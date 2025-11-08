@@ -13,6 +13,7 @@ import Dashboard from './pages/Dashboard';
 import AIAssistants from './pages/AIAssistants';
 import VCFAnalysis from './pages/VCFAnalysis';
 import InstitutionalAdmin from './pages/InstitutionalAdmin';
+import InstitutionalPricing from './pages/InstitutionalPricing';
 import Layout from './Layout.jsx';
 
 
@@ -32,6 +33,7 @@ export const PAGES = {
     "AIAssistants": AIAssistants,
     "VCFAnalysis": VCFAnalysis,
     "InstitutionalAdmin": InstitutionalAdmin,
+    "InstitutionalPricing": InstitutionalPricing,
 }
 
 export const pagesConfig = {

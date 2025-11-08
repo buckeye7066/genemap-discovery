@@ -3,7 +3,7 @@ import React from "react";
 import { Link, useLocation } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import DnaIcon from "./components/icons/DnaIcon";
-import { Search, User, Crown, History, Home, FileText, Heart, Shield, BarChart3, Microscope, LayoutDashboard, MessageSquare } from "lucide-react";
+import { Search, User, Crown, History, Home, FileText, Heart, Shield, BarChart3, Microscope, LayoutDashboard, MessageSquare, Building2 } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -85,6 +85,13 @@ const navigationItems = [
     title: "Search History",
     url: createPageUrl("History"),
     icon: History,
+  },
+  {
+    title: "Institutional Admin",
+    url: createPageUrl("InstitutionalAdmin"),
+    icon: Building2,
+    highlight: true,
+    badge: "Admin"
   },
   {
     title: "Profile",
