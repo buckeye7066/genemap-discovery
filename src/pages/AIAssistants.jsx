@@ -17,7 +17,13 @@ import {
   MessageSquare,
   Info,
   Stethoscope,
-  FlaskConical
+  FlaskConical,
+  Mic,
+  MicOff,
+  Volume2,
+  VolumeX,
+  Pause,
+  Play
 } from "lucide-react";
 import ReactMarkdown from 'react-markdown';
 
@@ -30,8 +36,23 @@ export default function AIAssistantsPage() {
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef(null);
 
+  // Voice states
+  const [isListening, setIsListening] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [voiceEnabled, setVoiceEnabled] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
+  const recognitionRef = useRef(null);
+  const synthRef = useRef(null);
+  const currentUtteranceRef = useRef(null);
+
   useEffect(() => {
     loadData();
+    initializeVoice();
+    
+    return () => {
+      stopListening();
+      stopSpeaking();
+    };
   }, []);
 
   useEffect(() => {
@@ -47,7 +68,171 @@ export default function AIAssistantsPage() {
       assistant: activeAssistant,
       timestamp: new Date()
     }]);
+    
+    // Speak welcome message if voice is enabled
+    if (voiceEnabled) {
+      speakText(welcomeMessage, activeAssistant);
+    }
   }, [activeAssistant, user]);
+
+  const initializeVoice = () => {
+    // Initialize Speech Recognition
+    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      recognitionRef.current = new SpeechRecognition();
+      recognitionRef.current.continuous = false;
+      recognitionRef.current.interimResults = false;
+      recognitionRef.current.lang = 'en-US';
+
+      recognitionRef.current.onresult = (event) => {
+        const transcript = event.results[0][0].transcript;
+        setInputMessage(transcript);
+        setIsListening(false);
+      };
+
+      recognitionRef.current.onerror = (event) => {
+        console.error('Speech recognition error:', event.error);
+        setIsListening(false);
+      };
+
+      recognitionRef.current.onend = () => {
+        setIsListening(false);
+      };
+    }
+
+    // Initialize Speech Synthesis
+    if ('speechSynthesis' in window) {
+      synthRef.current = window.speechSynthesis;
+    }
+  };
+
+  const toggleListening = () => {
+    if (!recognitionRef.current) {
+      alert("Speech recognition is not supported in your browser.");
+      return;
+    }
+
+    if (isListening) {
+      stopListening();
+    } else {
+      startListening();
+    }
+  };
+
+  const startListening = () => {
+    if (recognitionRef.current && !isListening) {
+      try {
+        recognitionRef.current.start();
+        setIsListening(true);
+      } catch (err) {
+        console.error("Error starting recognition:", err);
+      }
+    }
+  };
+
+  const stopListening = () => {
+    if (recognitionRef.current && isListening) {
+      recognitionRef.current.stop();
+      setIsListening(false);
+    }
+  };
+
+  const speakText = (text, assistant) => {
+    if (!synthRef.current || !voiceEnabled) return;
+
+    // Stop any current speech
+    stopSpeaking();
+
+    // Clean text for speech (remove markdown, emojis)
+    const cleanText = text
+      .replace(/\*\*/g, '')
+      .replace(/\*/g, '')
+      .replace(/#{1,6}\s/g, '')
+      .replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1')
+      .replace(/`([^`]+)`/g, '$1')
+      .replace(/[😊💜❤️🧬💉📸📄📊📋✓•→]/g, '');
+
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+    
+    // Get available voices
+    const voices = synthRef.current.getVoices();
+    
+    // Select voice based on assistant
+    if (assistant === 'robert') {
+      // Robert: Deep, authoritative male voice
+      const robertVoice = voices.find(v => 
+        v.name.includes('Daniel') || 
+        v.name.includes('Alex') ||
+        v.name.includes('Google UK English Male')
+      ) || voices.find(v => v.lang.startsWith('en') && v.name.includes('Male'));
+      
+      if (robertVoice) utterance.voice = robertVoice;
+      utterance.pitch = 0.8;
+      utterance.rate = 0.9;
+    } else {
+      // Anastasia: Warm, friendly female voice (British accent if available)
+      const anastasiaVoice = voices.find(v => 
+        v.name.includes('Serena') || 
+        v.name.includes('Karen') ||
+        v.name.includes('Google UK English Female')
+      ) || voices.find(v => v.lang.startsWith('en') && v.name.includes('Female'));
+      
+      if (anastasiaVoice) utterance.voice = anastasiaVoice;
+      utterance.pitch = 1.1;
+      utterance.rate = 1.0;
+    }
+
+    utterance.onstart = () => {
+      setIsSpeaking(true);
+      setIsPaused(false);
+    };
+
+    utterance.onend = () => {
+      setIsSpeaking(false);
+      setIsPaused(false);
+      currentUtteranceRef.current = null;
+    };
+
+    utterance.onerror = (event) => {
+      console.error('Speech synthesis error:', event);
+      setIsSpeaking(false);
+      setIsPaused(false);
+    };
+
+    currentUtteranceRef.current = utterance;
+    synthRef.current.speak(utterance);
+  };
+
+  const toggleSpeaking = () => {
+    if (!synthRef.current) return;
+
+    if (isPaused) {
+      synthRef.current.resume();
+      setIsPaused(false);
+    } else if (isSpeaking) {
+      synthRef.current.pause();
+      setIsPaused(true);
+    }
+  };
+
+  const stopSpeaking = () => {
+    if (synthRef.current) {
+      synthRef.current.cancel();
+      setIsSpeaking(false);
+      setIsPaused(false);
+      currentUtteranceRef.current = null;
+    }
+  };
+
+  const toggleVoice = () => {
+    const newState = !voiceEnabled;
+    setVoiceEnabled(newState);
+    
+    if (!newState) {
+      stopSpeaking();
+      stopListening();
+    }
+  };
 
   const loadData = async () => {
     try {
@@ -81,28 +266,19 @@ export default function AIAssistantsPage() {
     const name = user?.full_name?.split(' ')[0] || 'there';
     
     if (assistant === 'robert') {
-      return `Greetings, ${name}. I'm **Robert**, your AI genomics research assistant. I specialize in rigorous scientific analysis, evidence-based interpretation, and comprehensive data synthesis.
+      return `Greetings, ${name}. I'm Robert, your AI genomics research assistant. I specialize in rigorous scientific analysis, evidence-based interpretation, and comprehensive data synthesis.
 
-**My expertise encompasses:**
-• **Genomic Analysis** - Variant interpretation, pathogenicity assessment, functional impact prediction
-• **Clinical Decision Support** - Drug interactions, pharmacogenomics, treatment protocols
-• **Research Methodology** - Experimental design, statistical analysis, publication-grade insights
-• **Database Integration** - Cross-referencing ClinVar, OMIM, UniProt, PubMed, and 20+ scientific databases
+My expertise encompasses genomic analysis, clinical decision support, research methodology, and database integration across ClinVar, OMIM, UniProt, PubMed, and 20+ scientific databases.
 
 I communicate with precision and scientific rigor, providing citations, statistical confidence intervals, and mechanistic explanations. My analyses are thorough, methodologically sound, and aligned with current research standards.
 
 What genomic inquiry may I assist you with today?`;
     } else {
-      return `Hey ${name}! 👋 I'm **Anastasia**, your friendly genetic counseling companion! Think of me as your personal guide through the wonderful (and sometimes confusing!) world of genetics.
+      return `Hey ${name}! I'm Anastasia, your friendly genetic counseling companion! Think of me as your personal guide through the wonderful world of genetics.
 
-**Here's what I love helping with:**
-• **Genetic Results** - Breaking down those complicated test results into plain English
-• **Health Risks** - Explaining what your genes might mean for your health (without the scary jargon!)
-• **Medical Reports** - Making sense of lab results and clinical findings
-• **Variant Analysis** - Understanding those genetic changes and what they actually mean
-• **Clinical Trials** - Finding studies that might be perfect for you
+I love helping with genetic results, breaking down those complicated test results into plain English. I can explain health risks without the scary jargon, help you understand medical reports and lab results, clarify what genetic variants actually mean, and help you find clinical trials that might be perfect for you.
 
-I'm here to make genetics feel less like rocket science and more like a conversation with a knowledgeable friend. I promise to keep things clear, supportive, and maybe even a little fun! 😊
+I'm here to make genetics feel less like rocket science and more like a conversation with a knowledgeable friend. I promise to keep things clear, supportive, and maybe even a little fun!
 
 So, what's on your mind today?`;
     }
@@ -135,13 +311,20 @@ So, what's on your mind today?`;
 
       setMessages(prev => [...prev, assistantMessage]);
 
+      // Auto-speak response if voice is enabled
+      if (voiceEnabled) {
+        setTimeout(() => {
+          speakText(response, activeAssistant);
+        }, 500);
+      }
+
     } catch (err) {
       console.error("Error getting response:", err);
       const errorMessage = {
         role: 'assistant',
         content: activeAssistant === 'robert' 
           ? "I apologize, but I'm experiencing technical difficulties processing your request. Please retry or rephrase your inquiry."
-          : "Oops! 😅 I'm having a little technical hiccup. Mind trying that again?",
+          : "Oops! I'm having a little technical hiccup. Mind trying that again?",
         assistant: activeAssistant,
         timestamp: new Date()
       };
@@ -211,7 +394,7 @@ Maintain rigorous scientific standards while being thorough and comprehensive.`;
 - Ask clarifying questions to ensure understanding
 - Celebrate small wins ("Great question!", "You're really getting this!")
 - Use relatable examples and metaphors
-- Add emoji for warmth (but don't overdo it! 😊)
+- Add emoji for warmth (but don't overdo it!)
 
 **Your Expertise (PhD-level knowledge, presented accessibly):**
 - Clinical genetics and genomic medicine
@@ -240,12 +423,12 @@ ${user?.age ? `- User is ${user.age} years old` : ''}
 
 **Tone Examples:**
 - Instead of: "The variant exhibits incomplete penetrance"
-- Say: "Not everyone with this variant develops the condition - genetics is tricky like that! 😊"
+- Say: "Not everyone with this variant develops the condition - genetics is tricky like that!"
 
 - Instead of: "Pharmacogenomic implications suggest altered drug metabolism"
 - Say: "Here's the thing - your genes might affect how your body processes certain medications. Let me break that down..."
 
-Be the genetic counselor everyone wishes they had - knowledgeable, kind, and able to explain anything! 💜`;
+Be the genetic counselor everyone wishes they had - knowledgeable, kind, and able to explain anything!`;
     }
 
     const prompt = `${systemPrompt}
@@ -297,12 +480,73 @@ Please provide a comprehensive response.`;
             </div>
           </div>
           <h1 className="text-3xl md:text-4xl font-bold text-slate-900 mb-2">
-            AI Assistants
+            AI Assistants with Voice
           </h1>
           <p className="text-lg text-slate-600">
-            Chat with Robert or Anastasia for personalized genomic insights
+            Chat or talk with Robert and Anastasia
           </p>
+          
+          {/* Voice Toggle */}
+          <div className="flex justify-center gap-3 mt-4">
+            <Button
+              onClick={toggleVoice}
+              variant={voiceEnabled ? "default" : "outline"}
+              className={voiceEnabled ? "bg-green-600 hover:bg-green-700" : ""}
+            >
+              {voiceEnabled ? (
+                <>
+                  <Volume2 className="w-4 h-4 mr-2" />
+                  Voice Enabled
+                </>
+              ) : (
+                <>
+                  <VolumeX className="w-4 h-4 mr-2" />
+                  Enable Voice
+                </>
+              )}
+            </Button>
+            
+            {voiceEnabled && isSpeaking && (
+              <Button
+                onClick={toggleSpeaking}
+                variant="outline"
+                className="gap-2"
+              >
+                {isPaused ? (
+                  <>
+                    <Play className="w-4 h-4" />
+                    Resume
+                  </>
+                ) : (
+                  <>
+                    <Pause className="w-4 h-4" />
+                    Pause
+                  </>
+                )}
+              </Button>
+            )}
+            
+            {voiceEnabled && isSpeaking && (
+              <Button
+                onClick={stopSpeaking}
+                variant="outline"
+                className="gap-2"
+              >
+                Stop Speaking
+              </Button>
+            )}
+          </div>
         </div>
+
+        {/* Voice Status Alert */}
+        {voiceEnabled && (
+          <Alert className="mb-4 bg-green-50 border-green-200">
+            <Volume2 className="h-4 w-4 text-green-600" />
+            <AlertDescription className="text-green-800 text-sm">
+              🎙️ Voice mode active! Responses will be read aloud. Click the mic button to speak your questions.
+            </AlertDescription>
+          </Alert>
+        )}
 
         {/* Assistant Selector */}
         <Card className="shadow-lg mb-6">
@@ -353,6 +597,12 @@ Please provide a comprehensive response.`;
                   activeAssistant === 'robert' ? 'text-blue-600' : 'text-purple-600'
                 }`} />
                 Conversation with {activeAssistant === 'robert' ? 'Robert' : 'Anastasia'}
+                {isSpeaking && (
+                  <Badge className="ml-auto bg-green-600 text-white animate-pulse">
+                    <Volume2 className="w-3 h-3 mr-1" />
+                    Speaking...
+                  </Badge>
+                )}
               </CardTitle>
             </CardHeader>
             <CardContent className="p-0">
@@ -384,6 +634,16 @@ Please provide a comprehensive response.`;
                               <Heart className="w-4 h-4 text-purple-600" />
                               <span className="text-xs font-semibold text-purple-900">Anastasia</span>
                             </>
+                          )}
+                          {voiceEnabled && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => speakText(message.content, message.assistant)}
+                              className="ml-auto h-6 px-2"
+                            >
+                              <Volume2 className="w-3 h-3" />
+                            </Button>
                           )}
                         </div>
                       )}
@@ -486,20 +746,33 @@ Please provide a comprehensive response.`;
               {/* Input */}
               <form onSubmit={handleSendMessage} className="p-4 border-t">
                 <div className="flex gap-2">
+                  {voiceEnabled && (
+                    <Button
+                      type="button"
+                      onClick={toggleListening}
+                      disabled={isLoading}
+                      variant={isListening ? "default" : "outline"}
+                      className={isListening ? "bg-red-600 hover:bg-red-700 animate-pulse" : ""}
+                    >
+                      {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+                    </Button>
+                  )}
                   <Input
                     value={inputMessage}
                     onChange={(e) => setInputMessage(e.target.value)}
                     placeholder={
-                      activeAssistant === 'robert' 
+                      isListening 
+                        ? "Listening..." 
+                        : activeAssistant === 'robert' 
                         ? "Pose your scientific inquiry here..." 
-                        : "Ask me anything about genetics - I'm here to help! 😊"
+                        : "Ask me anything about genetics - I'm here to help!"
                     }
                     className="flex-1"
-                    disabled={isLoading}
+                    disabled={isLoading || isListening}
                   />
                   <Button
                     type="submit"
-                    disabled={isLoading || !inputMessage.trim()}
+                    disabled={isLoading || !inputMessage.trim() || isListening}
                     className={
                       activeAssistant === 'robert'
                         ? 'bg-blue-600 hover:bg-blue-700'
@@ -509,12 +782,51 @@ Please provide a comprehensive response.`;
                     <Send className="w-4 h-4" />
                   </Button>
                 </div>
+                {isListening && (
+                  <p className="text-xs text-red-600 mt-2 animate-pulse">
+                    🎙️ Listening... Speak now
+                  </p>
+                )}
               </form>
             </CardContent>
           </Card>
 
           {/* Sidebar */}
           <div className="space-y-6">
+            {/* Voice Controls */}
+            {voiceEnabled && (
+              <Card className="shadow-lg border-2 border-green-200 bg-gradient-to-br from-green-50 to-emerald-50">
+                <CardHeader>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <Volume2 className="w-5 h-5 text-green-600" />
+                    Voice Controls
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="flex items-center gap-2 text-sm">
+                    <Mic className="w-4 h-4 text-green-600" />
+                    <span className="text-slate-700">
+                      {isListening ? "Listening..." : "Click mic to speak"}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 text-sm">
+                    <Volume2 className="w-4 h-4 text-green-600" />
+                    <span className="text-slate-700">
+                      {isSpeaking ? (isPaused ? "Paused" : "Speaking...") : "Responses read aloud"}
+                    </span>
+                  </div>
+                  <Alert className="bg-white border-green-200">
+                    <Info className="h-4 w-4 text-green-600" />
+                    <AlertDescription className="text-green-900 text-xs">
+                      <strong>Tip:</strong> {activeAssistant === 'robert' 
+                        ? "Robert has a deep, authoritative voice" 
+                        : "Anastasia has a warm, British-accented voice"}
+                    </AlertDescription>
+                  </Alert>
+                </CardContent>
+              </Card>
+            )}
+
             {/* Assistant Info */}
             <Card className={`shadow-lg border-2 ${
               activeAssistant === 'robert' 
@@ -569,7 +881,7 @@ Please provide a comprehensive response.`;
                     <p className="text-slate-700 leading-relaxed">
                       <strong className="text-purple-900">Anastasia</strong> makes genetics fun and 
                       understandable! She has PhD-level knowledge but explains everything in plain language 
-                      with warmth and wit. 💜
+                      with warmth and wit.
                     </p>
                     <div className="space-y-2">
                       <div className="flex items-start gap-2">
