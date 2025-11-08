@@ -1,3 +1,4 @@
+
 import React from "react";
 import { Link, useLocation } from "react-router-dom";
 import { createPageUrl } from "@/utils";
@@ -44,6 +45,13 @@ const navigationItems = [
     icon: MessageSquare,
     highlight: true,
     badge: "Chat"
+  },
+  {
+    title: "VCF Analysis",
+    url: createPageUrl("VCFAnalysis"),
+    icon: FileText,
+    highlight: true,
+    badge: "New"
   },
   {
     title: "Visualization Hub",

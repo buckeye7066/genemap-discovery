@@ -11,6 +11,7 @@ import VisualizationHub from './pages/VisualizationHub';
 import ResearchMode from './pages/ResearchMode';
 import Dashboard from './pages/Dashboard';
 import AIAssistants from './pages/AIAssistants';
+import VCFAnalysis from './pages/VCFAnalysis';
 import Layout from './Layout.jsx';
 
 
@@ -28,6 +29,7 @@ export const PAGES = {
     "ResearchMode": ResearchMode,
     "Dashboard": Dashboard,
     "AIAssistants": AIAssistants,
+    "VCFAnalysis": VCFAnalysis,
 }
 
 export const pagesConfig = {
