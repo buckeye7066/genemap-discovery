@@ -8,6 +8,7 @@ import MedicalData from './pages/MedicalData';
 import Anastasia from './pages/Anastasia';
 import RobertClinical from './pages/RobertClinical';
 import VisualizationHub from './pages/VisualizationHub';
+import ResearchMode from './pages/ResearchMode';
 import Layout from './Layout.jsx';
 
 
@@ -22,6 +23,7 @@ export const PAGES = {
     "Anastasia": Anastasia,
     "RobertClinical": RobertClinical,
     "VisualizationHub": VisualizationHub,
+    "ResearchMode": ResearchMode,
 }
 
 export const pagesConfig = {

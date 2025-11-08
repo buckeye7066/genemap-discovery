@@ -3,7 +3,7 @@ import React from "react";
 import { Link, useLocation } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import DnaIcon from "./components/icons/DnaIcon";
-import { Search, User, Crown, History, Home, FileText, Heart, Shield, BarChart3 } from "lucide-react"; // Added BarChart3
+import { Search, User, Crown, History, Home, FileText, Heart, Shield, BarChart3, Microscope } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -33,6 +33,20 @@ const navigationItems = [
     icon: Search,
   },
   {
+    title: "Visualization Hub",
+    url: createPageUrl("VisualizationHub"),
+    icon: BarChart3,
+    highlight: true,
+    badge: "New"
+  },
+  {
+    title: "Research Mode",
+    url: createPageUrl("ResearchMode"),
+    icon: Microscope,
+    highlight: true,
+    badge: "Research"
+  },
+  {
     title: "Robert Clinical",
     url: createPageUrl("RobertClinical"),
     icon: Shield,
@@ -40,7 +54,7 @@ const navigationItems = [
     badge: "New"
   },
   {
-    title: "Anastasia", // Changed from "Anastasia AI" to "Anastasia"
+    title: "Anastasia",
     url: createPageUrl("Anastasia"),
     icon: Heart,
     highlight: true,
