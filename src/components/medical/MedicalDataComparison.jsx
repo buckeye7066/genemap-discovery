@@ -18,6 +18,7 @@ import {
   Info
 } from "lucide-react";
 import ReactMarkdown from 'react-markdown';
+import FHIRExporter from "./FHIRExporter";
 
 export default function MedicalDataComparison({ records, onClose, userEducationLevel }) {
   const [comparison, setComparison] = useState(null);
@@ -272,10 +273,27 @@ Format with clear sections, use tables for comparisons, highlight key findings.`
                     </p>
                   </div>
                 </div>
-                <Badge className="bg-purple-600 text-white">
-                  <Shield className="w-3 h-3 mr-1" />
-                  HIPAA Compliant
-                </Badge>
+                <div className="flex gap-2">
+                  <FHIRExporter
+                    data={{
+                      records: records.map(r => ({
+                        id: r.id,
+                        type: r.file_type,
+                        date: r.created_date,
+                        genes: r.relevant_genes,
+                        phenotypes: r.phenotypes_identified
+                      })),
+                      executive_summary: comparison.executive_summary,
+                      analysis: comparison.analysis,
+                      comparison_date: new Date().toISOString()
+                    }}
+                    type="comparison_analysis"
+                  />
+                  <Badge className="bg-purple-600 text-white">
+                    <Shield className="w-3 h-3 mr-1" />
+                    HIPAA Compliant
+                  </Badge>
+                </div>
               </div>
             </CardHeader>
           </Card>

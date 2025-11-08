@@ -37,13 +37,15 @@ import {
   Shield, 
   TrendingUp, 
   Info,
-  Brain, // New import
-  AlertTriangle, // New import
-  Sparkles // New import
+  Brain, 
+  AlertTriangle, 
+  Sparkles 
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import MedicalDataComparison from "../components/medical/MedicalDataComparison";
+import VCFParser from "../components/medical/VCFParser";
+import FHIRExporter from "../components/medical/FHIRExporter";
 
 export default function MedicalDataPage() {
   const [user, setUser] = useState(null);
@@ -194,87 +196,98 @@ export default function MedicalDataPage() {
   };
 
   const getSchemaForFileType = (fileType) => {
-    const schemas = {
-      genetic_test: {
-        type: "object",
-        properties: {
-          variants: {
-            type: "array",
-            items: {
-              type: "object",
-              properties: {
-                gene: { type: "string" },
-                rsid: { type: "string" },
-                genotype: { type: "string" },
-                chromosome: { type: "string" }
+    switch (fileType) {
+      case 'genetic_test':
+        return {
+          type: "object",
+          properties: {
+            test_type: { type: "string" },
+            genes_tested: { type: "array", items: { type: "string" } },
+            variants_identified: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  gene: { type: "string" },
+                  variant: { type: "string" },
+                  significance: { type: "string" }
+                }
+              }
+            },
+            interpretation: { type: "string" }
+          }
+        };
+      case 'blood_test':
+        return {
+          type: "object",
+          properties: {
+            test_date: { type: "string" },
+            lab_values: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  test_name: { type: "string" },
+                  value: { type: "string" },
+                  unit: { type: "string" },
+                  reference_range: { type: "string" },
+                  abnormal: { type: "boolean" }
+                }
               }
             }
-          },
-          test_type: { type: "string" },
-          test_date: { type: "string" }
-        }
-      },
-      blood_test: {
-        type: "object",
-        properties: {
-          test_name: { type: "string" },
-          test_date: { type: "string" },
-          results: {
-            type: "array",
-            items: {
-              type: "object",
-              properties: {
-                marker: { type: "string" },
-                value: { type: "number" },
-                unit: { type: "string" },
-                reference_range: { type: "string" },
-                status: { type: "string" }
-              }
+          }
+        };
+      case 'vcf_file':
+        return {
+          type: "object",
+          properties: {
+            vcf_version: { type: "string" },
+            reference_genome: { type: "string" },
+            total_variants: { type: "number" },
+            sample_id: { type: "string" },
+            note: { type: "string" }
+          }
+        };
+      case 'photo': // Keep existing schema for photo
+        return {
+          type: "object",
+          properties: {
+            visible_features: {
+              type: "array",
+              items: { type: "string" }
+            },
+            potential_conditions: {
+              type: "array",
+              items: { type: "string" }
             }
           }
-        }
-      },
-      photo: {
-        type: "object",
-        properties: {
-          visible_features: {
-            type: "array",
-            items: { type: "string" }
-          },
-          potential_conditions: {
-            type: "array",
-            items: { type: "string" }
+        };
+      case 'medical_report': // Keep existing schema for medical_report
+        return {
+          type: "object",
+          properties: {
+            report_type: { type: "string" },
+            date: { type: "string" },
+            findings: {
+              type: "array",
+              items: { type: "string" }
+            },
+            diagnoses: {
+              type: "array",
+              items: { type: "string" }
+            }
           }
-        }
-      },
-      medical_report: {
-        type: "object",
-        properties: {
-          report_type: { type: "string" },
-          date: { type: "string" },
-          findings: {
-            type: "array",
-            items: { type: "string" }
-          },
-          diagnoses: {
-            type: "array",
-            items: { type: "string" }
+        };
+      default: // This covers 'other' and any undefined types
+        return {
+          type: "object",
+          properties: {
+            description: { type: "string" },
+            findings: { type: "array", items: { type: "string" } },
+            observations: { type: "string" }
           }
-        }
-      },
-      other: {
-        type: "object",
-        properties: {
-          content: { type: "string" },
-          key_findings: {
-            type: "array",
-            items: { type: "string" }
-          }
-        }
-      }
-    };
-
-    return schemas[fileType] || schemas.other;
+        };
+    }
   };
 
   const analyzeExtractedData = async (extractedData, fileType) => {
@@ -482,11 +495,36 @@ Return structured analysis with all sections.`;
     }
   };
 
+  const handleVariantsParsed = async (recordId, variants) => {
+    try {
+      // Update the record with parsed variants
+      const record = medicalRecords.find(r => r.id === recordId);
+      if (record) {
+        // Also add to extracted_data for potential AI analysis later
+        const updatedExtractedData = {
+          ...(record.extracted_data || {}),
+          vcf_variants: variants
+        };
+
+        await base44.entities.MedicalData.update(recordId, {
+          vcf_variants: variants, // Top-level for direct access
+          extracted_data: updatedExtractedData // Also within extracted_data
+        });
+        setSuccess("VCF variants parsed and saved successfully!");
+        await loadData(); // Reload to show the updated record
+      }
+    } catch (err) {
+      console.error("Error saving variants:", err);
+      setError("Failed to save VCF variants: " + err.message);
+    }
+  };
+
   const fileTypeLabels = {
-    genetic_test: "Genetic Test (23andMe, AncestryDNA, etc.)",
-    blood_test: "Blood Test (CBC, BMP, etc.)",
-    photo: "Photo (Physical Features)",
+    genetic_test: "Genetic Test Report",
+    blood_test: "Blood Test / Lab Results",
+    photo: "Medical Photo / Scan",
     medical_report: "Medical Report",
+    vcf_file: "VCF File (Variant Call Format)",
     other: "Other Medical Data"
   };
 
@@ -495,6 +533,7 @@ Return structured analysis with all sections.`;
     blood_test: "💉",
     photo: "📸",
     medical_report: "📄",
+    vcf_file: "📊",
     other: "📋"
   };
 
@@ -686,47 +725,54 @@ Return structured analysis with all sections.`;
         )}
 
         {/* Upload Form */}
-        <Card className="shadow-lg mb-8">
+        <Card className="shadow-lg mb-6">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-xl">
-              <Upload className="w-5 h-5 text-green-600" />
+            <CardTitle className="flex items-center gap-2">
+              <Upload className="w-5 h-5 text-blue-600" />
               Upload Medical Data
             </CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-4">
             <form onSubmit={handleUpload} className="space-y-6">
-              <div className="space-y-2">
-                <Label htmlFor="file-type" className="text-base font-medium">
+              <div>
+                <Label htmlFor="file-type" className="text-base font-medium mb-2 block">
                   Data Type
                 </Label>
-                <Select 
-                  value={uploadForm.fileType} 
-                  onValueChange={(value) => setUploadForm({ ...uploadForm, fileType: value })}
+                <select
+                  id="file-type"
+                  value={uploadForm.fileType}
+                  onChange={(e) => setUploadForm({ ...uploadForm, fileType: e.target.value })}
+                  className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent min-h-[48px]"
+                  disabled={isUploading}
                 >
-                  <SelectTrigger id="file-type" className="text-lg py-3">
-                    <SelectValue placeholder="Select type of medical data" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Object.entries(fileTypeLabels).map(([value, label]) => (
-                      <SelectItem key={value} value={value}>
-                        {fileTypeIcons[value]} {label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  {Object.entries(fileTypeLabels).map(([value, label]) => (
+                    <option key={value} value={value}>{fileTypeIcons[value]} {label}</option>
+                  ))}
+                </select>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="file-upload" className="text-base font-medium">
-                  File
+              {uploadForm.fileType === 'vcf_file' && (
+                <Alert className="bg-cyan-50 border-cyan-200">
+                  <Info className="h-4 w-4 text-cyan-600" />
+                  <AlertDescription className="text-cyan-900 text-sm">
+                    <strong>VCF Format:</strong> Upload your VCF (Variant Call Format) file for automated 
+                    variant parsing and analysis. Supports standard VCF v4.x format.
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              <div>
+                <Label htmlFor="file-upload" className="text-base font-medium mb-2 block">
+                  Select File
                 </Label>
                 <div className="border-2 border-dashed border-slate-300 rounded-lg p-6 text-center hover:border-blue-400 transition-colors">
                   <Input
                     id="file-upload"
                     type="file"
                     onChange={handleFileChange}
-                    accept=".pdf,.jpg,.jpeg,.png,.csv,.txt"
+                    accept={uploadForm.fileType === 'vcf_file' ? '.vcf,.vcf.gz' : '.pdf,.jpg,.jpeg,.png,.dicom,.csv,.txt'}
                     className="hidden"
+                    disabled={isUploading}
                   />
                   <label htmlFor="file-upload" className="cursor-pointer">
                     <div className="flex flex-col items-center gap-2">
@@ -742,7 +788,9 @@ Return structured analysis with all sections.`;
                           {uploadForm.file ? uploadForm.file.name : "Click to upload"}
                         </p>
                         <p className="text-sm text-slate-500">
-                          PDF, JPG, PNG, CSV, or TXT (max 10MB)
+                          {uploadForm.fileType === 'vcf_file' 
+                            ? 'Accepted formats: .vcf, .vcf.gz'
+                            : 'Supported formats: PDF, JPG, PNG, DICOM, CSV, TXT, and more (max 10MB)'}
                         </p>
                       </div>
                     </div>
@@ -760,6 +808,7 @@ Return structured analysis with all sections.`;
                   value={uploadForm.notes}
                   onChange={(e) => setUploadForm({ ...uploadForm, notes: e.target.value })}
                   className="h-24"
+                  disabled={isUploading}
                 />
               </div>
 
@@ -842,6 +891,18 @@ Return structured analysis with all sections.`;
                       </div>
                     </div>
                     <div className="flex gap-2">
+                      <FHIRExporter 
+                        data={{
+                          record_id: record.id,
+                          file_type: record.file_type,
+                          summary: record.summary,
+                          extracted_data: record.extracted_data,
+                          relevant_genes: record.relevant_genes,
+                          phenotypes: record.phenotypes_identified,
+                          vcf_variants: record.vcf_variants // Include VCF variants for FHIR export
+                        }}
+                        type="medical_record"
+                      />
                       <Link to={createPageUrl("Anastasia")}>
                         <Button
                           variant="outline"
@@ -874,6 +935,43 @@ Return structured analysis with all sections.`;
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
+                  {/* VCF Parser for VCF files */}
+                  {record.file_type === 'vcf_file' && !record.vcf_variants && (
+                    <VCFParser 
+                      fileUrl={record.file_url}
+                      onVariantsParsed={(variants) => handleVariantsParsed(record.id, variants)}
+                    />
+                  )}
+
+                  {/* Display parsed VCF variants */}
+                  {record.file_type === 'vcf_file' && record.vcf_variants && record.vcf_variants.length > 0 && (
+                    <div className="bg-cyan-50 p-4 rounded-lg border border-cyan-200">
+                      <h4 className="font-semibold text-cyan-900 mb-2 text-sm flex items-center gap-2">
+                        <FileText className="w-4 h-4" />
+                        Parsed Variants ({record.vcf_variants.length})
+                      </h4>
+                      <div className="space-y-2 max-h-48 overflow-y-auto">
+                        {record.vcf_variants.slice(0, 10).map((variant, idx) => (
+                          <div key={idx} className="text-xs text-cyan-800 bg-white p-2 rounded">
+                            <span className="font-mono">
+                              {variant.chromosome}:{variant.position} {variant.gene && `(${variant.gene})`}
+                            </span>
+                            {variant.clinical_significance && (
+                              <Badge className="ml-2 text-xs">
+                                {variant.clinical_significance}
+                              </Badge>
+                            )}
+                          </div>
+                        ))}
+                        {record.vcf_variants.length > 10 && (
+                          <p className="text-xs text-cyan-700">
+                            ...and {record.vcf_variants.length - 10} more variants
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
                   {/* AI Summary Section */}
                   {record.summary && (
                     <div className="bg-gradient-to-br from-blue-50 to-indigo-50 p-4 rounded-lg border border-blue-200">

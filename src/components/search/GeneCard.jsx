@@ -47,6 +47,7 @@ import { Textarea } from "@/components/ui/textarea"; // Added
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"; // Added
 import { Label } from "@/components/ui/label"; // Added
 import { Alert, AlertDescription } from "@/components/ui/alert"; // Added
+import FHIRExporter from "../medical/FHIRExporter";
 
 export default function GeneCard({ gene, rank, isPremium, isSelected = false, onSelect = null }) {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -801,10 +802,21 @@ Provide comprehensive, evidence-based analysis formatted with clear sections.`;
                     {/* Analysis Results */}
                     <Card className="shadow-lg">
                       <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                          <Brain className="w-5 h-5 text-indigo-600" />
-                          Robert's Variant Interpretation
-                        </CardTitle>
+                        <div className="flex items-center justify-between">
+                          <CardTitle className="flex items-center gap-2">
+                            <Brain className="w-5 h-5 text-indigo-600" />
+                            Robert's Variant Interpretation
+                          </CardTitle>
+                          <FHIRExporter
+                            data={{
+                              gene: variantAnalysis.gene,
+                              variant: variantAnalysis.variant,
+                              analysis: variantAnalysis.analysis,
+                              timestamp: new Date().toISOString()
+                            }}
+                            type="variant_interpretation"
+                          />
+                        </div>
                       </CardHeader>
                       <CardContent>
                         <div className="prose prose-sm max-w-none">
