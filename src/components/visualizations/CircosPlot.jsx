@@ -1,13 +1,18 @@
+
 import React, { useState, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Download, Info } from "lucide-react";
 import html2canvas from 'html2canvas';
+import { Badge } from "@/components/ui/badge"; // Added import
+import { Label } from "@/components/ui/label"; // Added import
 
-export default function CircosPlot({ genes, userEducationLevel }) {
+export default function CircosPlot({ genes, userEducationLevel, highlightedGene, onGeneClick }) {
   const circosRef = useRef(null);
   const [hoveredGene, setHoveredGene] = useState(null);
+  const [showConnections, setShowConnections] = useState(true); // New state
+  const [selectedChromosome, setSelectedChromosome] = useState("all"); // New state
 
   // Chromosome lengths (approximate, in Mb)
   const chromosomeLengths = {
@@ -54,10 +59,26 @@ export default function CircosPlot({ genes, userEducationLevel }) {
     link.click();
   };
 
+  const filteredGenes = selectedChromosome === "all" 
+    ? genes 
+    : genes.filter(g => g.chromosome === selectedChromosome);
+
   const outerRadius = 280;
   const innerRadius = 220;
   const centerX = 300;
   const centerY = 300;
+
+  const getExplanation = () => {
+    if (!userEducationLevel || userEducationLevel === 'high_school') {
+      return "This circular view shows where your genes are located on chromosomes. Click any blue dot to highlight it.";
+    }
+    if (userEducationLevel === 'undergraduate') {
+      return "Circular genome view with gene positions. Lines show potential relationships between genes.";
+    }
+    return "Circos plot showing chromosomal distribution and inter-gene relationships.";
+  };
+
+  const uniqueChromosomes = [...new Set(genes.map(g => g.chromosome).filter(Boolean))].sort();
 
   return (
     <Card className="shadow-lg">
@@ -66,23 +87,52 @@ export default function CircosPlot({ genes, userEducationLevel }) {
           <div>
             <CardTitle>Circos Plot - Genomic Overview</CardTitle>
             <p className="text-sm text-slate-600 mt-1">
-              Circular visualization of {genes.length} genes across chromosomes
+              {getExplanation()}
             </p>
           </div>
-          <Button variant="outline" size="sm" onClick={handleExport}>
-            <Download className="w-4 h-4 mr-1" />
-            Export
-          </Button>
+          <div className="flex gap-2">
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={() => setShowConnections(!showConnections)}
+            >
+              {showConnections ? 'Hide' : 'Show'} Lines
+            </Button>
+            <Button variant="outline" size="sm" onClick={handleExport}>
+              <Download className="w-4 h-4 mr-1" />
+              Export
+            </Button>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
         <Alert className="bg-blue-50 border-blue-200">
           <Info className="h-4 w-4 text-blue-600" />
           <AlertDescription className="text-blue-900 text-sm">
-            <strong>Circos Plot:</strong> Circular genome visualization showing gene locations 
-            across chromosomes. Lines connect related genes. Hover for details.
+            <strong>Interactive Circos:</strong> Click any gene marker to highlight it across all plots. 
+            Filter by chromosome to focus on specific regions.
           </AlertDescription>
         </Alert>
+
+        {/* Chromosome Filter */}
+        <div className="flex gap-2 flex-wrap items-center">
+          <Label className="text-sm font-medium">Chromosome:</Label>
+          <Badge
+            className={`cursor-pointer ${selectedChromosome === "all" ? "bg-blue-600 text-white" : "bg-slate-300 hover:bg-slate-400"}`}
+            onClick={() => setSelectedChromosome("all")}
+          >
+            All
+          </Badge>
+          {uniqueChromosomes.slice(0, 12).map((chr) => (
+            <Badge
+              key={chr}
+              className={`cursor-pointer ${selectedChromosome === chr ? "bg-blue-600 text-white" : "bg-slate-300 hover:bg-slate-400"}`}
+              onClick={() => setSelectedChromosome(chr)}
+            >
+              {chr?.replace('chr', '')}
+            </Badge>
+          ))}
+        </div>
 
         <div ref={circosRef} className="flex justify-center bg-white p-4 rounded border">
           <svg width="600" height="600" viewBox="0 0 600 600">
@@ -100,6 +150,8 @@ export default function CircosPlot({ genes, userEducationLevel }) {
               
               const largeArc = (endAngle - startAngle) > 180 ? 1 : 0;
               
+              const hasGenes = filteredGenes.some(g => g.chromosome === chr);
+              
               return (
                 <g key={chr}>
                   {/* Chromosome arc */}
@@ -109,9 +161,10 @@ export default function CircosPlot({ genes, userEducationLevel }) {
                         L ${innerEnd.x} ${innerEnd.y}
                         A ${innerRadius} ${innerRadius} 0 ${largeArc} 0 ${innerStart.x} ${innerStart.y}
                         Z`}
-                    fill={idx % 2 === 0 ? "#e2e8f0" : "#cbd5e1"}
+                    fill={hasGenes ? (idx % 2 === 0 ? "#dbeafe" : "#bfdbfe") : (idx % 2 === 0 ? "#e2e8f0" : "#cbd5e1")}
                     stroke="#94a3b8"
                     strokeWidth="1"
+                    opacity={selectedChromosome === "all" || selectedChromosome === chr ? 1 : 0.3}
                   />
                   
                   {/* Chromosome label */}
@@ -121,6 +174,7 @@ export default function CircosPlot({ genes, userEducationLevel }) {
                     textAnchor="middle"
                     fontSize="10"
                     fill="#475569"
+                    fontWeight={hasGenes ? "bold" : "normal"}
                   >
                     {chr.replace('chr', '')}
                   </text>
@@ -129,33 +183,49 @@ export default function CircosPlot({ genes, userEducationLevel }) {
             })}
 
             {/* Gene markers */}
-            {genes.map((gene, idx) => {
+            {filteredGenes.map((gene, idx) => {
               if (!gene.chromosome || !gene.start) return null;
               
               const angle = getArcPosition(gene.chromosome, gene.start / 1000000);
               const pos = polarToCartesian(angle, (outerRadius + innerRadius) / 2, centerX, centerY);
+              const isHighlighted = gene.symbol === highlightedGene;
+              const isHovered = gene.symbol === hoveredGene?.symbol;
               
               return (
-                <circle
-                  key={idx}
-                  cx={pos.x}
-                  cy={pos.y}
-                  r="4"
-                  fill="#3b82f6"
-                  stroke="#1e40af"
-                  strokeWidth="1"
-                  className="cursor-pointer hover:r-6 transition-all"
-                  onMouseEnter={() => setHoveredGene(gene)}
-                  onMouseLeave={() => setHoveredGene(null)}
-                >
-                  <title>{gene.symbol} - {gene.chromosome}:{gene.start}</title>
-                </circle>
+                <g key={idx}>
+                  <circle
+                    cx={pos.x}
+                    cy={pos.y}
+                    r={isHighlighted ? 8 : isHovered ? 6 : 4}
+                    fill={isHighlighted ? "#fbbf24" : "#3b82f6"}
+                    stroke={isHighlighted ? "#f59e0b" : isHovered ? "#1d4ed8" : "#1e40af"}
+                    strokeWidth={isHighlighted ? 3 : 2}
+                    className="cursor-pointer transition-all"
+                    onMouseEnter={() => setHoveredGene(gene)}
+                    onMouseLeave={() => setHoveredGene(null)}
+                    onClick={() => onGeneClick && onGeneClick(gene.symbol)}
+                  >
+                    <title>{gene.symbol} - {gene.chromosome}:{gene.start}</title>
+                  </circle>
+                  {isHighlighted && (
+                    <text
+                      x={pos.x}
+                      y={pos.y - 15}
+                      textAnchor="middle"
+                      fontSize="12"
+                      fontWeight="bold"
+                      fill="#f59e0b"
+                    >
+                      {gene.symbol}
+                    </text>
+                  )}
+                </g>
               );
             })}
 
             {/* Gene connections (if multiple genes) */}
-            {genes.length > 1 && genes.map((gene1, i) => 
-              genes.slice(i + 1).map((gene2, j) => {
+            {showConnections && filteredGenes.length > 1 && filteredGenes.map((gene1, i) => 
+              filteredGenes.slice(i + 1).map((gene2, j) => {
                 if (!gene1.chromosome || !gene2.chromosome) return null;
                 
                 const angle1 = getArcPosition(gene1.chromosome, gene1.start / 1000000);
@@ -164,14 +234,16 @@ export default function CircosPlot({ genes, userEducationLevel }) {
                 const pos1 = polarToCartesian(angle1, innerRadius - 20, centerX, centerY);
                 const pos2 = polarToCartesian(angle2, innerRadius - 20, centerX, centerY);
                 
+                const isRelatedToHighlighted = gene1.symbol === highlightedGene || gene2.symbol === highlightedGene;
+                
                 return (
                   <path
                     key={`${i}-${j}`}
                     d={`M ${pos1.x} ${pos1.y} Q ${centerX} ${centerY} ${pos2.x} ${pos2.y}`}
-                    stroke="#3b82f6"
-                    strokeWidth="1"
+                    stroke={isRelatedToHighlighted ? "#fbbf24" : "#3b82f6"}
+                    strokeWidth={isRelatedToHighlighted ? 2 : 1}
                     fill="none"
-                    opacity="0.3"
+                    opacity={isRelatedToHighlighted ? 0.8 : 0.3}
                   />
                 );
               })
@@ -195,20 +267,40 @@ export default function CircosPlot({ genes, userEducationLevel }) {
               fontSize="12"
               fill="#64748b"
             >
-              {genes.length} genes
+              {filteredGenes.length} genes
             </text>
           </svg>
         </div>
 
-        {hoveredGene && (
-          <div className="bg-blue-50 p-3 rounded border border-blue-200">
-            <p className="font-semibold text-blue-900">{hoveredGene.symbol}</p>
-            <p className="text-sm text-blue-800">
-              {hoveredGene.chromosome}:{hoveredGene.start?.toLocaleString()}-{hoveredGene.end?.toLocaleString()}
-            </p>
-            {hoveredGene.name && (
-              <p className="text-xs text-slate-600 mt-1">{hoveredGene.name}</p>
-            )}
+        {(hoveredGene || highlightedGene) && (
+          <div className={`p-3 rounded border ${
+            highlightedGene && (hoveredGene?.symbol === highlightedGene || !hoveredGene)
+              ? 'bg-amber-50 border-amber-200'
+              : 'bg-blue-50 border-blue-200'
+          }`}>
+            {(() => {
+              const displayGene = hoveredGene || genes.find(g => g.symbol === highlightedGene);
+              if (!displayGene) return null;
+              
+              return (
+                <>
+                  <p className={`font-semibold ${highlightedGene === displayGene.symbol ? 'text-amber-900' : 'text-blue-900'}`}>
+                    {displayGene.symbol}
+                  </p>
+                  <p className="text-sm text-slate-800">
+                    {displayGene.chromosome}:{displayGene.start?.toLocaleString()}-{displayGene.end?.toLocaleString()}
+                  </p>
+                  {displayGene.name && (
+                    <p className="text-xs text-slate-600 mt-1">{displayGene.name}</p>
+                  )}
+                  {highlightedGene === displayGene.symbol && (
+                    <Badge className="bg-amber-600 text-white text-xs mt-2">
+                      Highlighted across all plots
+                    </Badge>
+                  )}
+                </>
+              );
+            })()}
           </div>
         )}
       </CardContent>

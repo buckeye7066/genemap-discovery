@@ -1,3 +1,4 @@
+
 import React, { useState, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -12,9 +13,13 @@ import {
 } from "@/components/ui/select";
 import { Download, Palette, Info } from "lucide-react";
 import html2canvas from 'html2canvas';
+import { Slider } from "@/components/ui/slider";
+import { Label } from "@/components/ui/label";
 
-export default function ExpressionHeatmap({ genes, samples, expressionData, userEducationLevel }) {
+export default function ExpressionHeatmap({ genes, samples, expressionData, userEducationLevel, highlightedGene, onGeneClick }) {
   const [colorScheme, setColorScheme] = useState("blue-red");
+  const [minThreshold, setMinThreshold] = useState(0); // 0-100 percentage
+  const [maxThreshold, setMaxThreshold] = useState(100); // 0-100 percentage
   const heatmapRef = useRef(null);
 
   const colorSchemes = {
@@ -41,6 +46,10 @@ export default function ExpressionHeatmap({ genes, samples, expressionData, user
   };
 
   const getColor = (value, min, max) => {
+    // Handle cases where min equals max to avoid division by zero or NaN
+    if (min === max) {
+      return colorSchemes[colorScheme].mid; // Or any neutral color
+    }
     const normalized = (value - min) / (max - min);
     const scheme = colorSchemes[colorScheme];
     
@@ -70,9 +79,28 @@ export default function ExpressionHeatmap({ genes, samples, expressionData, user
     return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
   };
 
+  // Calculate min/max across all data for consistent color scaling and legend
   const allValues = expressionData.flat();
-  const minValue = Math.min(...allValues);
-  const maxValue = Math.max(...allValues);
+  const minValueRaw = allValues.length > 0 ? Math.min(...allValues) : 0;
+  const maxValueRaw = allValues.length > 0 ? Math.max(...allValues) : 0;
+
+  // Convert percentage thresholds from sliders to actual expression value thresholds
+  const minThresholdActual = minValueRaw + (maxValueRaw - minValueRaw) * (minThreshold / 100);
+  const maxThresholdActual = minValueRaw + (maxValueRaw - minValueRaw) * (maxThreshold / 100);
+
+  // Filter genes based on average expression within the actual thresholds
+  const filteredRows = genes.map((gene, idx) => {
+    const data = expressionData[idx];
+    const avgExpression = data && data.length > 0 ? data.reduce((a, b) => a + b, 0) / data.length : 0;
+    return {
+      geneIdx: idx,
+      gene: gene,
+      data: data,
+      avgExpression: avgExpression
+    };
+  }).filter(row =>
+    row.avgExpression >= minThresholdActual && row.avgExpression <= maxThresholdActual
+  );
 
   const handleExport = async () => {
     if (!heatmapRef.current) return;
@@ -88,6 +116,16 @@ export default function ExpressionHeatmap({ genes, samples, expressionData, user
     link.click();
   };
 
+  const getExplanation = () => {
+    if (!userEducationLevel || userEducationLevel === 'high_school') {
+      return "Colors show how active each gene is. Red = very active, Blue = less active.";
+    }
+    if (userEducationLevel === 'undergraduate') {
+      return "Heatmap showing gene expression levels. Color intensity represents expression strength.";
+    }
+    return "Expression matrix visualization. Rows = genes, Columns = samples, Color = expression level.";
+  };
+
   return (
     <Card className="shadow-lg">
       <CardHeader>
@@ -95,7 +133,7 @@ export default function ExpressionHeatmap({ genes, samples, expressionData, user
           <div>
             <CardTitle>Gene Expression Heatmap</CardTitle>
             <p className="text-sm text-slate-600 mt-1">
-              Expression across {genes.length} genes and {samples.length} samples
+              {getExplanation()}
             </p>
           </div>
           <div className="flex gap-2">
@@ -122,10 +160,44 @@ export default function ExpressionHeatmap({ genes, samples, expressionData, user
         <Alert className="bg-blue-50 border-blue-200">
           <Info className="h-4 w-4 text-blue-600" />
           <AlertDescription className="text-blue-900 text-sm">
-            <strong>Expression Heatmap:</strong> Color intensity represents gene expression levels. 
-            Blue = low expression, Red = high expression. Hover over cells for exact values.
+            <strong>Interactive Heatmap:</strong> Click any gene name to highlight it across all visualizations.
+            Use filters to focus on specific expression ranges.
           </AlertDescription>
         </Alert>
+
+        {/* Filter Controls */}
+        <div className="bg-slate-50 p-4 rounded border border-slate-200 space-y-3">
+          <div>
+            <Label className="text-sm">Expression Range Filter</Label>
+            <div className="flex items-center gap-4 mt-2">
+              <div className="flex-1">
+                <Label className="text-xs text-slate-600">Min Avg: {minThresholdActual.toFixed(2)}</Label>
+                <Slider
+                  value={[minThreshold]}
+                  onValueChange={(v) => setMinThreshold(v[0])}
+                  min={0}
+                  max={100}
+                  step={1}
+                  className="mt-1"
+                />
+              </div>
+              <div className="flex-1">
+                <Label className="text-xs text-slate-600">Max Avg: {maxThresholdActual.toFixed(2)}</Label>
+                <Slider
+                  value={[maxThreshold]}
+                  onValueChange={(v) => setMaxThreshold(v[0])}
+                  min={0}
+                  max={100}
+                  step={1}
+                  className="mt-1"
+                />
+              </div>
+            </div>
+          </div>
+          <p className="text-xs text-slate-500">
+            Showing {filteredRows.length} of {genes.length} genes with average expression between {minThresholdActual.toFixed(2)} and {maxThresholdActual.toFixed(2)}
+          </p>
+        </div>
 
         <div ref={heatmapRef} className="overflow-x-auto bg-white p-4 rounded border">
           <div className="min-w-max">
@@ -144,21 +216,32 @@ export default function ExpressionHeatmap({ genes, samples, expressionData, user
             </div>
 
             {/* Heatmap rows */}
-            {genes.map((gene, geneIdx) => (
+            {filteredRows.map(({ geneIdx, gene, data }) => (
               <div key={geneIdx} className="flex items-center">
-                <div className="w-32 text-sm font-mono font-semibold pr-2 text-right">
+                <div 
+                  className={`w-32 text-sm font-mono font-semibold pr-2 text-right cursor-pointer transition-colors ${
+                    gene === highlightedGene 
+                      ? 'text-amber-600 bg-amber-100 px-2 py-1 rounded' 
+                      : 'hover:text-blue-600'
+                  }`}
+                  onClick={() => onGeneClick && onGeneClick(gene)}
+                >
                   {gene}
                 </div>
                 {samples.map((_, sampleIdx) => {
-                  const value = expressionData[geneIdx][sampleIdx];
-                  const color = getColor(value, minValue, maxValue);
+                  const value = data[sampleIdx];
+                  const color = getColor(value, minValueRaw, maxValueRaw);
+                  const isHighlighted = gene === highlightedGene;
                   
                   return (
                     <div
                       key={sampleIdx}
-                      className="w-16 h-8 border border-slate-200 cursor-pointer hover:ring-2 hover:ring-blue-500 transition-all"
+                      className={`w-16 h-8 border cursor-pointer hover:ring-2 hover:ring-blue-500 transition-all ${
+                        isHighlighted ? 'ring-2 ring-amber-500 border-amber-500' : 'border-slate-200'
+                      }`}
                       style={{ backgroundColor: color }}
                       title={`${gene} - ${samples[sampleIdx]}: ${value.toFixed(2)}`}
+                      onClick={() => onGeneClick && onGeneClick(gene)}
                     >
                       <div className="w-full h-full flex items-center justify-center text-xs text-white drop-shadow">
                         {value.toFixed(1)}
@@ -177,7 +260,7 @@ export default function ExpressionHeatmap({ genes, samples, expressionData, user
               }}></div>
               <span className="text-sm text-slate-600">High</span>
               <div className="text-xs text-slate-500 ml-4">
-                Range: {minValue.toFixed(2)} - {maxValue.toFixed(2)}
+                Range: {minValueRaw.toFixed(2)} - {maxValueRaw.toFixed(2)}
               </div>
             </div>
           </div>

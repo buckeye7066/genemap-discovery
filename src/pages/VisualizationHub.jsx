@@ -8,6 +8,8 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   BarChart3,
   Plus,
@@ -18,8 +20,18 @@ import {
   TrendingUp,
   Network as NetworkIcon,
   Dna,
-  Target
+  Target,
+  Save,
+  FolderOpen,
+  AlertCircle
 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import GeneExpressionChart from "../components/visualizations/GeneExpressionChart";
 import ProteinDomains from "../components/visualizations/ProteinDomains";
 import ProteinInteractions from "../components/visualizations/ProteinInteractions";
@@ -48,9 +60,16 @@ export default function VisualizationHub() {
     'circos'
   ]);
   const [overlayMode, setOverlayMode] = useState(false);
+  const [highlightedGene, setHighlightedGene] = useState(null);
+  const [savedConfigs, setSavedConfigs] = useState([]);
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+  const [loadDialogOpen, setLoadDialogOpen] = useState(false);
+  const [configName, setConfigName] = useState("");
+  const [configDescription, setConfigDescription] = useState("");
 
   useEffect(() => {
     loadUser();
+    loadSavedConfigs();
   }, []);
 
   const loadUser = async () => {
@@ -59,6 +78,19 @@ export default function VisualizationHub() {
       setUser(currentUser);
     } catch (err) {
       console.log("Not logged in");
+    }
+  };
+
+  const loadSavedConfigs = async () => {
+    try {
+      const configs = await base44.entities.VisualizationConfig.filter(
+        {},
+        '-created_date'
+      );
+      setSavedConfigs(configs);
+    } catch (err) {
+      console.log("No saved configs found or error fetching configs:", err);
+      setSavedConfigs([]); // Ensure it's an empty array on error
     }
   };
 
@@ -112,12 +144,82 @@ export default function VisualizationHub() {
     });
   };
 
+  const handleGeneHighlight = (geneSymbol) => {
+    setHighlightedGene(prev => (prev === geneSymbol ? null : geneSymbol));
+  };
+
+  const handleSaveConfig = async () => {
+    if (!configName.trim() || selectedGenes.length === 0) {
+      setError("Configuration name cannot be empty, and at least one gene must be selected.");
+      return;
+    }
+
+    try {
+      await base44.entities.VisualizationConfig.create({
+        name: configName,
+        description: configDescription,
+        genes: selectedGenes.map(g => g.symbol),
+        active_visualizations: activeVisualizations,
+        settings: {
+          overlay_mode: overlayMode
+        }
+      });
+
+      setConfigName("");
+      setConfigDescription("");
+      setSaveDialogOpen(false);
+      await loadSavedConfigs();
+      
+    } catch (err) {
+      console.error("Error saving configuration:", err);
+      setError(`Failed to save configuration: ${err.message || 'Unknown error'}`);
+    }
+  };
+
+  const handleLoadConfig = async (config) => {
+    setIsLoading(true);
+    setError(null);
+    setLoadDialogOpen(false);
+
+    try {
+      // Load genes
+      const loadedGenesPromises = config.genes.map(async (geneSymbol) => {
+        const results = await PhenotypeSearchService.searchGenes(geneSymbol, false);
+        if (results.candidateGenes && results.candidateGenes.length > 0) {
+          return results.candidateGenes[0];
+        }
+        console.warn(`Could not find full data for gene: ${geneSymbol}`);
+        return null;
+      });
+
+      const resolvedGenes = await Promise.all(loadedGenesPromises);
+      const validLoadedGenes = resolvedGenes.filter(g => g !== null);
+
+      setSelectedGenes(validLoadedGenes);
+      const newGeneData = validLoadedGenes.reduce((acc, gene) => {
+        acc[gene.symbol] = gene;
+        return acc;
+      }, {});
+      setGeneData(newGeneData);
+      setActiveVisualizations(config.active_visualizations);
+      if (config.settings?.overlay_mode !== undefined) {
+        setOverlayMode(config.settings.overlay_mode);
+      }
+      
+    } catch (err) {
+      console.error("Error loading configuration:", err);
+      setError(`Failed to load configuration: ${err.message || 'Unknown error'}`);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   // Generate mock GWAS data for Manhattan plot
   const generateMockGWASData = () => {
     const data = [];
-    const chromosomes = ['chr1', 'chr2', 'chr3', 'chr4', 'chr5', 'chr6', 'chr7', 'chr8', 'chr9', 'chr10'];
+    // const chromosomes = ['chr1', 'chr2', 'chr3', 'chr4', 'chr5', 'chr6', 'chr7', 'chr8', 'chr9', 'chr10'];
     
-    selectedGenes.forEach((gene, geneIdx) => {
+    selectedGenes.forEach((gene) => {
       // Generate some significant hits near this gene
       for (let i = 0; i < 50; i++) {
         const position = (gene.start || 1000000) + (Math.random() - 0.5) * 10000000;
@@ -134,7 +236,11 @@ export default function VisualizationHub() {
       }
     });
     
-    return data.sort((a, b) => a.chromosome.localeCompare(b.chromosome) || a.position - b.position);
+    return data.sort((a, b) => {
+      const chrA = a.chromosome.replace('chr', '');
+      const chrB = b.chromosome.replace('chr', '');
+      return (parseInt(chrA, 10) || chrA.charCodeAt(0)) - (parseInt(chrB, 10) || chrB.charCodeAt(0)) || a.position - b.position;
+    });
   };
 
   // Generate expression data for heatmap
@@ -183,6 +289,105 @@ export default function VisualizationHub() {
           <p className="text-lg text-slate-600 max-w-3xl mx-auto">
             Interactive dashboard for comprehensive genomic data visualization and comparison
           </p>
+          
+          {/* Save/Load Buttons */}
+          <div className="flex justify-center gap-2 mt-4">
+            <Dialog open={saveDialogOpen} onOpenChange={setSaveDialogOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline" disabled={selectedGenes.length === 0} className="gap-2">
+                  <Save className="w-4 h-4" />
+                  Save Configuration
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Save Visualization Configuration</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4 pt-4">
+                  <div>
+                    <Label htmlFor="config-name">Configuration Name *</Label>
+                    <Input
+                      id="config-name"
+                      placeholder="e.g., BRCA Analysis Setup"
+                      value={configName}
+                      onChange={(e) => setConfigName(e.target.value)}
+                      className="mt-1"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="config-desc">Description</Label>
+                    <Textarea
+                      id="config-desc"
+                      placeholder="Optional description..."
+                      value={configDescription}
+                      onChange={(e) => setConfigDescription(e.target.value)}
+                      className="mt-1 h-20"
+                    />
+                  </div>
+                  <div className="bg-slate-50 p-3 rounded text-sm">
+                    <p className="font-medium text-slate-900 mb-1">Will Save:</p>
+                    <ul className="text-slate-700 space-y-1">
+                      <li>• {selectedGenes.length} gene{selectedGenes.length !== 1 ? 's' : ''}</li>
+                      <li>• {activeVisualizations.length} active visualization{activeVisualizations.length !== 1 ? 's' : ''}</li>
+                      <li>• Current display settings (e.g., overlay mode)</li>
+                    </ul>
+                  </div>
+                  <Button
+                    onClick={handleSaveConfig}
+                    disabled={!configName.trim()}
+                    className="w-full"
+                  >
+                    Save Configuration
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+
+            <Dialog open={loadDialogOpen} onOpenChange={setLoadDialogOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline" className="gap-2">
+                  <FolderOpen className="w-4 h-4" />
+                  Load Configuration
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Load Saved Configuration</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-3 pt-4 max-h-96 overflow-y-auto">
+                  {savedConfigs.length === 0 ? (
+                    <div className="text-center py-8">
+                      <AlertCircle className="w-12 h-12 mx-auto mb-3 text-slate-300" />
+                      <p className="text-slate-500 text-sm">No saved configurations</p>
+                    </div>
+                  ) : (
+                    savedConfigs.map((config) => (
+                      <Card
+                        key={config.id}
+                        className="cursor-pointer hover:bg-slate-50 transition-colors"
+                        onClick={() => handleLoadConfig(config)}
+                      >
+                        <CardContent className="pt-4">
+                          <h4 className="font-semibold text-slate-900">{config.name}</h4>
+                          {config.description && (
+                            <p className="text-xs text-slate-600 mt-1">{config.description}</p>
+                          )}
+                          <div className="flex gap-2 mt-2">
+                            <Badge variant="outline" className="text-xs">
+                              {config.genes.length} gene{config.genes.length !== 1 ? 's' : ''}
+                            </Badge>
+                            <Badge variant="outline" className="text-xs">
+                              {config.active_visualizations.length} plot{config.active_visualizations.length !== 1 ? 's' : ''}
+                            </Badge>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))
+                  )}
+                </div>
+              </DialogContent>
+            </Dialog>
+          </div>
         </div>
 
         {/* Gene Selection */}
@@ -411,6 +616,16 @@ export default function VisualizationHub() {
           </Card>
         ) : (
           <div className="space-y-8">
+            {/* Highlighted Gene Info */}
+            {highlightedGene && (
+              <Alert className="bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-300">
+                <Info className="h-4 w-4 text-blue-600" />
+                <AlertDescription className="text-blue-900">
+                  <strong>Highlighted:</strong> {highlightedGene} - Click any gene in visualizations to highlight across all plots. Click again to clear.
+                </AlertDescription>
+              </Alert>
+            )}
+
             {/* Gene Expression Comparison */}
             {activeVisualizations.includes('expression') && (
               <div>
@@ -451,6 +666,9 @@ export default function VisualizationHub() {
                           <GeneExpressionChart
                             expressionData={gene.expressionData}
                             userEducationLevel={user?.education_level}
+                            highlightedGene={highlightedGene}
+                            onGeneClick={handleGeneHighlight}
+                            geneSymbol={gene.symbol}
                           />
                         </div>
                       )
@@ -564,6 +782,9 @@ export default function VisualizationHub() {
                 <ManhattanPlot
                   gwasData={generateMockGWASData()}
                   userEducationLevel={user?.education_level}
+                  highlightedGene={highlightedGene}
+                  onGeneClick={handleGeneHighlight}
+                  allGenes={selectedGenes.map(g => g.symbol)}
                 />
               </div>
             )}
@@ -583,6 +804,8 @@ export default function VisualizationHub() {
                       samples={samples}
                       expressionData={matrix}
                       userEducationLevel={user?.education_level}
+                      highlightedGene={highlightedGene}
+                      onGeneClick={handleGeneHighlight}
                     />
                   );
                 })()}
@@ -599,6 +822,8 @@ export default function VisualizationHub() {
                 <CircosPlot
                   genes={selectedGenes}
                   userEducationLevel={user?.education_level}
+                  highlightedGene={highlightedGene}
+                  onGeneClick={handleGeneHighlight}
                 />
               </div>
             )}

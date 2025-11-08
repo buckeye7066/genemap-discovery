@@ -1,9 +1,10 @@
-import React, { useState } from "react";
+
+import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
-import { Activity, ZoomIn, ZoomOut, RotateCcw, Filter, Info } from "lucide-react";
+import { Activity, ZoomIn, ZoomOut, RotateCcw, Filter, Info, SortAsc, SortDesc } from "lucide-react"; // Added SortAsc, SortDesc (though not strictly used in current sort UI)
 import {
   BarChart,
   Bar,
@@ -21,16 +22,22 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Alert, AlertDescription } from "@/components/ui/alert"; // Added Alert imports
 
 const COLORS = ['#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#06b6d4', '#6366f1', '#ef4444'];
 
-export default function GeneExpressionChart({ expressionData, userEducationLevel }) {
+export default function GeneExpressionChart({ expressionData, userEducationLevel, highlightedGene, onGeneClick, geneSymbol }) {
   const [zoomLevel, setZoomLevel] = useState(1);
-  const [selectedTissues, setSelectedTissues] = useState(
-    expressionData.map(d => d.tissue)
-  );
-  const [sortOrder, setSortOrder] = useState('default'); // 'default', 'asc', 'desc'
-  const [highlightedTissue, setHighlightedTissue] = useState(null);
+  const [selectedTissues, setSelectedTissues] = useState([]); // Initialized as empty as per outline
+  const [sortBy, setSortBy] = useState("value"); // Changed from sortOrder to sortBy, default to "value"
+
+  // useEffect to initialize selectedTissues with all tissues when expressionData is available
+  // This ensures that when the component first mounts or expressionData changes, all tissues are selected by default.
+  useEffect(() => {
+    if (expressionData && expressionData.length > 0 && selectedTissues.length === 0) {
+      setSelectedTissues(expressionData.map(d => d.tissue));
+    }
+  }, [expressionData]); // Removed selectedTissues.length from dependency array to avoid infinite loop
 
   const isSimplified = userEducationLevel === 'high_school';
 
@@ -52,7 +59,7 @@ export default function GeneExpressionChart({ expressionData, userEducationLevel
     return tissue;
   };
 
-  const getExplanationText = () => {
+  const getExplanationText = () => { // Renamed from getExplanation() to match existing function
     if (isSimplified) {
       return "This chart shows how active this gene is in different parts of your body. Taller bars mean more activity.";
     }
@@ -71,8 +78,9 @@ export default function GeneExpressionChart({ expressionData, userEducationLevel
     setZoomLevel(1);
   };
 
+  // Modified handler for new sortBy state
   const handleSortChange = (order) => {
-    setSortOrder(order);
+    setSortBy(order);
   };
 
   const toggleTissue = (tissue) => {
@@ -93,19 +101,22 @@ export default function GeneExpressionChart({ expressionData, userEducationLevel
     setSelectedTissues([]);
   };
 
-  // Process and sort data
-  let processedData = expressionData
-    .filter(d => selectedTissues.includes(d.tissue))
+  // Process and sort data (renamed processedData to sortedData)
+  let sortedData = expressionData
+    .filter(d => selectedTissues.length === 0 || selectedTissues.includes(d.tissue)) // Filter logic updated
     .map(d => ({
       ...d,
       displayName: isSimplified ? simplifyTissueName(d.tissue) : d.tissue
     }));
 
-  if (sortOrder === 'asc') {
-    processedData = [...processedData].sort((a, b) => a.expression - b.expression);
-  } else if (sortOrder === 'desc') {
-    processedData = [...processedData].sort((a, b) => b.expression - a.expression);
+  // Apply sorting based on new sortBy state
+  if (sortBy === 'value') { // Corresponds to High->Low expression
+    sortedData = [...sortedData].sort((a, b) => b.expression - a.expression);
+  } else if (sortBy === 'alphabetical') { // New sort option
+    sortedData = [...sortedData].sort((a, b) => a.tissue.localeCompare(b.tissue));
   }
+  // If sortBy is 'default' or anything else, it will use the original order of expressionData after filtering.
+  // Given sortBy defaults to "value", this block is sufficient.
 
   const CustomTooltip = ({ active, payload }) => {
     if (active && payload && payload.length) {
@@ -168,13 +179,26 @@ export default function GeneExpressionChart({ expressionData, userEducationLevel
     );
   };
 
+  const isHighlighted = geneSymbol === highlightedGene;
+
   return (
-    <Card className="shadow-md hover:shadow-lg transition-shadow">
+    <Card className={`shadow-md hover:shadow-lg transition-shadow ${isHighlighted ? 'ring-2 ring-amber-500 bg-amber-50/30' : ''}`}>
       <CardHeader>
         <div className="flex items-center justify-between flex-wrap gap-3">
-          <div className="flex items-center gap-2">
+          <div
+            className={`flex items-center gap-2 cursor-pointer ${isHighlighted ? 'text-amber-900' : ''}`}
+            onClick={() => onGeneClick && onGeneClick(geneSymbol)}
+          >
             <Activity className="w-5 h-5 text-cyan-600" />
-            <CardTitle className="text-lg">Gene Expression Levels</CardTitle>
+            <CardTitle className="text-lg flex items-center gap-2">
+              {geneSymbol && <span className="text-blue-600">{geneSymbol}</span>} Gene Expression
+              {isHighlighted && (
+                <Badge className="bg-amber-600 text-white text-xs">Highlighted</Badge>
+              )}
+            </CardTitle>
+            <p className="text-sm text-slate-600 mt-1">
+              {getExplanationText()}
+            </p>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             {/* Filter Popover */}
@@ -229,31 +253,23 @@ export default function GeneExpressionChart({ expressionData, userEducationLevel
               </PopoverContent>
             </Popover>
 
-            {/* Sort Options */}
+            {/* Sort Options (updated for new sortBy states) */}
             <div className="flex gap-1 border rounded-md p-1">
               <Button
-                variant={sortOrder === 'default' ? 'secondary' : 'ghost'}
+                variant={sortBy === 'value' ? 'secondary' : 'ghost'}
                 size="sm"
-                onClick={() => handleSortChange('default')}
-                className="text-xs h-7 px-2"
-              >
-                Default
-              </Button>
-              <Button
-                variant={sortOrder === 'desc' ? 'secondary' : 'ghost'}
-                size="sm"
-                onClick={() => handleSortChange('desc')}
+                onClick={() => handleSortChange('value')}
                 className="text-xs h-7 px-2"
               >
                 High→Low
               </Button>
               <Button
-                variant={sortOrder === 'asc' ? 'secondary' : 'ghost'}
+                variant={sortBy === 'alphabetical' ? 'secondary' : 'ghost'}
                 size="sm"
-                onClick={() => handleSortChange('asc')}
+                onClick={() => handleSortChange('alphabetical')}
                 className="text-xs h-7 px-2"
               >
-                Low→High
+                A→Z
               </Button>
             </div>
 
@@ -300,8 +316,9 @@ export default function GeneExpressionChart({ expressionData, userEducationLevel
                     <li>• Hover over bars for detailed values</li>
                     <li>• Use zoom controls to adjust view</li>
                     <li>• Filter tissues to focus on specific organs</li>
-                    <li>• Sort data by expression level</li>
+                    <li>• Sort data by expression level or alphabetically</li>
                     <li>• Colors indicate different tissues</li>
+                    <li>• Click on a gene symbol to highlight it across all charts</li>
                   </ul>
                 </div>
               </PopoverContent>
@@ -309,7 +326,16 @@ export default function GeneExpressionChart({ expressionData, userEducationLevel
           </div>
         </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-4">
+        {isHighlighted && (
+          <Alert className="bg-amber-50 border-amber-200">
+            <Info className="h-4 w-4 text-amber-600" />
+            <AlertDescription className="text-amber-900 text-sm">
+              This gene is highlighted across all visualizations. Click another gene to change selection.
+            </AlertDescription>
+          </Alert>
+        )}
+
         <div className="mb-4">
           <Badge variant="outline" className="text-xs bg-cyan-50 text-cyan-700 border-cyan-200">
             {getExplanationText()}
@@ -320,12 +346,19 @@ export default function GeneExpressionChart({ expressionData, userEducationLevel
           <div className="text-center py-12 text-slate-500">
             <Filter className="w-12 h-12 mx-auto mb-3 text-slate-300" />
             <p className="text-sm">No tissues selected. Use the filter to select tissues.</p>
+            <Button
+              variant="link"
+              onClick={selectAllTissues}
+              className="mt-2"
+            >
+              Select All Tissues
+            </Button>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <ResponsiveContainer width="100%" height={Math.max(300, 300 * zoomLevel)}>
               <BarChart
-                data={processedData}
+                data={sortedData} // Changed to sortedData
                 margin={{ top: 20, right: 30, left: 20, bottom: 80 }}
               >
                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
@@ -351,7 +384,7 @@ export default function GeneExpressionChart({ expressionData, userEducationLevel
                   animationDuration={800}
                   animationBegin={0}
                 >
-                  {processedData.map((entry, index) => (
+                  {sortedData.map((entry, index) => ( // Changed to sortedData
                     <Cell
                       key={`cell-${index}`}
                       fill={COLORS[index % COLORS.length]}
@@ -366,7 +399,7 @@ export default function GeneExpressionChart({ expressionData, userEducationLevel
         )}
 
         <div className="mt-4 text-xs text-slate-500 text-center">
-          Zoom: {Math.round(zoomLevel * 100)}% | Showing {processedData.length} of {expressionData.length} tissues
+          Zoom: {Math.round(zoomLevel * 100)}% | Showing {sortedData.length} of {expressionData.length} tissues
         </div>
       </CardContent>
     </Card>
