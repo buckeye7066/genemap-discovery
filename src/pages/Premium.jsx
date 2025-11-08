@@ -18,14 +18,24 @@ import {
   AlertCircle,
   Loader2,
   ExternalLink,
-  CheckCircle, // New icon import
-  Settings // New icon import
+  CheckCircle,
+  Settings,
+  Building2 // New icon import
 } from "lucide-react";
+import Link from "next/link"; // New import for navigation
 
-import { createCheckoutSession } from "@/functions/createCheckoutSession"; // New import
-import { createPortalSession } from "@/functions/createPortalSession"; // New import
+import { createCheckoutSession } from "@/functions/createCheckoutSession";
+import { createPortalSession } from "@/functions/createPortalSession";
 
-// Removed: isInIframe function as it's no longer used
+// New helper function for creating page URLs (assuming Next.js routing)
+const createPageUrl = (pageName) => {
+  switch (pageName) {
+    case "InstitutionalPricing":
+      return "/institutional-pricing"; // Or the actual path for institutional pricing
+    default:
+      return `/${pageName.toLowerCase().replace(/ /g, '-')}`; // Fallback for other pages
+  }
+};
 
 export default function PremiumPage() {
   const [user, setUser] = useState(null);
@@ -33,15 +43,10 @@ export default function PremiumPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // New state variables from outline
   const [hasActiveSubscription, setHasActiveSubscription] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false); // Replaces isSubscribing
+  const [isProcessing, setIsProcessing] = useState(false);
   const [paymentSuccess, setPaymentSuccess] = useState(false);
   const [paymentCanceled, setPaymentCanceled] = useState(false);
-
-  // Removed: const [isSubscribing, setIsSubscribing] = useState(false);
-  // Removed: const [paymentStatus, setPaymentStatus] = useState(null);
-  // Removed: const [isPreview] = useState(isInIframe());
 
   useEffect(() => {
     checkSubscriptionStatus();
@@ -93,8 +98,6 @@ export default function PremiumPage() {
     }
   };
 
-  // Removed: old loadData function
-
   const handleSubscribe = async () => {
     setIsProcessing(true);
     setError(null);
@@ -135,8 +138,6 @@ export default function PremiumPage() {
       setIsProcessing(false);
     }
   };
-
-  // Removed: isAdmin and isPremium logic as it's replaced by hasActiveSubscription for UI display
 
   if (isLoading) {
     return (
@@ -196,9 +197,7 @@ export default function PremiumPage() {
           </Alert>
         )}
 
-        {/* Removed: old paymentStatus and isPreview alerts */}
-
-        {/* Current Subscription Status (replaces old isPremium card) */}
+        {/* Current Subscription Status */}
         {hasActiveSubscription && subscription && (
           <Card className="mb-6 bg-gradient-to-r from-green-50 to-emerald-50 border-green-200 shadow-lg">
             <CardContent className="pt-6">
@@ -242,7 +241,7 @@ export default function PremiumPage() {
           </Card>
         )}
 
-        {/* Retained Free Tier status card if no active subscription */}
+        {/* Free Tier status if no active subscription */}
         {!hasActiveSubscription && (
           <Card className="mb-8 bg-blue-50 border-blue-200">
             <CardContent className="pt-6">
@@ -258,6 +257,36 @@ export default function PremiumPage() {
           </Card>
         )}
 
+        {/* Institutional License CTA - NEW */}
+        <Card className="mb-8 bg-gradient-to-r from-indigo-50 to-purple-50 border-indigo-200 shadow-lg">
+          <CardContent className="pt-6">
+            <div className="flex flex-col md:flex-row items-center gap-4">
+              <div className="w-16 h-16 bg-indigo-600 rounded-xl flex items-center justify-center flex-shrink-0">
+                <Building2 className="w-8 h-8 text-white" />
+              </div>
+              <div className="flex-1 text-center md:text-left">
+                <h3 className="text-xl font-bold text-indigo-900 mb-1">
+                  Institutional Licensing for Teams
+                </h3>
+                <p className="text-indigo-700 mb-2">
+                  Get premium access for your entire organization with volume discounts, admin controls, and dedicated support
+                </p>
+                <div className="flex flex-wrap gap-2 justify-center md:justify-start">
+                  <Badge className="bg-indigo-600 text-white">Starting at $5.99/user/month</Badge>
+                  <Badge className="bg-green-600 text-white">Save up to 40%</Badge>
+                </div>
+              </div>
+              <Link href={createPageUrl("InstitutionalPricing")}>
+                <Button className="bg-indigo-600 hover:bg-indigo-700 gap-2">
+                  <Building2 className="w-4 h-4" />
+                  View Institutional Plans
+                </Button>
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Individual vs Team comparison grid */}
         <div className="grid md:grid-cols-2 gap-6 mb-8">
 
           <Card>
