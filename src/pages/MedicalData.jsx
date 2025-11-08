@@ -8,6 +8,14 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -25,10 +33,14 @@ import {
   Trash2,
   Eye,
   Download,
-  MessageSquare
+  MessageSquare,
+  Shield, // New import
+  TrendingUp, // New import
+  Info // New import
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
+import MedicalDataComparison from "../components/medical/MedicalDataComparison"; // New import
 
 export default function MedicalDataPage() {
   const [user, setUser] = useState(null);
@@ -38,6 +50,13 @@ export default function MedicalDataPage() {
   const [uploadProgress, setUploadProgress] = useState("");
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
+  const [selectedRecords, setSelectedRecords] = useState([]);
+  const [showComparison, setShowComparison] = useState(false);
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
+  const [shareWithEmail, setShareWithEmail] = useState("");
+  const [sharePurpose, setSharePurpose] = useState("");
+  const [isSharing, setIsSharing] = useState(false);
+  const [sharedRecords, setSharedRecords] = useState([]);
 
   const [uploadForm, setUploadForm] = useState({
     file: null,
@@ -59,6 +78,21 @@ export default function MedicalDataPage() {
         '-created_date'
       );
       setMedicalRecords(records);
+
+      // Load shared records the user has access to
+      try {
+        const shares = await base44.entities.MedicalDataShare.filter({
+          shared_with_email: currentUser.email,
+          status: 'active'
+        });
+        
+        // Get the actual records that were shared
+        // For now, we'll just track the shares objects, as fetching actual records by ID list
+        // might require a different backend API or multiple calls.
+        setSharedRecords(shares);
+      } catch (err) {
+        console.log("No shared records found for current user or error fetching shares:", err.message);
+      }
     } catch (err) {
       console.error("Error loading data:", err);
       setError("Failed to load medical records");
@@ -278,6 +312,78 @@ Focus on medically relevant information and genetic associations.
     }
   };
 
+  const toggleRecordSelection = (recordId) => {
+    setSelectedRecords(prev => {
+      if (prev.includes(recordId)) {
+        return prev.filter(id => id !== recordId);
+      } else {
+        return [...prev, recordId];
+      }
+    });
+  };
+
+  const handleCompareRecords = () => {
+    // Filter medicalRecords based on selectedRecords IDs.
+    // This is already done inside the `if (showComparison)` block for rendering.
+    setShowComparison(true);
+  };
+
+  const handleShareRecords = async () => {
+    if (!shareWithEmail.trim() || !sharePurpose.trim()) {
+      setError("Please enter recipient email and purpose");
+      return;
+    }
+
+    if (selectedRecords.length === 0) {
+      setError("Please select records to share");
+      return;
+    }
+
+    setIsSharing(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      // Create share permissions for each selected record
+      for (const recordId of selectedRecords) {
+        await base44.entities.MedicalDataShare.create({
+          record_id: recordId,
+          shared_with_email: shareWithEmail.trim(),
+          shared_by_email: user.email,
+          permission_level: 'compare', // As specified in the outline
+          purpose: sharePurpose.trim(),
+          status: 'active'
+        });
+      }
+
+      setSuccess(`Successfully shared ${selectedRecords.length} record(s) with ${shareWithEmail}`);
+      setShareDialogOpen(false);
+      setShareWithEmail("");
+      setSharePurpose("");
+      setSelectedRecords([]); // Clear selection after sharing
+    } catch (err) {
+      console.error("Error sharing records:", err);
+      setError("Failed to share records. Please try again. " + err.message);
+    } finally {
+      setIsSharing(false);
+    }
+  };
+
+  const handleRevokeShare = async (shareId) => {
+    if (!window.confirm("Are you sure you want to revoke this sharing permission?")) {
+      return;
+    }
+
+    try {
+      await base44.entities.MedicalDataShare.update(shareId, {
+        status: 'revoked'
+      });
+      setSuccess("Sharing permission revoked successfully");
+      await loadData(); // Reload to reflect changes
+    } catch (err) {
+      setError("Failed to revoke sharing permission");
+    }
+  };
+
   const fileTypeLabels = {
     genetic_test: "Genetic Test (23andMe, AncestryDNA, etc.)",
     blood_test: "Blood Test (CBC, BMP, etc.)",
@@ -302,6 +408,20 @@ Focus on medically relevant information and genetic associations.
           <p className="text-slate-600">Loading your medical data...</p>
         </div>
       </div>
+    );
+  }
+
+  if (showComparison) {
+    const recordsToCompare = medicalRecords.filter(r => selectedRecords.includes(r.id));
+    return (
+      <MedicalDataComparison
+        records={recordsToCompare}
+        onClose={() => {
+          setShowComparison(false);
+          setSelectedRecords([]);
+        }}
+        userEducationLevel={user?.education_level}
+      />
     );
   }
 
@@ -360,6 +480,112 @@ Focus on medically relevant information and genetic associations.
             </div>
           </CardContent>
         </Card>
+
+        {/* Comparison Selection Mode */}
+        {selectedRecords.length > 0 && (
+          <Card className="mb-6 bg-gradient-to-r from-purple-50 to-indigo-50 border-purple-200 shadow-lg">
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between flex-wrap gap-4">
+                <div>
+                  <h3 className="font-semibold text-purple-900 mb-1">
+                    {selectedRecords.length} record{selectedRecords.length > 1 ? 's' : ''} selected
+                  </h3>
+                  <p className="text-sm text-purple-700">
+                    Compare records or share with approved users
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => setSelectedRecords([])}
+                    className="min-h-[44px]"
+                  >
+                    Clear
+                  </Button>
+                  
+                  <Dialog open={shareDialogOpen} onOpenChange={setShareDialogOpen}>
+                    <DialogTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className="min-h-[44px] gap-2"
+                      >
+                        <Shield className="w-4 h-4" />
+                        Share
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>Share Medical Records (HIPAA Compliant)</DialogTitle>
+                      </DialogHeader>
+                      <div className="space-y-4 pt-4">
+                        <Alert className="bg-amber-50 border-amber-200">
+                          <Shield className="h-4 w-4 text-amber-600" />
+                          <AlertDescription className="text-amber-900 text-xs">
+                            <strong>Privacy Notice:</strong> You are about to share {selectedRecords.length} medical record(s). 
+                            Only share with trusted individuals. You can revoke access at any time.
+                          </AlertDescription>
+                        </Alert>
+
+                        <div>
+                          <Label htmlFor="share-email">Recipient Email *</Label>
+                          <Input
+                            id="share-email"
+                            type="email"
+                            placeholder="user@example.com"
+                            value={shareWithEmail}
+                            onChange={(e) => setShareWithEmail(e.target.value)}
+                            className="mt-1"
+                          />
+                        </div>
+
+                        <div>
+                          <Label htmlFor="share-purpose">Purpose of Sharing *</Label>
+                          <Textarea
+                            id="share-purpose"
+                            placeholder="e.g., Second opinion, family member access, research collaboration"
+                            value={sharePurpose}
+                            onChange={(e) => setSharePurpose(e.target.value)}
+                            className="mt-1 h-20"
+                          />
+                          <p className="text-xs text-slate-500 mt-1">
+                            This helps maintain an audit trail for compliance
+                          </p>
+                        </div>
+
+                        <Button
+                          onClick={handleShareRecords}
+                          disabled={isSharing || !shareWithEmail.trim() || !sharePurpose.trim()}
+                          className="w-full bg-purple-600 hover:bg-purple-700"
+                        >
+                          {isSharing ? (
+                            <>
+                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                              Sharing...
+                            </>
+                          ) : (
+                            <>
+                              <Shield className="w-4 h-4 mr-2" />
+                              Share Records
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    </DialogContent>
+                  </Dialog>
+
+                  <Button
+                    onClick={handleCompareRecords}
+                    disabled={selectedRecords.length < 2}
+                    className="bg-purple-600 hover:bg-purple-700 min-h-[44px] gap-2"
+                  >
+                    <TrendingUp className="w-4 h-4" />
+                    Compare ({selectedRecords.length})
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Upload Form */}
         <Card className="shadow-lg mb-8">
@@ -472,7 +698,14 @@ Focus on medically relevant information and genetic associations.
 
         {/* Uploaded Records */}
         <div className="space-y-4">
-          <h2 className="text-2xl font-bold text-slate-900">Your Medical Records</h2>
+          <div className="flex items-center justify-between">
+            <h2 className="text-2xl font-bold text-slate-900">Your Medical Records</h2>
+            {medicalRecords.length > 1 && (
+              <Badge variant="outline" className="text-xs">
+                Select records to compare or share
+              </Badge>
+            )}
+          </div>
           
           {medicalRecords.length === 0 ? (
             <Card className="border-2 border-dashed border-slate-200">
@@ -488,10 +721,18 @@ Focus on medically relevant information and genetic associations.
             </Card>
           ) : (
             medicalRecords.map((record) => (
-              <Card key={record.id} className="shadow-md hover:shadow-lg transition-shadow">
+              <Card key={record.id} className={`shadow-md hover:shadow-lg transition-shadow ${
+                selectedRecords.includes(record.id) ? 'ring-2 ring-purple-500 bg-purple-50/30' : ''
+              }`}>
                 <CardHeader>
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-3">
+                      {medicalRecords.length > 1 && (
+                        <Checkbox
+                          checked={selectedRecords.includes(record.id)}
+                          onCheckedChange={() => toggleRecordSelection(record.id)}
+                        />
+                      )}
                       <div className="text-3xl">{fileTypeIcons[record.file_type]}</div>
                       <div>
                         <CardTitle className="text-lg">
@@ -518,6 +759,7 @@ Focus on medically relevant information and genetic associations.
                         size="icon"
                         onClick={() => window.open(record.file_url, '_blank')}
                         className="h-9 w-9"
+                        title="View original file"
                       >
                         <Eye className="w-4 h-4" />
                       </Button>
@@ -526,6 +768,7 @@ Focus on medically relevant information and genetic associations.
                         size="icon"
                         onClick={() => handleDelete(record.id)}
                         className="h-9 w-9 text-red-600 hover:text-red-700"
+                        title="Delete record"
                       >
                         <Trash2 className="w-4 h-4" />
                       </Button>
@@ -576,6 +819,53 @@ Focus on medically relevant information and genetic associations.
             ))
           )}
         </div>
+
+        {/* Shared Records Section */}
+        {sharedRecords.length > 0 && (
+          <div className="mt-8 space-y-4">
+            <h2 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
+              <Shield className="w-6 h-6 text-blue-600" />
+              Records Shared With You
+            </h2>
+            <Alert className="bg-blue-50 border-blue-200">
+              <Info className="h-4 w-4 text-blue-600" />
+              <AlertDescription className="text-blue-900 text-sm">
+                These records have been shared with you by other users. You can review the sharing details and revoke access if needed.
+              </AlertDescription>
+            </Alert>
+
+            {sharedRecords.map((share) => (
+              <Card key={share.id} className="border-blue-200">
+                <CardContent className="pt-6 flex justify-between items-center">
+                  <div>
+                    <p className="font-semibold text-slate-900">
+                      Shared by: {share.shared_by_email}
+                    </p>
+                    <p className="text-sm text-slate-600">
+                      Purpose: {share.purpose}
+                    </p>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Shared: {new Date(share.created_date).toLocaleDateString()}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="bg-blue-50 text-blue-700">
+                      {share.permission_level}
+                    </Badge>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => handleRevokeShare(share.id)}
+                      title="Revoke sharing access"
+                    >
+                      <Trash2 className="w-4 h-4 mr-1" /> Revoke
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
