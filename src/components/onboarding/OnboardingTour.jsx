@@ -173,7 +173,7 @@ Every change is automatically saved as a version - you can restore any previous 
 • Pathway enrichment tools
 • AI hypothesis generation
 
-**Pricing:** Just **$4.99/month**
+**Pricing:** Just **$9.99/month**
 
 **Special access:** Researchers and clinicians may qualify for institutional licenses!`,
     action: 'View Premium',

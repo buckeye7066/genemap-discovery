@@ -340,7 +340,7 @@ export default function PremiumPage() {
           </Card>
         </div>
 
-        {/* Subscription CTA (replaces old !isPremium CTA) */}
+        {/* Subscription CTA */}
         {!hasActiveSubscription && (
           <div className="text-center mt-12">
             <Card className="max-w-2xl mx-auto shadow-2xl border-2 border-amber-200 bg-gradient-to-br from-amber-50 to-yellow-50">
@@ -381,42 +381,6 @@ export default function PremiumPage() {
             </Card>
           </div>
         )}
-
-        <div className="mt-8">
-          <h2 className="text-2xl font-bold text-center mb-6">Premium Examples</h2>
-          <div className="grid sm:grid-cols-3 gap-4">
-            <Card className="bg-blue-50 border-blue-200">
-              <CardContent className="pt-6">
-                <Users className="w-8 h-8 text-blue-600 mb-2" />
-                <h4 className="font-semibold mb-2">Population Data</h4>
-                <p className="text-sm text-blue-700">
-                  "1 in 175,000 births globally (OMIM, 2024)"
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-purple-50 border-purple-200">
-              <CardContent className="pt-6">
-                <History className="w-8 h-8 text-purple-600 mb-2" />
-                <h4 className="font-semibold mb-2">Gene History</h4>
-                <p className="text-sm text-purple-700">
-                  "Highly conserved, linked to hedgehog signaling..."
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-green-50 border-green-200">
-              <CardContent className="pt-6">
-                <Pill className="w-8 h-8 text-green-600 mb-2" />
-                <h4 className="font-semibold mb-2">Treatments</h4>
-                <p className="text-sm text-green-700">
-                  "Surgical correction at 12-18 months recommended..."
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-
       </div>
     </div>
   );
