@@ -44,7 +44,7 @@ const navigationItems = [
     url: createPageUrl("AIAssistants"),
     icon: MessageSquare,
     highlight: true,
-    badge: "Chat"
+    badge: "Voice" // Changed from "Chat" to "Voice"
   },
   {
     title: "VCF Analysis",
