@@ -12,6 +12,7 @@ import ResearchMode from './pages/ResearchMode';
 import Dashboard from './pages/Dashboard';
 import AIAssistants from './pages/AIAssistants';
 import VCFAnalysis from './pages/VCFAnalysis';
+import InstitutionalAdmin from './pages/InstitutionalAdmin';
 import Layout from './Layout.jsx';
 
 
@@ -30,6 +31,7 @@ export const PAGES = {
     "Dashboard": Dashboard,
     "AIAssistants": AIAssistants,
     "VCFAnalysis": VCFAnalysis,
+    "InstitutionalAdmin": InstitutionalAdmin,
 }
 
 export const pagesConfig = {
