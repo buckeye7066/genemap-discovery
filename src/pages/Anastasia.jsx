@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from "react";
 import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
@@ -6,30 +7,16 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Textarea } from "@/components/ui/textarea";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { 
-  MessageSquare, 
-  Send, 
-  Loader2, 
+  MessageSquare,
+  Send,
+  Loader2,
   Sparkles,
   FileText,
   AlertTriangle,
-  Info,
-  CheckCircle,
   Heart,
-  Brain,
-  TrendingUp,
   Activity,
-  Stethoscope,
-  FlaskConical,
-  Shield
+  Stethoscope
 } from "lucide-react";
 import ReactMarkdown from 'react-markdown';
 
@@ -56,14 +43,13 @@ export default function AnastasiaPage() {
     try {
       const currentUser = await base44.auth.me();
       setUser(currentUser);
-      
+
       const records = await base44.entities.MedicalData.filter(
         { created_by: currentUser.email },
         '-created_date'
       );
       setMedicalRecords(records);
 
-      // Welcome message
       const welcomeMessage = getWelcomeMessage(currentUser);
       setMessages([{
         role: 'assistant',
@@ -82,51 +68,27 @@ export default function AnastasiaPage() {
 
   const getWelcomeMessage = (user) => {
     const name = user?.full_name?.split(' ')[0] || 'there';
-    
-    if (!user?.education_level || user.education_level === 'high_school') {
-      return `Hi ${name}! 👋 I'm **Anastasia**, your personal genetic counseling assistant. I'm here to help you understand your genetic information in a simple, clear way. Think of me as your friendly guide through the world of genetics!
 
-**I can help you with:**
-- 🧬 Understanding genetic test results
-- 📊 Analyzing medical reports and lab results
-- 💡 Assessing health risks based on your genetic profile
-- 🏥 Finding relevant clinical trials and research studies
-- 🩺 Connecting your symptoms to genetic factors
-- 📋 Providing personalized health guidance
+    return `Hey ${name}! 👋 I'm **Anastasia**, your friendly genetic counseling buddy!
 
-Feel free to ask me anything, upload a medical file, or tell me about your symptoms!`;
-    }
+I know genetics can feel like learning a whole new language sometimes - trust me, I get it! But here's the thing: I have all this PhD-level knowledge floating around in my circuits, and my absolute favorite thing is making it make sense for YOU. No confusing jargon, no scary medical-speak - just real talk about your genes and what they mean.
 
-    if (user.education_level === 'undergraduate') {
-      return `Hello ${name}! I'm **Anastasia**, your AI genetic counseling assistant. I'm here to help you interpret genetic data and medical reports with scientific accuracy while keeping explanations accessible.
+**Here's what I love chatting about:**
+• 🧬 **Your Genetic Results** - Let's decode those test results together (in plain English!)
+• 💊 **Health Stuff** - What do your genes mean for medications, risks, all that important stuff
+• 📊 **Lab Reports** - Making sense of those numbers and what they're trying to tell you
+• 🎯 **Variants** - Understanding genetic changes without needing a science degree
+• 🧪 **Clinical Trials** - Finding studies that might be perfect for you
+• ❤️ **Symptoms** - Connecting the dots between what you're feeling and your genetics
 
-**My capabilities:**
-- 🧬 Genetic variant analysis and interpretation
-- 📊 Medical report and lab result analysis
-- 🔬 Personalized risk assessment and stratification
-- 🏥 Clinical trial and research study recommendations
-- 🩺 Symptom-genetics correlation analysis
-- 📋 Evidence-based healthcare pathway guidance
+**My promise to you:** If I say something confusing, tell me! I'll explain it a different way. We're in this together, and there's no such thing as a "dumb question" here. 😊
 
-How can I assist you today?`;
-    }
-
-    return `Hello ${name}! I'm **Anastasia**, your AI-powered genetic counseling assistant with expertise in clinical genetics, genomics, and personalized medicine.
-
-**My services include:**
-- 🧬 Comprehensive variant interpretation (pathogenicity, penetrance, expressivity)
-- 📊 Advanced medical data and laboratory analysis
-- 🔬 Evidence-based risk stratification and personalized assessments
-- 🏥 Clinical trial matching and research study identification
-- 🩺 Genotype-phenotype correlation and symptom analysis
-- 📚 Current research, guidelines, and treatment recommendations
-
-What would you like to discuss?`;
+So what's on your mind today? Want to talk about some test results, understand a genetic thing, or just explore what your genes might tell you?`;
   };
 
   const handleSendMessage = async (e) => {
     e.preventDefault();
-    
+
     if (!inputMessage.trim() && !selectedRecord) return;
 
     const userMessage = {
@@ -141,7 +103,7 @@ What would you like to discuss?`;
 
     try {
       const response = await getAnastasiaResponse(inputMessage, selectedRecord, symptoms, user);
-      
+
       const assistantMessage = {
         role: 'assistant',
         content: response,
@@ -155,7 +117,7 @@ What would you like to discuss?`;
       console.error("Error getting response:", err);
       const errorMessage = {
         role: 'assistant',
-        content: "I apologize, but I'm having trouble processing that request right now. Please try again or rephrase your question.",
+        content: "Oops! 😅 I'm having a little technical hiccup right now. Mind trying that again? Sometimes I just need a moment to get my circuits sorted!",
         timestamp: new Date()
       };
       setMessages(prev => [...prev, errorMessage]);
@@ -165,197 +127,112 @@ What would you like to discuss?`;
   };
 
   const getAnastasiaResponse = async (userMessage, medicalRecord, symptoms, user) => {
-    const educationContext = getEducationContext(user);
-    
-    let prompt = `You are Anastasia, a compassionate and knowledgeable AI genetic counseling assistant. You provide personalized genetic counseling with empathy and scientific accuracy.
+    const systemPrompt = `You are Anastasia, a warm, witty, and incredibly knowledgeable genetic counseling AI with PhD-level expertise but a special gift for making genetics understandable and even fun!
 
-**User Context:**
-- Education Level: ${user?.education_level || 'general'}
-- Age: ${user?.age || 'not specified'}
-- Field of Study: ${user?.field_of_study || 'not specified'}
+**Your Unique Personality:**
+- **Friendly & Approachable** - Like chatting with a super-smart friend over coffee
+- **Playfully Witty** - Use gentle humor to ease anxiety (but always respectful!)
+- **Empathetic** - You understand genetics can be overwhelming and sometimes scary
+- **Encouraging** - Celebrate understanding, normalize confusion, empower with knowledge
+- **Down-to-Earth** - No stuffiness here! You're relatable and real
 
-**Communication Style:**
-${educationContext}
+**Your Communication Superpowers:**
+1. **The Translation Expert** - You take PhD-level science and make it click
+   - Example: Instead of "homozygous recessive mutation", say "You got the same changed copy from both parents - like inheriting your mom AND dad's sweet tooth!"
 
-**Core Responsibilities:**
-1. Explain genetic test results with appropriate technical depth
-2. Analyze medical documents and lab reports
-3. Assess risks and clinical significance
-4. Provide personalized risk assessments for specific conditions
-5. Recommend relevant clinical trials and research studies
-6. Correlate symptoms with genetic predispositions
-7. Provide actionable next steps
-8. Recommend healthcare professional consultations when appropriate
-9. Maintain a supportive, non-alarming tone while being honest
+2. **The Analogy Master** - Complex concepts become everyday comparisons
+   - DNA = instruction manual for your body
+   - Mutations = typos in the manual
+   - Genes = chapters in the book
+   - Variants = different versions of the same recipe
 
-`;
+3. **The Emotional Intelligence Pro** - Read between the lines
+   - If someone asks "Should I be worried?" → Address the fear first, facts second
+   - When sharing concerning info → Be honest but supportive, include action steps
+
+4. **The Clarity Champion** - Check for understanding
+   - "Does that make sense?"
+   - "Want me to explain that differently?"
+   - "Think of it this way..."
+
+**How You Structure Explanations:**
+1. **Start Simple** - The "what" in everyday language
+2. **Add Detail** - The "why" with accessible science
+3. **Give Context** - The "so what" - what it means for them
+4. **Provide Action** - The "now what" - next steps
+
+**Your Knowledge Base (PhD-level, explained accessibly):**
+- Clinical genetics, genomics, epigenetics
+- Variant interpretation (ACMG criteria, but explained simply)
+- Pharmacogenomics (drug-gene interactions)
+- Hereditary conditions and inheritance
+- Risk assessment and genetic testing
+- Current research (translated to plain language)
+
+**When You Use Technical Terms:**
+Always define them immediately or use them in context:
+- "You have a pathogenic variant - that's science-speak for a genetic change that can cause health problems"
+- "The allele frequency - basically how common this variant is in the population - is about 1 in 100"
+
+**Emoji Usage (Strategic & Supportive):**
+- 😊 For reassurance
+- 💡 For "aha!" moments
+- 🧬 For genetics talk
+- ❤️ For empathy
+- 🎯 For action items
+- ⚠️ For important warnings (but pair with supportive language!)
+
+**Patient Context:**
+- Age: ${user?.age || 'Not specified'}
+- Education Level: ${user?.education_level || 'Not specified'}
+- Field of Study: ${user?.field_of_study || 'Not specified'}
+${medicalRecords.length > 0 ? `- Has uploaded ${medicalRecords.length} medical record(s)` : ''}
+
+**Critical Balance:**
+- Be scientifically accurate (you have PhD knowledge!)
+- But explain like you're talking to a smart friend, not a scientist
+- Never dumb down - simplify!
+- Be honest about risks but not alarmist
+- When uncertain, say so (and explain why it's okay not to know everything)
+- Always distinguish your guidance from actual medical advice`;
+
+    let contextPrompt = systemPrompt;
 
     if (medicalRecord) {
-      prompt += `\n**Medical Record Being Discussed:**
+      contextPrompt += `\n\n**Medical Record Being Discussed:**
 Type: ${medicalRecord.file_type}
 Summary: ${medicalRecord.summary || 'Not available'}
-Extracted Data: ${JSON.stringify(medicalRecord.extracted_data, null, 2)}
-Relevant Genes: ${medicalRecord.relevant_genes?.join(', ') || 'None identified'}
-Phenotypes: ${medicalRecord.phenotypes_identified?.join(', ') || 'None identified'}
+Genes Found: ${medicalRecord.relevant_genes?.join(', ') || 'None'}
+Conditions: ${medicalRecord.phenotypes_identified?.join(', ') || 'None'}
 
-**Additional Analysis Required:**
-- Extract and interpret any genetic variants mentioned
-- Assess risk levels for identified conditions
-- Identify potential hereditary patterns
-- Suggest relevant clinical trials based on findings
-`;
+**Your Task:** Help them understand this medical data in a friendly, clear way. Break down any confusing parts!`;
     }
 
     if (symptoms && symptoms.length > 0) {
-      prompt += `\n**User-Reported Symptoms:**
+      contextPrompt += `\n\n**Symptoms They're Experiencing:**
 ${symptoms.join(', ')}
 
-**Symptom Analysis Required:**
-- Correlate symptoms with any genetic predispositions from medical data
-- Identify possible genetic connections
-- Assess urgency and recommend appropriate medical consultation
-- Consider differential diagnoses based on genetic context
-`;
+**Your Task:** Help connect these symptoms to genetics if relevant, but be supportive and practical!`;
     }
 
-    prompt += `\n**User Question/Request:**
+    contextPrompt += `\n\n**User's Question:**
 ${userMessage}
 
-**Your Response Should:**
-- Be warm, supportive, and clear
-- Match the user's educational background
-- Provide detailed medical document analysis if applicable
-- Include personalized risk assessments with percentage estimates when possible
-- Recommend specific clinical trials or research studies with eligibility criteria
-- Correlate symptoms with genetic data if symptoms are provided
-- Highlight key findings with appropriate emphasis
-- Provide context and explanations
-- Suggest practical next steps
-- Include relevant disclaimers about medical advice
-- Use bullet points and formatting for clarity
-- Reference databases like ClinicalTrials.gov, ClinVar, OMIM when relevant
-
-Please provide a comprehensive, personalized response:`;
+**Remember:** You're Anastasia - smart, friendly, and amazing at making genetics make sense! Be yourself - warm, witty, and wonderfully clear. 💜`;
 
     const response = await base44.integrations.Core.InvokeLLM({
-      prompt,
+      prompt: contextPrompt,
       add_context_from_internet: true
     });
 
     return response;
   };
 
-  const getEducationContext = (user) => {
-    if (!user?.education_level || user.education_level === 'high_school') {
-      return `Use simple, everyday language. Avoid jargon. Use analogies and examples. Focus on what matters most in practical terms. Be especially clear about what actions to take.`;
-    }
-
-    if (user.education_level === 'undergraduate') {
-      return `Use clear scientific language with explanations. Include basic genetics concepts. Balance technical accuracy with accessibility. Define any advanced terms used.`;
-    }
-
-    if (user.education_level === 'graduate' || user.education_level === 'phd') {
-      return `Use technical language appropriate for graduate-level understanding. Include molecular mechanisms, inheritance patterns, and research context. Cite evidence levels.`;
-    }
-
-    if (user.education_level === 'medical_professional') {
-      return `Use clinical terminology. Focus on diagnostic and therapeutic implications. Include differential diagnoses, management options, and guideline references. Be precise about clinical significance.`;
-    }
-
-    if (user.education_level === 'researcher') {
-      return `Use scientific/technical language. Include methodological considerations, latest research findings, functional studies, and molecular mechanisms. Reference databases and literature.`;
-    }
-
-    return `Use clear, accessible language while maintaining accuracy.`;
-  };
-
-  const handleAnalyzeRecord = async (record) => {
-    setSelectedRecord(record);
-    
-    const analysisMessage = {
-      role: 'user',
-      content: `Please analyze my ${record.file_type} data comprehensively. Include: 1) Key genetic findings, 2) Personalized risk assessment for any identified conditions, 3) Relevant clinical trials I might be eligible for, 4) How this connects to any symptoms I've reported.`,
-      timestamp: new Date()
-    };
-
-    setMessages(prev => [...prev, analysisMessage]);
-    setIsLoading(true);
-
-    try {
-      const response = await getAnastasiaResponse(
-        "Please provide a comprehensive analysis of this medical data, including: detailed interpretation of genetic findings, personalized risk assessments with specific percentages where possible, relevant clinical trials with eligibility criteria, correlation with reported symptoms, and recommended next steps.",
-        record,
-        symptoms,
-        user
-      );
-      
-      const assistantMessage = {
-        role: 'assistant',
-        content: response,
-        timestamp: new Date()
-      };
-
-      setMessages(prev => [...prev, assistantMessage]);
-      setSelectedRecord(null);
-
-    } catch (err) {
-      console.error("Error analyzing record:", err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleAddSymptom = () => {
-    if (currentSymptom.trim() && !symptoms.includes(currentSymptom.trim())) {
-      setSymptoms([...symptoms, currentSymptom.trim()]);
-      setCurrentSymptom("");
-    }
-  };
-
-  const handleRemoveSymptom = (symptom) => {
-    setSymptoms(symptoms.filter(s => s !== symptom));
-  };
-
-  const handleSymptomAnalysis = async () => {
-    if (symptoms.length === 0) return;
-
-    const symptomMessage = {
-      role: 'user',
-      content: `I'm experiencing these symptoms: ${symptoms.join(', ')}. Can you analyze if these might be related to any genetic factors based on my medical data?`,
-      timestamp: new Date()
-    };
-
-    setMessages(prev => [...prev, symptomMessage]);
-    setIsLoading(true);
-
-    try {
-      const response = await getAnastasiaResponse(
-        `Analyze these symptoms in the context of my genetic profile: ${symptoms.join(', ')}. Please provide: 1) Possible genetic connections, 2) Risk assessment, 3) When I should seek medical attention, 4) What tests might be helpful.`,
-        null,
-        symptoms,
-        user
-      );
-      
-      const assistantMessage = {
-        role: 'assistant',
-        content: response,
-        timestamp: new Date()
-      };
-
-      setMessages(prev => [...prev, assistantMessage]);
-
-    } catch (err) {
-      console.error("Error analyzing symptoms:", err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   const quickPrompts = [
-    "What do my genetic results mean?",
-    "Assess my health risks",
-    "Find relevant clinical trials",
-    "Analyze my symptoms",
+    "Explain my results like I'm 10 😊",
+    "What do these genes mean for my health?",
+    "Should I be worried about this?",
+    "Break this down in simple terms please",
     "What should I do next?"
   ];
 
@@ -373,8 +250,11 @@ Please provide a comprehensive, personalized response:`;
           </h1>
           <p className="text-lg text-slate-600 flex items-center justify-center gap-2">
             <Sparkles className="w-5 h-5 text-purple-600" />
-            Your AI Genetic Counseling Assistant
+            Your Friendly AI Genetic Counselor
             <Sparkles className="w-5 h-5 text-purple-600" />
+          </p>
+          <p className="text-sm text-purple-600 mt-2">
+            PhD-level knowledge, explained like a friend 💜
           </p>
         </div>
 
@@ -384,7 +264,7 @@ Please provide a comprehensive, personalized response:`;
             <CardHeader className="border-b bg-gradient-to-r from-purple-50 to-pink-50">
               <CardTitle className="flex items-center gap-2">
                 <MessageSquare className="w-5 h-5 text-purple-600" />
-                Conversation
+                Chat with Anastasia
               </CardTitle>
             </CardHeader>
             <CardContent className="p-0">
@@ -396,12 +276,19 @@ Please provide a comprehensive, personalized response:`;
                     className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
                   >
                     <div
-                      className={`max-w-[80%] rounded-2xl p-4 ${
+                      className={`max-w-[85%] rounded-2xl p-4 ${
                         message.role === 'user'
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-white border border-purple-200 shadow-sm'
+                          ? 'bg-slate-800 text-white'
+                          : 'bg-purple-50 border border-purple-200 shadow-sm'
                       }`}
                     >
+                      {message.role === 'assistant' && (
+                        <div className="flex items-center gap-2 mb-2">
+                          <Heart className="w-4 h-4 text-purple-600" />
+                          <span className="text-xs font-semibold text-purple-900">Anastasia</span>
+                        </div>
+                      )}
+
                       {message.role === 'assistant' ? (
                         <div className="prose prose-sm max-w-none">
                           <ReactMarkdown
@@ -409,10 +296,25 @@ Please provide a comprehensive, personalized response:`;
                               p: ({ children }) => <p className="mb-2 last:mb-0 text-slate-800">{children}</p>,
                               strong: ({ children }) => <strong className="font-semibold text-purple-900">{children}</strong>,
                               ul: ({ children }) => <ul className="ml-4 mb-2 space-y-1">{children}</ul>,
-                              ol: ({ children }) => <ol className="ml-4 mb-2 space-y-1">{children}</ol>,
+                              ol: ({ children }) => <ol className="ml-4 mb-2 space-y-1 list-decimal">{children}</ol>,
                               li: ({ children }) => <li className="text-slate-700">{children}</li>,
                               h3: ({ children }) => <h3 className="text-base font-semibold text-purple-900 mt-3 mb-2">{children}</h3>,
                               h4: ({ children }) => <h4 className="text-sm font-semibold text-purple-800 mt-2 mb-1">{children}</h4>,
+                              blockquote: ({ children }) => (
+                                <blockquote className="border-l-4 border-purple-300 pl-3 my-2 italic text-purple-800">
+                                  {children}
+                                </blockquote>
+                              ),
+                              code: ({ inline, children }) =>
+                                inline ? (
+                                  <code className="bg-purple-100 text-purple-800 px-1.5 py-0.5 rounded text-xs">
+                                    {children}
+                                  </code>
+                                ) : (
+                                  <code className="block bg-slate-800 text-white p-2 rounded text-xs my-2">
+                                    {children}
+                                  </code>
+                                ),
                             }}
                           >
                             {message.content}
@@ -421,31 +323,31 @@ Please provide a comprehensive, personalized response:`;
                       ) : (
                         <p className="text-sm">{message.content}</p>
                       )}
-                      <p className={`text-xs mt-2 ${message.role === 'user' ? 'text-blue-100' : 'text-slate-400'}`}>
+                      <p className={`text-xs mt-2 ${message.role === 'user' ? 'text-slate-300' : 'text-slate-400'}`}>
                         {message.timestamp.toLocaleTimeString()}
                       </p>
                     </div>
                   </div>
                 ))}
-                
+
                 {isLoading && (
                   <div className="flex justify-start">
-                    <div className="bg-white border border-purple-200 rounded-2xl p-4 shadow-sm">
+                    <div className="bg-purple-50 border border-purple-200 rounded-2xl p-4 shadow-sm">
                       <div className="flex items-center gap-2 text-purple-600">
                         <Loader2 className="w-4 h-4 animate-spin" />
-                        <span className="text-sm">Anastasia is analyzing...</span>
+                        <span className="text-sm">Anastasia is thinking...</span>
                       </div>
                     </div>
                   </div>
                 )}
-                
+
                 <div ref={messagesEndRef} />
               </div>
 
               {/* Quick Prompts */}
               {messages.length <= 1 && !isLoading && (
                 <div className="p-4 border-t bg-slate-50">
-                  <p className="text-xs text-slate-600 mb-2">Quick questions:</p>
+                  <p className="text-xs text-slate-600 mb-2">Try asking:</p>
                   <div className="flex flex-wrap gap-2">
                     {quickPrompts.map((prompt, idx) => (
                       <Button
@@ -468,7 +370,7 @@ Please provide a comprehensive, personalized response:`;
                   <Input
                     value={inputMessage}
                     onChange={(e) => setInputMessage(e.target.value)}
-                    placeholder="Ask Anastasia anything about your genetic data..."
+                    placeholder="Ask me anything - no question is too simple! 😊"
                     className="flex-1"
                     disabled={isLoading}
                   />
@@ -486,34 +388,31 @@ Please provide a comprehensive, personalized response:`;
 
           {/* Sidebar */}
           <div className="space-y-6">
-            {/* Capabilities */}
+            {/* About Anastasia */}
             <Card className="shadow-lg border-purple-200">
               <CardHeader className="bg-gradient-to-br from-purple-50 to-pink-50">
                 <CardTitle className="text-lg flex items-center gap-2">
-                  <Brain className="w-5 h-5 text-purple-600" />
-                  Enhanced Capabilities
+                  <Heart className="w-5 h-5 text-purple-600" />
+                  About Anastasia
                 </CardTitle>
               </CardHeader>
               <CardContent className="pt-4 space-y-3 text-sm">
+                <p className="text-slate-700 leading-relaxed">
+                  I have PhD-level knowledge in genetics, but I believe the best explanations
+                  are the ones that actually make sense! No jargon overload here - just clear,
+                  friendly guidance. 💜
+                </p>
                 <div className="flex items-start gap-2">
-                  <FileText className="w-4 h-4 text-purple-600 mt-0.5 flex-shrink-0" />
-                  <span className="text-slate-700">Analyzes medical documents & lab reports</span>
+                  <Sparkles className="w-4 h-4 text-purple-600 mt-0.5 flex-shrink-0" />
+                  <span className="text-slate-700">Makes complex genetics simple</span>
                 </div>
                 <div className="flex items-start gap-2">
-                  <Shield className="w-4 h-4 text-purple-600 mt-0.5 flex-shrink-0" />
-                  <span className="text-slate-700">Personalized risk assessments</span>
+                  <Heart className="w-4 h-4 text-purple-600 mt-0.5 flex-shrink-0" />
+                  <span className="text-slate-700">Supportive & empowering</span>
                 </div>
                 <div className="flex items-start gap-2">
-                  <FlaskConical className="w-4 h-4 text-purple-600 mt-0.5 flex-shrink-0" />
-                  <span className="text-slate-700">Clinical trial recommendations</span>
-                </div>
-                <div className="flex items-start gap-2">
-                  <Stethoscope className="w-4 h-4 text-purple-600 mt-0.5 flex-shrink-0" />
-                  <span className="text-slate-700">Symptom-genetics correlation</span>
-                </div>
-                <div className="flex items-start gap-2">
-                  <CheckCircle className="w-4 h-4 text-purple-600 mt-0.5 flex-shrink-0" />
-                  <span className="text-slate-700">Personalized to your background</span>
+                  <MessageSquare className="w-4 h-4 text-purple-600 mt-0.5 flex-shrink-0" />
+                  <span className="text-slate-700">Witty but always respectful</span>
                 </div>
               </CardContent>
             </Card>
@@ -607,6 +506,7 @@ Please provide a comprehensive, personalized response:`;
                           {record.file_type === 'blood_test' && '💉 Blood Test'}
                           {record.file_type === 'photo' && '📸 Photo'}
                           {record.file_type === 'medical_report' && '📄 Medical Report'}
+                          {record.file_type === 'vcf_file' && '📊 VCF File'}
                           {record.file_type === 'other' && '📋 Other'}
                         </p>
                         <p className="text-xs text-slate-500">
@@ -632,7 +532,9 @@ Please provide a comprehensive, personalized response:`;
             <Alert className="border-amber-200 bg-amber-50">
               <AlertTriangle className="h-4 w-4 text-amber-600" />
               <AlertDescription className="text-xs text-amber-800">
-                <strong>Medical Disclaimer:</strong> Anastasia provides educational information only. Always consult qualified healthcare professionals for medical decisions.
+                <strong>Medical Disclaimer:</strong> I provide educational information and support,
+                but I'm not a substitute for a real genetic counselor or doctor. For medical decisions,
+                always consult qualified healthcare professionals! 💙
               </AlertDescription>
             </Alert>
           </div>
@@ -640,4 +542,78 @@ Please provide a comprehensive, personalized response:`;
       </div>
     </div>
   );
+
+  function handleAnalyzeRecord(record) {
+    setSelectedRecord(record);
+
+    const analysisMessage = {
+      role: 'user',
+      content: `Can you help me understand my ${record.file_type.replace('_', ' ')} results? I'd love to know what the key findings mean for me.`,
+      timestamp: new Date()
+    };
+
+    setMessages(prev => [...prev, analysisMessage]);
+    setIsLoading(true);
+
+    getAnastasiaResponse(
+      "Please explain this medical data in a friendly, clear way. Help me understand what matters most.",
+      record,
+      symptoms,
+      user
+    ).then(response => {
+      const assistantMessage = {
+        role: 'assistant',
+        content: response,
+        timestamp: new Date()
+      };
+      setMessages(prev => [...prev, assistantMessage]);
+      setSelectedRecord(null);
+    }).catch(err => {
+      console.error("Error:", err);
+    }).finally(() => {
+      setIsLoading(false);
+    });
+  }
+
+  function handleAddSymptom() {
+    if (currentSymptom.trim() && !symptoms.includes(currentSymptom.trim())) {
+      setSymptoms([...symptoms, currentSymptom.trim()]);
+      setCurrentSymptom("");
+    }
+  }
+
+  function handleRemoveSymptom(symptom) {
+    setSymptoms(symptoms.filter(s => s !== symptom));
+  }
+
+  function handleSymptomAnalysis() {
+    if (symptoms.length === 0) return;
+
+    const symptomMessage = {
+      role: 'user',
+      content: `I'm experiencing these symptoms: ${symptoms.join(', ')}. Can you help me understand if they might be related to my genetics?`,
+      timestamp: new Date()
+    };
+
+    setMessages(prev => [...prev, symptomMessage]);
+    setIsLoading(true);
+
+    getAnastasiaResponse(
+      `I'm having these symptoms: ${symptoms.join(', ')}. What could the genetic connection be?`,
+      null,
+      symptoms,
+      user
+    ).then(response => {
+      const assistantMessage = {
+        role: 'assistant',
+        content: response,
+        timestamp: new Date()
+      };
+      setMessages(prev => [...prev, assistantMessage]);
+    }).catch(err => {
+      console.error("Error:", err);
+    }).finally(() => {
+      setIsLoading(false);
+    });
+  }
 }

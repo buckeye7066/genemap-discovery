@@ -1,9 +1,8 @@
-
 import React from "react";
 import { Link, useLocation } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import DnaIcon from "./components/icons/DnaIcon";
-import { Search, User, Crown, History, Home, FileText, Heart, Shield, BarChart3, Microscope, LayoutDashboard } from "lucide-react";
+import { Search, User, Crown, History, Home, FileText, Heart, Shield, BarChart3, Microscope, LayoutDashboard, MessageSquare } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -40,11 +39,17 @@ const navigationItems = [
     icon: Search,
   },
   {
+    title: "AI Assistants",
+    url: createPageUrl("AIAssistants"),
+    icon: MessageSquare,
+    highlight: true,
+    badge: "Chat"
+  },
+  {
     title: "Visualization Hub",
     url: createPageUrl("VisualizationHub"),
     icon: BarChart3,
     highlight: true,
-    badge: "New"
   },
   {
     title: "Research Mode",
@@ -57,14 +62,11 @@ const navigationItems = [
     title: "Robert Clinical",
     url: createPageUrl("RobertClinical"),
     icon: Shield,
-    highlight: true,
-    badge: "New"
   },
   {
     title: "Anastasia",
     url: createPageUrl("Anastasia"),
     icon: Heart,
-    highlight: true,
   },
   {
     title: "Medical Data",

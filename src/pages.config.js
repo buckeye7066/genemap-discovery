@@ -10,6 +10,7 @@ import RobertClinical from './pages/RobertClinical';
 import VisualizationHub from './pages/VisualizationHub';
 import ResearchMode from './pages/ResearchMode';
 import Dashboard from './pages/Dashboard';
+import AIAssistants from './pages/AIAssistants';
 import Layout from './Layout.jsx';
 
 
@@ -26,6 +27,7 @@ export const PAGES = {
     "VisualizationHub": VisualizationHub,
     "ResearchMode": ResearchMode,
     "Dashboard": Dashboard,
+    "AIAssistants": AIAssistants,
 }
 
 export const pagesConfig = {
