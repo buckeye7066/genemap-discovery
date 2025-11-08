@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
@@ -12,14 +13,26 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { User, CheckCircle, Loader2, Brain } from "lucide-react";
+import { User, Save, Loader2, BookOpen, Sparkles, Brain, CheckCircle } from "lucide-react";
+
+// Placeholder for createPageUrl. In a real application, this would typically
+// be imported from a utility file or a routing library, e.g., Next.js router.
+const createPageUrl = (pageName) => {
+  switch (pageName) {
+    case "Dashboard":
+      return "/dashboard";
+    // Add other cases as needed
+    default:
+      return "/"; // Fallback
+  }
+};
 
 export default function ProfilePage() {
   const [user, setUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [success, setSuccess] = useState(false);
-  const [error, setError] = useState(null);
+  const [successMessage, setSuccessMessage] = useState(null); // Changed from 'success' boolean
+  const [errorMessage, setErrorMessage] = useState(null);     // Changed from 'error' string
 
   const [formData, setFormData] = useState({
     age: "",
@@ -43,7 +56,7 @@ export default function ProfilePage() {
       });
     } catch (err) {
       console.error("Error loading user:", err);
-      setError("Failed to load profile data");
+      setErrorMessage("Failed to load profile data");
     } finally {
       setIsLoading(false);
     }
@@ -52,8 +65,8 @@ export default function ProfilePage() {
   const handleSave = async (e) => {
     e.preventDefault();
     setIsSaving(true);
-    setError(null);
-    setSuccess(false);
+    setErrorMessage(null);
+    setSuccessMessage(null);
 
     try {
       await base44.auth.updateMe({
@@ -62,13 +75,28 @@ export default function ProfilePage() {
         field_of_study: formData.field_of_study || null
       });
 
-      setSuccess(true);
-      setTimeout(() => setSuccess(false), 3000);
+      setSuccessMessage("Profile saved successfully! Your search results will now be tailored to your background.");
+      setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err) {
       console.error("Error saving profile:", err);
-      setError("Failed to save profile. Please try again.");
+      setErrorMessage("Failed to save profile. Please try again.");
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleRestartTour = async () => {
+    try {
+      await base44.auth.updateMe({
+        onboarding_completed: false,
+        onboarding_step: 0
+      });
+      setSuccessMessage("Onboarding tour reset! Redirecting to dashboard...");
+      setTimeout(() => {
+        window.location.href = createPageUrl("Dashboard");
+      }, 1500);
+    } catch (err) {
+      setErrorMessage("Failed to restart tour");
     }
   };
 
@@ -94,7 +122,7 @@ export default function ProfilePage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-4 sm:p-6">
-      <div className="max-w-2xl mx-auto">
+      <div className="max-w-3xl mx-auto">
         <div className="text-center mb-8">
           <div className="flex justify-center mb-4">
             <div className="w-16 h-16 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-2xl flex items-center justify-center shadow-lg">
@@ -109,18 +137,18 @@ export default function ProfilePage() {
           </p>
         </div>
 
-        {success && (
+        {successMessage && (
           <Alert className="mb-6 bg-green-50 border-green-200">
             <CheckCircle className="h-4 w-4 text-green-600" />
             <AlertDescription className="text-green-800">
-              Profile saved successfully! Your search results will now be tailored to your background.
+              {successMessage}
             </AlertDescription>
           </Alert>
         )}
 
-        {error && (
+        {errorMessage && (
           <Alert variant="destructive" className="mb-6">
-            <AlertDescription>{error}</AlertDescription>
+            <AlertDescription>{errorMessage}</AlertDescription>
           </Alert>
         )}
 
@@ -144,7 +172,7 @@ export default function ProfilePage() {
           </CardContent>
         </Card>
 
-        <Card className="shadow-lg">
+        <Card className="shadow-lg mb-6">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-xl">
               <Brain className="w-5 h-5 text-blue-600" />
@@ -238,12 +266,39 @@ export default function ProfilePage() {
                   </>
                 ) : (
                   <>
-                    <CheckCircle className="w-5 h-5 mr-2" />
+                    <Save className="w-5 h-5 mr-2" />
                     Save Profile
                   </>
                 )}
               </Button>
             </form>
+          </CardContent>
+        </Card>
+
+        {/* Onboarding Tour */}
+        <Card className="shadow-lg bg-gradient-to-br from-purple-50 to-pink-50 border-purple-200 mb-6">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-purple-600" />
+              Onboarding Tour
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="bg-white p-4 rounded-lg border border-purple-200">
+              <p className="text-sm text-slate-700 mb-3">
+                {user?.onboarding_completed 
+                  ? "You've completed the onboarding tour! Want to see it again?"
+                  : "Haven't completed the tour yet? Restart from the beginning."}
+              </p>
+              <Button
+                onClick={handleRestartTour}
+                variant="outline"
+                className="w-full gap-2 border-purple-300 hover:bg-purple-50"
+              >
+                <Sparkles className="w-4 h-4" />
+                {user?.onboarding_completed ? 'Restart Tour' : 'Continue Tour'}
+              </Button>
+            </div>
           </CardContent>
         </Card>
       </div>

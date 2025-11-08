@@ -1,5 +1,5 @@
 
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { Button } from "@/components/ui/button";
@@ -7,15 +7,38 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import DnaIcon from "../components/icons/DnaIcon";
 import AIConversation from "../components/AIConversation";
+import OnboardingTour from "../components/OnboardingTour"; // Assuming this path
+import { base44 } from "@/lib/base44"; // Assuming base44 is imported from a library or utility file
 import { Search, Zap, Shield, Crown, ArrowRight, CheckCircle, LayoutDashboard } from "lucide-react";
 
 export default function HomePage() {
+  const [showOnboarding, setShowOnboarding] = useState(false);
+
   useEffect(() => {
     document.title = "GeneMap - Phenotype to Gene Discovery";
+    checkFirstVisit();
   }, []);
+
+  const checkFirstVisit = async () => {
+    try {
+      const user = await base44.auth.me();
+      if (user && !user.onboarding_completed) { // Ensure user object exists before checking property
+        setShowOnboarding(true);
+      }
+    } catch (err) {
+      // Not logged in or an error occurred fetching user data.
+      // In this case, onboarding should not be shown.
+      console.error("Failed to check onboarding status:", err);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
+      {/* Onboarding Tour */}
+      {showOnboarding && (
+        <OnboardingTour onComplete={() => setShowOnboarding(false)} />
+      )}
+
       {/* Hero Section */}
       <div className="px-4 sm:px-6 py-8 sm:py-12 md:py-20">
         <div className="max-w-6xl mx-auto text-center">

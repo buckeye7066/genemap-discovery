@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { Link } from "react-router-dom";
@@ -22,6 +23,7 @@ import {
   Plus,
   Info
 } from "lucide-react";
+import OnboardingTour from "../components/onboarding/OnboardingTour";
 
 export default function Dashboard() {
   const [user, setUser] = useState(null);
@@ -37,6 +39,7 @@ export default function Dashboard() {
     medicalRecords: true,
     recommendations: true
   });
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
   useEffect(() => {
     loadDashboardData();
@@ -47,9 +50,14 @@ export default function Dashboard() {
       const currentUser = await base44.auth.me();
       setUser(currentUser);
 
+      // Check if user needs onboarding
+      if (!currentUser.onboarding_completed) {
+        setShowOnboarding(true);
+      }
+
       // Load recent gene views
       const activities = await base44.entities.UserActivity.filter(
-        { 
+        {
           created_by: currentUser.email,
           activity_type: "gene_view"
         },
@@ -121,6 +129,9 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-4 sm:p-6">
+      {/* Onboarding Tour */}
+      {showOnboarding && <OnboardingTour onComplete={() => setShowOnboarding(false)} />}
+
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-6 sm:mb-8">
@@ -134,10 +145,20 @@ export default function Dashboard() {
                 Welcome to your personalized genomics dashboard
               </p>
             </div>
-            <Button variant="outline" className="gap-2">
-              <Settings className="w-4 h-4" />
-              Customize
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                className="gap-2"
+                onClick={() => setShowOnboarding(true)}
+              >
+                <Sparkles className="w-4 h-4" />
+                Tour
+              </Button>
+              <Button variant="outline" className="gap-2">
+                <Settings className="w-4 h-4" />
+                Customize
+              </Button>
+            </div>
           </div>
 
           {/* Quick Stats */}
@@ -230,7 +251,7 @@ export default function Dashboard() {
                   ) : (
                     <div className="space-y-2">
                       {recentGenes.slice(0, 5).map((activity, idx) => (
-                        <Link 
+                        <Link
                           key={idx}
                           to={`${createPageUrl("Search")}?query=${activity.gene_symbol}`}
                           className="block p-3 hover:bg-slate-50 rounded-lg transition-colors"
@@ -334,9 +355,9 @@ export default function Dashboard() {
                       >
                         <div className="flex items-center gap-3">
                           <div className="text-2xl">
-                            {record.file_type === 'genetic_test' ? '🧬' : 
-                             record.file_type === 'blood_test' ? '💉' : 
-                             record.file_type === 'vcf_file' ? '📊' : '📄'}
+                            {record.file_type === 'genetic_test' ? '🧬' :
+                              record.file_type === 'blood_test' ? '💉' :
+                                record.file_type === 'vcf_file' ? '📊' : '📄'}
                           </div>
                           <div className="flex-1">
                             <p className="font-medium text-slate-900 text-sm">
@@ -398,9 +419,9 @@ export default function Dashboard() {
                             <p className="font-semibold text-slate-900 text-sm">{project.name}</p>
                             <Badge className={
                               project.status === 'active' ? 'bg-green-100 text-green-800' :
-                              project.status === 'planning' ? 'bg-blue-100 text-blue-800' :
-                              project.status === 'paused' ? 'bg-amber-100 text-amber-800' :
-                              'bg-slate-100 text-slate-800'
+                                project.status === 'planning' ? 'bg-blue-100 text-blue-800' :
+                                  project.status === 'paused' ? 'bg-amber-100 text-amber-800' :
+                                    'bg-slate-100 text-slate-800'
                             }>
                               {project.status}
                             </Badge>
@@ -450,7 +471,7 @@ export default function Dashboard() {
                     <Alert className="bg-white border-purple-200">
                       <Users className="h-4 w-4 text-purple-600" />
                       <AlertDescription className="text-purple-900 text-sm">
-                        <strong>Clinical Trials:</strong> Based on your medical data, we found relevant trials. 
+                        <strong>Clinical Trials:</strong> Based on your medical data, we found relevant trials.
                         <Link to={createPageUrl("MedicalData")} className="underline ml-1">
                           View matches
                         </Link>
@@ -461,7 +482,7 @@ export default function Dashboard() {
                   <Alert className="bg-white border-amber-200">
                     <Sparkles className="h-4 w-4 text-amber-600" />
                     <AlertDescription className="text-amber-900 text-sm">
-                      <strong>New Feature:</strong> Research Mode now available with bulk VCF analysis. 
+                      <strong>New Feature:</strong> Research Mode now available with bulk VCF analysis.
                       <Link to={createPageUrl("ResearchMode")} className="underline ml-1">
                         Explore
                       </Link>
