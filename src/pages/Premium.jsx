@@ -1,6 +1,7 @@
-
 import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
+import { Link } from "react-router-dom";
+import { createPageUrl } from "@/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -13,29 +14,16 @@ import {
   History,
   Pill,
   Zap,
-  CreditCard,
   Shield,
   AlertCircle,
   Loader2,
-  ExternalLink,
   CheckCircle,
   Settings,
-  Building2 // New icon import
+  Building2
 } from "lucide-react";
-import Link from "next/link"; // New import for navigation
 
 import { createCheckoutSession } from "@/functions/createCheckoutSession";
 import { createPortalSession } from "@/functions/createPortalSession";
-
-// New helper function for creating page URLs (assuming Next.js routing)
-const createPageUrl = (pageName) => {
-  switch (pageName) {
-    case "InstitutionalPricing":
-      return "/institutional-pricing"; // Or the actual path for institutional pricing
-    default:
-      return `/${pageName.toLowerCase().replace(/ /g, '-')}`; // Fallback for other pages
-  }
-};
 
 export default function PremiumPage() {
   const [user, setUser] = useState(null);
@@ -86,7 +74,7 @@ export default function PremiumPage() {
       setPaymentSuccess(true);
       setTimeout(() => {
         window.history.replaceState({}, '', window.location.pathname);
-        checkSubscriptionStatus(); // Reload subscription data after success
+        checkSubscriptionStatus();
       }, 3000);
     }
 
@@ -103,9 +91,8 @@ export default function PremiumPage() {
     setError(null);
 
     try {
-      // Use the new createCheckoutSession function
       const response = await createCheckoutSession({
-        priceId: Deno.env.get("STRIPE_PRICE_ID_MONTHLY") // Placeholder for Deno.env, assumes it's available or mocked
+        priceId: "price_default"
       });
 
       if (response.data && response.data.url) {
@@ -168,7 +155,6 @@ export default function PremiumPage() {
           </p>
         </div>
 
-        {/* Payment Success */}
         {paymentSuccess && (
           <Alert className="mb-6 bg-green-50 border-green-200">
             <CheckCircle className="h-4 w-4 text-green-600" />
@@ -179,7 +165,6 @@ export default function PremiumPage() {
           </Alert>
         )}
 
-        {/* Payment Canceled */}
         {paymentCanceled && (
           <Alert className="mb-6 bg-amber-50 border-amber-200">
             <AlertCircle className="h-4 w-4 text-amber-600" />
@@ -189,7 +174,6 @@ export default function PremiumPage() {
           </Alert>
         )}
 
-        {/* Error Alert */}
         {error && (
           <Alert variant="destructive" className="mb-6">
             <AlertCircle className="h-4 w-4" />
@@ -197,7 +181,6 @@ export default function PremiumPage() {
           </Alert>
         )}
 
-        {/* Current Subscription Status */}
         {hasActiveSubscription && subscription && (
           <Card className="mb-6 bg-gradient-to-r from-green-50 to-emerald-50 border-green-200 shadow-lg">
             <CardContent className="pt-6">
@@ -241,7 +224,6 @@ export default function PremiumPage() {
           </Card>
         )}
 
-        {/* Free Tier status if no active subscription */}
         {!hasActiveSubscription && (
           <Card className="mb-8 bg-blue-50 border-blue-200">
             <CardContent className="pt-6">
@@ -257,7 +239,6 @@ export default function PremiumPage() {
           </Card>
         )}
 
-        {/* Institutional License CTA - NEW */}
         <Card className="mb-8 bg-gradient-to-r from-indigo-50 to-purple-50 border-indigo-200 shadow-lg">
           <CardContent className="pt-6">
             <div className="flex flex-col md:flex-row items-center gap-4">
@@ -276,7 +257,7 @@ export default function PremiumPage() {
                   <Badge className="bg-green-600 text-white">Save up to 40%</Badge>
                 </div>
               </div>
-              <Link href={createPageUrl("InstitutionalPricing")}>
+              <Link to={createPageUrl("InstitutionalPricing")}>
                 <Button className="bg-indigo-600 hover:bg-indigo-700 gap-2">
                   <Building2 className="w-4 h-4" />
                   View Institutional Plans
@@ -286,9 +267,7 @@ export default function PremiumPage() {
           </CardContent>
         </Card>
 
-        {/* Individual vs Team comparison grid */}
         <div className="grid md:grid-cols-2 gap-6 mb-8">
-
           <Card>
             <CardHeader className="text-center">
               <div className="w-12 h-12 mx-auto mb-3 bg-slate-100 rounded-xl flex items-center justify-center">
@@ -369,7 +348,6 @@ export default function PremiumPage() {
           </Card>
         </div>
 
-        {/* Subscription CTA */}
         {!hasActiveSubscription && (
           <div className="text-center mt-12">
             <Card className="max-w-2xl mx-auto shadow-2xl border-2 border-amber-200 bg-gradient-to-br from-amber-50 to-yellow-50">
