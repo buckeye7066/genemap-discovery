@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
@@ -240,7 +241,7 @@ export default function HomePage() {
                 </div>
                 <CardTitle className="text-xl sm:text-2xl text-slate-900">Premium Tier</CardTitle>
                 <p className="text-slate-600">Advanced research insights</p>
-                <Badge className="bg-amber-600 text-white mt-2">$9.99/month</Badge>
+                <Badge className="bg-amber-600 text-white mt-2">$4.99/month</Badge>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex items-start gap-3">

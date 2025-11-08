@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { Link } from "react-router-dom";
@@ -172,7 +173,7 @@ Every change is automatically saved as a version - you can restore any previous 
 • Pathway enrichment tools
 • AI hypothesis generation
 
-**Pricing:** Just $9.99/month
+**Pricing:** Just **$4.99/month**
 
 **Special access:** Researchers and clinicians may qualify for institutional licenses!`,
     action: 'View Premium',

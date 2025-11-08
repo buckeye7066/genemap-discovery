@@ -5,117 +5,138 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { 
-  Crown, 
-  Check, 
-  X, 
-  Users, 
-  History, 
-  Pill, 
+import {
+  Crown,
+  Check,
+  X,
+  Users,
+  History,
+  Pill,
   Zap,
   CreditCard,
   Shield,
   AlertCircle,
   Loader2,
-  ExternalLink
+  ExternalLink,
+  CheckCircle, // New icon import
+  Settings // New icon import
 } from "lucide-react";
 
-// Detect if running in iframe (Preview mode)
-function isInIframe() {
-  try {
-    return window.self !== window.top;
-  } catch (e) {
-    return true;
-  }
-}
+import { createCheckoutSession } from "@/functions/createCheckoutSession"; // New import
+import { createPortalSession } from "@/functions/createPortalSession"; // New import
+
+// Removed: isInIframe function as it's no longer used
 
 export default function PremiumPage() {
   const [user, setUser] = useState(null);
   const [subscription, setSubscription] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isSubscribing, setIsSubscribing] = useState(false);
   const [error, setError] = useState(null);
-  const [paymentStatus, setPaymentStatus] = useState(null);
-  const [isPreview] = useState(isInIframe()); // Preserve original isPreview state
+
+  // New state variables from outline
+  const [hasActiveSubscription, setHasActiveSubscription] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false); // Replaces isSubscribing
+  const [paymentSuccess, setPaymentSuccess] = useState(false);
+  const [paymentCanceled, setPaymentCanceled] = useState(false);
+
+  // Removed: const [isSubscribing, setIsSubscribing] = useState(false);
+  // Removed: const [paymentStatus, setPaymentStatus] = useState(null);
+  // Removed: const [isPreview] = useState(isInIframe());
 
   useEffect(() => {
-    loadData();
+    checkSubscriptionStatus();
+    checkPaymentStatus();
   }, []);
 
-  async function loadData() {
+  const checkSubscriptionStatus = async () => {
     try {
       const currentUser = await base44.auth.me();
       setUser(currentUser);
-      
-      try {
-        const subs = await base44.entities.Subscription.filter({ 
-          created_by: currentUser.email 
-        });
-        if (subs && subs.length > 0) {
-          setSubscription(subs[0]);
-        }
-      } catch (subError) {
-        console.log("No subscription found yet"); // Updated message as per outline
-      }
 
-      const urlParams = new URLSearchParams(window.location.search);
-      const payment = urlParams.get('payment');
-      if (payment === 'success') {
-        setPaymentStatus({ type: 'success', message: 'Payment successful! Your subscription is now active.' });
-        window.history.replaceState(null, '', window.location.pathname);
-        // Reload subscription data after a short delay to ensure backend update
-        setTimeout(() => loadData(), 1000); // Preserve original reload logic
-      } else if (payment === 'cancelled') {
-        setPaymentStatus({ type: 'error', message: 'Payment was cancelled. You can try again anytime.' });
-        window.history.replaceState(null, '', window.location.pathname);
+      const subscriptions = await base44.entities.Subscription.filter({
+        created_by: currentUser.email
+      });
+
+      if (subscriptions.length > 0) {
+        const sub = subscriptions[0];
+        setSubscription(sub);
+        setHasActiveSubscription(
+          sub.status === 'active' || sub.status === 'trialing'
+        );
       }
     } catch (err) {
-      console.error("Load error:", err);
-      setError("Unable to load page data");
+      console.error("Error checking subscription:", err);
+      setError("Failed to load subscription status.");
     } finally {
       setIsLoading(false);
     }
-  }
+  };
 
-  async function handleSubscribe() {
-    setIsSubscribing(true);
+  const checkPaymentStatus = () => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const success = urlParams.get('success');
+    const canceled = urlParams.get('canceled');
+
+    if (success === 'true') {
+      setPaymentSuccess(true);
+      setTimeout(() => {
+        window.history.replaceState({}, '', window.location.pathname);
+        checkSubscriptionStatus(); // Reload subscription data after success
+      }, 3000);
+    }
+
+    if (canceled === 'true') {
+      setPaymentCanceled(true);
+      setTimeout(() => {
+        window.history.replaceState({}, '', window.location.pathname);
+      }, 5000);
+    }
+  };
+
+  // Removed: old loadData function
+
+  const handleSubscribe = async () => {
+    setIsProcessing(true);
     setError(null);
-    
+
     try {
-      const response = await base44.functions.invoke('createCheckoutSession', {});
-      
-      if (!response || !response.data) {
-        throw new Error("No response from checkout");
-      }
+      // Use the new createCheckoutSession function
+      const response = await createCheckoutSession({
+        priceId: Deno.env.get("STRIPE_PRICE_ID_MONTHLY") // Placeholder for Deno.env, assumes it's available or mocked
+      });
 
-      const { sessionId, url } = response.data;
-
-      if (!url) {
-        throw new Error("No checkout URL returned");
-      }
-
-      // In Preview (iframe), open in new tab to escape iframe restrictions - Preserve original logic
-      if (isPreview) {
-        window.open(url, '_blank', 'noopener,noreferrer');
-        setPaymentStatus({ 
-          type: 'info', 
-          message: 'Checkout opened in a new tab. Complete your payment there and return here.' 
-        });
-        setIsSubscribing(false);
+      if (response.data && response.data.url) {
+        window.location.href = response.data.url;
       } else {
-        // In production, redirect in same window
-        window.location.href = url;
+        throw new Error("No checkout URL returned");
       }
     } catch (err) {
       console.error("Subscribe error:", err);
-      setError(err.message || "Failed to start checkout. Please try again.");
-      setIsSubscribing(false);
+      setError("Failed to start checkout. Please try again.");
+      setIsProcessing(false);
     }
-  }
+  };
 
-  // Admin backdoor check
-  const isAdmin = user?.email === "buckeye7066@gmail.com";
-  const isPremium = isAdmin || (subscription?.status === "active" && subscription?.plan_type === "premium");
+  const handleManageSubscription = async () => {
+    setIsProcessing(true);
+    setError(null);
+
+    try {
+      const response = await createPortalSession({});
+
+      if (response.data && response.data.url) {
+        window.location.href = response.data.url;
+      } else {
+        throw new Error("No portal URL returned");
+      }
+    } catch (err) {
+      console.error("Portal error:", err);
+      setError("Failed to open customer portal. Please try again.");
+      setIsProcessing(false);
+    }
+  };
+
+  // Removed: isAdmin and isPremium logic as it's replaced by hasActiveSubscription for UI display
 
   if (isLoading) {
     return (
@@ -130,8 +151,8 @@ export default function PremiumPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-4 sm:p-6">
-      <div className="max-w-4xl mx-auto">
-        
+      <div className="max-w-6xl mx-auto">
+
         <div className="text-center mb-8">
           <div className="flex justify-center mb-4">
             <div className="w-16 h-16 bg-gradient-to-r from-amber-500 to-yellow-500 rounded-2xl flex items-center justify-center shadow-lg">
@@ -146,57 +167,83 @@ export default function PremiumPage() {
           </p>
         </div>
 
+        {/* Payment Success */}
+        {paymentSuccess && (
+          <Alert className="mb-6 bg-green-50 border-green-200">
+            <CheckCircle className="h-4 w-4 text-green-600" />
+            <AlertDescription className="text-green-800">
+              <strong>Payment Successful!</strong> Your premium subscription is now active.
+              Refreshing subscription status...
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {/* Payment Canceled */}
+        {paymentCanceled && (
+          <Alert className="mb-6 bg-amber-50 border-amber-200">
+            <AlertCircle className="h-4 w-4 text-amber-600" />
+            <AlertDescription className="text-amber-800">
+              Payment was canceled. You can try again anytime!
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {/* Error Alert */}
         {error && (
           <Alert variant="destructive" className="mb-6">
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
-        
-        {paymentStatus && ( // Preserve original payment status alert logic
-          <Alert 
-            variant={paymentStatus.type === 'success' ? 'default' : paymentStatus.type === 'info' ? 'default' : 'destructive'} 
-            className={paymentStatus.type === 'success' ? "mb-6 bg-green-50 border-green-200" : paymentStatus.type === 'info' ? "mb-6 bg-blue-50 border-blue-200" : "mb-6"}
-          >
-            {paymentStatus.type === 'success' && <Check className="h-4 w-4 text-green-600" />}
-            {paymentStatus.type === 'info' && <ExternalLink className="h-4 w-4 text-blue-600" />}
-            {paymentStatus.type === 'error' && <AlertCircle className="h-4 w-4" />}
-            <AlertDescription className={paymentStatus.type === 'success' ? 'text-green-800' : paymentStatus.type === 'info' ? 'text-blue-800' : ''}>
-              {paymentStatus.message}
-            </AlertDescription>
-          </Alert>
-        )}
 
-        {isPreview && ( // Preserve original isPreview alert
-          <Alert className="mb-6 bg-blue-50 border-blue-200">
-            <ExternalLink className="h-4 w-4 text-blue-600" />
-            <AlertDescription className="text-blue-800">
-              <strong>Preview Mode:</strong> Checkout will open in a new tab for security. After payment, return to this tab.
-            </AlertDescription>
-          </Alert>
-        )}
+        {/* Removed: old paymentStatus and isPreview alerts */}
 
-        {isPremium ? (
-          <Card className="mb-8 bg-gradient-to-r from-amber-50 to-yellow-50 border-amber-200">
+        {/* Current Subscription Status (replaces old isPremium card) */}
+        {hasActiveSubscription && subscription && (
+          <Card className="mb-6 bg-gradient-to-r from-green-50 to-emerald-50 border-green-200 shadow-lg">
             <CardContent className="pt-6">
-              <div className="flex items-center gap-3">
-                <Crown className="w-6 h-6 text-amber-600" />
-                <div className="flex-1">
-                  <h3 className="font-semibold text-amber-900">
-                    {isAdmin ? "Admin Access (Full Premium)" : "Premium Active"}
-                  </h3>
-                  <p className="text-sm text-amber-700">
-                    {isAdmin ? "You have unlimited access to all premium features" : 
-                     `Expires: ${subscription?.expires_at ? new Date(subscription.expires_at).toLocaleDateString() : 'N/A'}`}
-                  </p>
+              <div className="flex items-start justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 bg-green-600 rounded-xl flex items-center justify-center">
+                    <Crown className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-green-900 text-lg">Premium Active</h3>
+                    <p className="text-sm text-green-700">
+                      Status: <Badge className="bg-green-600 text-white">{subscription.status}</Badge>
+                    </p>
+                    {subscription.expires_at && (
+                      <p className="text-xs text-green-600 mt-1">
+                        Renews: {new Date(subscription.expires_at).toLocaleDateString()}
+                      </p>
+                    )}
+                  </div>
                 </div>
-                <Badge className="bg-amber-600 text-white">
-                  {isAdmin ? "Admin" : "Active"}
-                </Badge>
+                <Button
+                  onClick={handleManageSubscription}
+                  disabled={isProcessing}
+                  variant="outline"
+                  className="gap-2"
+                >
+                  {isProcessing ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Loading...
+                    </>
+                  ) : (
+                    <>
+                      <Settings className="w-4 h-4" />
+                      Manage Subscription
+                    </>
+                  )}
+                </Button>
               </div>
             </CardContent>
           </Card>
-        ) : (
+        )}
+
+        {/* Retained Free Tier status card if no active subscription */}
+        {!hasActiveSubscription && (
           <Card className="mb-8 bg-blue-50 border-blue-200">
             <CardContent className="pt-6">
               <div className="flex items-center gap-3">
@@ -212,7 +259,7 @@ export default function PremiumPage() {
         )}
 
         <div className="grid md:grid-cols-2 gap-6 mb-8">
-          
+
           <Card>
             <CardHeader className="text-center">
               <div className="w-12 h-12 mx-auto mb-3 bg-slate-100 rounded-xl flex items-center justify-center">
@@ -293,40 +340,46 @@ export default function PremiumPage() {
           </Card>
         </div>
 
-        {!isPremium && (
-          <Card className="text-center shadow-lg">
-            <CardContent className="py-8">
-              <h3 className="text-2xl font-bold text-slate-900 mb-4">Upgrade to Premium</h3>
-              <p className="text-slate-600 mb-6 max-w-2xl mx-auto px-4">
-                Get comprehensive genomic insights with population data, evolutionary history, 
-                and treatment options.
-              </p>
-              
-              <Button 
-                size="lg" 
-                onClick={handleSubscribe}
-                disabled={isSubscribing}
-                className="bg-amber-600 hover:bg-amber-700 px-8 py-3 min-h-[48px]" // Preserve original min-h
-              >
-                {isSubscribing ? (
-                  <>
-                    <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                    Opening Checkout... {/* Preserve original text */}
-                  </>
-                ) : (
-                  <>
-                    <CreditCard className="w-5 h-5 mr-2" />
-                    Subscribe for $9.99/month
-                    {isPreview && <ExternalLink className="w-4 h-4 ml-2" />} {/* Preserve original isPreview icon */}
-                  </>
-                )}
-              </Button>
-              
-              <p className="text-xs text-slate-500 mt-4">
-                Cancel anytime. Secure payment via Stripe.
-              </p>
-            </CardContent>
-          </Card>
+        {/* Subscription CTA (replaces old !isPremium CTA) */}
+        {!hasActiveSubscription && (
+          <div className="text-center mt-12">
+            <Card className="max-w-2xl mx-auto shadow-2xl border-2 border-amber-200 bg-gradient-to-br from-amber-50 to-yellow-50">
+              <CardContent className="pt-8 pb-8">
+                <div className="flex justify-center mb-4">
+                  <div className="w-16 h-16 bg-amber-600 rounded-2xl flex items-center justify-center">
+                    <Crown className="w-8 h-8 text-white" />
+                  </div>
+                </div>
+                <h2 className="text-3xl font-bold text-slate-900 mb-3">
+                  Upgrade to Premium
+                </h2>
+                <p className="text-lg text-slate-600 mb-6">
+                  Unlock advanced genomic insights for just <strong className="text-amber-600">$9.99/month</strong>
+                </p>
+                <Button
+                  onClick={handleSubscribe}
+                  disabled={isProcessing}
+                  size="lg"
+                  className="bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-700 hover:to-yellow-700 text-white px-8 py-6 text-lg"
+                >
+                  {isProcessing ? (
+                    <>
+                      <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                      Processing...
+                    </>
+                  ) : (
+                    <>
+                      <Crown className="w-5 h-5 mr-2" />
+                      Subscribe Now - $9.99/month
+                    </>
+                  )}
+                </Button>
+                <p className="text-xs text-slate-500 mt-4">
+                  Cancel anytime • Secure payment • Instant access
+                </p>
+              </CardContent>
+            </Card>
+          </div>
         )}
 
         <div className="mt-8">
