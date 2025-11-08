@@ -34,13 +34,16 @@ import {
   Eye,
   Download,
   MessageSquare,
-  Shield, // New import
-  TrendingUp, // New import
-  Info // New import
+  Shield, 
+  TrendingUp, 
+  Info,
+  Brain, // New import
+  AlertTriangle, // New import
+  Sparkles // New import
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import MedicalDataComparison from "../components/medical/MedicalDataComparison"; // New import
+import MedicalDataComparison from "../components/medical/MedicalDataComparison";
 
 export default function MedicalDataPage() {
   const [user, setUser] = useState(null);
@@ -155,7 +158,16 @@ export default function MedicalDataPage() {
       await base44.entities.MedicalData.create({
         file_type: uploadForm.fileType,
         file_url: fileUrl,
-        extracted_data: extractionResult.output,
+        // The display code expects key_findings, risks, recommendations inside extracted_data.
+        // We combine the original extracted data with the new AI analysis components
+        // into the 'extracted_data' field.
+        extracted_data: {
+          ...extractionResult.output, // Raw extracted data
+          key_findings: analysisResult.key_findings,
+          risks: analysisResult.risks,
+          recommendations: analysisResult.recommendations,
+        },
+        // Keep these as top-level for backward compatibility and direct access
         summary: analysisResult.summary,
         relevant_genes: analysisResult.genes,
         phenotypes_identified: analysisResult.phenotypes,
@@ -266,16 +278,62 @@ export default function MedicalDataPage() {
   };
 
   const analyzeExtractedData = async (extractedData, fileType) => {
-    const prompt = `
-Analyze this ${fileType} data and provide:
-1. A concise summary for the patient (2-3 sentences)
-2. List of relevant genes mentioned or implicated
-3. List of phenotypes or medical conditions identified
+    const educationContext = getEducationContext(user?.education_level);
+    
+    const prompt = `You are Robert, an AI medical data analysis assistant. Analyze this ${fileType} data and provide a comprehensive, personalized summary.
 
-Data: ${JSON.stringify(extractedData, null, 2)}
+**Patient Context:**
+- Age: ${user?.age || 'Not specified'}
+- Education Level: ${educationContext}
 
-Focus on medically relevant information and genetic associations.
-`;
+**Extracted Data:**
+${JSON.stringify(extractedData, null, 2)}
+
+**Your Task - Generate Comprehensive Analysis:**
+
+1.  **Concise Summary** (2-3 sentences)
+    - What type of data is this?
+    - Most important finding(s)
+    - Overall impression
+    - Adapted for ${educationContext}
+
+2.  **Key Findings** (3-5 bullet points)
+    - Most significant genetic variants (if genetic test)
+    - Critical lab values (if lab test)
+    - Important observations (if report/photo)
+    - Clinical significance of each
+
+3.  **Relevant Genes** (list)
+    - Extract gene symbols mentioned
+    - Include both genes with variants and genes discussed
+    - Return as array
+
+4.  **Identified Phenotypes/Conditions** (list)
+    - Medical conditions mentioned
+    - Phenotypic traits identified
+    - Disease associations
+    - Return as array
+
+5.  **Potential Risks** (if applicable)
+    - Health risks identified
+    - Risk level (low/moderate/high)
+    - Time sensitivity (urgent/routine/monitoring)
+
+6.  **Recommendations**
+    - Next steps
+    - Follow-up actions
+    - Specialist consultations needed
+    - Timeline for action
+
+**Critical Guidelines:**
+- Adapt language complexity to ${educationContext}
+- Be clear about certainty levels
+- Highlight urgent findings prominently
+- Use supportive, non-alarming tone while being honest
+- Focus on actionable information
+- Distinguish facts from interpretations
+
+Return structured analysis with all sections.`;
 
     const analysis = await base44.integrations.Core.InvokeLLM({
       prompt,
@@ -283,6 +341,10 @@ Focus on medically relevant information and genetic associations.
         type: "object",
         properties: {
           summary: { type: "string" },
+          key_findings: {
+            type: "array",
+            items: { type: "string" }
+          },
           genes: {
             type: "array",
             items: { type: "string" }
@@ -290,12 +352,48 @@ Focus on medically relevant information and genetic associations.
           phenotypes: {
             type: "array",
             items: { type: "string" }
+          },
+          risks: {
+            type: "object",
+            properties: {
+              identified: { type: "boolean" },
+              level: { type: "string" },
+              description: { type: "string" },
+              urgency: { type: "string" }
+            }
+          },
+          recommendations: {
+            type: "array",
+            items: { type: "string" }
           }
         }
       }
     });
 
-    return analysis;
+    return {
+      summary: analysis.summary,
+      key_findings: analysis.key_findings || [],
+      genes: analysis.genes || [],
+      phenotypes: analysis.phenotypes || [],
+      risks: analysis.risks || null,
+      recommendations: analysis.recommendations || []
+    };
+  };
+
+  const getEducationContext = (level) => {
+    if (!level || level === 'high_school') {
+      return "high school student - use simple, everyday language";
+    }
+    if (level === 'undergraduate') {
+      return "undergraduate student - use clear scientific terms with explanations";
+    }
+    if (level === 'graduate' || level === 'phd') {
+      return "graduate/PhD student - use technical scientific language";
+    }
+    if (level === 'medical_professional') {
+      return "medical professional - use clinical terminology";
+    }
+    return "researcher - use comprehensive scientific language";
   };
 
   const handleDelete = async (recordId) => {
@@ -776,10 +874,82 @@ Focus on medically relevant information and genetic associations.
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
+                  {/* AI Summary Section */}
                   {record.summary && (
-                    <div className="bg-blue-50 p-4 rounded-lg">
-                      <h4 className="font-semibold text-blue-900 mb-2">Robert Summary</h4>
-                      <p className="text-blue-800 text-sm">{record.summary}</p>
+                    <div className="bg-gradient-to-br from-blue-50 to-indigo-50 p-4 rounded-lg border border-blue-200">
+                      <div className="flex items-start gap-2 mb-2">
+                        <Brain className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
+                        <h4 className="font-semibold text-blue-900">Robert's AI Summary</h4>
+                      </div>
+                      <p className="text-blue-800 text-sm leading-relaxed">{record.summary}</p>
+                    </div>
+                  )}
+
+                  {/* Key Findings */}
+                  {record.extracted_data?.key_findings && record.extracted_data.key_findings.length > 0 && (
+                    <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
+                      <h4 className="font-semibold text-slate-900 mb-2 text-sm flex items-center gap-2">
+                        <CheckCircle className="w-4 h-4 text-green-600" />
+                        Key Findings
+                      </h4>
+                      <ul className="space-y-1">
+                        {record.extracted_data.key_findings.map((finding, idx) => (
+                          <li key={idx} className="text-sm text-slate-700 flex items-start gap-2">
+                            <span className="text-blue-600 mt-1">•</span>
+                            <span>{finding}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* Risk Assessment */}
+                  {record.extracted_data?.risks?.identified && (
+                    <Alert className={`${
+                      record.extracted_data.risks.level === 'high' 
+                        ? 'bg-red-50 border-red-300' 
+                        : record.extracted_data.risks.level === 'moderate'
+                        ? 'bg-amber-50 border-amber-300'
+                        : 'bg-blue-50 border-blue-200'
+                    }`}>
+                      <AlertTriangle className={`h-4 w-4 ${
+                        record.extracted_data.risks.level === 'high' 
+                          ? 'text-red-600' 
+                          : record.extracted_data.risks.level === 'moderate'
+                          ? 'text-amber-600'
+                          : 'text-blue-600'
+                      }`} />
+                      <AlertDescription className={`${
+                        record.extracted_data.risks.level === 'high' 
+                          ? 'text-red-900' 
+                          : record.extracted_data.risks.level === 'moderate'
+                          ? 'text-amber-900'
+                          : 'text-blue-900'
+                      }`}>
+                        <strong className="text-sm">
+                          Risk Level: {record.extracted_data.risks.level?.toUpperCase() || 'Unknown'}
+                          {record.extracted_data.risks.urgency && ` (${record.extracted_data.risks.urgency})`}
+                        </strong>
+                        <p className="text-xs mt-1">{record.extracted_data.risks.description}</p>
+                      </AlertDescription>
+                    </Alert>
+                  )}
+
+                  {/* Recommendations */}
+                  {record.extracted_data?.recommendations && record.extracted_data.recommendations.length > 0 && (
+                    <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
+                      <h4 className="font-semibold text-purple-900 mb-2 text-sm flex items-center gap-2">
+                        <Sparkles className="w-4 h-4 text-purple-600" />
+                        Recommendations
+                      </h4>
+                      <ul className="space-y-1">
+                        {record.extracted_data.recommendations.map((rec, idx) => (
+                          <li key={idx} className="text-sm text-purple-800 flex items-start gap-2">
+                            <span className="text-purple-600 mt-1">→</span>
+                            <span>{rec}</span>
+                          </li>
+                        ))}
+                      </ul>
                     </div>
                   )}
 

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -53,6 +54,15 @@ Record ${i + 1}:
 `).join('\n')}
 
 **Your Task - Comprehensive Multi-Record Comparison:**
+
+**FIRST: Generate Executive Summary**
+Create a 3-4 sentence holistic overview that captures:
+- The overall clinical picture from all records combined
+- Most significant patterns or findings
+- Key insights that emerge from the comparison
+- Actionable takeaways
+
+**THEN: Provide Detailed Analysis**
 
 **IMPORTANT:** Adapt all explanations for ${educationContext}.
 
@@ -134,15 +144,23 @@ Format with clear sections, use tables for comparisons, highlight key findings.`
 
       const response = await base44.integrations.Core.InvokeLLM({
         prompt,
-        add_context_from_internet: false
+        add_context_from_internet: false,
+        response_json_schema: {
+          type: "object",
+          properties: {
+            executive_summary: { type: "string" },
+            detailed_analysis: { type: "string" }
+          }
+        }
       });
 
-      const hasCriticalFindings = response.toLowerCase().includes('urgent') ||
-                                  response.toLowerCase().includes('critical') ||
-                                  response.toLowerCase().includes('immediate attention');
+      const hasCriticalFindings = response.detailed_analysis.toLowerCase().includes('urgent') ||
+                                  response.detailed_analysis.toLowerCase().includes('critical') ||
+                                  response.detailed_analysis.toLowerCase().includes('immediate attention');
 
       setComparison({
-        analysis: response,
+        executive_summary: response.executive_summary,
+        analysis: response.detailed_analysis,
         has_critical_findings: hasCriticalFindings,
         record_count: records.length,
         compared_types: [...new Set(records.map(r => r.file_type))]
@@ -286,6 +304,25 @@ Format with clear sections, use tables for comparisons, highlight key findings.`
           </Alert>
         )}
 
+        {/* Executive Summary */}
+        {comparison.executive_summary && (
+          <Card className="mb-6 shadow-lg bg-gradient-to-br from-purple-50 via-indigo-50 to-blue-50 border-2 border-purple-300">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Brain className="w-6 h-6 text-purple-600" />
+                Executive Summary
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="prose prose-sm max-w-none">
+                <p className="text-lg leading-relaxed text-slate-800 font-medium">
+                  {comparison.executive_summary}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Records Overview */}
         <div className="grid md:grid-cols-3 gap-4 mb-6">
           {records.map((record, idx) => (
@@ -328,7 +365,7 @@ Format with clear sections, use tables for comparisons, highlight key findings.`
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <TrendingUp className="w-5 h-5 text-purple-600" />
-              Robert's Comprehensive Comparison
+              Detailed Comparison Analysis
             </CardTitle>
           </CardHeader>
           <CardContent>
