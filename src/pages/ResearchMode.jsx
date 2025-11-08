@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,12 +14,14 @@ import {
   Shield,
   TrendingUp,
   FileStack,
-  Lock
+  Lock,
+  Beaker // Added Beaker icon
 } from "lucide-react";
 import BulkVCFAnalysis from "../components/research/BulkVCFAnalysis";
 import ExternalDatabaseIntegration from "../components/research/ExternalDatabaseIntegration";
 import PathwayEnrichment from "../components/research/PathwayEnrichment";
 import HypothesisGenerator from "../components/research/HypothesisGenerator";
+import ProjectManager from "../components/research/ProjectManager"; // Added ProjectManager import
 
 export default function ResearchMode() {
   const [user, setUser] = useState(null);
@@ -164,7 +167,7 @@ export default function ResearchMode() {
 
         {/* Feature Tabs */}
         <Tabs defaultValue="bulk-vcf" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-2 lg:grid-cols-4 h-auto">
+          <TabsList className="grid w-full grid-cols-2 lg:grid-cols-5 h-auto"> {/* Changed to lg:grid-cols-5 */}
             <TabsTrigger value="bulk-vcf" className="flex-col gap-1 py-3">
               <FileStack className="w-5 h-5" />
               <span className="text-xs">Bulk VCF</span>
@@ -180,6 +183,12 @@ export default function ResearchMode() {
             <TabsTrigger value="hypothesis" className="flex-col gap-1 py-3">
               <Lightbulb className="w-5 h-5" />
               <span className="text-xs">Hypothesis</span>
+            </TabsTrigger>
+            {/* Added new TabsTrigger for Projects */}
+            <TabsTrigger value="projects" className="flex-col gap-1 py-3">
+              <Beaker className="w-5 h-5" />
+              <span className="text-xs">Projects</span>
+              <Badge className="bg-green-600 text-white text-[10px] px-1">New</Badge>
             </TabsTrigger>
           </TabsList>
 
@@ -197,6 +206,11 @@ export default function ResearchMode() {
 
           <TabsContent value="hypothesis">
             <HypothesisGenerator userEducationLevel={user?.education_level} />
+          </TabsContent>
+
+          {/* Added new TabsContent for Projects */}
+          <TabsContent value="projects">
+            <ProjectManager />
           </TabsContent>
         </Tabs>
       </div>

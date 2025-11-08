@@ -79,6 +79,7 @@ const navigationItems = [
   {
     title: "Profile",
     url: createPageUrl("Profile"),
+    icon: User,
   },
   {
     title: "Premium",
