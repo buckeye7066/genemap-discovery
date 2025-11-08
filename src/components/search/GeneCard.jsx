@@ -66,7 +66,28 @@ export default function GeneCard({ gene, rank, isPremium, isSelected = false, on
 
   React.useEffect(() => {
     loadUserAndContext();
-  }, []);
+    
+    // Track gene view activity
+    if (gene && gene.symbol) {
+      trackGeneView(gene.symbol);
+    }
+  }, [gene?.symbol]);
+
+  const trackGeneView = async (geneSymbol) => {
+    try {
+      await base44.entities.UserActivity.create({
+        activity_type: "gene_view",
+        gene_symbol: geneSymbol,
+        metadata: {
+          confidence_score: gene.score,
+          phenotypes: gene.phenotypes?.map(p => p.name) || []
+        }
+      });
+    } catch (err) {
+      // Silently fail - activity tracking shouldn't break the app
+      console.log("Could not track activity:", err);
+    }
+  };
 
   React.useEffect(() => {
     if (isExpanded) {

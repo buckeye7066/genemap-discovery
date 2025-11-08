@@ -9,6 +9,7 @@ import Anastasia from './pages/Anastasia';
 import RobertClinical from './pages/RobertClinical';
 import VisualizationHub from './pages/VisualizationHub';
 import ResearchMode from './pages/ResearchMode';
+import Dashboard from './pages/Dashboard';
 import Layout from './Layout.jsx';
 
 
@@ -24,6 +25,7 @@ export const PAGES = {
     "RobertClinical": RobertClinical,
     "VisualizationHub": VisualizationHub,
     "ResearchMode": ResearchMode,
+    "Dashboard": Dashboard,
 }
 
 export const pagesConfig = {

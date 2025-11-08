@@ -6,12 +6,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import DnaIcon from "../components/icons/DnaIcon";
-import AIConversation from "../components/AIConversation"; // Added AIConversation import
-import { Search, Zap, Shield, Crown, ArrowRight, CheckCircle } from "lucide-react";
+import AIConversation from "../components/AIConversation";
+import { Search, Zap, Shield, Crown, ArrowRight, CheckCircle, LayoutDashboard } from "lucide-react";
 
 export default function HomePage() {
   useEffect(() => {
-    document.title = "GeneMap - Phenotype to Gene Discovery"; // Updated document title
+    document.title = "GeneMap - Phenotype to Gene Discovery";
   }, []);
 
   return (
@@ -36,17 +36,17 @@ export default function HomePage() {
           </p>
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-8 sm:mb-12 px-4">
-            <Link to={createPageUrl("Search")}>
-              <Button size="lg" className="bg-blue-600 hover:bg-blue-700 px-6 sm:px-8 py-3 text-lg shadow-lg w-full sm:w-auto min-h-[48px] touch-manipulation">
-                <Search className="w-5 h-5 mr-2" />
-                Start Gene Discovery
+            <Link to={createPageUrl("Dashboard")}>
+              <Button size="lg" className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 px-6 sm:px-8 py-3 text-lg shadow-lg w-full sm:w-auto min-h-[48px] touch-manipulation">
+                <LayoutDashboard className="w-5 h-5 mr-2" />
+                Go to Dashboard
               </Button>
             </Link>
 
-            <Link to={createPageUrl("Premium")}>
-              <Button variant="outline" size="lg" className="px-6 sm:px-8 py-3 text-lg border-2 hover:bg-blue-50 w-full sm:w-auto min-h-[48px] touch-manipulation">
-                <Crown className="w-5 h-5 mr-2 text-amber-500" />
-                View Premium Features
+            <Link to={createPageUrl("Search")}>
+              <Button size="lg" variant="outline" className="px-6 sm:px-8 py-3 text-lg border-2 hover:bg-blue-50 w-full sm:w-auto min-h-[48px] touch-manipulation">
+                <Search className="w-5 h-5 mr-2" />
+                Start Gene Discovery
               </Button>
             </Link>
           </div>

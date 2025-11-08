@@ -3,7 +3,7 @@ import React from "react";
 import { Link, useLocation } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import DnaIcon from "./components/icons/DnaIcon";
-import { Search, User, Crown, History, Home, FileText, Heart, Shield, BarChart3, Microscope } from "lucide-react";
+import { Search, User, Crown, History, Home, FileText, Heart, Shield, BarChart3, Microscope, LayoutDashboard } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -26,6 +26,13 @@ const navigationItems = [
     title: "Home",
     url: createPageUrl("Home"),
     icon: Home,
+  },
+  {
+    title: "Dashboard",
+    url: createPageUrl("Dashboard"),
+    icon: LayoutDashboard,
+    highlight: true,
+    badge: "New"
   },
   {
     title: "Gene Search",
@@ -72,7 +79,6 @@ const navigationItems = [
   {
     title: "Profile",
     url: createPageUrl("Profile"),
-    icon: User,
   },
   {
     title: "Premium",
@@ -116,7 +122,7 @@ export default function Layout({ children, currentPageName }) {
                         } ${item.highlight ? 'bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200' : ''}`}
                       >
                         <Link to={item.url} className="flex items-center gap-3 px-4 py-4 min-h-[48px]">
-                          <item.icon className={`w-5 h-5 ${item.highlight ? 'text-purple-600' : ''}`} />
+                          {item.icon && <item.icon className={`w-5 h-5 ${item.highlight ? 'text-purple-600' : ''}`} />}
                           <span>{item.title}</span>
                           {item.badge && (
                             <Badge className="ml-auto bg-purple-600 text-white text-xs">
