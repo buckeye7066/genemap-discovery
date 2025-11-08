@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -34,6 +35,7 @@ import {
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
+import RenewalNotifications from "../components/institutional/RenewalNotifications";
 
 export default function InstitutionalAdminPage() {
   const [user, setUser] = useState(null);
@@ -145,6 +147,7 @@ export default function InstitutionalAdminPage() {
         // Send invitation email
         await base44.integrations.Core.SendEmail({
           to: email,
+          from_name: selectedLicense.organization_name,
           subject: `You've been invited to ${selectedLicense.organization_name} on GeneMap`,
           body: `Hello!
 
@@ -304,7 +307,7 @@ The GeneMap Team`
               <p className="text-slate-600 mb-6">
                 You don't have access to any institutional licenses yet.
               </p>
-              <Link to={createPageUrl("Premium")}>
+              <Link to={createPageUrl("InstitutionalPricing")}>
                 <Button className="bg-blue-600 hover:bg-blue-700">
                   <Crown className="w-4 h-4 mr-2" />
                   Explore Institutional Licensing
@@ -334,7 +337,7 @@ The GeneMap Team`
                 Manage your organization's GeneMap licenses
               </p>
             </div>
-            <Link to={createPageUrl("Premium")}>
+            <Link to={createPageUrl("InstitutionalPricing")}>
               <Button variant="outline" className="gap-2">
                 <Crown className="w-4 h-4" />
                 View Pricing
@@ -357,6 +360,11 @@ The GeneMap Team`
               ))}
             </div>
           )}
+        </div>
+
+        {/* Renewal Notifications - NEW */}
+        <div className="mb-6">
+          <RenewalNotifications />
         </div>
 
         {/* Alerts */}

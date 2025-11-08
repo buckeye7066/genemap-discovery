@@ -1,3 +1,4 @@
+
 import { createClientFromRequest } from 'npm:@base44/sdk@0.7.1';
 import Stripe from 'npm:stripe@14.10.0';
 
@@ -138,8 +139,54 @@ async function handleCheckoutCompleted(base44, session) {
         return;
     }
 
-    // Subscription will be handled by subscription.created event
-    console.log(`Checkout completed for ${userEmail}`);
+    // Check if this is an institutional license purchase
+    const organizationName = session.metadata.organization_name;
+    const licenseType = session.metadata.license_type;
+    const seats = session.metadata.seats;
+
+    if (organizationName && licenseType && seats) {
+        // Create institutional license
+        const startDate = new Date();
+        const endDate = new Date();
+        const billingCycle = session.metadata.billing_cycle || 'monthly';
+        
+        if (billingCycle === 'annual') {
+            endDate.setFullYear(endDate.getFullYear() + 1);
+        } else {
+            endDate.setMonth(endDate.getMonth() + 1);
+        }
+
+        const renewalDate = new Date(endDate);
+        renewalDate.setDate(renewalDate.getDate() - 14); // 14 days before expiry
+
+        await base44.asServiceRole.entities.InstitutionalLicense.create({
+            organization_name: organizationName,
+            contact_email: userEmail,
+            contact_name: session.customer_details?.name || '',
+            license_type: licenseType,
+            max_seats: parseInt(seats),
+            assigned_seats: 0,
+            status: 'active',
+            start_date: startDate.toISOString(),
+            end_date: endDate.toISOString(),
+            renewal_date: renewalDate.toISOString(),
+            auto_renew: billingCycle === 'monthly',
+            stripe_customer_id: session.customer,
+            stripe_subscription_id: session.subscription || null,
+            pricing: {
+                price_per_seat: session.amount_total / (parseInt(seats) * 100),
+                total_annual_cost: session.amount_total / 100,
+                billing_cycle: billingCycle
+            },
+            admin_users: [userEmail],
+            created_by: userEmail
+        });
+
+        console.log(`Institutional license created for ${organizationName}`);
+    } else {
+        // Individual subscription - handled by subscription.created event
+        console.log(`Checkout completed for ${userEmail}`);
+    }
 }
 
 async function handlePaymentSucceeded(base44, invoice) {
