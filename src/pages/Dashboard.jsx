@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { Link } from "react-router-dom";
@@ -32,6 +31,7 @@ export default function Dashboard() {
   const [projects, setProjects] = useState([]);
   const [medicalRecords, setMedicalRecords] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [showOnboarding, setShowOnboarding] = useState(false);
   const [widgetVisibility, setWidgetVisibility] = useState({
     recentGenes: true,
     recentSearches: true,
@@ -39,7 +39,6 @@ export default function Dashboard() {
     medicalRecords: true,
     recommendations: true
   });
-  const [showOnboarding, setShowOnboarding] = useState(false);
 
   useEffect(() => {
     loadDashboardData();
@@ -50,14 +49,12 @@ export default function Dashboard() {
       const currentUser = await base44.auth.me();
       setUser(currentUser);
 
-      // Check if user needs onboarding
       if (!currentUser.onboarding_completed) {
         setShowOnboarding(true);
       }
 
-      // Load recent gene views
       const activities = await base44.entities.UserActivity.filter(
-        {
+        { 
           created_by: currentUser.email,
           activity_type: "gene_view"
         },
@@ -66,7 +63,6 @@ export default function Dashboard() {
       );
       setRecentGenes(activities);
 
-      // Load recent searches
       const searches = await base44.entities.SearchHistory.filter(
         { created_by: currentUser.email },
         '-created_date',
@@ -74,7 +70,6 @@ export default function Dashboard() {
       );
       setRecentSearches(searches);
 
-      // Load research projects
       const userProjects = await base44.entities.ResearchProject.filter(
         { created_by: currentUser.email },
         '-updated_date',
@@ -82,7 +77,6 @@ export default function Dashboard() {
       );
       setProjects(userProjects);
 
-      // Load medical records
       const records = await base44.entities.MedicalData.filter(
         { created_by: currentUser.email },
         '-created_date',
@@ -129,11 +123,9 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-4 sm:p-6">
-      {/* Onboarding Tour */}
-      {showOnboarding && <OnboardingTour onComplete={() => setShowOnboarding(false)} />}
+      <OnboardingTour onComplete={() => setShowOnboarding(false)} />
 
       <div className="max-w-7xl mx-auto">
-        {/* Header */}
         <div className="mb-6 sm:mb-8">
           <div className="flex items-center justify-between mb-4">
             <div>
@@ -146,8 +138,8 @@ export default function Dashboard() {
               </p>
             </div>
             <div className="flex gap-2">
-              <Button
-                variant="outline"
+              <Button 
+                variant="outline" 
                 className="gap-2"
                 onClick={() => setShowOnboarding(true)}
               >
@@ -251,7 +243,7 @@ export default function Dashboard() {
                   ) : (
                     <div className="space-y-2">
                       {recentGenes.slice(0, 5).map((activity, idx) => (
-                        <Link
+                        <Link 
                           key={idx}
                           to={`${createPageUrl("Search")}?query=${activity.gene_symbol}`}
                           className="block p-3 hover:bg-slate-50 rounded-lg transition-colors"
@@ -355,9 +347,9 @@ export default function Dashboard() {
                       >
                         <div className="flex items-center gap-3">
                           <div className="text-2xl">
-                            {record.file_type === 'genetic_test' ? '🧬' :
-                              record.file_type === 'blood_test' ? '💉' :
-                                record.file_type === 'vcf_file' ? '📊' : '📄'}
+                            {record.file_type === 'genetic_test' ? '🧬' : 
+                             record.file_type === 'blood_test' ? '💉' : 
+                             record.file_type === 'vcf_file' ? '📊' : '📄'}
                           </div>
                           <div className="flex-1">
                             <p className="font-medium text-slate-900 text-sm">
@@ -419,9 +411,9 @@ export default function Dashboard() {
                             <p className="font-semibold text-slate-900 text-sm">{project.name}</p>
                             <Badge className={
                               project.status === 'active' ? 'bg-green-100 text-green-800' :
-                                project.status === 'planning' ? 'bg-blue-100 text-blue-800' :
-                                  project.status === 'paused' ? 'bg-amber-100 text-amber-800' :
-                                    'bg-slate-100 text-slate-800'
+                              project.status === 'planning' ? 'bg-blue-100 text-blue-800' :
+                              project.status === 'paused' ? 'bg-amber-100 text-amber-800' :
+                              'bg-slate-100 text-slate-800'
                             }>
                               {project.status}
                             </Badge>
@@ -471,7 +463,7 @@ export default function Dashboard() {
                     <Alert className="bg-white border-purple-200">
                       <Users className="h-4 w-4 text-purple-600" />
                       <AlertDescription className="text-purple-900 text-sm">
-                        <strong>Clinical Trials:</strong> Based on your medical data, we found relevant trials.
+                        <strong>Clinical Trials:</strong> Based on your medical data, we found relevant trials. 
                         <Link to={createPageUrl("MedicalData")} className="underline ml-1">
                           View matches
                         </Link>
@@ -482,7 +474,7 @@ export default function Dashboard() {
                   <Alert className="bg-white border-amber-200">
                     <Sparkles className="h-4 w-4 text-amber-600" />
                     <AlertDescription className="text-amber-900 text-sm">
-                      <strong>New Feature:</strong> Research Mode now available with bulk VCF analysis.
+                      <strong>New Feature:</strong> Research Mode now available with bulk VCF analysis. 
                       <Link to={createPageUrl("ResearchMode")} className="underline ml-1">
                         Explore
                       </Link>
