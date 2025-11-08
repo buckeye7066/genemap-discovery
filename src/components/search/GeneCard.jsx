@@ -42,6 +42,7 @@ import ProteinDomains from "../visualizations/ProteinDomains";
 import ProteinStructure from "../visualizations/ProteinStructure";
 import ProteinInteractions from "../visualizations/ProteinInteractions";
 import RobertClinicalSupport from "../clinical/RobertClinicalSupport";
+import ClinicalTrialFinder from "../clinical/ClinicalTrialFinder"; // Added
 import ReactMarkdown from 'react-markdown';
 import { Textarea } from "@/components/ui/textarea"; // Added
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"; // Added
@@ -61,6 +62,7 @@ export default function GeneCard({ gene, rank, isPremium, isSelected = false, on
   const [variantInput, setVariantInput] = useState(""); // Added
   const [variantAnalysis, setVariantAnalysis] = useState(null); // Added
   const [isAnalyzingVariant, setIsAnalyzingVariant] = useState(false); // Added
+  const [showClinicalTrials, setShowClinicalTrials] = useState(false); // Added
 
   React.useEffect(() => {
     loadUserAndContext();
@@ -677,10 +679,11 @@ Provide comprehensive, evidence-based analysis formatted with clear sections.`;
 
         {isExpanded && (
           <div className="mb-4">
-            <Tabs defaultValue="clinical" className="w-full">
-              <TabsList className="grid w-full grid-cols-2">
+            <Tabs defaultValue={showClinicalTrials ? "trials" : "clinical"} className="w-full">
+              <TabsList className="grid w-full grid-cols-3">
                 <TabsTrigger value="clinical">Clinical Analysis</TabsTrigger>
                 <TabsTrigger value="variant">Variant Analysis</TabsTrigger>
+                <TabsTrigger value="trials">Clinical Trials</TabsTrigger>
               </TabsList>
 
               <TabsContent value="clinical" className="mt-4">
@@ -886,6 +889,23 @@ Provide comprehensive, evidence-based analysis formatted with clear sections.`;
                     <AlertDescription>{variantAnalysis.message}</AlertDescription>
                   </Alert>
                 )}
+              </TabsContent>
+
+              <TabsContent value="trials" className="mt-4">
+                <Alert className="mb-4 bg-blue-50 border-blue-200">
+                  <Info className="h-4 w-4 text-blue-600" />
+                  <AlertDescription className="text-blue-900 text-sm">
+                    Search for clinical trials related to {gene.symbol} and its associated conditions.
+                  </AlertDescription>
+                </Alert>
+                <ClinicalTrialFinder
+                  geneticData={{
+                    gene: gene.symbol,
+                    variant: variantAnalysis?.variant || null,
+                    conditions: gene.phenotypes?.map(p => p.name) || []
+                  }}
+                  userEducationLevel={user?.education_level}
+                />
               </TabsContent>
             </Tabs>
           </div>

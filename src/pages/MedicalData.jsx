@@ -23,29 +23,31 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { 
-  Upload, 
-  FileText, 
-  Camera, 
-  Loader2, 
-  CheckCircle, 
+import {
+  Upload,
+  FileText,
+  Camera,
+  Loader2,
+  CheckCircle,
   AlertCircle,
   Trash2,
   Eye,
   Download,
   MessageSquare,
-  Shield, 
-  TrendingUp, 
+  Shield,
+  TrendingUp,
   Info,
-  Brain, 
-  AlertTriangle, 
-  Sparkles 
+  Brain,
+  AlertTriangle,
+  Sparkles,
+  Users // Added Users icon for Clinical Trial Finder
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import MedicalDataComparison from "../components/medical/MedicalDataComparison";
 import VCFParser from "../components/medical/VCFParser";
 import FHIRExporter from "../components/medical/FHIRExporter";
+import ClinicalTrialFinder from "../components/clinical/ClinicalTrialFinder"; // New import
 
 export default function MedicalDataPage() {
   const [user, setUser] = useState(null);
@@ -62,6 +64,8 @@ export default function MedicalDataPage() {
   const [sharePurpose, setSharePurpose] = useState("");
   const [isSharing, setIsSharing] = useState(false);
   const [sharedRecords, setSharedRecords] = useState([]);
+  const [showTrialFinder, setShowTrialFinder] = useState(false); // New state
+  const [trialSearchContext, setTrialSearchContext] = useState(null); // New state
 
   const [uploadForm, setUploadForm] = useState({
     file: null,
@@ -77,7 +81,7 @@ export default function MedicalDataPage() {
     try {
       const currentUser = await base44.auth.me();
       setUser(currentUser);
-      
+
       const records = await base44.entities.MedicalData.filter(
         { created_by: currentUser.email },
         '-created_date'
@@ -90,7 +94,7 @@ export default function MedicalDataPage() {
           shared_with_email: currentUser.email,
           status: 'active'
         });
-        
+
         // Get the actual records that were shared
         // For now, we'll just track the shares objects, as fetching actual records by ID list
         // might require a different backend API or multiple calls.
@@ -115,7 +119,7 @@ export default function MedicalDataPage() {
 
   const handleUpload = async (e) => {
     e.preventDefault();
-    
+
     if (!uploadForm.file) {
       setError("Please select a file to upload");
       return;
@@ -178,7 +182,7 @@ export default function MedicalDataPage() {
 
       setSuccess("Medical data uploaded and analyzed successfully! Visit Anastasia AI for detailed counseling.");
       setUploadForm({ file: null, fileType: "genetic_test", notes: "" });
-      
+
       // Reset file input
       const fileInput = document.getElementById('file-upload');
       if (fileInput) fileInput.value = '';
@@ -292,7 +296,7 @@ export default function MedicalDataPage() {
 
   const analyzeExtractedData = async (extractedData, fileType) => {
     const educationContext = getEducationContext(user?.education_level);
-    
+
     const prompt = `You are Robert, an AI medical data analysis assistant. Analyze this ${fileType} data and provide a comprehensive, personalized summary.
 
 **Patient Context:**
@@ -519,6 +523,16 @@ Return structured analysis with all sections.`;
     }
   };
 
+  const handleFindTrials = (record) => {
+    const context = {
+      conditions: record.phenotypes_identified || [],
+      genes: record.relevant_genes || [],
+      treatments: record.extracted_data?.treatments || []
+    };
+    setTrialSearchContext(context);
+    setShowTrialFinder(true);
+  };
+
   const fileTypeLabels = {
     genetic_test: "Genetic Test Report",
     blood_test: "Blood Test / Lab Results",
@@ -543,6 +557,29 @@ Return structured analysis with all sections.`;
         <div className="max-w-4xl mx-auto flex flex-col items-center justify-center py-20">
           <Loader2 className="w-12 h-12 animate-spin text-blue-600 mb-4" />
           <p className="text-slate-600">Loading your medical data...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (showTrialFinder) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-4 sm:p-6">
+        <div className="max-w-6xl mx-auto">
+          <Button
+            variant="outline"
+            onClick={() => {
+              setShowTrialFinder(false);
+              setTrialSearchContext(null);
+            }}
+            className="mb-4"
+          >
+            ← Back to Medical Data
+          </Button>
+          <ClinicalTrialFinder
+            medicalContext={trialSearchContext}
+            userEducationLevel={user?.education_level}
+          />
         </div>
       </div>
     );
@@ -639,7 +676,7 @@ Return structured analysis with all sections.`;
                   >
                     Clear
                   </Button>
-                  
+
                   <Dialog open={shareDialogOpen} onOpenChange={setShareDialogOpen}>
                     <DialogTrigger asChild>
                       <Button
@@ -658,7 +695,7 @@ Return structured analysis with all sections.`;
                         <Alert className="bg-amber-50 border-amber-200">
                           <Shield className="h-4 w-4 text-amber-600" />
                           <AlertDescription className="text-amber-900 text-xs">
-                            <strong>Privacy Notice:</strong> You are about to share {selectedRecords.length} medical record(s). 
+                            <strong>Privacy Notice:</strong> You are about to share {selectedRecords.length} medical record(s).
                             Only share with trusted individuals. You can revoke access at any time.
                           </AlertDescription>
                         </Alert>
@@ -755,7 +792,7 @@ Return structured analysis with all sections.`;
                 <Alert className="bg-cyan-50 border-cyan-200">
                   <Info className="h-4 w-4 text-cyan-600" />
                   <AlertDescription className="text-cyan-900 text-sm">
-                    <strong>VCF Format:</strong> Upload your VCF (Variant Call Format) file for automated 
+                    <strong>VCF Format:</strong> Upload your VCF (Variant Call Format) file for automated
                     variant parsing and analysis. Supports standard VCF v4.x format.
                   </AlertDescription>
                 </Alert>
@@ -788,7 +825,7 @@ Return structured analysis with all sections.`;
                           {uploadForm.file ? uploadForm.file.name : "Click to upload"}
                         </p>
                         <p className="text-sm text-slate-500">
-                          {uploadForm.fileType === 'vcf_file' 
+                          {uploadForm.fileType === 'vcf_file'
                             ? 'Accepted formats: .vcf, .vcf.gz'
                             : 'Supported formats: PDF, JPG, PNG, DICOM, CSV, TXT, and more (max 10MB)'}
                         </p>
@@ -853,7 +890,7 @@ Return structured analysis with all sections.`;
               </Badge>
             )}
           </div>
-          
+
           {medicalRecords.length === 0 ? (
             <Card className="border-2 border-dashed border-slate-200">
               <CardContent className="text-center py-12">
@@ -890,8 +927,20 @@ Return structured analysis with all sections.`;
                         </p>
                       </div>
                     </div>
-                    <div className="flex gap-2">
-                      <FHIRExporter 
+                    <div className="flex gap-2 flex-wrap">
+                      {(record.relevant_genes?.length > 0 || record.phenotypes_identified?.length > 0) && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleFindTrials(record)}
+                          className="gap-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                          title="Find relevant clinical trials"
+                        >
+                          <Users className="w-4 h-4" />
+                          <span className="hidden sm:inline">Trials</span>
+                        </Button>
+                      )}
+                      <FHIRExporter
                         data={{
                           record_id: record.id,
                           file_type: record.file_type,
@@ -899,7 +948,7 @@ Return structured analysis with all sections.`;
                           extracted_data: record.extracted_data,
                           relevant_genes: record.relevant_genes,
                           phenotypes: record.phenotypes_identified,
-                          vcf_variants: record.vcf_variants // Include VCF variants for FHIR export
+                          vcf_variants: record.vcf_variants
                         }}
                         type="medical_record"
                       />
@@ -937,7 +986,7 @@ Return structured analysis with all sections.`;
                 <CardContent className="space-y-4">
                   {/* VCF Parser for VCF files */}
                   {record.file_type === 'vcf_file' && !record.vcf_variants && (
-                    <VCFParser 
+                    <VCFParser
                       fileUrl={record.file_url}
                       onVariantsParsed={(variants) => handleVariantsParsed(record.id, variants)}
                     />
@@ -1004,22 +1053,22 @@ Return structured analysis with all sections.`;
                   {/* Risk Assessment */}
                   {record.extracted_data?.risks?.identified && (
                     <Alert className={`${
-                      record.extracted_data.risks.level === 'high' 
-                        ? 'bg-red-50 border-red-300' 
+                      record.extracted_data.risks.level === 'high'
+                        ? 'bg-red-50 border-red-300'
                         : record.extracted_data.risks.level === 'moderate'
                         ? 'bg-amber-50 border-amber-300'
                         : 'bg-blue-50 border-blue-200'
                     }`}>
                       <AlertTriangle className={`h-4 w-4 ${
-                        record.extracted_data.risks.level === 'high' 
-                          ? 'text-red-600' 
+                        record.extracted_data.risks.level === 'high'
+                          ? 'text-red-600'
                           : record.extracted_data.risks.level === 'moderate'
                           ? 'text-amber-600'
                           : 'text-blue-600'
                       }`} />
                       <AlertDescription className={`${
-                        record.extracted_data.risks.level === 'high' 
-                          ? 'text-red-900' 
+                        record.extracted_data.risks.level === 'high'
+                          ? 'text-red-900'
                           : record.extracted_data.risks.level === 'moderate'
                           ? 'text-amber-900'
                           : 'text-blue-900'

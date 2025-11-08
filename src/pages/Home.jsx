@@ -92,11 +92,91 @@ export default function HomePage() {
       </div>
 
       {/* Features Grid */}
-      <div className="px-4 sm:px-6 py-12 sm:py-16 bg-gradient-to-b from-white/50 to-transparent"> {/* Updated background here */}
+      <div className="px-4 sm:px-6 py-12 sm:py-16 bg-gradient-to-b from-white/50 to-transparent">
         <div className="max-w-6xl mx-auto">
           <h2 className="text-2xl sm:text-3xl font-bold text-center text-slate-900 mb-8 sm:mb-12">
-            Free & Premium Features
+            Comprehensive Genomic Platform
           </h2>
+
+          <div className="grid gap-6 sm:gap-8 md:grid-cols-3 mb-12">
+            {/* Gene Discovery */}
+            <Card className="border-2 border-blue-200 shadow-lg hover:shadow-xl transition-shadow duration-300">
+              <CardHeader className="text-center">
+                <div className="w-12 h-12 mx-auto mb-4 bg-blue-100 rounded-2xl flex items-center justify-center">
+                  <Search className="w-6 h-6 text-blue-600" />
+                </div>
+                <CardTitle className="text-lg text-slate-900">Gene Discovery</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex items-start gap-2">
+                  <CheckCircle className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
+                  <p className="text-sm text-slate-700">Phenotype-to-gene mapping</p>
+                </div>
+                <div className="flex items-start gap-2">
+                  <CheckCircle className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
+                  <p className="text-sm text-slate-700">Disease-gene associations</p>
+                </div>
+                <div className="flex items-start gap-2">
+                  <CheckCircle className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
+                  <p className="text-sm text-slate-700">AI-powered insights</p>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Clinical Analysis */}
+            <Card className="border-2 border-purple-200 shadow-lg hover:shadow-xl transition-shadow duration-300">
+              <CardHeader className="text-center">
+                <div className="w-12 h-12 mx-auto mb-4 bg-purple-100 rounded-2xl flex items-center justify-center">
+                  <Shield className="w-6 h-6 text-purple-600" />
+                </div>
+                <CardTitle className="text-lg text-slate-900">Clinical Support</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex items-start gap-2">
+                  <CheckCircle className="w-4 h-4 text-purple-600 mt-0.5 flex-shrink-0" />
+                  <p className="text-sm text-slate-700">Medical data analysis</p>
+                </div>
+                <div className="flex items-start gap-2">
+                  <CheckCircle className="w-4 h-4 text-purple-600 mt-0.5 flex-shrink-0" />
+                  <p className="text-sm text-slate-700">Variant interpretation</p>
+                </div>
+                <div className="flex items-start gap-2">
+                  <CheckCircle className="w-4 h-4 text-purple-600 mt-0.5 flex-shrink-0" />
+                  <p className="text-sm text-slate-700">Drug interaction screening</p>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Clinical Trials */}
+            <Card className="border-2 border-cyan-200 shadow-lg hover:shadow-xl transition-shadow duration-300 bg-gradient-to-br from-cyan-50 to-blue-50">
+              <CardHeader className="text-center">
+                <div className="w-12 h-12 mx-auto mb-4 bg-cyan-100 rounded-2xl flex items-center justify-center">
+                  <Badge className="w-6 h-6 text-cyan-600">🧪</Badge>
+                </div>
+                <CardTitle className="text-lg text-slate-900">Clinical Trials</CardTitle>
+                <Badge className="bg-cyan-600 text-white mt-2 text-xs">NEW</Badge>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex items-start gap-2">
+                  <CheckCircle className="w-4 h-4 text-cyan-600 mt-0.5 flex-shrink-0" />
+                  <p className="text-sm text-slate-700">ClinicalTrials.gov search</p>
+                </div>
+                <div className="flex items-start gap-2">
+                  <CheckCircle className="w-4 h-4 text-cyan-600 mt-0.5 flex-shrink-0" />
+                  <p className="text-sm text-slate-700">Personalized matching</p>
+                </div>
+                <div className="flex items-start gap-2">
+                  <CheckCircle className="w-4 h-4 text-cyan-600 mt-0.5 flex-shrink-0" />
+                  <p className="text-sm text-slate-700">Eligibility assessment</p>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Free vs Premium Comparison */}
+          <h3 className="text-xl sm:text-2xl font-bold text-center text-slate-900 mb-6 sm:mb-8">
+            Free & Premium Features
+          </h3>
 
           <div className="grid gap-6 sm:gap-8 md:grid-cols-2">
             {/* Free Features */}
