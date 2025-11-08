@@ -1,3 +1,4 @@
+
 import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -28,7 +29,10 @@ import {
   Sparkles,
   FileHeart,
   Target,
-  Stethoscope
+  Stethoscope,
+  Brain, // Added for variant analysis
+  Heart, // Added for variant analysis
+  AlertCircle // Added for variant analysis
 } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import GeneExpressionChart from "../visualizations/GeneExpressionChart";
@@ -39,6 +43,10 @@ import ProteinStructure from "../visualizations/ProteinStructure";
 import ProteinInteractions from "../visualizations/ProteinInteractions";
 import RobertClinicalSupport from "../clinical/RobertClinicalSupport";
 import ReactMarkdown from 'react-markdown';
+import { Textarea } from "@/components/ui/textarea"; // Added
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"; // Added
+import { Label } from "@/components/ui/label"; // Added
+import { Alert, AlertDescription } from "@/components/ui/alert"; // Added
 
 export default function GeneCard({ gene, rank, isPremium, isSelected = false, onSelect = null }) {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -49,6 +57,9 @@ export default function GeneCard({ gene, rank, isPremium, isSelected = false, on
   const [isLoadingSynthesis, setIsLoadingSynthesis] = useState(false);
   const [medicalContext, setMedicalContext] = useState(null);
   const [showClinicalAnalysis, setShowClinicalAnalysis] = useState(false);
+  const [variantInput, setVariantInput] = useState(""); // Added
+  const [variantAnalysis, setVariantAnalysis] = useState(null); // Added
+  const [isAnalyzingVariant, setIsAnalyzingVariant] = useState(false); // Added
 
   React.useEffect(() => {
     loadUserAndContext();
@@ -254,6 +265,174 @@ Keep your response concise (3-4 short paragraphs) and use clear formatting.`;
       return "researcher - use scientific language with methodological details";
     }
     return "general audience - use clear, accessible language";
+  };
+
+  const analyzeVariant = async () => {
+    if (!variantInput.trim()) return;
+
+    setIsAnalyzingVariant(true);
+    try {
+      const educationContext = getEducationContext(user?.education_level);
+      
+      const prompt = `You are Robert, an AI genetic variant interpretation specialist. Analyze this genetic variant for the patient.
+
+**Gene Context:** ${gene.symbol} (${gene.name})
+**Variant Input:** ${variantInput.trim()}
+
+**Patient Context:**
+- Age: ${user?.age || 'Not specified'}
+- Education Level: ${educationContext}
+
+**Your Task - Comprehensive Variant Interpretation:**
+
+1. **Variant Identification & Validation**
+   - Parse the variant notation (rsID, HGVS, or description)
+   - Confirm it's associated with ${gene.symbol}
+   - Provide standard nomenclature (if input is non-standard)
+   - Genomic location and nucleotide change
+
+2. **Population Genetics**
+   - Population frequency (from gnomAD, 1000 Genomes, etc.)
+   - How common is this variant?
+   - Ethnic/geographic distribution differences
+   - Allele frequency interpretation
+
+3. **Clinical Significance**
+   - Classification: Pathogenic, Likely Pathogenic, VUS (Variant of Unknown Significance), Likely Benign, Benign
+   - Disease associations and evidence level
+   - Penetrance (if applicable) - what % of people with this variant develop the condition?
+   - Age of onset considerations
+   - Use ClinVar, OMIM, published literature
+
+4. **Functional Impact**
+   - Effect on protein function (missense, nonsense, frameshift, etc.)
+   - Predicted pathogenicity scores (SIFT, PolyPhen, CADD, etc.)
+   - Domain/region affected
+   - Conservation across species
+
+5. **Personalized Risk Assessment**
+   - Given this variant, what is the risk level? (Low / Moderate / High / Very High)
+   - Absolute risk vs. relative risk
+   - Risk context (e.g., general population risk is X%, this variant increases it to Y%)
+   - Age-specific considerations
+   - Other genetic/environmental factors that modify risk
+
+6. **Pharmacogenomic Implications** (CRITICAL for clinical genes)
+   - Does this variant affect drug metabolism or response?
+   - Specific medications impacted (list drug names)
+   - Recommended dose adjustments or alternatives
+   - FDA pharmacogenomic labels
+   - Use PharmGKB, CPIC guidelines
+
+7. **Clinical Management & Next Steps**
+   - Recommended genetic counseling? (Yes/No and why)
+   - Additional testing needed?
+   - Screening recommendations (what, when, how often?)
+   - Lifestyle modifications
+   - Family implications (inheritance pattern, testing relatives)
+   - Specialist consultation recommendations
+
+8. **Patient-Friendly Summary**
+   - What does this variant mean for ME specifically?
+   - Should I be concerned?
+   - What should I DO about it?
+   - Timeline for action (urgent/soon/routine/monitoring)
+
+**Adaptation for ${educationContext}:**
+${getEducationGuidance(user?.education_level)}
+
+**Critical Guidelines:**
+- Cite evidence sources (ClinVar, gnomAD, PharmGKB, etc.)
+- Be honest about uncertainty (VUS means we don't know yet)
+- Emphasize genetic counseling for pathogenic/likely pathogenic variants
+- Provide both technical details AND plain language explanations
+- Use risk analogies appropriate for education level
+- Include warning banners for high-risk findings
+- Be supportive and avoid unnecessary alarm while being truthful
+
+Provide comprehensive, evidence-based analysis formatted with clear sections.`;
+
+      const response = await base44.integrations.Core.InvokeLLM({
+        prompt,
+        add_context_from_internet: true
+      });
+
+      // Parse for high-risk indicators
+      const hasHighRisk = response.toLowerCase().includes('pathogenic') || 
+                         response.toLowerCase().includes('high risk') ||
+                         response.toLowerCase().includes('very high');
+      
+      const hasDrugImplications = response.toLowerCase().includes('medication') ||
+                                 response.toLowerCase().includes('drug') ||
+                                 response.toLowerCase().includes('pharmacogenomic');
+
+      const requiresCounseling = response.toLowerCase().includes('genetic counseling recommended') ||
+                                response.toLowerCase().includes('should see a genetic counselor');
+
+      setVariantAnalysis({
+        analysis: response,
+        has_high_risk: hasHighRisk,
+        has_drug_implications: hasDrugImplications,
+        requires_counseling: requiresCounseling,
+        variant: variantInput.trim(),
+        gene: gene.symbol
+      });
+
+    } catch (err) {
+      console.error("Error analyzing variant:", err);
+      setVariantAnalysis({
+        error: true,
+        message: "Failed to analyze variant. Please check the variant notation and try again."
+      });
+    } finally {
+      setIsAnalyzingVariant(false);
+    }
+  };
+
+  const getEducationGuidance = (level) => {
+    if (!level || level === 'high_school') {
+      return `- Use everyday language, avoid jargon
+- Explain concepts with simple analogies (e.g., "like a typo in the instruction manual")
+- Focus on practical impact
+- Use percentages in relatable terms (e.g., "1 in 100 people")
+- Keep explanations brief and clear`;
+    }
+    if (level === 'undergraduate') {
+      return `- Use basic scientific terminology with brief explanations
+- Include some molecular details but keep accessible
+- Explain evidence levels clearly
+- Use both technical and plain language
+- Provide context for statistics`;
+    }
+    if (level === 'graduate' || level === 'phd') {
+      return `- Use full scientific nomenclature
+- Include detailed molecular mechanisms
+- Reference specific studies and databases
+- Discuss methodological considerations
+- Provide comprehensive evidence review`;
+    }
+    if (level === 'medical_professional') {
+      return `- Use clinical terminology
+- Focus on diagnostic and management implications
+- Include differential diagnoses
+- Reference clinical guidelines
+- Emphasize actionable medical decisions`;
+    }
+    if (level === 'researcher') {
+      return `- Use complete technical terminology
+- Include detailed bioinformatics predictions
+- Discuss functional validation studies
+- Reference latest literature
+- Include methodological limitations`;
+    }
+    return `- Use clear, accessible language
+- Balance technical accuracy with readability
+- Provide context for all technical terms`;
+  };
+
+  const handleClearVariantAnalysis = () => {
+    setVariantAnalysis(null);
+    setVariantInput("");
   };
 
   const confidenceColor = gene.score >= 0.9 ? "bg-green-100 text-green-800 border-green-200" :
@@ -497,13 +676,206 @@ Keep your response concise (3-4 short paragraphs) and use clear formatting.`;
 
         {isExpanded && (
           <div className="mb-4">
-            <Button
-              onClick={() => setShowClinicalAnalysis(!showClinicalAnalysis)}
-              className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 min-h-[48px] touch-manipulation text-white"
-            >
-              <Stethoscope className="w-4 h-4 mr-2" />
-              {showClinicalAnalysis ? 'Hide Clinical Data Analysis' : 'Analyze Against My Medical Data'}
-            </Button>
+            <Tabs defaultValue="clinical" className="w-full">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="clinical">Clinical Analysis</TabsTrigger>
+                <TabsTrigger value="variant">Variant Analysis</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="clinical" className="mt-4">
+                <Button
+                  onClick={() => setShowClinicalAnalysis(!showClinicalAnalysis)}
+                  className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 min-h-[48px] touch-manipulation text-white"
+                >
+                  <Stethoscope className="w-4 h-4 mr-2" />
+                  {showClinicalAnalysis ? 'Hide Clinical Data Analysis' : 'Analyze Against My Medical Data'}
+                </Button>
+              </TabsContent>
+
+              <TabsContent value="variant" className="mt-4 space-y-4">
+                <div className="bg-gradient-to-br from-indigo-50 to-purple-50 p-4 rounded-lg border border-indigo-200">
+                  <div className="flex items-start gap-2 mb-3">
+                    <Info className="w-5 h-5 text-indigo-600 mt-0.5 flex-shrink-0" />
+                    <div>
+                      <h4 className="font-semibold text-indigo-900 mb-1">AI-Powered Variant Interpretation</h4>
+                      <p className="text-sm text-indigo-700">
+                        Enter a specific genetic variant to get personalized analysis including risk assessment, 
+                        drug implications, and clinical recommendations.
+                      </p>
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-3">
+                    <div>
+                      <Label htmlFor="variant-input" className="text-sm font-medium text-slate-900 mb-1 block">
+                        Variant Notation
+                      </Label>
+                      <Textarea
+                        id="variant-input"
+                        placeholder="e.g., rs1234567, c.1234A>G, p.Val123Met, or description"
+                        value={variantInput}
+                        onChange={(e) => setVariantInput(e.target.value)}
+                        className="min-h-[80px]"
+                        disabled={isAnalyzingVariant}
+                      />
+                      <p className="text-xs text-slate-500 mt-1">
+                        Supported formats: rsID (rs123), HGVS (c.123A>G, p.Val123Met), or plain description
+                      </p>
+                    </div>
+
+                    <Button
+                      onClick={analyzeVariant}
+                      disabled={!variantInput.trim() || isAnalyzingVariant}
+                      className="w-full bg-indigo-600 hover:bg-indigo-700"
+                    >
+                      {isAnalyzingVariant ? (
+                        <>
+                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                          Robert is Analyzing...
+                        </>
+                      ) : (
+                        <>
+                          <Brain className="w-4 h-4 mr-2" />
+                          Analyze Variant with Robert
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+
+                {variantAnalysis && !variantAnalysis.error && (
+                  <div className="space-y-4">
+                    {/* High Risk Warning */}
+                    {variantAnalysis.has_high_risk && (
+                      <Alert className="bg-red-50 border-red-300 border-2">
+                        <AlertTriangle className="h-5 w-5 text-red-600" />
+                        <AlertDescription className="text-red-900">
+                          <strong className="text-lg">⚠️ HIGH-RISK VARIANT DETECTED</strong>
+                          <p className="mt-1">This variant may have significant clinical implications. Review the analysis below and consult with a genetic counselor or healthcare provider promptly.</p>
+                        </AlertDescription>
+                      </Alert>
+                    )}
+
+                    {/* Drug Implications */}
+                    {variantAnalysis.has_drug_implications && (
+                      <Alert className="bg-amber-50 border-amber-300 border-2">
+                        <Pill className="h-5 w-5 text-amber-600" />
+                        <AlertDescription className="text-amber-900">
+                          <strong className="text-base">💊 PHARMACOGENOMIC IMPLICATIONS</strong>
+                          <p className="mt-1">This variant affects medication metabolism or response. See drug-specific guidance below.</p>
+                        </AlertDescription>
+                      </Alert>
+                    )}
+
+                    {/* Counseling Recommendation */}
+                    {variantAnalysis.requires_counseling && (
+                      <Alert className="bg-blue-50 border-blue-300">
+                        <Heart className="h-4 w-4 text-blue-600" />
+                        <AlertDescription className="text-blue-900">
+                          <strong>Genetic Counseling Recommended</strong>
+                          <p className="mt-1">Consider speaking with a genetic counselor to discuss this variant, its implications, and next steps.</p>
+                        </AlertDescription>
+                      </Alert>
+                    )}
+
+                    {/* Variant Header */}
+                    <Card className="bg-gradient-to-r from-indigo-50 to-purple-50 border-indigo-200">
+                      <CardContent className="pt-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm text-slate-600">Analyzed Variant</p>
+                            <p className="text-xl font-bold text-indigo-900">{variantAnalysis.variant}</p>
+                            <p className="text-sm text-slate-700">in gene {variantAnalysis.gene}</p>
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleClearVariantAnalysis}
+                          >
+                            New Variant
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* Analysis Results */}
+                    <Card className="shadow-lg">
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                          <Brain className="w-5 h-5 text-indigo-600" />
+                          Robert's Variant Interpretation
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="prose prose-sm max-w-none">
+                          <ReactMarkdown
+                            components={{
+                              p: ({ children }) => <p className="mb-3 text-slate-800 leading-relaxed">{children}</p>,
+                              strong: ({ children }) => <strong className="font-semibold text-indigo-900">{children}</strong>,
+                              ul: ({ children }) => <ul className="ml-4 mb-3 space-y-2 list-disc">{children}</ul>,
+                              ol: ({ children }) => <ol className="ml-4 mb-3 space-y-2 list-decimal">{children}</ol>,
+                              li: ({ children }) => <li className="text-slate-700">{children}</li>,
+                              h1: ({ children }) => <h1 className="text-2xl font-bold text-indigo-900 mt-6 mb-3 pb-2 border-b-2 border-indigo-200">{children}</h1>,
+                              h2: ({ children }) => <h2 className="text-xl font-semibold text-indigo-900 mt-5 mb-2">{children}</h2>,
+                              h3: ({ children }) => <h3 className="text-lg font-semibold text-slate-900 mt-4 mb-2">{children}</h3>,
+                              h4: ({ children }) => <h4 className="text-base font-semibold text-slate-800 mt-3 mb-1">{children}</h4>,
+                              blockquote: ({ children }) => (
+                                <blockquote className="border-l-4 border-red-500 pl-4 my-4 bg-red-50 py-3 rounded-r">
+                                  <div className="flex items-start gap-2">
+                                    <AlertTriangle className="w-5 h-5 text-red-600 mt-1 flex-shrink-0" />
+                                    <div className="text-red-900 font-medium">{children}</div>
+                                  </div>
+                                </blockquote>
+                              ),
+                              code: ({ inline, children }) => 
+                                inline ? (
+                                  <code className="bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded text-sm font-mono">
+                                    {children}
+                                  </code>
+                                ) : (
+                                  <code className="block bg-slate-900 text-slate-100 p-3 rounded-lg overflow-x-auto text-sm">
+                                    {children}
+                                  </code>
+                                ),
+                              table: ({ children }) => (
+                                <div className="overflow-x-auto my-4">
+                                  <table className="min-w-full border-collapse border border-slate-300">
+                                    {children}
+                                  </table>
+                                </div>
+                              ),
+                              thead: ({ children }) => <thead className="bg-slate-100">{children}</thead>,
+                              th: ({ children }) => <th className="border border-slate-300 px-4 py-2 text-left font-semibold">{children}</th>,
+                              td: ({ children }) => <td className="border border-slate-300 px-4 py-2">{children}</td>,
+                            }}
+                          >
+                            {variantAnalysis.analysis}
+                          </ReactMarkdown>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* Disclaimer */}
+                    <Alert className="bg-amber-50 border-amber-200">
+                      <AlertTriangle className="h-4 w-4 text-amber-600" />
+                      <AlertDescription className="text-amber-900 text-xs">
+                        <strong>Important:</strong> This is an AI-powered interpretation for educational purposes. 
+                        Variant interpretation requires clinical context and professional expertise. Always consult 
+                        a board-certified genetic counselor or medical geneticist for clinical decision-making. 
+                        For concerning findings, seek professional guidance promptly.
+                      </AlertDescription>
+                    </Alert>
+                  </div>
+                )}
+
+                {variantAnalysis?.error && (
+                  <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>{variantAnalysis.message}</AlertDescription>
+                  </Alert>
+                )}
+              </TabsContent>
+            </Tabs>
           </div>
         )}
 
