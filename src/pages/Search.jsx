@@ -5,7 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import DnaIcon from "../components/icons/DnaIcon";
-import { Search, AlertCircle, GitCompare, BookmarkPlus, Library, Sparkles } from "lucide-react"; // Added Sparkles
+import { Search, AlertCircle, GitCompare, BookmarkPlus, Library, Sparkles, BarChart3 } from "lucide-react"; // Added BarChart3
+import { Link } from "react-router-dom";
+import { createPageUrl } from "@/utils";
 
 import SearchForm from "../components/search/SearchForm";
 import GeneResults from "../components/search/GeneResults";
@@ -215,6 +217,18 @@ export default function SearchPage() {
           <p className="text-base sm:text-lg text-slate-600 max-w-2xl mx-auto px-4">
             Search phenotypes or input genes of interest for comprehensive analysis
           </p>
+          
+          {/* Visualization Hub Link */}
+          {selectedGenes.length > 0 && (
+            <div className="mt-4">
+              <Link to={createPageUrl("VisualizationHub")}>
+                <Button variant="outline" className="gap-2">
+                  <BarChart3 className="w-4 h-4" />
+                  Open in Visualization Hub
+                </Button>
+              </Link>
+            </div>
+          )}
         </div>
 
         {!showComparison && !showSavedSets && !showComparativeGenomics && (

@@ -3,7 +3,7 @@ import React from "react";
 import { Link, useLocation } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import DnaIcon from "./components/icons/DnaIcon";
-import { Search, User, Crown, History, Home, FileText, Heart, Shield } from "lucide-react"; // Added Shield icon
+import { Search, User, Crown, History, Home, FileText, Heart, Shield, BarChart3 } from "lucide-react"; // Added BarChart3
 import {
   Sidebar,
   SidebarContent,
@@ -18,7 +18,7 @@ import {
   SidebarProvider,
   SidebarTrigger,
 } from "@/components/ui/sidebar";
-import { Badge } from "@/components/ui/badge"; // Added Badge import
+import { Badge } from "@/components/ui/badge";
 import MobileOptimization from "./components/MobileOptimization";
 
 const navigationItems = [
