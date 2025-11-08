@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,6 +25,9 @@ import ProteinDomains from "../components/visualizations/ProteinDomains";
 import ProteinInteractions from "../components/visualizations/ProteinInteractions";
 import ChromosomeView from "../components/visualizations/ChromosomeView";
 import PhenotypeNetwork from "../components/visualizations/PhenotypeNetwork";
+import ManhattanPlot from "../components/visualizations/ManhattanPlot";
+import ExpressionHeatmap from "../components/visualizations/ExpressionHeatmap";
+import CircosPlot from "../components/visualizations/CircosPlot";
 import { PhenotypeSearchService } from "../components/search/PhenotypeSearchService";
 
 export default function VisualizationHub() {
@@ -38,7 +42,10 @@ export default function VisualizationHub() {
     'domains',
     'interactions',
     'chromosome',
-    'phenotype'
+    'phenotype',
+    'manhattan',
+    'heatmap',
+    'circos'
   ]);
   const [overlayMode, setOverlayMode] = useState(false);
 
@@ -103,6 +110,40 @@ export default function VisualizationHub() {
         return [...prev, vizType];
       }
     });
+  };
+
+  // Generate mock GWAS data for Manhattan plot
+  const generateMockGWASData = () => {
+    const data = [];
+    const chromosomes = ['chr1', 'chr2', 'chr3', 'chr4', 'chr5', 'chr6', 'chr7', 'chr8', 'chr9', 'chr10'];
+    
+    selectedGenes.forEach((gene, geneIdx) => {
+      // Generate some significant hits near this gene
+      for (let i = 0; i < 50; i++) {
+        const position = (gene.start || 1000000) + (Math.random() - 0.5) * 10000000;
+        const pvalue = Math.random() < 0.1 ? Math.random() * 1e-8 : Math.random() * 0.01;
+        
+        data.push({
+          snp: `rs${Math.floor(Math.random() * 10000000)}`,
+          chromosome: gene.chromosome || 'chr1',
+          position: Math.max(0, Math.floor(position)),
+          pvalue: pvalue,
+          negLogP: -Math.log10(pvalue),
+          gene: gene.symbol
+        });
+      }
+    });
+    
+    return data.sort((a, b) => a.chromosome.localeCompare(b.chromosome) || a.position - b.position);
+  };
+
+  // Generate expression data for heatmap
+  const generateExpressionMatrix = () => {
+    const samples = ['Sample 1', 'Sample 2', 'Sample 3', 'Sample 4', 'Sample 5', 'Sample 6'];
+    const matrix = selectedGenes.map(gene => 
+      samples.map(() => Math.random() * 100)
+    );
+    return { samples, matrix };
   };
 
   const quickGenes = ["BRCA1", "BRCA2", "TP53", "CFTR", "APOE"];
@@ -262,7 +303,7 @@ export default function VisualizationHub() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                 <div className="flex items-center space-x-2">
                   <Checkbox
                     id="viz-expression"
@@ -311,6 +352,36 @@ export default function VisualizationHub() {
                   />
                   <label htmlFor="viz-phenotype" className="text-sm cursor-pointer">
                     Phenotype
+                  </label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="viz-manhattan"
+                    checked={activeVisualizations.includes('manhattan')}
+                    onCheckedChange={() => toggleVisualization('manhattan')}
+                  />
+                  <label htmlFor="viz-manhattan" className="text-sm cursor-pointer">
+                    Manhattan
+                  </label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="viz-heatmap"
+                    checked={activeVisualizations.includes('heatmap')}
+                    onCheckedChange={() => toggleVisualization('heatmap')}
+                  />
+                  <label htmlFor="viz-heatmap" className="text-sm cursor-pointer">
+                    Heatmap
+                  </label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="viz-circos"
+                    checked={activeVisualizations.includes('circos')}
+                    onCheckedChange={() => toggleVisualization('circos')}
+                  />
+                  <label htmlFor="viz-circos" className="text-sm cursor-pointer">
+                    Circos
                   </label>
                 </div>
               </div>
@@ -480,6 +551,55 @@ export default function VisualizationHub() {
                     )
                   ))}
                 </div>
+              </div>
+            )}
+
+            {/* Manhattan Plot */}
+            {activeVisualizations.includes('manhattan') && selectedGenes.length > 0 && (
+              <div>
+                <h2 className="text-2xl font-bold text-slate-900 mb-4 flex items-center gap-2">
+                  <TrendingUp className="w-6 h-6 text-red-600" />
+                  Manhattan Plot - GWAS Visualization
+                </h2>
+                <ManhattanPlot
+                  gwasData={generateMockGWASData()}
+                  userEducationLevel={user?.education_level}
+                />
+              </div>
+            )}
+
+            {/* Expression Heatmap */}
+            {activeVisualizations.includes('heatmap') && selectedGenes.length >= 2 && (
+              <div>
+                <h2 className="text-2xl font-bold text-slate-900 mb-4 flex items-center gap-2">
+                  <BarChart3 className="w-6 h-6 text-purple-600" />
+                  Expression Heatmap - Multi-Sample Analysis
+                </h2>
+                {(() => {
+                  const { samples, matrix } = generateExpressionMatrix();
+                  return (
+                    <ExpressionHeatmap
+                      genes={selectedGenes.map(g => g.symbol)}
+                      samples={samples}
+                      expressionData={matrix}
+                      userEducationLevel={user?.education_level}
+                    />
+                  );
+                })()}
+              </div>
+            )}
+
+            {/* Circos Plot */}
+            {activeVisualizations.includes('circos') && selectedGenes.length >= 2 && (
+              <div>
+                <h2 className="text-2xl font-bold text-slate-900 mb-4 flex items-center gap-2">
+                  <Target className="w-6 h-6 text-pink-600" />
+                  Circos Plot - Genomic Overview
+                </h2>
+                <CircosPlot
+                  genes={selectedGenes}
+                  userEducationLevel={user?.education_level}
+                />
               </div>
             )}
           </div>
