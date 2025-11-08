@@ -6,11 +6,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import DnaIcon from "../components/icons/DnaIcon";
+import AIConversation from "../components/AIConversation"; // Added AIConversation import
 import { Search, Zap, Shield, Crown, ArrowRight, CheckCircle } from "lucide-react";
 
 export default function HomePage() {
   useEffect(() => {
-    document.title = "Edit file";
+    document.title = "GeneMap - Phenotype to Gene Discovery"; // Updated document title
   }, []);
 
   return (
@@ -83,8 +84,15 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* Features Grid */}
+      {/* AI Conversation Section */}
       <div className="px-4 sm:px-6 py-12 sm:py-16 bg-white/50">
+        <div className="max-w-5xl mx-auto">
+          <AIConversation />
+        </div>
+      </div>
+
+      {/* Features Grid */}
+      <div className="px-4 sm:px-6 py-12 sm:py-16 bg-gradient-to-b from-white/50 to-transparent"> {/* Updated background here */}
         <div className="max-w-6xl mx-auto">
           <h2 className="text-2xl sm:text-3xl font-bold text-center text-slate-900 mb-8 sm:mb-12">
             Free & Premium Features
@@ -113,13 +121,6 @@ export default function HomePage() {
                   <div>
                     <p className="font-medium text-slate-900">Genomic Locations</p>
                     <p className="text-sm text-slate-600">Chromosome coordinates with build info</p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-3">
-                  <CheckCircle className="w-5 h-5 text-green-600 mt-0.5 flex-shrink-0" />
-                  <div>
-                    <p className="font-medium text-slate-900">Associated Phenotypes</p>
-                    <p className="text-sm text-slate-600">Other traits linked to each gene</p>
                   </div>
                 </div>
                 <div className="flex items-start gap-3">
