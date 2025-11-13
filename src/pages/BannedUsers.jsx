@@ -33,6 +33,9 @@ export default function BannedUsersPage() {
   const [success, setSuccess] = useState(null);
   const [banReason, setBanReason] = useState("");
   const [selectedUser, setSelectedUser] = useState(null);
+  const [preBanEmail, setPreBanEmail] = useState("");
+  const [preBanReason, setPreBanReason] = useState("");
+  const [isPreBanning, setIsPreBanning] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -174,6 +177,85 @@ export default function BannedUsersPage() {
     }
   };
 
+  const handlePreBanUser = async () => {
+    if (!preBanEmail.trim()) {
+      setError("Please enter an email address to pre-ban");
+      return;
+    }
+
+    if (!preBanReason.trim()) {
+      setError("Please provide a reason for pre-banning this email");
+      return;
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(preBanEmail.trim())) {
+      setError("Please enter a valid email address");
+      return;
+    }
+
+    if (!confirm(`Pre-ban ${preBanEmail}? They will be blocked if they try to sign up or log in.`)) {
+      return;
+    }
+
+    setIsPreBanning(true);
+    setError(null);
+
+    try {
+      // Check if user already exists
+      const existingUsers = await base44.asServiceRole.entities.User.filter({
+        email: preBanEmail.trim()
+      });
+
+      if (existingUsers.length > 0) {
+        const existingUser = existingUsers[0];
+        if (existingUser.banned) {
+          setError("This user is already banned");
+          setIsPreBanning(false);
+          return;
+        }
+        
+        // Ban existing user
+        await base44.asServiceRole.entities.User.update(existingUser.id, {
+          banned: true,
+          ban_reason: preBanReason,
+          banned_date: new Date().toISOString(),
+          banned_by: currentUser.email
+        });
+        
+        setSuccess(`Successfully banned ${preBanEmail} (existing user)`);
+      } else {
+        // Create pre-banned user record
+        await base44.asServiceRole.entities.User.create({
+          email: preBanEmail.trim(),
+          full_name: "Pre-banned User",
+          role: "user",
+          banned: true,
+          ban_reason: preBanReason,
+          banned_date: new Date().toISOString(),
+          banned_by: currentUser.email,
+          pre_banned: true // Flag to indicate this was pre-banned
+        });
+        
+        setSuccess(`Successfully pre-banned ${preBanEmail} - they cannot sign up or log in`);
+      }
+
+      setPreBanEmail("");
+      setPreBanReason("");
+
+      // Reload banned users list
+      await loadData();
+
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (err) {
+      console.error("Pre-ban error:", err);
+      setError(`Failed to pre-ban user: ${err.message || 'Please try again.'}`);
+    } finally {
+      setIsPreBanning(false);
+    }
+  };
+
   if (isLoading && !currentUser) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-6">
@@ -233,12 +315,77 @@ export default function BannedUsersPage() {
           </Alert>
         )}
 
+        {/* Pre-Ban Section */}
+        <Card className="mb-6 shadow-lg bg-gradient-to-br from-red-50 to-orange-50 border-red-200">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Ban className="w-5 h-5 text-red-600" />
+              Pre-Ban by Email
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="bg-white p-4 rounded-lg border border-red-200">
+                <p className="text-sm text-slate-700 mb-4">
+                  <strong>Pre-ban users before they sign up.</strong> Enter an email address to block them from accessing the platform.
+                  If they try to sign up or log in, they'll be immediately blocked.
+                </p>
+                
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                      Email Address
+                    </label>
+                    <Input
+                      type="email"
+                      placeholder="user@example.com"
+                      value={preBanEmail}
+                      onChange={(e) => setPreBanEmail(e.target.value)}
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                      Reason for Pre-Ban
+                    </label>
+                    <Textarea
+                      placeholder="Enter reason (e.g., violation of terms, security threat, etc.)..."
+                      value={preBanReason}
+                      onChange={(e) => setPreBanReason(e.target.value)}
+                      rows={3}
+                    />
+                  </div>
+                  
+                  <Button
+                    onClick={handlePreBanUser}
+                    disabled={isPreBanning || !preBanEmail.trim() || !preBanReason.trim()}
+                    variant="destructive"
+                    className="w-full"
+                  >
+                    {isPreBanning ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Pre-Banning...
+                      </>
+                    ) : (
+                      <>
+                        <Ban className="w-4 h-4 mr-2" />
+                        Pre-Ban This Email
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Search Section */}
         <Card className="mb-6 shadow-lg">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Search className="w-5 h-5" />
-              Search Users
+              Search Existing Users
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -377,6 +524,11 @@ export default function BannedUsersPage() {
                               {user.full_name || "No name"}
                             </span>
                             <Badge variant="destructive">Banned</Badge>
+                            {user.pre_banned && (
+                              <Badge className="bg-orange-100 text-orange-800 border-orange-300">
+                                Pre-Banned
+                              </Badge>
+                            )}
                             {user.role === 'admin' && (
                               <Badge variant="outline">Admin</Badge>
                             )}
