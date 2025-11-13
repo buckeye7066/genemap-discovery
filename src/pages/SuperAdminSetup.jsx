@@ -189,16 +189,6 @@ export default function SuperAdminSetupPage() {
           </CardContent>
         </Card>
 
-        <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-          <h3 className="font-semibold text-blue-900 mb-2">📋 Important Notes</h3>
-          <ul className="text-sm text-blue-800 space-y-1">
-            <li>• Enter the email address you use to log into GeneMap</li>
-            <li>• The email must match exactly (case-insensitive)</li>
-            <li>• You must have logged in at least once before granting privileges</li>
-            <li>• After granting, the page will automatically reload</li>
-          </ul>
-        </div>
-
         <div className="mt-6 p-4 bg-amber-50 border border-amber-200 rounded-lg">
           <h3 className="font-semibold text-amber-900 mb-2">⚠️ Administrator Privileges</h3>
           <ul className="text-sm text-amber-800 space-y-1">
