@@ -36,7 +36,7 @@ export default function SuperAdminSetupPage() {
       return;
     }
 
-    if (!confirm(`Grant super administrator privileges to ${searchEmail}?`)) {
+    if (!confirm(`Grant administrator privileges to ${searchEmail}?`)) {
       return;
     }
 
@@ -45,34 +45,29 @@ export default function SuperAdminSetupPage() {
     setSuccess(null);
 
     try {
-      // Search for user
-      const users = await base44.asServiceRole.entities.User.filter({
-        email: searchEmail.trim()
+      // Call backend function to grant admin privileges
+      const response = await base44.functions.invoke('grantAdminPrivileges', {
+        targetEmail: searchEmail.trim()
       });
 
-      if (users.length === 0) {
-        setError("User not found with that email address");
-        setIsSaving(false);
+      if (response.error) {
+        setError(response.error);
         return;
       }
-
-      const targetUser = users[0];
-
-      // Update user to super admin
-      await base44.asServiceRole.entities.User.update(targetUser.id, {
-        super_admin: true
-      });
 
       setSuccess(`Successfully granted administrator privileges to ${searchEmail}`);
       setSearchEmail("");
 
-      // If granting to self, reload user
+      // If granting to self, reload user and page
       if (searchEmail.trim() === currentUser.email) {
-        await loadUser();
+        setTimeout(async () => {
+          await loadUser();
+          window.location.reload(); // Reload page to refresh permissions
+        }, 1000);
       }
     } catch (err) {
-      console.error("Error granting super admin:", err);
-      setError("Failed to grant privileges. Please try again.");
+      console.error("Error granting admin:", err);
+      setError(err.message || "Failed to grant privileges. Please try again.");
     } finally {
       setIsSaving(false);
     }
