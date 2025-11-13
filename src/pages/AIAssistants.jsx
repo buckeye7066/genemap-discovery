@@ -17,13 +17,7 @@ import {
   MessageSquare,
   Info,
   Stethoscope,
-  FlaskConical,
-  Mic,
-  MicOff,
-  Volume2,
-  VolumeX,
-  Pause,
-  Play
+  FlaskConical
 } from "lucide-react";
 import ReactMarkdown from 'react-markdown';
 
@@ -36,23 +30,10 @@ export default function AIAssistantsPage() {
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef(null);
 
-  // Voice states
-  const [isListening, setIsListening] = useState(false);
-  const [isSpeaking, setIsSpeaking] = useState(false);
-  const [voiceEnabled, setVoiceEnabled] = useState(false);
-  const [isPaused, setIsPaused] = useState(false);
-  const recognitionRef = useRef(null);
-  const synthRef = useRef(null);
-  const currentUtteranceRef = useRef(null);
+
 
   useEffect(() => {
     loadData();
-    initializeVoice();
-    
-    return () => {
-      stopListening();
-      stopSpeaking();
-    };
   }, []);
 
   useEffect(() => {
@@ -68,171 +49,9 @@ export default function AIAssistantsPage() {
       assistant: activeAssistant,
       timestamp: new Date()
     }]);
-    
-    // Speak welcome message if voice is enabled
-    if (voiceEnabled) {
-      speakText(welcomeMessage, activeAssistant);
-    }
   }, [activeAssistant, user]);
 
-  const initializeVoice = () => {
-    // Initialize Speech Recognition
-    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      recognitionRef.current = new SpeechRecognition();
-      recognitionRef.current.continuous = false;
-      recognitionRef.current.interimResults = false;
-      recognitionRef.current.lang = 'en-US';
 
-      recognitionRef.current.onresult = (event) => {
-        const transcript = event.results[0][0].transcript;
-        setInputMessage(transcript);
-        setIsListening(false);
-      };
-
-      recognitionRef.current.onerror = (event) => {
-        console.error('Speech recognition error:', event.error);
-        setIsListening(false);
-      };
-
-      recognitionRef.current.onend = () => {
-        setIsListening(false);
-      };
-    }
-
-    // Initialize Speech Synthesis
-    if ('speechSynthesis' in window) {
-      synthRef.current = window.speechSynthesis;
-    }
-  };
-
-  const toggleListening = () => {
-    if (!recognitionRef.current) {
-      alert("Speech recognition is not supported in your browser.");
-      return;
-    }
-
-    if (isListening) {
-      stopListening();
-    } else {
-      startListening();
-    }
-  };
-
-  const startListening = () => {
-    if (recognitionRef.current && !isListening) {
-      try {
-        recognitionRef.current.start();
-        setIsListening(true);
-      } catch (err) {
-        console.error("Error starting recognition:", err);
-      }
-    }
-  };
-
-  const stopListening = () => {
-    if (recognitionRef.current && isListening) {
-      recognitionRef.current.stop();
-      setIsListening(false);
-    }
-  };
-
-  const speakText = (text, assistant) => {
-    if (!synthRef.current || !voiceEnabled) return;
-
-    // Stop any current speech
-    stopSpeaking();
-
-    // Clean text for speech (remove markdown, emojis)
-    const cleanText = text
-      .replace(/\*\*/g, '')
-      .replace(/\*/g, '')
-      .replace(/#{1,6}\s/g, '')
-      .replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1')
-      .replace(/`([^`]+)`/g, '$1')
-      .replace(/[😊💜❤️🧬💉📸📄📊📋✓•→]/g, '');
-
-    const utterance = new SpeechSynthesisUtterance(cleanText);
-    
-    // Get available voices
-    const voices = synthRef.current.getVoices();
-    
-    // Select voice based on assistant
-    if (assistant === 'robert') {
-      // Robert: Deep, authoritative male voice
-      const robertVoice = voices.find(v => 
-        v.name.includes('Daniel') || 
-        v.name.includes('Alex') ||
-        v.name.includes('Google UK English Male')
-      ) || voices.find(v => v.lang.startsWith('en') && v.name.includes('Male'));
-      
-      if (robertVoice) utterance.voice = robertVoice;
-      utterance.pitch = 0.8;
-      utterance.rate = 0.9;
-    } else {
-      // Anastasia: Warm, friendly female voice (British accent if available)
-      const anastasiaVoice = voices.find(v => 
-        v.name.includes('Serena') || 
-        v.name.includes('Karen') ||
-        v.name.includes('Google UK English Female')
-      ) || voices.find(v => v.lang.startsWith('en') && v.name.includes('Female'));
-      
-      if (anastasiaVoice) utterance.voice = anastasiaVoice;
-      utterance.pitch = 1.1;
-      utterance.rate = 1.0;
-    }
-
-    utterance.onstart = () => {
-      setIsSpeaking(true);
-      setIsPaused(false);
-    };
-
-    utterance.onend = () => {
-      setIsSpeaking(false);
-      setIsPaused(false);
-      currentUtteranceRef.current = null;
-    };
-
-    utterance.onerror = (event) => {
-      console.error('Speech synthesis error:', event);
-      setIsSpeaking(false);
-      setIsPaused(false);
-    };
-
-    currentUtteranceRef.current = utterance;
-    synthRef.current.speak(utterance);
-  };
-
-  const toggleSpeaking = () => {
-    if (!synthRef.current) return;
-
-    if (isPaused) {
-      synthRef.current.resume();
-      setIsPaused(false);
-    } else if (isSpeaking) {
-      synthRef.current.pause();
-      setIsPaused(true);
-    }
-  };
-
-  const stopSpeaking = () => {
-    if (synthRef.current) {
-      synthRef.current.cancel();
-      setIsSpeaking(false);
-      setIsPaused(false);
-      currentUtteranceRef.current = null;
-    }
-  };
-
-  const toggleVoice = () => {
-    const newState = !voiceEnabled;
-    setVoiceEnabled(newState);
-    
-    if (!newState) {
-      stopSpeaking();
-      stopListening();
-    }
-  };
 
   const loadData = async () => {
     try {
@@ -310,13 +129,6 @@ So, what's on your mind today?`;
       };
 
       setMessages(prev => [...prev, assistantMessage]);
-
-      // Auto-speak response if voice is enabled
-      if (voiceEnabled) {
-        setTimeout(() => {
-          speakText(response, activeAssistant);
-        }, 500);
-      }
 
     } catch (err) {
       console.error("Error getting response:", err);
@@ -480,73 +292,14 @@ Please provide a comprehensive response.`;
             </div>
           </div>
           <h1 className="text-3xl md:text-4xl font-bold text-slate-900 mb-2">
-            AI Assistants with Voice
+            AI Assistants
           </h1>
           <p className="text-lg text-slate-600">
-            Chat or talk with Robert and Anastasia
+            Chat with Robert and Anastasia for personalized genetic insights
           </p>
-          
-          {/* Voice Toggle */}
-          <div className="flex justify-center gap-3 mt-4">
-            <Button
-              onClick={toggleVoice}
-              variant={voiceEnabled ? "default" : "outline"}
-              className={voiceEnabled ? "bg-green-600 hover:bg-green-700" : ""}
-            >
-              {voiceEnabled ? (
-                <>
-                  <Volume2 className="w-4 h-4 mr-2" />
-                  Voice Enabled
-                </>
-              ) : (
-                <>
-                  <VolumeX className="w-4 h-4 mr-2" />
-                  Enable Voice
-                </>
-              )}
-            </Button>
-            
-            {voiceEnabled && isSpeaking && (
-              <Button
-                onClick={toggleSpeaking}
-                variant="outline"
-                className="gap-2"
-              >
-                {isPaused ? (
-                  <>
-                    <Play className="w-4 h-4" />
-                    Resume
-                  </>
-                ) : (
-                  <>
-                    <Pause className="w-4 h-4" />
-                    Pause
-                  </>
-                )}
-              </Button>
-            )}
-            
-            {voiceEnabled && isSpeaking && (
-              <Button
-                onClick={stopSpeaking}
-                variant="outline"
-                className="gap-2"
-              >
-                Stop Speaking
-              </Button>
-            )}
-          </div>
         </div>
 
-        {/* Voice Status Alert */}
-        {voiceEnabled && (
-          <Alert className="mb-4 bg-green-50 border-green-200">
-            <Volume2 className="h-4 w-4 text-green-600" />
-            <AlertDescription className="text-green-800 text-sm">
-              🎙️ Voice mode active! Responses will be read aloud. Click the mic button to speak your questions.
-            </AlertDescription>
-          </Alert>
-        )}
+
 
         {/* Assistant Selector */}
         <Card className="shadow-lg mb-6">
@@ -746,33 +499,20 @@ Please provide a comprehensive response.`;
               {/* Input */}
               <form onSubmit={handleSendMessage} className="p-4 border-t">
                 <div className="flex gap-2">
-                  {voiceEnabled && (
-                    <Button
-                      type="button"
-                      onClick={toggleListening}
-                      disabled={isLoading}
-                      variant={isListening ? "default" : "outline"}
-                      className={isListening ? "bg-red-600 hover:bg-red-700 animate-pulse" : ""}
-                    >
-                      {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-                    </Button>
-                  )}
                   <Input
                     value={inputMessage}
                     onChange={(e) => setInputMessage(e.target.value)}
                     placeholder={
-                      isListening 
-                        ? "Listening..." 
-                        : activeAssistant === 'robert' 
+                      activeAssistant === 'robert' 
                         ? "Pose your scientific inquiry here..." 
                         : "Ask me anything about genetics - I'm here to help!"
                     }
                     className="flex-1"
-                    disabled={isLoading || isListening}
+                    disabled={isLoading}
                   />
                   <Button
                     type="submit"
-                    disabled={isLoading || !inputMessage.trim() || isListening}
+                    disabled={isLoading || !inputMessage.trim()}
                     className={
                       activeAssistant === 'robert'
                         ? 'bg-blue-600 hover:bg-blue-700'
@@ -782,51 +522,12 @@ Please provide a comprehensive response.`;
                     <Send className="w-4 h-4" />
                   </Button>
                 </div>
-                {isListening && (
-                  <p className="text-xs text-red-600 mt-2 animate-pulse">
-                    🎙️ Listening... Speak now
-                  </p>
-                )}
               </form>
             </CardContent>
           </Card>
 
           {/* Sidebar */}
           <div className="space-y-6">
-            {/* Voice Controls */}
-            {voiceEnabled && (
-              <Card className="shadow-lg border-2 border-green-200 bg-gradient-to-br from-green-50 to-emerald-50">
-                <CardHeader>
-                  <CardTitle className="text-lg flex items-center gap-2">
-                    <Volume2 className="w-5 h-5 text-green-600" />
-                    Voice Controls
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="flex items-center gap-2 text-sm">
-                    <Mic className="w-4 h-4 text-green-600" />
-                    <span className="text-slate-700">
-                      {isListening ? "Listening..." : "Click mic to speak"}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2 text-sm">
-                    <Volume2 className="w-4 h-4 text-green-600" />
-                    <span className="text-slate-700">
-                      {isSpeaking ? (isPaused ? "Paused" : "Speaking...") : "Responses read aloud"}
-                    </span>
-                  </div>
-                  <Alert className="bg-white border-green-200">
-                    <Info className="h-4 w-4 text-green-600" />
-                    <AlertDescription className="text-green-900 text-xs">
-                      <strong>Tip:</strong> {activeAssistant === 'robert' 
-                        ? "Robert has a deep, authoritative voice" 
-                        : "Anastasia has a warm, British-accented voice"}
-                    </AlertDescription>
-                  </Alert>
-                </CardContent>
-              </Card>
-            )}
-
             {/* Assistant Info */}
             <Card className={`shadow-lg border-2 ${
               activeAssistant === 'robert' 
