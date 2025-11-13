@@ -43,9 +43,9 @@ export default function AxiomNewsletterPage() {
       const user = await base44.auth.me();
       setCurrentUser(user);
 
-      // Check if user is super admin
+      // Check if user is administrator
       if (!user.super_admin) {
-        setError("Access denied. Super administrator privileges required.");
+        setError("Access denied. Administrator privileges required.");
         setIsLoading(false);
         return;
       }
@@ -183,10 +183,7 @@ export default function AxiomNewsletterPage() {
             <CardContent className="pt-12 pb-12 text-center">
               <ShieldOff className="w-16 h-16 mx-auto mb-4 text-red-600" />
               <h2 className="text-2xl font-bold text-slate-900 mb-2">Access Denied</h2>
-              <p className="text-slate-600">Super administrator privileges required to access this page.</p>
-              <p className="text-xs text-slate-500 mt-4">
-                Only the system owner has access to newsletter subscriber data.
-              </p>
+              <p className="text-slate-600">Administrator privileges required to access this page.</p>
             </CardContent>
           </Card>
         </div>
