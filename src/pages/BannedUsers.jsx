@@ -153,7 +153,8 @@ export default function BannedUsersPage() {
 
     try {
       const response = await base44.functions.invoke('unbanUser', {
-        userId: user.id
+        userId: user.id,
+        isPreBanned: user.pre_banned || false
       });
 
       if (response.error) {

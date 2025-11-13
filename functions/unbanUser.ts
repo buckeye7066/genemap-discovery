@@ -17,19 +17,24 @@ Deno.serve(async (req) => {
         }
 
         // Parse the request body
-        const { userId } = await req.json();
+        const { userId, isPreBanned } = await req.json();
         
         if (!userId) {
             return Response.json({ error: 'User ID is required' }, { status: 400 });
         }
 
-        // Unban the user
-        await base44.asServiceRole.entities.User.update(userId, {
-            banned: false,
-            ban_reason: null,
-            banned_date: null,
-            banned_by: null
-        });
+        if (isPreBanned) {
+            // Delete the pre-ban record
+            await base44.asServiceRole.entities.PreBannedUser.delete(userId);
+        } else {
+            // Unban the user
+            await base44.asServiceRole.entities.User.update(userId, {
+                banned: false,
+                ban_reason: null,
+                banned_date: null,
+                banned_by: null
+            });
+        }
 
         return Response.json({
             success: true,

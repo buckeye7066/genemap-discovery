@@ -58,6 +58,7 @@ Deno.serve(async (req) => {
         const uniqueUsers = Array.from(new Map(existingUsers.map(u => [u.id, u])).values());
 
         if (uniqueUsers.length > 0) {
+            // Ban existing user
             const existingUser = uniqueUsers[0];
             if (existingUser.banned) {
                 return Response.json({ 
@@ -65,7 +66,6 @@ Deno.serve(async (req) => {
                 }, { status: 400 });
             }
             
-            // Ban existing user
             await base44.asServiceRole.entities.User.update(existingUser.id, {
                 banned: true,
                 ban_reason: reason,
@@ -78,17 +78,14 @@ Deno.serve(async (req) => {
                 message: `Successfully banned ${existingUser.email || existingUser.full_name} (existing user)`
             });
         } else {
-            // Create pre-banned user record
-            await base44.asServiceRole.entities.User.create({
-                email: email ? email.trim() : `preban_${Date.now()}@blocked.local`,
-                full_name: name ? name.trim() : "Pre-banned User",
+            // Create pre-ban record (not a User entity)
+            await base44.asServiceRole.entities.PreBannedUser.create({
+                email: email ? email.trim() : null,
+                full_name: name ? name.trim() : null,
                 phone_number: phone ? phone.trim() : null,
-                role: "user",
-                banned: true,
                 ban_reason: reason,
-                banned_date: new Date().toISOString(),
                 banned_by: requestingUser.email,
-                pre_banned: true
+                status: 'active'
             });
             
             const identifiers = [];
@@ -98,7 +95,7 @@ Deno.serve(async (req) => {
             
             return Response.json({
                 success: true,
-                message: `Successfully pre-banned ${identifiers.join(', ')} - they cannot sign up or log in`
+                message: `Successfully pre-banned ${identifiers.join(', ')} - they will be blocked on signup/login`
             });
         }
 

@@ -16,14 +16,35 @@ Deno.serve(async (req) => {
             }, { status: 403 });
         }
 
-        // Fetch all banned users using service role
+        // Fetch banned users
         const bannedUsers = await base44.asServiceRole.entities.User.filter({
             banned: true
         });
 
+        // Fetch pre-banned records
+        const preBannedRecords = await base44.asServiceRole.entities.PreBannedUser.filter({
+            status: 'active'
+        });
+
+        // Convert pre-banned records to user-like format for display
+        const preBannedUsers = preBannedRecords.map(record => ({
+            id: record.id,
+            email: record.email || 'N/A',
+            full_name: record.full_name || 'Pre-banned User',
+            phone_number: record.phone_number || null,
+            banned: true,
+            ban_reason: record.ban_reason,
+            banned_date: record.created_date,
+            banned_by: record.banned_by,
+            pre_banned: true
+        }));
+
+        // Combine both lists
+        const allBanned = [...bannedUsers, ...preBannedUsers];
+
         return Response.json({
             success: true,
-            users: bannedUsers
+            users: allBanned
         });
 
     } catch (error) {
