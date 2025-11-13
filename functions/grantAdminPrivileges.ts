@@ -11,6 +11,13 @@ Deno.serve(async (req) => {
             return Response.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
+        // CRITICAL: Verify the requesting user is already a super_admin
+        if (!requestingUser.super_admin) {
+            return Response.json({ 
+                error: 'Access denied. Only super administrators can grant privileges.' 
+            }, { status: 403 });
+        }
+
         // Parse the request body
         const { targetEmail } = await req.json();
         
