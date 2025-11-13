@@ -1,0 +1,51 @@
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.4';
+
+Deno.serve(async (req) => {
+    try {
+        // Initialize base44 client from request
+        const base44 = createClientFromRequest(req);
+        
+        // Verify the requesting user is authenticated
+        const requestingUser = await base44.auth.me();
+        if (!requestingUser) {
+            return Response.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
+        // Parse the request body
+        const { targetEmail } = await req.json();
+        
+        if (!targetEmail) {
+            return Response.json({ error: 'Target email is required' }, { status: 400 });
+        }
+
+        // Find the target user
+        const users = await base44.asServiceRole.entities.User.filter({
+            email: targetEmail.trim()
+        });
+
+        if (users.length === 0) {
+            return Response.json({ 
+                error: 'User not found with that email address' 
+            }, { status: 404 });
+        }
+
+        const targetUser = users[0];
+
+        // Grant super_admin privileges
+        await base44.asServiceRole.entities.User.update(targetUser.id, {
+            super_admin: true
+        });
+
+        return Response.json({
+            success: true,
+            message: `Successfully granted administrator privileges to ${targetEmail}`,
+            targetEmail: targetEmail
+        });
+
+    } catch (error) {
+        console.error("Error granting admin privileges:", error);
+        return Response.json({ 
+            error: error.message || 'Failed to grant privileges' 
+        }, { status: 500 });
+    }
+});
