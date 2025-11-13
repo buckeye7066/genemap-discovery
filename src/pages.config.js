@@ -15,6 +15,8 @@ import VCFAnalysis from './pages/VCFAnalysis';
 import InstitutionalAdmin from './pages/InstitutionalAdmin';
 import InstitutionalPricing from './pages/InstitutionalPricing';
 import BannedUsers from './pages/BannedUsers';
+import DemographicCollection from './pages/DemographicCollection';
+import SuperAdminSetup from './pages/SuperAdminSetup';
 import Layout from './Layout.jsx';
 
 
@@ -36,6 +38,8 @@ export const PAGES = {
     "InstitutionalAdmin": InstitutionalAdmin,
     "InstitutionalPricing": InstitutionalPricing,
     "BannedUsers": BannedUsers,
+    "DemographicCollection": DemographicCollection,
+    "SuperAdminSetup": SuperAdminSetup,
 }
 
 export const pagesConfig = {

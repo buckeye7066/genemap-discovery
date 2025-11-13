@@ -3,6 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import DnaIcon from "./components/icons/DnaIcon";
 import BanCheck from "./components/BanCheck";
+import DemographicCheck from "./components/DemographicCheck";
 import { Search, User, Crown, History, Home, FileText, Heart, Shield, BarChart3, Microscope, LayoutDashboard, MessageSquare, Building2, ShieldOff } from "lucide-react";
 import {
   Sidebar,
@@ -117,8 +118,9 @@ export default function Layout({ children, currentPageName }) {
 
   return (
     <BanCheck>
-      <SidebarProvider>
-        <div className="min-h-screen flex w-full bg-gradient-to-br from-slate-50 to-blue-50">
+      <DemographicCheck>
+        <SidebarProvider>
+          <div className="min-h-screen flex w-full bg-gradient-to-br from-slate-50 to-blue-50">
         <Sidebar className="border-r border-slate-200/50">
           <SidebarHeader className="border-b border-slate-200/50 p-4">
             <div className="flex items-center gap-3">
@@ -214,10 +216,23 @@ export default function Layout({ children, currentPageName }) {
                 </div>
               </div>
               
-              <div className="pt-2 border-t border-slate-200">
+              <div className="pt-2 border-t border-slate-200 space-y-2">
                 <p className="text-xs text-slate-500 text-center">
                   Created by <span className="font-medium text-slate-700">Dr. John White</span>
                 </p>
+                <div className="text-center">
+                  <a
+                    href="https://www.axiombiolabs.com"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-blue-600 hover:text-blue-700 font-medium inline-flex items-center gap-1"
+                  >
+                    Sponsored by Axiom Biolabs
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                    </svg>
+                  </a>
+                </div>
               </div>
             </div>
           </SidebarFooter>
@@ -246,6 +261,7 @@ export default function Layout({ children, currentPageName }) {
         </main>
       </div>
     </SidebarProvider>
+      </DemographicCheck>
     </BanCheck>
   );
 }

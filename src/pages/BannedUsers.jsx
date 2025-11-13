@@ -42,9 +42,9 @@ export default function BannedUsersPage() {
       const user = await base44.auth.me();
       setCurrentUser(user);
 
-      // Check if user is admin
-      if (user.role !== 'admin') {
-        setError("Access denied. Admin privileges required.");
+      // Check if user is super admin
+      if (!user.super_admin) {
+        setError("Access denied. Super administrator privileges required.");
         setIsLoading(false);
         return;
       }
@@ -179,7 +179,7 @@ export default function BannedUsersPage() {
     );
   }
 
-  if (currentUser?.role !== 'admin') {
+  if (!currentUser?.super_admin) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-6">
         <div className="max-w-2xl mx-auto">
@@ -187,7 +187,10 @@ export default function BannedUsersPage() {
             <CardContent className="pt-12 pb-12 text-center">
               <ShieldOff className="w-16 h-16 mx-auto mb-4 text-red-600" />
               <h2 className="text-2xl font-bold text-slate-900 mb-2">Access Denied</h2>
-              <p className="text-slate-600">Admin privileges required to access this page.</p>
+              <p className="text-slate-600">Super administrator privileges required to access this page.</p>
+              <p className="text-xs text-slate-500 mt-4">
+                Only the system owner has access to user ban management.
+              </p>
             </CardContent>
           </Card>
         </div>
