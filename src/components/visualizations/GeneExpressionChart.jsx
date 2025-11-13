@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -30,6 +29,7 @@ export default function GeneExpressionChart({ expressionData, userEducationLevel
   const [zoomLevel, setZoomLevel] = useState(1);
   const [selectedTissues, setSelectedTissues] = useState([]); // Initialized as empty as per outline
   const [sortBy, setSortBy] = useState("value"); // Changed from sortOrder to sortBy, default to "value"
+  const [highlightedTissue, setHighlightedTissue] = useState(null); // Added missing state
 
   // useEffect to initialize selectedTissues with all tissues when expressionData is available
   // This ensures that when the component first mounts or expressionData changes, all tissues are selected by default.
