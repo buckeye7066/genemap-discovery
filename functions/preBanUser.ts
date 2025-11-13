@@ -113,44 +113,6 @@ Deno.serve(async (req) => {
 
         // User doesn't exist, create pre-ban entry
         try {
-            // Check if a pre-ban already exists for any of these identifiers
-            const existingPreBans = [];
-            
-            if (hasEmail) {
-                const emailBans = await base44.asServiceRole.entities.PreBannedUser.filter({
-                    email: email.trim(),
-                    status: 'active'
-                }).catch(() => []);
-                existingPreBans.push(...emailBans);
-            }
-            
-            if (hasPhone) {
-                const phoneBans = await base44.asServiceRole.entities.PreBannedUser.filter({
-                    phone_number: phone.trim(),
-                    status: 'active'
-                }).catch(() => []);
-                existingPreBans.push(...phoneBans);
-            }
-            
-            if (hasName) {
-                const nameBans = await base44.asServiceRole.entities.PreBannedUser.filter({
-                    full_name: name.trim(),
-                    status: 'active'
-                }).catch(() => []);
-                existingPreBans.push(...nameBans);
-            }
-            
-            if (existingPreBans.length > 0) {
-                const identifiers = [];
-                if (hasEmail) identifiers.push(`email: ${email.trim()}`);
-                if (hasPhone) identifiers.push(`phone: ${phone.trim()}`);
-                if (hasName) identifiers.push(`name: ${name.trim()}`);
-                
-                return Response.json({ 
-                    error: `A pre-ban already exists for ${identifiers.join(', ')}` 
-                }, { status: 400 });
-            }
-            
             const preBanData = {
                 ban_reason: reason.trim(),
                 banned_by: requestingUser.email,
