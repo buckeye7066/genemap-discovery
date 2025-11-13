@@ -280,11 +280,6 @@ export default function AIConversation() {
                     : 'bg-gradient-to-br from-pink-50 to-rose-50 border border-pink-200'
                 }`}>
                   <p className="text-slate-800 leading-relaxed">{message.text}</p>
-                  <p className={`text-xs italic mt-2 ${
-                    message.speaker === 'robert' ? 'text-purple-600' : 'text-pink-600'
-                  }`}>
-                    ({message.voice})
-                  </p>
                 </div>
               </div>
             </div>
