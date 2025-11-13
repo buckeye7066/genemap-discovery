@@ -152,25 +152,33 @@ export default function ProfilePage() {
           </Alert>
         )}
 
-        <Card className="shadow-lg mb-6">
-          <CardHeader>
-            <CardTitle className="text-xl">Account Information</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <Label className="text-sm font-medium text-slate-700">Email</Label>
-              <p className="text-slate-900 mt-1">{user?.email}</p>
-            </div>
-            <div>
-              <Label className="text-sm font-medium text-slate-700">Full Name</Label>
-              <p className="text-slate-900 mt-1">{user?.full_name}</p>
-            </div>
-            <div>
-              <Label className="text-sm font-medium text-slate-700">Role</Label>
-              <p className="text-slate-900 mt-1 capitalize">{user?.role}</p>
-            </div>
-          </CardContent>
-        </Card>
+        <div className="grid md:grid-cols-2 gap-6 mb-6">
+          <Card className="shadow-lg">
+            <CardHeader>
+              <CardTitle className="text-xl">Account Information</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <Label className="text-sm font-medium text-slate-700">Email</Label>
+                <p className="text-slate-900 mt-1">{user?.email}</p>
+              </div>
+              <div>
+                <Label className="text-sm font-medium text-slate-700">Full Name</Label>
+                <p className="text-slate-900 mt-1">{user?.full_name}</p>
+              </div>
+              <div>
+                <Label className="text-sm font-medium text-slate-700">Phone Number</Label>
+                <p className="text-slate-900 mt-1">{user?.phone_number || "Not provided"}</p>
+              </div>
+              <div>
+                <Label className="text-sm font-medium text-slate-700">Role</Label>
+                <p className="text-slate-900 mt-1 capitalize">{user?.role}</p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <LoginInfo />
+        </div>
 
         <Card className="shadow-lg mb-6">
           <CardHeader>
