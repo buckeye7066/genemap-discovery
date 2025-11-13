@@ -67,6 +67,18 @@ const conversation = [
   },
   {
     speaker: "robert",
+    text: "You can ask me any question - from 'How can I speed up my metabolism?' to complex pharmacogenomic interactions. I'll provide evidence-based answers with scientific rigor.",
+    voice: "Confident expertise",
+    duration: 6000
+  },
+  {
+    speaker: "anastasia",
+    text: "And I'm here for the everyday questions too! Ask me things like 'Give me dietary suggestions based on my blood type' or anything about your genetic health. I'll explain it in a way that makes sense.",
+    voice: "Warm enthusiasm",
+    duration: 6500
+  },
+  {
+    speaker: "robert",
     text: "Our visualizations are interactive. Zoom into protein domains, explore interaction networks, analyze gene expression across tissues.",
     voice: "Technical precision",
     duration: 5000
