@@ -88,11 +88,11 @@ const navigationItems = [
     icon: History,
   },
   {
-    title: "Institutional Admin",
+    title: "License Manager",
     url: createPageUrl("InstitutionalAdmin"),
     icon: Building2,
     highlight: true,
-    badge: "Admin"
+    badge: "Teams"
   },
   {
     title: "Banned Users",
