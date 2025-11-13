@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
@@ -275,13 +274,6 @@ export default function HomePage() {
               </CardContent>
             </Card>
           </div>
-        </div>
-      </div>
-
-      {/* AI Conversation Section */}
-      <div className="px-4 sm:px-6 py-12 sm:py-16 bg-white/50">
-        <div className="max-w-5xl mx-auto">
-          <AIConversation />
         </div>
       </div>
 
