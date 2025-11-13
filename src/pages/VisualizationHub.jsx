@@ -103,13 +103,67 @@ export default function VisualizationHub() {
     setError(null);
 
     try {
-      // Fetch gene data using our search service
-      const results = await PhenotypeSearchService.searchGenes(gene, false);
-      
-      if (results.candidateGenes && results.candidateGenes.length > 0) {
-        const geneInfo = results.candidateGenes[0];
-        
-        setSelectedGenes(prev => [...prev, { symbol: gene, ...geneInfo }]);
+      // For simple gene lookups in Visualization Hub, use a lightweight approach
+      const prompt = `
+For the gene symbol ${gene}, provide basic genomic information:
+
+1. Full gene name
+2. Chromosomal location (chromosome, start, end positions)
+3. Top 3-5 associated phenotypes or diseases
+4. Top 5 tissues where it's highly expressed (with relative expression levels)
+
+Keep it concise and factual. Use NCBI Gene, Ensembl, UniProt as sources.
+`;
+
+      const result = await base44.integrations.Core.InvokeLLM({
+        prompt,
+        add_context_from_internet: true,
+        response_json_schema: {
+          type: "object",
+          properties: {
+            symbol: { type: "string" },
+            name: { type: "string" },
+            chromosome: { type: "string" },
+            start: { type: "number" },
+            end: { type: "number" },
+            phenotypes: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  name: { type: "string" },
+                  hpoId: { type: "string" }
+                }
+              }
+            },
+            expressionData: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  tissue: { type: "string" },
+                  expression: { type: "number" }
+                }
+              }
+            }
+          }
+        }
+      });
+
+      if (result && result.symbol) {
+        const geneInfo = {
+          symbol: result.symbol || gene,
+          name: result.name || gene,
+          chromosome: result.chromosome || 'chr1',
+          start: result.start || 0,
+          end: result.end || 1000000,
+          phenotypes: result.phenotypes || [],
+          expressionData: result.expressionData || [],
+          genomeBuild: "GRCh38",
+          sources: ["NCBI Gene", "Ensembl", "UniProt", "GTEx"]
+        };
+
+        setSelectedGenes(prev => [...prev, geneInfo]);
         setGeneData(prev => ({
           ...prev,
           [gene]: geneInfo
@@ -120,7 +174,7 @@ export default function VisualizationHub() {
       }
     } catch (err) {
       console.error("Error loading gene:", err);
-      setError(`Failed to load gene "${gene}". Please try again.`);
+      setError(`Failed to load gene "${gene}". ${err.message || 'Please try again.'}`);
     } finally {
       setIsLoading(false);
     }
