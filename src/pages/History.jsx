@@ -11,7 +11,9 @@ import {
   Calendar,
   TrendingUp,
   AlertCircle,
-  FileText
+  FileText,
+  Trash2,
+  X
 } from "lucide-react";
 import { format } from "date-fns";
 import { Link } from "react-router-dom";
@@ -22,6 +24,8 @@ export default function HistoryPage() {
   const [user, setUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
+  const [successMessage, setSuccessMessage] = useState(null);
 
   useEffect(() => {
     loadData();
@@ -65,6 +69,51 @@ export default function HistoryPage() {
     );
   };
 
+  const handleDeleteSearch = async (searchId) => {
+    if (!confirm("Are you sure you want to delete this search from your history?")) {
+      return;
+    }
+
+    setDeletingId(searchId);
+    setError(null);
+
+    try {
+      await base44.entities.SearchHistory.delete(searchId);
+      setSearchHistory(prev => prev.filter(s => s.id !== searchId));
+      setSuccessMessage("Search deleted successfully");
+      setTimeout(() => setSuccessMessage(null), 3000);
+    } catch (err) {
+      console.error("Error deleting search:", err);
+      setError("Failed to delete search. Please try again.");
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const handleClearAllHistory = async () => {
+    if (!confirm(`Are you sure you want to delete all ${searchHistory.length} searches from your history? This action cannot be undone.`)) {
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      // Delete all searches
+      await Promise.all(
+        searchHistory.map(search => base44.entities.SearchHistory.delete(search.id))
+      );
+      setSearchHistory([]);
+      setSuccessMessage("All search history cleared successfully");
+      setTimeout(() => setSuccessMessage(null), 3000);
+    } catch (err) {
+      console.error("Error clearing history:", err);
+      setError("Failed to clear all history. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-6">
@@ -94,12 +143,31 @@ export default function HistoryPage() {
           <p className="text-lg text-slate-600 max-w-2xl mx-auto">
             Review your previous phenotype searches and results
           </p>
+          {searchHistory.length > 0 && (
+            <div className="mt-4">
+              <Button
+                variant="outline"
+                onClick={handleClearAllHistory}
+                className="text-red-600 hover:bg-red-50 hover:text-red-700 border-red-200"
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
+                Clear All History
+              </Button>
+            </div>
+          )}
         </div>
 
         {error && (
           <Alert variant="destructive" className="mb-8">
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+
+        {successMessage && (
+          <Alert className="mb-8 bg-green-50 border-green-200">
+            <AlertCircle className="h-4 w-4 text-green-600" />
+            <AlertDescription className="text-green-800">{successMessage}</AlertDescription>
           </Alert>
         )}
 
@@ -197,16 +265,31 @@ export default function HistoryPage() {
                       )}
                     </div>
 
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      asChild
-                      className="ml-4"
-                    >
-                      <Link to={createPageUrl(`Search?query=${encodeURIComponent(search.phenotype_query)}`)}>
-                        Search Again
-                      </Link>
-                    </Button>
+                    <div className="flex gap-2 ml-4">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        asChild
+                      >
+                        <Link to={createPageUrl(`Search?query=${encodeURIComponent(search.phenotype_query)}`)}>
+                          Search Again
+                        </Link>
+                      </Button>
+                      
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleDeleteSearch(search.id)}
+                        disabled={deletingId === search.id}
+                        className="text-red-600 hover:bg-red-50 hover:text-red-700 border-red-200"
+                      >
+                        {deletingId === search.id ? (
+                          <div className="w-4 h-4 border-2 border-red-600 border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                          <X className="w-4 h-4" />
+                        )}
+                      </Button>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
