@@ -30,70 +30,85 @@ Deno.serve(async (req) => {
             return Response.json({ error: 'Ban reason is required' }, { status: 400 });
         }
 
-        // Check if user already exists - search all in parallel
-        const searchPromises = [];
-        
-        if (email) {
-            searchPromises.push(
-                base44.asServiceRole.entities.User.filter({ email: email.trim() })
-                    .catch(() => [])
-            );
-        }
-        
-        if (phone) {
-            searchPromises.push(
-                base44.asServiceRole.entities.User.filter({ phone_number: phone.trim() })
-                    .catch(() => [])
-            );
-        }
-        
-        if (name) {
-            searchPromises.push(
-                base44.asServiceRole.entities.User.filter({ full_name: name.trim() })
-                    .catch(() => [])
-            );
-        }
-
-        // Wait for all searches
-        const searchResults = await Promise.all(searchPromises);
-        const existingUsers = searchResults.flat();
-
-        // Remove duplicates
-        const uniqueUsers = Array.from(new Map(existingUsers.map(u => [u.id, u])).values());
-
-        if (uniqueUsers.length > 0) {
-            // Ban existing user
-            const existingUser = uniqueUsers[0];
-            if (existingUser.banned) {
-                return Response.json({ 
-                    error: 'This user is already banned' 
-                }, { status: 400 });
+        // Check if user already exists with any of the provided identifiers
+        try {
+            const searchPromises = [];
+            
+            if (email && email.trim()) {
+                searchPromises.push(
+                    base44.asServiceRole.entities.User.filter({ email: email.trim() })
+                );
             }
             
-            await base44.asServiceRole.entities.User.update(existingUser.id, {
-                banned: true,
-                ban_reason: reason,
-                banned_date: new Date().toISOString(),
-                banned_by: requestingUser.email
-            });
+            if (phone && phone.trim()) {
+                searchPromises.push(
+                    base44.asServiceRole.entities.User.filter({ phone_number: phone.trim() })
+                );
+            }
             
-            return Response.json({
-                success: true,
-                message: `Successfully banned ${existingUser.email || existingUser.full_name} (existing user)`
-            });
-        } else {
-            // Create pre-ban record
+            if (name && name.trim()) {
+                searchPromises.push(
+                    base44.asServiceRole.entities.User.filter({ full_name: name.trim() })
+                );
+            }
+
+            // Wait for all searches with error handling
+            const searchResults = await Promise.allSettled(searchPromises);
+            const existingUsers = searchResults
+                .filter(result => result.status === 'fulfilled')
+                .flatMap(result => result.value || []);
+
+            // Remove duplicates by user ID
+            const uniqueUsers = Array.from(new Map(existingUsers.map(u => [u.id, u])).values());
+
+            if (uniqueUsers.length > 0) {
+                // User exists, ban them directly
+                const existingUser = uniqueUsers[0];
+                
+                if (existingUser.banned) {
+                    return Response.json({ 
+                        error: `User ${existingUser.email || existingUser.full_name} is already banned` 
+                    }, { status: 400 });
+                }
+                
+                await base44.asServiceRole.entities.User.update(existingUser.id, {
+                    banned: true,
+                    ban_reason: reason.trim(),
+                    banned_date: new Date().toISOString(),
+                    banned_by: requestingUser.email
+                });
+                
+                return Response.json({
+                    success: true,
+                    message: `Successfully banned existing user: ${existingUser.email || existingUser.full_name}`
+                });
+            }
+
+        } catch (searchError) {
+            console.error("Search error:", searchError);
+            // Continue to pre-ban even if search fails
+        }
+
+        // User doesn't exist, create pre-ban entry
+        try {
             const preBanData = {
-                ban_reason: reason,
+                ban_reason: reason.trim(),
                 banned_by: requestingUser.email,
                 status: 'active'
             };
 
-            if (email) preBanData.email = email.trim();
-            if (phone) preBanData.phone_number = phone.trim();
-            if (name) preBanData.full_name = name.trim();
+            // Only add fields that have values
+            if (email && email.trim()) {
+                preBanData.email = email.trim();
+            }
+            if (phone && phone.trim()) {
+                preBanData.phone_number = phone.trim();
+            }
+            if (name && name.trim()) {
+                preBanData.full_name = name.trim();
+            }
 
-            await base44.asServiceRole.entities.PreBannedUser.create(preBanData);
+            const preBanRecord = await base44.asServiceRole.entities.PreBannedUser.create(preBanData);
             
             const identifiers = [];
             if (email) identifiers.push(`email: ${email}`);
@@ -102,14 +117,20 @@ Deno.serve(async (req) => {
             
             return Response.json({
                 success: true,
-                message: `Successfully pre-banned ${identifiers.join(', ')} - they will be blocked on signup/login`
+                message: `Pre-ban created successfully for ${identifiers.join(', ')}`
             });
+
+        } catch (createError) {
+            console.error("Pre-ban creation error:", createError);
+            return Response.json({ 
+                error: `Failed to create pre-ban: ${createError.message}` 
+            }, { status: 500 });
         }
 
     } catch (error) {
-        console.error("Error pre-banning user:", error);
+        console.error("Pre-ban error:", error);
         return Response.json({ 
-            error: error.message || 'Failed to pre-ban user' 
+            error: `Pre-ban failed: ${error.message}` 
         }, { status: 500 });
     }
 });
