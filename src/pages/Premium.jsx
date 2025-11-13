@@ -91,9 +91,7 @@ export default function PremiumPage() {
     setError(null);
 
     try {
-      const response = await createCheckoutSession({
-        priceId: "price_default"
-      });
+      const response = await createCheckoutSession({});
 
       if (response.data && response.data.url) {
         window.location.href = response.data.url;
