@@ -1,9 +1,9 @@
-
 import React from "react";
 import { Link, useLocation } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import DnaIcon from "./components/icons/DnaIcon";
-import { Search, User, Crown, History, Home, FileText, Heart, Shield, BarChart3, Microscope, LayoutDashboard, MessageSquare, Building2 } from "lucide-react";
+import BanCheck from "./components/BanCheck";
+import { Search, User, Crown, History, Home, FileText, Heart, Shield, BarChart3, Microscope, LayoutDashboard, MessageSquare, Building2, ShieldOff } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -94,6 +94,13 @@ const navigationItems = [
     badge: "Admin"
   },
   {
+    title: "Banned Users",
+    url: createPageUrl("BannedUsers"),
+    icon: ShieldOff,
+    highlight: true,
+    badge: "Admin"
+  },
+  {
     title: "Profile",
     url: createPageUrl("Profile"),
     icon: User,
@@ -109,8 +116,9 @@ export default function Layout({ children, currentPageName }) {
   const location = useLocation();
 
   return (
-    <SidebarProvider>
-      <div className="min-h-screen flex w-full bg-gradient-to-br from-slate-50 to-blue-50">
+    <BanCheck>
+      <SidebarProvider>
+        <div className="min-h-screen flex w-full bg-gradient-to-br from-slate-50 to-blue-50">
         <Sidebar className="border-r border-slate-200/50">
           <SidebarHeader className="border-b border-slate-200/50 p-4">
             <div className="flex items-center gap-3">
@@ -238,5 +246,6 @@ export default function Layout({ children, currentPageName }) {
         </main>
       </div>
     </SidebarProvider>
+    </BanCheck>
   );
 }

@@ -14,6 +14,7 @@ import AIAssistants from './pages/AIAssistants';
 import VCFAnalysis from './pages/VCFAnalysis';
 import InstitutionalAdmin from './pages/InstitutionalAdmin';
 import InstitutionalPricing from './pages/InstitutionalPricing';
+import BannedUsers from './pages/BannedUsers';
 import Layout from './Layout.jsx';
 
 
@@ -34,6 +35,7 @@ export const PAGES = {
     "VCFAnalysis": VCFAnalysis,
     "InstitutionalAdmin": InstitutionalAdmin,
     "InstitutionalPricing": InstitutionalPricing,
+    "BannedUsers": BannedUsers,
 }
 
 export const pagesConfig = {
