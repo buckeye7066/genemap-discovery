@@ -515,23 +515,111 @@ export default function BannedUsersPage() {
           </CardContent>
         </Card>
 
+        {/* Pre-Ban List */}
+        <Card className="shadow-lg mb-6 border-2 border-orange-200">
+          <CardHeader className="bg-orange-50/50">
+            <CardTitle className="flex items-center gap-2">
+              <Ban className="w-5 h-5 text-orange-600" />
+              Pre-Banned Users ({bannedUsers.filter(u => u.pre_banned).length})
+            </CardTitle>
+            <p className="text-sm text-slate-600 mt-2">
+              These users are blocked before they can sign up. They will be rejected if they try to register or log in.
+            </p>
+          </CardHeader>
+          <CardContent>
+            {bannedUsers.filter(u => u.pre_banned).length === 0 ? (
+              <div className="text-center py-8 text-slate-500">
+                <Ban className="w-12 h-12 mx-auto mb-3 text-slate-300" />
+                <p>No pre-banned users</p>
+                <p className="text-xs mt-1">Use the form above to pre-ban by email, phone, or name</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {bannedUsers.filter(u => u.pre_banned).map((user) => (
+                  <Card key={user.id} className="border-2 border-orange-200 bg-orange-50/30">
+                    <CardContent className="pt-4">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-2">
+                            <Ban className="w-4 h-4 text-orange-600" />
+                            <span className="font-semibold text-slate-900">
+                              {user.full_name !== "Pre-banned User" ? user.full_name : "Blocked Identity"}
+                            </span>
+                            <Badge className="bg-orange-100 text-orange-800 border-orange-300">
+                              Pre-Banned (Not Yet Signed Up)
+                            </Badge>
+                          </div>
+                          {user.email && user.email !== "N/A" && !user.email.includes("@blocked.local") && (
+                            <div className="flex items-center gap-2 text-sm text-slate-600 mb-2">
+                              <Mail className="w-4 h-4" />
+                              {user.email}
+                            </div>
+                          )}
+                          {user.phone_number && (
+                            <div className="flex items-center gap-2 text-sm text-slate-600 mb-2">
+                              <Phone className="w-4 h-4" />
+                              {user.phone_number}
+                            </div>
+                          )}
+                          {user.ban_reason && (
+                            <div className="text-sm text-slate-700 mb-2 p-2 bg-white rounded border border-orange-200">
+                              <strong>Reason:</strong> {user.ban_reason}
+                            </div>
+                          )}
+                          <div className="flex flex-wrap gap-3 text-xs text-slate-500">
+                            {user.banned_date && (
+                              <div className="flex items-center gap-1">
+                                <Calendar className="w-3 h-3" />
+                                Pre-banned {format(new Date(user.banned_date), "MMM d, yyyy")}
+                              </div>
+                            )}
+                            {user.banned_by && (
+                              <div>
+                                By: {user.banned_by}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        <Button
+                          onClick={() => handleUnbanUser(user)}
+                          variant="outline"
+                          size="sm"
+                          className="ml-4 text-green-600 hover:bg-green-50 border-green-200"
+                        >
+                          <Undo2 className="w-4 h-4 mr-2" />
+                          Remove
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
         {/* Banned Users List */}
         <Card className="shadow-lg">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <UserX className="w-5 h-5" />
-              Banned Users ({bannedUsers.length})
+              <UserX className="w-5 h-5 text-red-600" />
+              Banned Existing Users ({bannedUsers.filter(u => !u.pre_banned).length})
             </CardTitle>
+            <p className="text-sm text-slate-600 mt-2">
+              These are existing users who have been banned from the platform.
+            </p>
           </CardHeader>
           <CardContent>
-            {bannedUsers.length === 0 ? (
+            {bannedUsers.filter(u => !u.pre_banned).length === 0 ? (
               <div className="text-center py-8 text-slate-500">
                 <UserX className="w-12 h-12 mx-auto mb-3 text-slate-300" />
-                <p>No banned users</p>
+                <p>No banned existing users</p>
+                <p className="text-xs mt-1">Use the search above to find and ban existing users</p>
               </div>
             ) : (
               <div className="space-y-3">
-                {bannedUsers.map((user) => (
+                {bannedUsers.filter(u => !u.pre_banned).map((user) => (
                   <Card key={user.id} className="border-2 border-red-200 bg-red-50/30">
                     <CardContent className="pt-4">
                       <div className="flex items-start justify-between">
@@ -541,12 +629,7 @@ export default function BannedUsersPage() {
                             <span className="font-semibold text-slate-900">
                               {user.full_name || "No name"}
                             </span>
-                            <Badge variant="destructive">Banned</Badge>
-                            {user.pre_banned && (
-                              <Badge className="bg-orange-100 text-orange-800 border-orange-300">
-                                Pre-Banned
-                              </Badge>
-                            )}
+                            <Badge variant="destructive">Banned User</Badge>
                             {user.role === 'admin' && (
                               <Badge variant="outline">Admin</Badge>
                             )}
