@@ -330,10 +330,10 @@ The GeneMap Team`
             <div>
               <h1 className="text-3xl md:text-4xl font-bold text-slate-900 flex items-center gap-3">
                 <Building2 className="w-8 h-8 text-blue-600" />
-                Institutional Admin
+                License Management
               </h1>
               <p className="text-lg text-slate-600 mt-2">
-                Manage your organization's GeneMap licenses
+                Manage your team's GeneMap licenses and users
               </p>
             </div>
             <Link to={createPageUrl("InstitutionalPricing")}>
@@ -607,7 +607,7 @@ The GeneMap Team`
                                     {assignment.role === 'admin' && (
                                       <Badge className="bg-blue-100 text-blue-800">
                                         <Shield className="w-3 h-3 mr-1" />
-                                        Admin
+                                        License Manager
                                       </Badge>
                                     )}
                                   </div>
