@@ -17,6 +17,7 @@ import InstitutionalPricing from './pages/InstitutionalPricing';
 import BannedUsers from './pages/BannedUsers';
 import DemographicCollection from './pages/DemographicCollection';
 import SuperAdminSetup from './pages/SuperAdminSetup';
+import AxiomNewsletter from './pages/AxiomNewsletter';
 import Layout from './Layout.jsx';
 
 
@@ -40,6 +41,7 @@ export const PAGES = {
     "BannedUsers": BannedUsers,
     "DemographicCollection": DemographicCollection,
     "SuperAdminSetup": SuperAdminSetup,
+    "AxiomNewsletter": AxiomNewsletter,
 }
 
 export const pagesConfig = {

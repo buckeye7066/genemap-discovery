@@ -4,7 +4,7 @@ import { createPageUrl } from "@/utils";
 import DnaIcon from "./components/icons/DnaIcon";
 import BanCheck from "./components/BanCheck";
 import DemographicCheck from "./components/DemographicCheck";
-import { Search, User, Crown, History, Home, FileText, Heart, Shield, BarChart3, Microscope, LayoutDashboard, MessageSquare, Building2, ShieldOff } from "lucide-react";
+import { Search, User, Crown, History, Home, FileText, Heart, Shield, BarChart3, Microscope, LayoutDashboard, MessageSquare, Building2, ShieldOff, Mail } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -98,6 +98,13 @@ const navigationItems = [
     title: "Banned Users",
     url: createPageUrl("BannedUsers"),
     icon: ShieldOff,
+    highlight: true,
+    badge: "Admin"
+  },
+  {
+    title: "Newsletter Subs",
+    url: createPageUrl("AxiomNewsletter"),
+    icon: Mail,
     highlight: true,
     badge: "Admin"
   },
