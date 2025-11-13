@@ -211,12 +211,16 @@ export default function BannedUsersPage() {
 
     try {
       // Call backend function to pre-ban user
-      const response = await base44.functions.invoke('preBanUser', {
-        email: preBanEmail.trim() || null,
-        phone: preBanPhone.trim() || null,
-        name: preBanName.trim() || null,
-        reason: preBanReason
-      });
+      const payload = {
+        reason: preBanReason.trim()
+      };
+      
+      // Only include fields that have values
+      if (preBanEmail.trim()) payload.email = preBanEmail.trim();
+      if (preBanPhone.trim()) payload.phone = preBanPhone.trim();
+      if (preBanName.trim()) payload.name = preBanName.trim();
+      
+      const response = await base44.functions.invoke('preBanUser', payload);
 
       if (response.error) {
         setError(response.error);
