@@ -62,7 +62,7 @@ export default function BannedUsersPage() {
 
   const handleSearch = async () => {
     if (!searchQuery.trim()) {
-      setError("Please enter a name or email to search");
+      setError("Please enter a name, email, or phone number to search");
       return;
     }
 
@@ -71,7 +71,7 @@ export default function BannedUsersPage() {
     setSearchResults([]);
 
     try {
-      // Search by email or name
+      // Search by email, name, or phone
       const emailResults = await base44.asServiceRole.entities.User.filter({
         email: { $regex: searchQuery, $options: 'i' }
       });
@@ -80,8 +80,12 @@ export default function BannedUsersPage() {
         full_name: { $regex: searchQuery, $options: 'i' }
       });
 
+      const phoneResults = await base44.asServiceRole.entities.User.filter({
+        phone_number: { $regex: searchQuery, $options: 'i' }
+      });
+
       // Combine and deduplicate results
-      const combined = [...emailResults, ...nameResults];
+      const combined = [...emailResults, ...nameResults, ...phoneResults];
       const unique = Array.from(new Map(combined.map(u => [u.id, u])).values());
 
       // Filter out already banned users
@@ -243,7 +247,7 @@ export default function BannedUsersPage() {
             <div className="space-y-4">
               <div className="flex gap-2">
                 <Input
-                  placeholder="Search by name or email..."
+                  placeholder="Search by name, email, or phone number..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
@@ -285,6 +289,12 @@ export default function BannedUsersPage() {
                               <Mail className="w-4 h-4" />
                               {user.email}
                             </div>
+                            {user.phone_number && (
+                              <div className="flex items-center gap-2 text-sm text-slate-600 mt-1">
+                                <Phone className="w-4 h-4" />
+                                {user.phone_number}
+                              </div>
+                            )}
                             {user.created_date && (
                               <div className="flex items-center gap-2 text-xs text-slate-500 mt-1">
                                 <Calendar className="w-3 h-3" />
@@ -377,6 +387,12 @@ export default function BannedUsersPage() {
                             <Mail className="w-4 h-4" />
                             {user.email}
                           </div>
+                          {user.phone_number && (
+                            <div className="flex items-center gap-2 text-sm text-slate-600 mb-2">
+                              <Phone className="w-4 h-4" />
+                              {user.phone_number}
+                            </div>
+                          )}
                           {user.ban_reason && (
                             <div className="text-sm text-slate-700 mb-2 p-2 bg-white rounded border border-red-200">
                               <strong>Reason:</strong> {user.ban_reason}

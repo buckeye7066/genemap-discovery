@@ -76,9 +76,7 @@ export default function DemographicCollectionPage() {
     }
   };
 
-  const handleSkip = () => {
-    navigate(createPageUrl("Home"));
-  };
+
 
   if (isLoading) {
     return (
@@ -97,9 +95,12 @@ export default function DemographicCollectionPage() {
               <DnaIcon className="w-8 h-8 text-white" />
             </div>
           </div>
-          <CardTitle className="text-2xl">Welcome to GeneMap</CardTitle>
+          <CardTitle className="text-2xl">Complete Your Profile</CardTitle>
           <p className="text-slate-600 text-sm mt-2">
-            Please help us serve you better by providing some information
+            Please provide the following information to access GeneMap
+          </p>
+          <p className="text-red-600 text-xs mt-1 font-medium">
+            * All fields are required
           </p>
         </CardHeader>
         <CardContent>
@@ -111,18 +112,24 @@ export default function DemographicCollectionPage() {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Display Name and Email (read-only) */}
-            <div className="space-y-4 p-4 bg-slate-50 rounded-lg border border-slate-200">
+            {/* Display Name and Email (from authentication) */}
+            <div className="space-y-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+              <div className="text-xs text-blue-800 mb-2 font-medium">
+                ✓ Account Information (from your login)
+              </div>
               <div className="flex items-center gap-2 text-sm">
-                <UserCircle className="w-4 h-4 text-slate-500" />
+                <UserCircle className="w-4 h-4 text-blue-600" />
                 <span className="text-slate-600">Name:</span>
                 <span className="font-medium text-slate-900">{user?.full_name || "Not provided"}</span>
               </div>
               <div className="flex items-center gap-2 text-sm">
-                <Mail className="w-4 h-4 text-slate-500" />
+                <Mail className="w-4 h-4 text-blue-600" />
                 <span className="text-slate-600">Email:</span>
                 <span className="font-medium text-slate-900">{user?.email}</span>
               </div>
+              <p className="text-xs text-blue-700 mt-2">
+                You can log in anytime using your email and password
+              </p>
             </div>
 
             {/* Phone Number Input */}
@@ -189,7 +196,7 @@ export default function DemographicCollectionPage() {
             <div className="flex flex-col gap-2">
               <Button
                 type="submit"
-                disabled={isSaving}
+                disabled={isSaving || !phoneNumber.trim()}
                 className="w-full bg-blue-600 hover:bg-blue-700"
               >
                 {isSaving ? (
@@ -205,15 +212,9 @@ export default function DemographicCollectionPage() {
                 )}
               </Button>
               
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={handleSkip}
-                disabled={isSaving}
-                className="w-full"
-              >
-                Skip for now
-              </Button>
+              <p className="text-center text-xs text-slate-500">
+                This information is required to access the application
+              </p>
             </div>
           </form>
         </CardContent>
