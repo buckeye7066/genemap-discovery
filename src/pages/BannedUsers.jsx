@@ -305,7 +305,7 @@ export default function BannedUsersPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Ban className="w-5 h-5 text-red-600" />
-              Pre-Ban by Email
+              Pre-Ban by Email, Phone, or Name
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -376,7 +376,7 @@ export default function BannedUsersPage() {
                   
                   <Button
                     onClick={handlePreBanUser}
-                    disabled={isPreBanning || (!preBanEmail.trim() && !preBanPhone.trim() && !preBanName.trim()) || !preBanReason.trim()}
+                    disabled={isPreBanning || !preBanReason.trim()}
                     variant="destructive"
                     className="w-full"
                   >
