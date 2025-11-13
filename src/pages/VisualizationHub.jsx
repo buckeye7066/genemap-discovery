@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -87,7 +86,7 @@ export default function VisualizationHub() {
         {},
         '-created_date'
       );
-      setSavedConfigs(configs);
+      setSavedConfigs(configs || []);
     } catch (err) {
       console.log("No saved configs found or error fetching configs:", err);
       setSavedConfigs([]); // Ensure it's an empty array on error
