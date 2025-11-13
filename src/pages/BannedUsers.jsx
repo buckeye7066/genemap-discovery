@@ -34,6 +34,8 @@ export default function BannedUsersPage() {
   const [banReason, setBanReason] = useState("");
   const [selectedUser, setSelectedUser] = useState(null);
   const [preBanEmail, setPreBanEmail] = useState("");
+  const [preBanPhone, setPreBanPhone] = useState("");
+  const [preBanName, setPreBanName] = useState("");
   const [preBanReason, setPreBanReason] = useState("");
   const [isPreBanning, setIsPreBanning] = useState(false);
 
@@ -178,24 +180,33 @@ export default function BannedUsersPage() {
   };
 
   const handlePreBanUser = async () => {
-    if (!preBanEmail.trim()) {
-      setError("Please enter an email address to pre-ban");
+    // Validate at least one identifier is provided
+    if (!preBanEmail.trim() && !preBanPhone.trim() && !preBanName.trim()) {
+      setError("Please enter at least one identifier (email, phone, or name) to pre-ban");
       return;
     }
 
     if (!preBanReason.trim()) {
-      setError("Please provide a reason for pre-banning this email");
+      setError("Please provide a reason for pre-banning");
       return;
     }
 
-    // Validate email format
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(preBanEmail.trim())) {
-      setError("Please enter a valid email address");
-      return;
+    // Validate email format if provided
+    if (preBanEmail.trim()) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(preBanEmail.trim())) {
+        setError("Please enter a valid email address");
+        return;
+      }
     }
 
-    if (!confirm(`Pre-ban ${preBanEmail}? They will be blocked if they try to sign up or log in.`)) {
+    // Build identifier string for confirmation
+    const identifiers = [];
+    if (preBanEmail.trim()) identifiers.push(`email: ${preBanEmail}`);
+    if (preBanPhone.trim()) identifiers.push(`phone: ${preBanPhone}`);
+    if (preBanName.trim()) identifiers.push(`name: ${preBanName}`);
+    
+    if (!confirm(`Pre-ban user with ${identifiers.join(', ')}? They will be blocked if they try to sign up or log in.`)) {
       return;
     }
 
@@ -203,13 +214,35 @@ export default function BannedUsersPage() {
     setError(null);
 
     try {
-      // Check if user already exists
-      const existingUsers = await base44.asServiceRole.entities.User.filter({
-        email: preBanEmail.trim()
-      });
+      // Check if user already exists with any of the provided identifiers
+      let existingUsers = [];
+      
+      if (preBanEmail.trim()) {
+        const emailUsers = await base44.asServiceRole.entities.User.filter({
+          email: preBanEmail.trim()
+        });
+        existingUsers = [...existingUsers, ...emailUsers];
+      }
+      
+      if (preBanPhone.trim() && existingUsers.length === 0) {
+        const phoneUsers = await base44.asServiceRole.entities.User.filter({
+          phone_number: preBanPhone.trim()
+        });
+        existingUsers = [...existingUsers, ...phoneUsers];
+      }
+      
+      if (preBanName.trim() && existingUsers.length === 0) {
+        const nameUsers = await base44.asServiceRole.entities.User.filter({
+          full_name: { $regex: preBanName.trim(), $options: 'i' }
+        });
+        existingUsers = [...existingUsers, ...nameUsers];
+      }
 
-      if (existingUsers.length > 0) {
-        const existingUser = existingUsers[0];
+      // Remove duplicates
+      const uniqueUsers = Array.from(new Map(existingUsers.map(u => [u.id, u])).values());
+
+      if (uniqueUsers.length > 0) {
+        const existingUser = uniqueUsers[0];
         if (existingUser.banned) {
           setError("This user is already banned");
           setIsPreBanning(false);
@@ -224,12 +257,13 @@ export default function BannedUsersPage() {
           banned_by: currentUser.email
         });
         
-        setSuccess(`Successfully banned ${preBanEmail} (existing user)`);
+        setSuccess(`Successfully banned ${existingUser.email || existingUser.full_name} (existing user)`);
       } else {
         // Create pre-banned user record
         await base44.asServiceRole.entities.User.create({
-          email: preBanEmail.trim(),
-          full_name: "Pre-banned User",
+          email: preBanEmail.trim() || `preban_${Date.now()}@blocked.local`,
+          full_name: preBanName.trim() || "Pre-banned User",
+          phone_number: preBanPhone.trim() || null,
           role: "user",
           banned: true,
           ban_reason: preBanReason,
@@ -238,10 +272,12 @@ export default function BannedUsersPage() {
           pre_banned: true // Flag to indicate this was pre-banned
         });
         
-        setSuccess(`Successfully pre-banned ${preBanEmail} - they cannot sign up or log in`);
+        setSuccess(`Successfully pre-banned ${identifiers.join(', ')} - they cannot sign up or log in`);
       }
 
       setPreBanEmail("");
+      setPreBanPhone("");
+      setPreBanName("");
       setPreBanReason("");
 
       // Reload banned users list
@@ -327,26 +363,59 @@ export default function BannedUsersPage() {
             <div className="space-y-4">
               <div className="bg-white p-4 rounded-lg border border-red-200">
                 <p className="text-sm text-slate-700 mb-4">
-                  <strong>Pre-ban users before they sign up.</strong> Enter an email address to block them from accessing the platform.
-                  If they try to sign up or log in, they'll be immediately blocked.
+                  <strong>Pre-ban users before they sign up.</strong> Enter any combination of email, phone, or name to block them from accessing the platform.
+                  If they try to sign up or log in with any of these identifiers, they'll be immediately blocked.
                 </p>
                 
                 <div className="space-y-3">
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">
-                      Email Address
-                    </label>
-                    <Input
-                      type="email"
-                      placeholder="user@example.com"
-                      value={preBanEmail}
-                      onChange={(e) => setPreBanEmail(e.target.value)}
-                    />
+                  <div className="grid md:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">
+                        Email Address
+                      </label>
+                      <Input
+                        type="email"
+                        placeholder="user@example.com"
+                        value={preBanEmail}
+                        onChange={(e) => setPreBanEmail(e.target.value)}
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">
+                        Phone Number
+                      </label>
+                      <Input
+                        type="tel"
+                        placeholder="+1234567890"
+                        value={preBanPhone}
+                        onChange={(e) => setPreBanPhone(e.target.value)}
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 mb-1">
+                        Full Name
+                      </label>
+                      <Input
+                        type="text"
+                        placeholder="John Doe"
+                        value={preBanName}
+                        onChange={(e) => setPreBanName(e.target.value)}
+                      />
+                    </div>
                   </div>
+                  
+                  <Alert className="bg-blue-50 border-blue-200">
+                    <AlertCircle className="h-4 w-4 text-blue-600" />
+                    <AlertDescription className="text-blue-900 text-xs">
+                      You can enter one, two, or all three identifiers. The user will be blocked if any of them match.
+                    </AlertDescription>
+                  </Alert>
                   
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-1">
-                      Reason for Pre-Ban
+                      Reason for Pre-Ban <span className="text-red-600">*</span>
                     </label>
                     <Textarea
                       placeholder="Enter reason (e.g., violation of terms, security threat, etc.)..."
@@ -358,7 +427,7 @@ export default function BannedUsersPage() {
                   
                   <Button
                     onClick={handlePreBanUser}
-                    disabled={isPreBanning || !preBanEmail.trim() || !preBanReason.trim()}
+                    disabled={isPreBanning || (!preBanEmail.trim() && !preBanPhone.trim() && !preBanName.trim()) || !preBanReason.trim()}
                     variant="destructive"
                     className="w-full"
                   >
@@ -370,7 +439,7 @@ export default function BannedUsersPage() {
                     ) : (
                       <>
                         <Ban className="w-4 h-4 mr-2" />
-                        Pre-Ban This Email
+                        Pre-Ban User
                       </>
                     )}
                   </Button>
