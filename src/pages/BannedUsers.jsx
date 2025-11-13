@@ -55,9 +55,13 @@ export default function BannedUsersPage() {
         return;
       }
 
-      // Load all banned users
-      const users = await base44.asServiceRole.entities.User.filter({ banned: true });
-      setBannedUsers(users);
+      // Load all banned users via backend function
+      const response = await base44.functions.invoke('getBannedUsers');
+      if (response.error) {
+        setError(response.error);
+      } else {
+        setBannedUsers(response.users || []);
+      }
     } catch (err) {
       console.error("Error loading data:", err);
       setError("Failed to load banned users");
@@ -77,30 +81,18 @@ export default function BannedUsersPage() {
     setSearchResults([]);
 
     try {
-      // Search by email, name, or phone
-      const emailResults = await base44.asServiceRole.entities.User.filter({
-        email: { $regex: searchQuery, $options: 'i' }
+      // Search via backend function
+      const response = await base44.functions.invoke('searchUsers', {
+        searchQuery: searchQuery
       });
 
-      const nameResults = await base44.asServiceRole.entities.User.filter({
-        full_name: { $regex: searchQuery, $options: 'i' }
-      });
-
-      const phoneResults = await base44.asServiceRole.entities.User.filter({
-        phone_number: { $regex: searchQuery, $options: 'i' }
-      });
-
-      // Combine and deduplicate results
-      const combined = [...emailResults, ...nameResults, ...phoneResults];
-      const unique = Array.from(new Map(combined.map(u => [u.id, u])).values());
-
-      // Filter out already banned users
-      const notBanned = unique.filter(u => !u.banned);
-
-      setSearchResults(notBanned);
-
-      if (notBanned.length === 0) {
-        setError("No users found matching your search (excluding already banned users)");
+      if (response.error) {
+        setError(response.error);
+      } else {
+        setSearchResults(response.users || []);
+        if (response.users.length === 0) {
+          setError("No users found matching your search (excluding already banned users)");
+        }
       }
     } catch (err) {
       console.error("Search error:", err);
@@ -124,23 +116,25 @@ export default function BannedUsersPage() {
     setError(null);
 
     try {
-      await base44.asServiceRole.entities.User.update(user.id, {
-        banned: true,
-        ban_reason: banReason,
-        banned_date: new Date().toISOString(),
-        banned_by: currentUser.email
+      const response = await base44.functions.invoke('banUser', {
+        userId: user.id,
+        banReason: banReason
       });
 
-      setSuccess(`Successfully banned ${user.full_name || user.email}`);
-      setBanReason("");
-      setSelectedUser(null);
-      setSearchResults([]);
-      setSearchQuery("");
+      if (response.error) {
+        setError(response.error);
+      } else {
+        setSuccess(`Successfully banned ${user.full_name || user.email}`);
+        setBanReason("");
+        setSelectedUser(null);
+        setSearchResults([]);
+        setSearchQuery("");
 
-      // Reload banned users list
-      await loadData();
+        // Reload banned users list
+        await loadData();
 
-      setTimeout(() => setSuccess(null), 3000);
+        setTimeout(() => setSuccess(null), 3000);
+      }
     } catch (err) {
       console.error("Ban error:", err);
       setError("Failed to ban user. Please try again.");
@@ -158,19 +152,20 @@ export default function BannedUsersPage() {
     setError(null);
 
     try {
-      await base44.asServiceRole.entities.User.update(user.id, {
-        banned: false,
-        ban_reason: null,
-        banned_date: null,
-        banned_by: null
+      const response = await base44.functions.invoke('unbanUser', {
+        userId: user.id
       });
 
-      setSuccess(`Successfully unbanned ${user.full_name || user.email}`);
+      if (response.error) {
+        setError(response.error);
+      } else {
+        setSuccess(`Successfully unbanned ${user.full_name || user.email}`);
 
-      // Reload banned users list
-      await loadData();
+        // Reload banned users list
+        await loadData();
 
-      setTimeout(() => setSuccess(null), 3000);
+        setTimeout(() => setSuccess(null), 3000);
+      }
     } catch (err) {
       console.error("Unban error:", err);
       setError("Failed to unban user. Please try again.");
@@ -214,76 +209,29 @@ export default function BannedUsersPage() {
     setError(null);
 
     try {
-      // Check if user already exists with any of the provided identifiers
-      let existingUsers = [];
-      
-      if (preBanEmail.trim()) {
-        const emailUsers = await base44.asServiceRole.entities.User.filter({
-          email: preBanEmail.trim()
-        });
-        existingUsers = [...existingUsers, ...emailUsers];
-      }
-      
-      if (preBanPhone.trim() && existingUsers.length === 0) {
-        const phoneUsers = await base44.asServiceRole.entities.User.filter({
-          phone_number: preBanPhone.trim()
-        });
-        existingUsers = [...existingUsers, ...phoneUsers];
-      }
-      
-      if (preBanName.trim() && existingUsers.length === 0) {
-        const nameUsers = await base44.asServiceRole.entities.User.filter({
-          full_name: { $regex: preBanName.trim(), $options: 'i' }
-        });
-        existingUsers = [...existingUsers, ...nameUsers];
-      }
+      // Call backend function to pre-ban user
+      const response = await base44.functions.invoke('preBanUser', {
+        email: preBanEmail.trim() || null,
+        phone: preBanPhone.trim() || null,
+        name: preBanName.trim() || null,
+        reason: preBanReason
+      });
 
-      // Remove duplicates
-      const uniqueUsers = Array.from(new Map(existingUsers.map(u => [u.id, u])).values());
-
-      if (uniqueUsers.length > 0) {
-        const existingUser = uniqueUsers[0];
-        if (existingUser.banned) {
-          setError("This user is already banned");
-          setIsPreBanning(false);
-          return;
-        }
-        
-        // Ban existing user
-        await base44.asServiceRole.entities.User.update(existingUser.id, {
-          banned: true,
-          ban_reason: preBanReason,
-          banned_date: new Date().toISOString(),
-          banned_by: currentUser.email
-        });
-        
-        setSuccess(`Successfully banned ${existingUser.email || existingUser.full_name} (existing user)`);
+      if (response.error) {
+        setError(response.error);
       } else {
-        // Create pre-banned user record
-        await base44.asServiceRole.entities.User.create({
-          email: preBanEmail.trim() || `preban_${Date.now()}@blocked.local`,
-          full_name: preBanName.trim() || "Pre-banned User",
-          phone_number: preBanPhone.trim() || null,
-          role: "user",
-          banned: true,
-          ban_reason: preBanReason,
-          banned_date: new Date().toISOString(),
-          banned_by: currentUser.email,
-          pre_banned: true // Flag to indicate this was pre-banned
-        });
+        setSuccess(response.message);
         
-        setSuccess(`Successfully pre-banned ${identifiers.join(', ')} - they cannot sign up or log in`);
+        setPreBanEmail("");
+        setPreBanPhone("");
+        setPreBanName("");
+        setPreBanReason("");
+
+        // Reload banned users list
+        await loadData();
+
+        setTimeout(() => setSuccess(null), 3000);
       }
-
-      setPreBanEmail("");
-      setPreBanPhone("");
-      setPreBanName("");
-      setPreBanReason("");
-
-      // Reload banned users list
-      await loadData();
-
-      setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
       console.error("Pre-ban error:", err);
       setError(`Failed to pre-ban user: ${err.message || 'Please try again.'}`);
