@@ -350,12 +350,6 @@ Please provide a comprehensive response.`;
                   activeAssistant === 'robert' ? 'text-blue-600' : 'text-purple-600'
                 }`} />
                 Conversation with {activeAssistant === 'robert' ? 'Robert' : 'Anastasia'}
-                {isSpeaking && (
-                  <Badge className="ml-auto bg-green-600 text-white animate-pulse">
-                    <Volume2 className="w-3 h-3 mr-1" />
-                    Speaking...
-                  </Badge>
-                )}
               </CardTitle>
             </CardHeader>
             <CardContent className="p-0">
@@ -387,16 +381,6 @@ Please provide a comprehensive response.`;
                               <Heart className="w-4 h-4 text-purple-600" />
                               <span className="text-xs font-semibold text-purple-900">Anastasia</span>
                             </>
-                          )}
-                          {voiceEnabled && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => speakText(message.content, message.assistant)}
-                              className="ml-auto h-6 px-2"
-                            >
-                              <Volume2 className="w-3 h-3" />
-                            </Button>
                           )}
                         </div>
                       )}
