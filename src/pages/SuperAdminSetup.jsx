@@ -63,7 +63,7 @@ export default function SuperAdminSetupPage() {
         super_admin: true
       });
 
-      setSuccess(`Successfully granted super admin privileges to ${searchEmail}`);
+      setSuccess(`Successfully granted administrator privileges to ${searchEmail}`);
       setSearchEmail("");
 
       // If granting to self, reload user
@@ -98,10 +98,10 @@ export default function SuperAdminSetupPage() {
             </div>
           </div>
           <h1 className="text-3xl md:text-4xl font-bold text-slate-900 mb-4">
-            Super Admin Setup
+            Administrator Setup
           </h1>
           <p className="text-lg text-slate-600">
-            Grant super administrator privileges to manage the entire system
+            Grant administrator privileges to manage users and system settings
           </p>
         </div>
 
@@ -121,7 +121,7 @@ export default function SuperAdminSetupPage() {
 
         <Card className="shadow-lg mb-6">
           <CardHeader>
-            <CardTitle>Grant Super Administrator Access</CardTitle>
+            <CardTitle>Grant Administrator Access</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
@@ -132,7 +132,7 @@ export default function SuperAdminSetupPage() {
                 type="email"
                 value={searchEmail}
                 onChange={(e) => setSearchEmail(e.target.value)}
-                placeholder="Enter email address..."
+                placeholder="Enter your email address..."
                 onKeyDown={(e) => e.key === 'Enter' && handleGrantSuperAdmin()}
               />
             </div>
@@ -150,7 +150,7 @@ export default function SuperAdminSetupPage() {
               ) : (
                 <>
                   <Crown className="w-4 h-4 mr-2" />
-                  Grant Super Admin Privileges
+                  Grant Administrator Privileges
                 </>
               )}
             </Button>
@@ -175,7 +175,7 @@ export default function SuperAdminSetupPage() {
                 <span className="font-medium text-slate-900">{currentUser?.role || "user"}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-sm text-slate-600">Super Admin:</span>
+                <span className="text-sm text-slate-600">Administrator:</span>
                 {currentUser?.super_admin ? (
                   <span className="flex items-center gap-1 text-green-600 font-medium">
                     <CheckCircle className="w-4 h-4" />
@@ -190,11 +190,11 @@ export default function SuperAdminSetupPage() {
         </Card>
 
         <div className="mt-6 p-4 bg-amber-50 border border-amber-200 rounded-lg">
-          <h3 className="font-semibold text-amber-900 mb-2">⚠️ Super Admin Privileges</h3>
+          <h3 className="font-semibold text-amber-900 mb-2">⚠️ Administrator Privileges</h3>
           <ul className="text-sm text-amber-800 space-y-1">
             <li>• Full access to ban/unban any user</li>
             <li>• View all banned users and reasons</li>
-            <li>• Exclusive access to user management system</li>
+            <li>• Access newsletter subscriber list</li>
             <li>• Complete control over platform moderation</li>
           </ul>
         </div>
