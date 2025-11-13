@@ -30,29 +30,33 @@ Deno.serve(async (req) => {
             return Response.json({ error: 'Ban reason is required' }, { status: 400 });
         }
 
-        // Check if user already exists with any of the provided identifiers
-        let existingUsers = [];
+        // Check if user already exists - search all in parallel
+        const searchPromises = [];
         
         if (email) {
-            const emailUsers = await base44.asServiceRole.entities.User.filter({
-                email: email.trim()
-            });
-            existingUsers = [...existingUsers, ...emailUsers];
+            searchPromises.push(
+                base44.asServiceRole.entities.User.filter({ email: email.trim() })
+                    .catch(() => [])
+            );
         }
         
-        if (phone && existingUsers.length === 0) {
-            const phoneUsers = await base44.asServiceRole.entities.User.filter({
-                phone_number: phone.trim()
-            });
-            existingUsers = [...existingUsers, ...phoneUsers];
+        if (phone) {
+            searchPromises.push(
+                base44.asServiceRole.entities.User.filter({ phone_number: phone.trim() })
+                    .catch(() => [])
+            );
         }
         
-        if (name && existingUsers.length === 0) {
-            const nameUsers = await base44.asServiceRole.entities.User.filter({
-                full_name: { $regex: name.trim(), $options: 'i' }
-            });
-            existingUsers = [...existingUsers, ...nameUsers];
+        if (name) {
+            searchPromises.push(
+                base44.asServiceRole.entities.User.filter({ full_name: name.trim() })
+                    .catch(() => [])
+            );
         }
+
+        // Wait for all searches
+        const searchResults = await Promise.all(searchPromises);
+        const existingUsers = searchResults.flat();
 
         // Remove duplicates
         const uniqueUsers = Array.from(new Map(existingUsers.map(u => [u.id, u])).values());
@@ -78,15 +82,18 @@ Deno.serve(async (req) => {
                 message: `Successfully banned ${existingUser.email || existingUser.full_name} (existing user)`
             });
         } else {
-            // Create pre-ban record (not a User entity)
-            await base44.asServiceRole.entities.PreBannedUser.create({
-                email: email ? email.trim() : null,
-                full_name: name ? name.trim() : null,
-                phone_number: phone ? phone.trim() : null,
+            // Create pre-ban record
+            const preBanData = {
                 ban_reason: reason,
                 banned_by: requestingUser.email,
                 status: 'active'
-            });
+            };
+
+            if (email) preBanData.email = email.trim();
+            if (phone) preBanData.phone_number = phone.trim();
+            if (name) preBanData.full_name = name.trim();
+
+            await base44.asServiceRole.entities.PreBannedUser.create(preBanData);
             
             const identifiers = [];
             if (email) identifiers.push(`email: ${email}`);
