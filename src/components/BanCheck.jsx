@@ -15,6 +15,14 @@ export default function BanCheck({ children }) {
 
   const checkBanStatus = async () => {
     try {
+      // First check if user matches any pre-bans
+      try {
+        await base44.functions.invoke('checkPreBanOnLogin');
+      } catch (preBanError) {
+        console.log("Pre-ban check error:", preBanError);
+      }
+
+      // Then check current ban status
       const currentUser = await base44.auth.me();
       setUser(currentUser);
 
