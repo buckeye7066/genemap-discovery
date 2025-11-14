@@ -73,6 +73,32 @@ export default function SuperAdminSetupPage() {
     }
   };
 
+  const handleGrantPremium = async () => {
+    if (!confirm('Grant yourself premium access?')) {
+      return;
+    }
+
+    setIsSaving(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const response = await base44.functions.invoke('grantPremiumAccess');
+
+      if (response.error) {
+        setError(response.error);
+        return;
+      }
+
+      setSuccess('Premium access granted! Reload the page to see changes.');
+    } catch (err) {
+      console.error("Error granting premium:", err);
+      setError(err.message || "Failed to grant premium access.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-6">
