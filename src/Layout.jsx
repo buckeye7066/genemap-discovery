@@ -116,6 +116,13 @@ const navigationItems = [
     badge: "Admin"
   },
   {
+    title: "Users Log",
+    url: createPageUrl("UsersLog"),
+    icon: Users,
+    highlight: true,
+    badge: "Admin"
+  },
+  {
     title: "Profile",
     url: createPageUrl("Profile"),
     icon: User,
