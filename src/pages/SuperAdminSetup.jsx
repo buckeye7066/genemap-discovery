@@ -178,6 +178,37 @@ export default function SuperAdminSetupPage() {
           </CardContent>
         </Card>
 
+        <Card className="shadow-lg mb-6 border-2 border-purple-200">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Crown className="w-5 h-5 text-purple-600" />
+              Grant Premium Access
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-slate-600 mb-4">
+              Grant yourself premium access to all features without payment.
+            </p>
+            <Button
+              onClick={handleGrantPremium}
+              disabled={isSaving}
+              className="w-full bg-purple-600 hover:bg-purple-700"
+            >
+              {isSaving ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Granting Access...
+                </>
+              ) : (
+                <>
+                  <Crown className="w-4 h-4 mr-2" />
+                  Grant Premium Access
+                </>
+              )}
+            </Button>
+          </CardContent>
+        </Card>
+
         <Card className="shadow-lg border-2 border-blue-200">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
