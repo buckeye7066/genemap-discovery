@@ -15,18 +15,32 @@ export default function BanCheck({ children }) {
 
   const checkBanStatus = async () => {
     try {
-      // First check if user matches any pre-bans
+      // First check if user matches any pre-bans and ban them if they do
       try {
-        await base44.functions.invoke('checkPreBanOnLogin');
+        const preBanCheck = await base44.functions.invoke('checkPreBanOnLogin');
+        console.log("Pre-ban check result:", preBanCheck);
+        
+        if (preBanCheck.banned) {
+          console.log("User was pre-banned, reloading user data...");
+          // Wait a moment for the ban to propagate
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
       } catch (preBanError) {
-        console.log("Pre-ban check error:", preBanError);
+        console.error("Pre-ban check error:", preBanError);
       }
 
-      // Then check current ban status
+      // Then check current ban status (after pre-ban check completed)
       const currentUser = await base44.auth.me();
       setUser(currentUser);
 
+      console.log("Current user status:", { 
+        email: currentUser.email, 
+        banned: currentUser.banned,
+        ban_reason: currentUser.ban_reason 
+      });
+
       if (currentUser.banned === true) {
+        console.log("User is banned, showing ban screen");
         setIsBanned(true);
       }
     } catch (err) {
