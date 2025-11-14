@@ -18,6 +18,7 @@ import BannedUsers from './pages/BannedUsers';
 import DemographicCollection from './pages/DemographicCollection';
 import SuperAdminSetup from './pages/SuperAdminSetup';
 import AxiomNewsletter from './pages/AxiomNewsletter';
+import UsersLog from './pages/UsersLog';
 import Layout from './Layout.jsx';
 
 
@@ -42,6 +43,7 @@ export const PAGES = {
     "DemographicCollection": DemographicCollection,
     "SuperAdminSetup": SuperAdminSetup,
     "AxiomNewsletter": AxiomNewsletter,
+    "UsersLog": UsersLog,
 }
 
 export const pagesConfig = {

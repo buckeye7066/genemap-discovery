@@ -4,7 +4,7 @@ import { createPageUrl } from "@/utils";
 import DnaIcon from "./components/icons/DnaIcon";
 import BanCheck from "./components/BanCheck";
 import DemographicCheck from "./components/DemographicCheck";
-import { Search, User, Crown, History, Home, FileText, Heart, Shield, BarChart3, Microscope, LayoutDashboard, MessageSquare, Building2, ShieldOff, Mail, Crown as CrownIcon } from "lucide-react";
+import { Search, User, Crown, History, Home, FileText, Heart, Shield, BarChart3, Microscope, LayoutDashboard, MessageSquare, Building2, ShieldOff, Mail, Crown as CrownIcon, Users } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
