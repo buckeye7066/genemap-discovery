@@ -16,8 +16,8 @@ Deno.serve(async (req) => {
             }, { status: 403 });
         }
 
-        // Fetch all users using service role
-        const users = await base44.asServiceRole.entities.User.list();
+        // Fetch all users using service role (with high limit to get all)
+        const users = await base44.asServiceRole.entities.User.filter({}, '-created_date', 10000);
 
         // Sort by created date (newest first)
         users.sort((a, b) => {
