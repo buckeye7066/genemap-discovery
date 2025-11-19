@@ -50,10 +50,14 @@ export default function AxiomNewsletterPage() {
         return;
       }
 
-      // Load all users who opted into mailing list
-      const users = await base44.asServiceRole.entities.User.filter({ 
-        mailing_list_opt_in: true 
-      });
+      // Load all users who opted into mailing list via backend function
+      const response = await base44.functions.invoke('getAllUsers');
+      
+      if (response.error) {
+        throw new Error(response.error);
+      }
+      
+      const users = (response.users || []).filter(u => u.mailing_list_opt_in === true);
       
       setSubscribedUsers(users);
       setFilteredUsers(users);

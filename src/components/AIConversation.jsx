@@ -359,7 +359,7 @@ export default function AIConversation() {
         )}
       </CardContent>
 
-      <style jsx>{`
+      <style>{`
         @keyframes slideIn {
           from {
             opacity: 0;
