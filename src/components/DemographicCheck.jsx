@@ -15,7 +15,8 @@ export default function DemographicCheck({ children }) {
 
   const checkDemographics = async () => {
     // Don't check on the demographic collection page itself
-    if (location.pathname === createPageUrl("DemographicCollection")) {
+    const demographicPath = createPageUrl("DemographicCollection");
+    if (location.pathname === demographicPath || location.pathname.includes('demographic')) {
       setIsChecking(false);
       return;
     }
@@ -26,7 +27,7 @@ export default function DemographicCheck({ children }) {
       // If demographics not collected, redirect
       if (!user.demographics_collected) {
         setShouldRedirect(true);
-        navigate(createPageUrl("DemographicCollection"));
+        navigate(createPageUrl("DemographicCollection"), { replace: true });
         return;
       }
     } catch (err) {
