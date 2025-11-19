@@ -743,7 +743,7 @@ Provide comprehensive, evidence-based analysis formatted with clear sections.`;
                         disabled={isAnalyzingVariant}
                       />
                       <p className="text-xs text-slate-500 mt-1">
-                        Supported formats: rsID (rs123), HGVS (c.123A>G, p.Val123Met), or plain description
+                        Supported formats: rsID (rs123), HGVS (c.123A&gt;G, p.Val123Met), or plain description
                       </p>
                     </div>
 
