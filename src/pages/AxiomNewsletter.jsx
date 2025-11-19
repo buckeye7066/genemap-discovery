@@ -57,7 +57,7 @@ export default function AxiomNewsletterPage() {
         throw new Error(response.error);
       }
       
-      const users = (response.users || []).filter(u => u.mailing_list_opt_in === true);
+      const users = (response.users || []).filter(u => u.mailing_list_opt_in);
       
       setSubscribedUsers(users);
       setFilteredUsers(users);
