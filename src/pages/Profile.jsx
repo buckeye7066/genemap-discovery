@@ -13,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { User, Save, Loader2, BookOpen, Sparkles, Brain, CheckCircle } from "lucide-react";
+import { User, Save, Loader2, Brain, CheckCircle } from "lucide-react";
 
 // Placeholder for createPageUrl. In a real application, this would typically
 // be imported from a utility file or a routing library, e.g., Next.js router.
@@ -85,20 +85,7 @@ export default function ProfilePage() {
     }
   };
 
-  const handleRestartTour = async () => {
-    try {
-      await base44.auth.updateMe({
-        onboarding_completed: false,
-        onboarding_step: 0
-      });
-      setSuccessMessage("Onboarding tour reset! Redirecting to dashboard...");
-      setTimeout(() => {
-        window.location.href = createPageUrl("Dashboard");
-      }, 1500);
-    } catch (err) {
-      setErrorMessage("Failed to restart tour");
-    }
-  };
+
 
   const educationLevels = [
     { value: "high_school", label: "High School" },
@@ -283,32 +270,7 @@ export default function ProfilePage() {
           </CardContent>
         </Card>
 
-        {/* Onboarding Tour */}
-        <Card className="shadow-lg bg-gradient-to-br from-purple-50 to-pink-50 border-purple-200 mb-6">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Sparkles className="w-5 h-5 text-purple-600" />
-              Onboarding Tour
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="bg-white p-4 rounded-lg border border-purple-200">
-              <p className="text-sm text-slate-700 mb-3">
-                {user?.onboarding_completed 
-                  ? "You've completed the onboarding tour! Want to see it again?"
-                  : "Haven't completed the tour yet? Restart from the beginning."}
-              </p>
-              <Button
-                onClick={handleRestartTour}
-                variant="outline"
-                className="w-full gap-2 border-purple-300 hover:bg-purple-50"
-              >
-                <Sparkles className="w-4 h-4" />
-                {user?.onboarding_completed ? 'Restart Tour' : 'Continue Tour'}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+
       </div>
     </div>
   );
