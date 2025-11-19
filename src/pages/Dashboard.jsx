@@ -22,7 +22,7 @@ import {
   Plus,
   Info
 } from "lucide-react";
-import OnboardingTour from "../components/onboarding/OnboardingTour";
+
 
 export default function Dashboard() {
   const [user, setUser] = useState(null);
