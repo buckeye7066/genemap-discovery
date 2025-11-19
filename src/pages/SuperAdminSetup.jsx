@@ -1,12 +1,15 @@
 import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
+import { useNavigate } from "react-router-dom";
+import { createPageUrl } from "@/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Shield, Crown, CheckCircle, AlertCircle, Loader2 } from "lucide-react";
+import { Shield, Crown, CheckCircle, AlertCircle, Loader2, LogOut } from "lucide-react";
 
 export default function SuperAdminSetupPage() {
+  const navigate = useNavigate();
   const [currentUser, setCurrentUser] = useState(null);
   const [searchEmail, setSearchEmail] = useState("");
   const [isLoading, setIsLoading] = useState(true);
@@ -20,14 +23,29 @@ export default function SuperAdminSetupPage() {
 
   const loadUser = async () => {
     try {
+      const isAuth = await base44.auth.isAuthenticated();
+      if (!isAuth) {
+        navigate(createPageUrl("Home"));
+        return;
+      }
+
       const user = await base44.auth.me();
       setCurrentUser(user);
+
+      // Redirect non-admins
+      if (!user.super_admin) {
+        navigate(createPageUrl("Home"));
+      }
     } catch (err) {
       console.error("Error loading user:", err);
-      setError("Failed to load user information");
+      navigate(createPageUrl("Home"));
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleLogout = () => {
+    base44.auth.logout();
   };
 
   const handleGrantSuperAdmin = async () => {
@@ -113,9 +131,23 @@ export default function SuperAdminSetupPage() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-6">
       <div className="max-w-2xl mx-auto">
         <div className="text-center mb-8">
-          <div className="flex justify-center mb-4">
-            <div className="w-16 h-16 bg-gradient-to-r from-purple-600 to-indigo-600 rounded-2xl flex items-center justify-center shadow-lg">
-              <Crown className="w-8 h-8 text-white" />
+          <div className="flex justify-between items-start mb-4">
+            <div className="flex-1"></div>
+            <div className="flex justify-center flex-1">
+              <div className="w-16 h-16 bg-gradient-to-r from-purple-600 to-indigo-600 rounded-2xl flex items-center justify-center shadow-lg">
+                <Crown className="w-8 h-8 text-white" />
+              </div>
+            </div>
+            <div className="flex-1 flex justify-end">
+              <Button
+                onClick={handleLogout}
+                variant="outline"
+                size="sm"
+                className="gap-2"
+              >
+                <LogOut className="w-4 h-4" />
+                Logout
+              </Button>
             </div>
           </div>
           <h1 className="text-3xl md:text-4xl font-bold text-slate-900 mb-4">
