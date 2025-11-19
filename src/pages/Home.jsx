@@ -6,34 +6,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import DnaIcon from "../components/icons/DnaIcon";
 import AIConversation from "../components/AIConversation";
-import OnboardingTour from "../components/onboarding/OnboardingTour";
 import { Search, Zap, Shield, Crown, ArrowRight, CheckCircle, LayoutDashboard } from "lucide-react";
-import { base44 } from "@/api/base44Client";
 
 export default function HomePage() {
-  const [showOnboarding, setShowOnboarding] = useState(false);
-
   useEffect(() => {
     document.title = "GeneMap - Phenotype to Gene Discovery";
-    checkFirstVisit();
   }, []);
-
-  const checkFirstVisit = async () => {
-    try {
-      const user = await base44.auth.me();
-      if (!user.onboarding_completed) {
-        setShowOnboarding(true);
-      }
-    } catch (err) {
-      // Not logged in
-    }
-  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
-      {showOnboarding && (
-        <OnboardingTour onComplete={() => setShowOnboarding(false)} />
-      )}
 
       {/* Hero Section */}
       <div className="px-4 sm:px-6 py-8 sm:py-12 md:py-20">
