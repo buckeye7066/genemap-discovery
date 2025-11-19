@@ -52,12 +52,14 @@ export default function AxiomNewsletterPage() {
 
       // Load all users who opted into mailing list via backend function
       const response = await base44.functions.invoke('getAllUsers');
-      
-      if (response.error) {
-        throw new Error(response.error);
+
+      const data = response.data || response;
+
+      if (data.error) {
+        throw new Error(data.error);
       }
-      
-      const users = (response.users || []).filter(u => u.mailing_list_opt_in);
+
+      const users = (data.users || []).filter(u => u.mailing_list_opt_in);
       
       setSubscribedUsers(users);
       setFilteredUsers(users);

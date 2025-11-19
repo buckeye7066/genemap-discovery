@@ -59,11 +59,13 @@ export default function UsersLogPage() {
 
       // Fetch all users using service role
       const response = await base44.functions.invoke('getAllUsers');
-      if (response.error) {
-        setError(response.error);
+      const data = response.data || response;
+      
+      if (data.error) {
+        setError(data.error);
       } else {
-        setUsers(response.users || []);
-        setFilteredUsers(response.users || []);
+        setUsers(data.users || []);
+        setFilteredUsers(data.users || []);
       }
     } catch (err) {
       console.error("Error loading users:", err);
