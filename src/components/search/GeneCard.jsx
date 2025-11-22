@@ -40,6 +40,7 @@ import PhenotypeNetwork from "../visualizations/PhenotypeNetwork";
 import ProteinDomains from "../visualizations/ProteinDomains";
 import ProteinStructure from "../visualizations/ProteinStructure";
 import ProteinInteractions from "../visualizations/ProteinInteractions";
+import GenomeBrowser from "../visualizations/GenomeBrowser";
 import RobertClinicalSupport from "../clinical/RobertClinicalSupport";
 import ClinicalTrialFinder from "../clinical/ClinicalTrialFinder"; // Added
 import ReactMarkdown from 'react-markdown';
@@ -997,6 +998,15 @@ Provide comprehensive, evidence-based analysis formatted with clear sections.`;
             <Separator className="my-4" />
 
             <div className="space-y-4">
+              <GenomeBrowser 
+                genes={[gene]} 
+                onGeneClick={(clickedGene) => {
+                  if (clickedGene.symbol !== gene.symbol) {
+                    window.open(`/search?query=${clickedGene.symbol}`, '_blank');
+                  }
+                }}
+              />
+
               <ChromosomeView
                 gene={gene}
                 userEducationLevel={user?.education_level}
