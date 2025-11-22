@@ -20,8 +20,14 @@ import {
   FileText,
   ChevronRight,
   Plus,
-  Info
+  Info,
+  BookmarkPlus,
+  Brain,
+  Heart,
+  RefreshCw,
+  Dna
 } from "lucide-react";
+import OnboardingTour from "../components/dashboard/OnboardingTour";
 
 
 export default function Dashboard() {
@@ -30,21 +36,39 @@ export default function Dashboard() {
   const [recentSearches, setRecentSearches] = useState([]);
   const [projects, setProjects] = useState([]);
   const [medicalRecords, setMedicalRecords] = useState([]);
+  const [geneSets, setGeneSets] = useState([]);
+  const [aiConversations, setAiConversations] = useState([]);
+  const [personalizedInsights, setPersonalizedInsights] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [widgetVisibility, setWidgetVisibility] = useState({
     recentGenes: true,
     recentSearches: true,
     projects: true,
     medicalRecords: true,
+    geneSets: true,
+    aiChats: true,
+    insights: true,
     recommendations: true
   });
 
   useEffect(() => {
     loadDashboardData();
+    
+    // Auto-refresh every 30 seconds for real-time updates
+    const interval = setInterval(() => {
+      loadDashboardData(true);
+    }, 30000);
+    
+    return () => clearInterval(interval);
   }, []);
 
-  const loadDashboardData = async () => {
+  const loadDashboardData = async (isAutoRefresh = false) => {
+    if (!isAutoRefresh) {
+      setIsLoading(true);
+    }
+    
     try {
       const currentUser = await base44.auth.me();
       setUser(currentUser);
@@ -53,42 +77,98 @@ export default function Dashboard() {
         setShowOnboarding(true);
       }
 
-      const activities = await base44.entities.UserActivity.filter(
-        { 
-          created_by: currentUser.email,
-          activity_type: "gene_view"
-        },
-        '-created_date',
-        10
-      );
+      // Load all data in parallel
+      const [activities, searches, userProjects, records, sets, conversations] = await Promise.all([
+        base44.entities.UserActivity.filter(
+          { 
+            created_by: currentUser.email,
+            activity_type: "gene_view"
+          },
+          '-created_date',
+          10
+        ),
+        base44.entities.SearchHistory.filter(
+          { created_by: currentUser.email },
+          '-created_date',
+          5
+        ),
+        base44.entities.ResearchProject.filter(
+          { created_by: currentUser.email },
+          '-updated_date',
+          10
+        ),
+        base44.entities.MedicalData.filter(
+          { created_by: currentUser.email },
+          '-created_date',
+          3
+        ),
+        base44.entities.GeneSet.filter(
+          { created_by: currentUser.email },
+          '-created_date',
+          5
+        ),
+        base44.entities.AIConversation.filter(
+          { created_by: currentUser.email },
+          '-updated_date',
+          5
+        ).catch(() => []) // AIConversation might not exist yet
+      ]);
+
       setRecentGenes(activities);
-
-      const searches = await base44.entities.SearchHistory.filter(
-        { created_by: currentUser.email },
-        '-created_date',
-        5
-      );
       setRecentSearches(searches);
-
-      const userProjects = await base44.entities.ResearchProject.filter(
-        { created_by: currentUser.email },
-        '-updated_date',
-        10
-      );
       setProjects(userProjects);
-
-      const records = await base44.entities.MedicalData.filter(
-        { created_by: currentUser.email },
-        '-created_date',
-        3
-      );
       setMedicalRecords(records);
+      setGeneSets(sets);
+      setAiConversations(conversations);
+
+      // Generate personalized insights
+      if (activities.length > 0 || records.length > 0 || searches.length > 0) {
+        generatePersonalizedInsights(currentUser, activities, records, searches);
+      }
 
     } catch (err) {
       console.error("Error loading dashboard:", err);
     } finally {
       setIsLoading(false);
+      setIsRefreshing(false);
     }
+  };
+
+  const generatePersonalizedInsights = async (user, activities, records, searches) => {
+    try {
+      const uniqueGenes = [...new Set(activities.map(a => a.gene_symbol))];
+      const allPhenotypes = searches.flatMap(s => s.hpo_term || s.phenotype_query);
+      const relevantGenes = records.flatMap(r => r.relevant_genes || []);
+
+      const prompt = `As an AI genomics advisor, provide 3 personalized insights for this user:
+
+**User Profile:**
+- Education: ${user.education_level || 'General'}
+- Recently viewed genes: ${uniqueGenes.slice(0, 5).join(', ')}
+- Recent phenotype searches: ${allPhenotypes.slice(0, 3).join(', ')}
+- Medical data genes: ${relevantGenes.slice(0, 5).join(', ')}
+
+**Task:** Generate 3 brief, actionable insights (2-3 sentences each):
+1. A pattern or trend in their research
+2. A connection they might have missed
+3. A next step recommendation
+
+Keep each insight under 50 words, practical, and personalized.`;
+
+      const response = await base44.integrations.Core.InvokeLLM({
+        prompt,
+        add_context_from_internet: false
+      });
+
+      setPersonalizedInsights(response);
+    } catch (err) {
+      console.error("Error generating insights:", err);
+    }
+  };
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await loadDashboardData();
   };
 
   const toggleWidget = (widgetName) => {
@@ -141,14 +221,19 @@ export default function Dashboard() {
               <Button 
                 variant="outline" 
                 className="gap-2"
+                onClick={handleRefresh}
+                disabled={isRefreshing}
+              >
+                <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+                Refresh
+              </Button>
+              <Button 
+                variant="outline" 
+                className="gap-2"
                 onClick={() => setShowOnboarding(true)}
               >
                 <Sparkles className="w-4 h-4" />
                 Tour
-              </Button>
-              <Button variant="outline" className="gap-2">
-                <Settings className="w-4 h-4" />
-                Customize
               </Button>
             </div>
           </div>
@@ -201,11 +286,11 @@ export default function Dashboard() {
               <CardContent className="pt-6">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 bg-amber-100 rounded-lg flex items-center justify-center">
-                    <FileText className="w-5 h-5 text-amber-600" />
+                    <BookmarkPlus className="w-5 h-5 text-amber-600" />
                   </div>
                   <div>
-                    <p className="text-2xl font-bold text-slate-900">{medicalRecords.length}</p>
-                    <p className="text-xs text-slate-600">Records</p>
+                    <p className="text-2xl font-bold text-slate-900">{geneSets.length}</p>
+                    <p className="text-xs text-slate-600">Gene Sets</p>
                   </div>
                 </div>
               </CardContent>
@@ -321,16 +406,66 @@ export default function Dashboard() {
               </Card>
             )}
 
-            {/* Medical Records */}
-            {widgetVisibility.medicalRecords && medicalRecords.length > 0 && (
+            {/* Saved Gene Sets */}
+            {widgetVisibility.geneSets && geneSets.length > 0 && (
               <Card className="shadow-lg">
                 <CardHeader>
                   <div className="flex items-center justify-between">
                     <CardTitle className="flex items-center gap-2">
-                      <FileText className="w-5 h-5 text-green-600" />
-                      Recent Medical Records
+                      <BookmarkPlus className="w-5 h-5 text-amber-600" />
+                      Saved Gene Sets
                     </CardTitle>
-                    <Link to={createPageUrl("MedicalData")}>
+                    <Badge variant="outline">{geneSets.length}</Badge>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    {geneSets.map((set, idx) => (
+                      <Link
+                        key={idx}
+                        to={createPageUrl("Search")}
+                        className="block p-3 hover:bg-slate-50 rounded-lg transition-colors border border-slate-200"
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <p className="font-semibold text-slate-900 text-sm">{set.name}</p>
+                          <Badge variant="secondary" className="text-xs">
+                            {set.genes?.length || 0} genes
+                          </Badge>
+                        </div>
+                        {set.description && (
+                          <p className="text-xs text-slate-600 mb-2">{set.description}</p>
+                        )}
+                        {set.genes && set.genes.length > 0 && (
+                          <div className="flex flex-wrap gap-1">
+                            {set.genes.slice(0, 5).map((gene, i) => (
+                              <Badge key={i} variant="outline" className="text-xs">
+                                {gene}
+                              </Badge>
+                            ))}
+                            {set.genes.length > 5 && (
+                              <Badge variant="outline" className="text-xs">
+                                +{set.genes.length - 5}
+                              </Badge>
+                            )}
+                          </div>
+                        )}
+                      </Link>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* AI Chat Sessions */}
+            {widgetVisibility.aiChats && aiConversations.length > 0 && (
+              <Card className="shadow-lg">
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="flex items-center gap-2">
+                      <Brain className="w-5 h-5 text-indigo-600" />
+                      Recent AI Conversations
+                    </CardTitle>
+                    <Link to={createPageUrl("AIAssistants")}>
                       <Button variant="ghost" size="sm">
                         View All
                       </Button>
@@ -338,35 +473,40 @@ export default function Dashboard() {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-3">
-                    {medicalRecords.map((record, idx) => (
+                  <div className="space-y-2">
+                    {aiConversations.map((conv, idx) => (
                       <Link
                         key={idx}
-                        to={createPageUrl("MedicalData")}
+                        to={createPageUrl("AIAssistants")}
                         className="block p-3 hover:bg-slate-50 rounded-lg transition-colors border border-slate-200"
                       >
                         <div className="flex items-center gap-3">
-                          <div className="text-2xl">
-                            {record.file_type === 'genetic_test' ? '🧬' : 
-                             record.file_type === 'blood_test' ? '💉' : 
-                             record.file_type === 'vcf_file' ? '📊' : '📄'}
-                          </div>
-                          <div className="flex-1">
-                            <p className="font-medium text-slate-900 text-sm">
-                              {record.file_type.replace('_', ' ').toUpperCase()}
-                            </p>
-                            <p className="text-xs text-slate-500">
-                              {new Date(record.created_date).toLocaleDateString()}
-                            </p>
-                            {record.relevant_genes && record.relevant_genes.length > 0 && (
-                              <div className="flex gap-1 mt-1">
-                                {record.relevant_genes.slice(0, 3).map((gene, i) => (
-                                  <Badge key={i} variant="secondary" className="text-xs">
-                                    {gene}
-                                  </Badge>
-                                ))}
-                              </div>
+                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                            conv.assistant_type === 'robert' 
+                              ? 'bg-blue-100' 
+                              : 'bg-purple-100'
+                          }`}>
+                            {conv.assistant_type === 'robert' ? (
+                              <Brain className="w-4 h-4 text-blue-600" />
+                            ) : (
+                              <Heart className="w-4 h-4 text-purple-600" />
                             )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <p className="text-xs font-semibold text-slate-900 capitalize">
+                                {conv.assistant_type}
+                              </p>
+                              <Badge variant="outline" className="text-xs">
+                                {conv.messages?.length || 0} msgs
+                              </Badge>
+                            </div>
+                            <p className="text-xs text-slate-600 truncate">
+                              {conv.last_message_preview || 'No preview'}
+                            </p>
+                            <p className="text-xs text-slate-400 mt-1">
+                              {new Date(conv.updated_date).toLocaleString()}
+                            </p>
                           </div>
                         </div>
                       </Link>
@@ -440,76 +580,95 @@ export default function Dashboard() {
               </Card>
             )}
 
-            {/* Recommendations */}
-            {widgetVisibility.recommendations && (
-              <Card className="shadow-lg bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-200">
+            {/* AI-Generated Personalized Insights */}
+            {widgetVisibility.insights && personalizedInsights && (
+              <Card className="shadow-lg bg-gradient-to-br from-indigo-50 to-purple-50 border-indigo-200">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
-                    <Sparkles className="w-5 h-5 text-blue-600" />
-                    Personalized Recommendations
+                    <Dna className="w-5 h-5 text-indigo-600" />
+                    Personalized Insights
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-3">
-                  {recentSearches.length > 0 && (
-                    <Alert className="bg-white border-blue-200">
-                      <Info className="h-4 w-4 text-blue-600" />
-                      <AlertDescription className="text-blue-900 text-sm">
-                        <strong>Continue your research:</strong> Try comparing your recently viewed genes in the Visualization Hub
-                      </AlertDescription>
-                    </Alert>
-                  )}
-
-                  {medicalRecords.length > 0 && (
-                    <Alert className="bg-white border-purple-200">
-                      <Users className="h-4 w-4 text-purple-600" />
-                      <AlertDescription className="text-purple-900 text-sm">
-                        <strong>Clinical Trials:</strong> Based on your medical data, we found relevant trials. 
-                        <Link to={createPageUrl("MedicalData")} className="underline ml-1">
-                          View matches
-                        </Link>
-                      </AlertDescription>
-                    </Alert>
-                  )}
-
-                  <Alert className="bg-white border-amber-200">
-                    <Sparkles className="h-4 w-4 text-amber-600" />
-                    <AlertDescription className="text-amber-900 text-sm">
-                      <strong>New Feature:</strong> Research Mode now available with bulk VCF analysis. 
-                      <Link to={createPageUrl("ResearchMode")} className="underline ml-1">
-                        Explore
-                      </Link>
-                    </AlertDescription>
-                  </Alert>
+                <CardContent className="space-y-3 text-sm text-slate-800 leading-relaxed whitespace-pre-line">
+                  {personalizedInsights}
                 </CardContent>
               </Card>
             )}
 
-            {/* Quick Actions */}
-            <Card className="shadow-lg">
-              <CardHeader>
-                <CardTitle className="text-sm">Quick Actions</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                <Link to={createPageUrl("Search")}>
-                  <Button variant="outline" className="w-full justify-start gap-2">
-                    <Search className="w-4 h-4" />
-                    New Gene Search
-                  </Button>
-                </Link>
-                <Link to={createPageUrl("MedicalData")}>
-                  <Button variant="outline" className="w-full justify-start gap-2">
-                    <FileText className="w-4 h-4" />
-                    Upload Medical Data
-                  </Button>
-                </Link>
-                <Link to={createPageUrl("VisualizationHub")}>
-                  <Button variant="outline" className="w-full justify-start gap-2">
-                    <TrendingUp className="w-4 h-4" />
-                    Visualization Hub
-                  </Button>
-                </Link>
-              </CardContent>
-            </Card>
+            {/* Medical Records */}
+            {widgetVisibility.medicalRecords && medicalRecords.length > 0 && (
+              <Card className="shadow-lg">
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="flex items-center gap-2 text-sm">
+                      <FileText className="w-4 h-4 text-green-600" />
+                      Medical Records
+                    </CardTitle>
+                    <Link to={createPageUrl("MedicalData")}>
+                      <Button variant="ghost" size="sm">
+                        <Plus className="w-3 h-3" />
+                      </Button>
+                    </Link>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    {medicalRecords.map((record, idx) => (
+                      <div
+                        key={idx}
+                        className="p-2 border border-slate-200 rounded text-xs"
+                      >
+                        <p className="font-medium text-slate-900">
+                          {record.file_type === 'genetic_test' ? '🧬' : 
+                           record.file_type === 'blood_test' ? '💉' : 
+                           record.file_type === 'vcf_file' ? '📊' : '📄'}{' '}
+                          {record.file_type.replace('_', ' ').toUpperCase()}
+                        </p>
+                        <p className="text-slate-500 mt-1">
+                          {new Date(record.created_date).toLocaleDateString()}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Recommendations */}
+            {widgetVisibility.recommendations && (
+              <Card className="shadow-lg bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-200">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-sm">
+                    <Sparkles className="w-4 h-4 text-blue-600" />
+                    Quick Actions
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  <Link to={createPageUrl("AIAssistants")}>
+                    <Button variant="outline" size="sm" className="w-full justify-start gap-2">
+                      <Brain className="w-3 h-3" />
+                      New AI Chat
+                    </Button>
+                  </Link>
+                  {recentGenes.length >= 2 && (
+                    <Link to={createPageUrl("VisualizationHub")}>
+                      <Button variant="outline" size="sm" className="w-full justify-start gap-2">
+                        <TrendingUp className="w-3 h-3" />
+                        Compare Genes
+                      </Button>
+                    </Link>
+                  )}
+                  <Link to={createPageUrl("Search")}>
+                    <Button variant="outline" size="sm" className="w-full justify-start gap-2">
+                      <Search className="w-3 h-3" />
+                      New Search
+                    </Button>
+                  </Link>
+                </CardContent>
+              </Card>
+            )}
+
+
           </div>
         </div>
       </div>
