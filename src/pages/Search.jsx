@@ -299,23 +299,25 @@ export default function SearchPage() {
 
             {/* Standard Search Results */}
             {searchResults && !isLoading && !geneSetComparison && (
-              <GeneResults
-                results={searchResults}
-                selectedGenes={selectedGenes}
-                onGeneSelect={handleGeneSelect}
-              />
-              
-              {selectedGenes.length > 0 && (
-                <div className="mt-6">
-                  <GenomeBrowser 
-                    genes={selectedGenes}
-                    onGeneClick={(gene) => {
-                      const element = document.getElementById(`gene-${gene.symbol}`);
-                      element?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    }}
-                  />
-                </div>
-              )}
+              <>
+                <GeneResults
+                  results={searchResults}
+                  selectedGenes={selectedGenes}
+                  onGeneSelect={handleGeneSelect}
+                />
+                
+                {selectedGenes.length > 0 && (
+                  <div className="mt-6">
+                    <GenomeBrowser 
+                      genes={selectedGenes}
+                      onGeneClick={(gene) => {
+                        const element = document.getElementById(`gene-${gene.symbol}`);
+                        element?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                      }}
+                    />
+                  </div>
+                )}
+              </>
             )}
 
             {!searchResults && !isLoading && !geneSetComparison && (
