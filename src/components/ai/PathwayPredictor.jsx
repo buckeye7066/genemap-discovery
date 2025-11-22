@@ -4,16 +4,26 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Loader2, Network, Sparkles, TrendingUp, AlertCircle, Info } from "lucide-react";
+import { Loader2, Network, Sparkles, TrendingUp, AlertCircle, Info, Upload } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Label } from "@/components/ui/label";
 import ReactMarkdown from "react-markdown";
+import VCFParser from "../medical/VCFParser";
 
 export default function PathwayPredictor({ genes = [] }) {
   const [predictions, setPredictions] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [inputMode, setInputMode] = useState("genes"); // genes or vcf
+  const [vcfFile, setVcfFile] = useState(null);
+  const [vcfFileUrl, setVcfFileUrl] = useState(null);
+  const [isUploadingVcf, setIsUploadingVcf] = useState(false);
+  const [vcfGenes, setVcfGenes] = useState([]);
 
   const predictInteractions = async () => {
-    if (genes.length < 2) {
+    const activeGenes = inputMode === "vcf" ? vcfGenes : genes;
+    
+    if (activeGenes.length < 2) {
       setError("Please select at least 2 genes to predict interactions");
       return;
     }
@@ -22,7 +32,7 @@ export default function PathwayPredictor({ genes = [] }) {
     setError(null);
 
     try {
-      const geneList = genes.map(g => typeof g === 'string' ? g : g.symbol).join(', ');
+      const geneList = activeGenes.map(g => typeof g === 'string' ? g : g.symbol).join(', ');
 
       const prompt = `You are an AI systems biology expert specializing in gene-gene interactions and pathway analysis. Analyze the following genes and predict their interactions.
 
@@ -115,6 +125,35 @@ Provide evidence-based predictions with clear confidence levels. Be honest about
     }
   };
 
+  const handleVcfUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploadingVcf(true);
+    try {
+      const { file_url } = await base44.integrations.Core.UploadFile({ file });
+      setVcfFile(file);
+      setVcfFileUrl(file_url);
+    } catch (err) {
+      console.error("Error uploading VCF:", err);
+      setError("Failed to upload VCF file. Please try again.");
+    } finally {
+      setIsUploadingVcf(false);
+    }
+  };
+
+  const handleVcfVariantsParsed = (variants) => {
+    // Extract unique genes from variants
+    const uniqueGenes = [...new Set(
+      variants
+        .filter(v => v.gene && v.gene !== 'Unknown gene' && v.gene !== '.')
+        .map(v => v.gene)
+    )];
+    setVcfGenes(uniqueGenes);
+  };
+
+  const activeGenes = inputMode === "vcf" ? vcfGenes : genes;
+
   return (
     <Card className="shadow-lg">
       <CardHeader>
@@ -130,21 +169,87 @@ Provide evidence-based predictions with clear confidence levels. Be honest about
         </div>
       </CardHeader>
       <CardContent>
-        {genes.length < 2 ? (
+        <Tabs value={inputMode} onValueChange={setInputMode} className="mb-4">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="genes">From Search</TabsTrigger>
+            <TabsTrigger value="vcf">From VCF File</TabsTrigger>
+          </TabsList>
+        </Tabs>
+
+        {inputMode === "vcf" && (
+          <div className="space-y-3 mb-4">
+            <Label htmlFor="vcf-upload-pathway" className="text-base font-medium">
+              Upload VCF File
+            </Label>
+            <div className="border-2 border-dashed border-slate-300 rounded-lg p-6 text-center hover:border-green-400 transition-colors">
+              <input
+                id="vcf-upload-pathway"
+                type="file"
+                accept=".vcf,.vcf.gz"
+                onChange={handleVcfUpload}
+                className="hidden"
+                disabled={isUploadingVcf}
+              />
+              <label
+                htmlFor="vcf-upload-pathway"
+                className="cursor-pointer flex flex-col items-center"
+              >
+                {isUploadingVcf ? (
+                  <>
+                    <Loader2 className="w-12 h-12 text-green-600 mb-2 animate-spin" />
+                    <p className="text-sm text-slate-600">Uploading VCF file...</p>
+                  </>
+                ) : vcfFile ? (
+                  <>
+                    <Upload className="w-12 h-12 text-green-600 mb-2" />
+                    <p className="text-sm font-medium text-green-900">{vcfFile.name}</p>
+                    <p className="text-xs text-slate-500 mt-1">Click to upload a different file</p>
+                  </>
+                ) : (
+                  <>
+                    <Upload className="w-12 h-12 text-slate-400 mb-2" />
+                    <p className="text-sm font-medium text-slate-700">Click to upload VCF file</p>
+                    <p className="text-xs text-slate-500 mt-1">.vcf or .vcf.gz files supported</p>
+                  </>
+                )}
+              </label>
+            </div>
+
+            {vcfFileUrl && (
+              <VCFParser
+                fileUrl={vcfFileUrl}
+                onVariantsParsed={handleVcfVariantsParsed}
+              />
+            )}
+
+            {vcfGenes.length > 0 && (
+              <Alert className="bg-green-50 border-green-200">
+                <Info className="h-4 w-4 text-green-600" />
+                <AlertDescription className="text-green-900 text-sm">
+                  Extracted <strong>{vcfGenes.length} unique genes</strong> from VCF file variants
+                </AlertDescription>
+              </Alert>
+            )}
+          </div>
+        )}
+
+        {activeGenes.length < 2 ? (
           <Alert>
             <Info className="h-4 w-4" />
             <AlertDescription>
-              Select at least 2 genes from search results to predict gene-gene interactions and pathway involvement
+              {inputMode === "vcf" 
+                ? "Upload a VCF file with variants in at least 2 genes to predict interactions"
+                : "Select at least 2 genes from search results to predict gene-gene interactions and pathway involvement"}
             </AlertDescription>
           </Alert>
         ) : (
           <>
             <div className="mb-4">
               <p className="text-sm text-slate-600 mb-2">
-                Analyzing interactions for {genes.length} genes:
+                Analyzing interactions for {activeGenes.length} genes:
               </p>
-              <div className="flex flex-wrap gap-2">
-                {genes.map((gene, idx) => (
+              <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto">
+                {activeGenes.map((gene, idx) => (
                   <Badge key={idx} variant="outline" className="text-sm">
                     {typeof gene === 'string' ? gene : gene.symbol}
                   </Badge>

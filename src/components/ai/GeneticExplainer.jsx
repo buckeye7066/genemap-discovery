@@ -13,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Brain, Loader2, MessageSquare, Sparkles, Volume2, Dna, FileText, Network } from "lucide-react";
+import { Brain, Loader2, MessageSquare, Sparkles, Volume2, Dna, FileText, Network, Upload } from "lucide-react";
 import {
   Tabs,
   TabsContent,
@@ -21,6 +21,7 @@ import {
   TabsTrigger,
 } from "@/components/ui/tabs";
 import ReactMarkdown from "react-markdown";
+import VCFParser from "../medical/VCFParser";
 
 export default function GeneticExplainer() {
   React.useEffect(() => {
@@ -47,6 +48,9 @@ export default function GeneticExplainer() {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [selectedVoice, setSelectedVoice] = useState(null);
   const [availableVoices, setAvailableVoices] = useState([]);
+  const [vcfFile, setVcfFile] = useState(null);
+  const [vcfFileUrl, setVcfFileUrl] = useState(null);
+  const [isUploadingVcf, setIsUploadingVcf] = useState(false);
 
   const audienceLevels = {
     child: "5-year-old child",
@@ -238,6 +242,33 @@ Make the explanation warm, clear, and empowering. Avoid unnecessary medical jarg
     return grouped;
   };
 
+  const handleVcfUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploadingVcf(true);
+    try {
+      const { file_url } = await base44.integrations.Core.UploadFile({ file });
+      setVcfFile(file);
+      setVcfFileUrl(file_url);
+    } catch (err) {
+      console.error("Error uploading VCF:", err);
+      setError("Failed to upload VCF file. Please try again.");
+    } finally {
+      setIsUploadingVcf(false);
+    }
+  };
+
+  const handleVcfVariantsParsed = (variants) => {
+    // Auto-populate variant list with parsed VCF data
+    const variantStrings = variants.slice(0, 20).map(v => 
+      `${v.rsid || '.'} (${v.chromosome}:${v.position} ${v.ref}>${v.alt}) - ${v.gene || 'Unknown gene'}${v.clinical_significance ? ` - ${v.clinical_significance}` : ''}`
+    ).join('\n');
+    
+    setVariantList(variantStrings);
+    setInputMode('variants');
+  };
+
   return (
     <Card className="shadow-lg">
       <CardHeader>
@@ -254,7 +285,7 @@ Make the explanation warm, clear, and empowering. Avoid unnecessary medical jarg
       </CardHeader>
       <CardContent>
         <Tabs value={inputMode} onValueChange={setInputMode} className="mb-4">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="text" className="gap-2">
               <FileText className="w-3 h-3" />
               Text
@@ -270,6 +301,10 @@ Make the explanation warm, clear, and empowering. Avoid unnecessary medical jarg
             <TabsTrigger value="combined" className="gap-2">
               <Network className="w-3 h-3" />
               Combined
+            </TabsTrigger>
+            <TabsTrigger value="vcf" className="gap-2">
+              <Upload className="w-3 h-3" />
+              VCF File
             </TabsTrigger>
           </TabsList>
         </Tabs>
@@ -364,6 +399,61 @@ Make the explanation warm, clear, and empowering. Avoid unnecessary medical jarg
                 <Network className="h-4 w-4 text-indigo-600" />
                 <AlertDescription className="text-indigo-900 text-xs">
                   <strong>Combined Analysis:</strong> AI will explain gene-variant relationships, pathway impacts, and synergistic effects
+                </AlertDescription>
+              </Alert>
+            </div>
+          )}
+
+          {inputMode === "vcf" && (
+            <div className="space-y-3">
+              <Label htmlFor="vcf-upload" className="text-base font-medium mb-2 block">
+                Upload VCF File
+              </Label>
+              <div className="border-2 border-dashed border-slate-300 rounded-lg p-6 text-center hover:border-blue-400 transition-colors">
+                <input
+                  id="vcf-upload"
+                  type="file"
+                  accept=".vcf,.vcf.gz"
+                  onChange={handleVcfUpload}
+                  className="hidden"
+                  disabled={isUploadingVcf}
+                />
+                <label
+                  htmlFor="vcf-upload"
+                  className="cursor-pointer flex flex-col items-center"
+                >
+                  {isUploadingVcf ? (
+                    <>
+                      <Loader2 className="w-12 h-12 text-blue-600 mb-2 animate-spin" />
+                      <p className="text-sm text-slate-600">Uploading VCF file...</p>
+                    </>
+                  ) : vcfFile ? (
+                    <>
+                      <Upload className="w-12 h-12 text-green-600 mb-2" />
+                      <p className="text-sm font-medium text-green-900">{vcfFile.name}</p>
+                      <p className="text-xs text-slate-500 mt-1">Click to upload a different file</p>
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="w-12 h-12 text-slate-400 mb-2" />
+                      <p className="text-sm font-medium text-slate-700">Click to upload VCF file</p>
+                      <p className="text-xs text-slate-500 mt-1">.vcf or .vcf.gz files supported</p>
+                    </>
+                  )}
+                </label>
+              </div>
+
+              {vcfFileUrl && (
+                <VCFParser
+                  fileUrl={vcfFileUrl}
+                  onVariantsParsed={handleVcfVariantsParsed}
+                />
+              )}
+
+              <Alert className="bg-blue-50 border-blue-200">
+                <Info className="h-4 w-4 text-blue-600" />
+                <AlertDescription className="text-blue-900 text-xs">
+                  <strong>VCF Upload:</strong> Upload your VCF file, parse variants, and automatically load them into the explainer for AI analysis of combined effects and clinical implications.
                 </AlertDescription>
               </Alert>
             </div>
