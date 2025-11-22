@@ -58,8 +58,15 @@ export default function GeneticExplainer() {
   };
 
   const explainText = async () => {
-    if (!inputText.trim()) {
-      setError("Please enter some genetic information to explain");
+    // Validate input based on mode
+    let hasInput = false;
+    if (inputMode === "text" && inputText.trim()) hasInput = true;
+    if (inputMode === "genes" && geneList.trim()) hasInput = true;
+    if (inputMode === "variants" && variantList.trim()) hasInput = true;
+    if (inputMode === "combined" && (geneList.trim() || variantList.trim())) hasInput = true;
+
+    if (!hasInput) {
+      setError("Please enter genetic information to explain");
       return;
     }
 
@@ -67,12 +74,52 @@ export default function GeneticExplainer() {
     setError(null);
 
     try {
+      // Build context based on input mode
+      let inputContext = "";
+      if (inputMode === "text") {
+        inputContext = `**Complex Input:**\n${inputText.trim()}`;
+      } else if (inputMode === "genes") {
+        const genes = geneList.split(/[,\s\n]+/).filter(g => g.trim());
+        inputContext = `**Gene List (${genes.length} genes):**\n${genes.join(', ')}`;
+      } else if (inputMode === "variants") {
+        inputContext = `**Genetic Variants:**\n${variantList.trim()}`;
+      } else if (inputMode === "combined") {
+        const genes = geneList.split(/[,\s\n]+/).filter(g => g.trim());
+        inputContext = `**Combined Analysis:**\n\nGenes (${genes.length}): ${genes.join(', ')}\n\nVariants:\n${variantList.trim()}`;
+      }
+      
       const prompt = `You are an AI genetic information translator. Your job is to take complex genetic and genomic information and explain it in simple, accessible terms.
 
-**Complex Input:**
-${inputText.trim()}
+${inputContext}
 
 **Target Audience:** ${audienceLevels[audienceLevel]}
+
+${inputMode === "genes" || inputMode === "combined" ? `
+**For Multiple Genes - Include:**
+1. What each gene does (function)
+2. How they might work together (interactions)
+3. What pathways they're involved in
+4. Combined health implications
+5. Why this combination matters
+` : ''}
+
+${inputMode === "variants" || inputMode === "combined" ? `
+**For Variants - Include:**
+1. What each variant means
+2. Combined effect analysis
+3. Interaction between variants
+4. Compound heterozygosity if applicable
+5. Overall risk assessment
+` : ''}
+
+${inputMode === "combined" ? `
+**CRITICAL - Combined Analysis:**
+- Explain how the variants relate to the genes
+- Gene-variant correlations and implications
+- Pathway-level impact analysis
+- Combined phenotypic predictions
+- Synergistic or antagonistic effects
+` : ''}
 
 **Your Task:**
 Transform this complex genetic information into an explanation that the target audience can understand and relate to.
