@@ -4,6 +4,7 @@ import { createPageUrl } from "@/utils";
 import DnaIcon from "./components/icons/DnaIcon";
 import BanCheck from "./components/BanCheck";
 import DemographicCheck from "./components/DemographicCheck";
+import MelissaBanner from "./components/MelissaBanner";
 import { Search, User, Crown, History, Home, FileText, Heart, Shield, BarChart3, Microscope, LayoutDashboard, MessageSquare, Building2, ShieldOff, Mail, Crown as CrownIcon, Users } from "lucide-react";
 import {
   Sidebar,
@@ -140,6 +141,7 @@ export default function Layout({ children, currentPageName }) {
   return (
     <BanCheck>
       <DemographicCheck>
+        <MelissaBanner />
         <SidebarProvider>
           <div className="min-h-screen flex w-full bg-gradient-to-br from-slate-50 to-blue-50">
         <Sidebar className="border-r border-slate-200/50">
