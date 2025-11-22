@@ -1,10 +1,10 @@
 import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Search, Crown, Sparkles, HelpCircle, Stethoscope } from "lucide-react";
+import AutocompleteSearch from "./AutocompleteSearch";
 import {
   Select,
   SelectContent,
@@ -77,12 +77,17 @@ export default function SearchForm({ onSearch, isLoading, initialQuery = "" }) {
           Search Query
         </Label>
         <div className="flex flex-col sm:flex-row gap-2">
-          <Input
-            id="phenotype-query"
-            placeholder="e.g., Rheumatoid Arthritis, polydactyly, HP:0001166"
+          <AutocompleteSearch
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            className="text-lg py-3 min-h-[48px] touch-manipulation"
+            onChange={setQuery}
+            onSelect={(suggestion) => {
+              if (suggestion.type === "disease") {
+                setSearchMode("disease");
+              } else if (suggestion.type === "phenotype") {
+                setSearchMode("free_text");
+              }
+            }}
+            placeholder="e.g., Rheumatoid Arthritis, polydactyly, HP:0001166"
             disabled={isLoading}
           />
           <Select value={searchMode} onValueChange={setSearchMode}>
