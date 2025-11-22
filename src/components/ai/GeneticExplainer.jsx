@@ -13,16 +13,40 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Brain, Loader2, MessageSquare, Sparkles, Volume2 } from "lucide-react";
+import { Brain, Loader2, MessageSquare, Sparkles, Volume2, Dna, FileText, Network } from "lucide-react";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
 import ReactMarkdown from "react-markdown";
 
 export default function GeneticExplainer() {
+  React.useEffect(() => {
+    // Load available voices
+    const loadVoices = () => {
+      const voices = window.speechSynthesis.getVoices();
+      setAvailableVoices(voices);
+      if (voices.length > 0 && !selectedVoice) {
+        setSelectedVoice(voices[0]);
+      }
+    };
+
+    loadVoices();
+    window.speechSynthesis.onvoiceschanged = loadVoices;
+  }, []);
   const [inputText, setInputText] = useState("");
+  const [geneList, setGeneList] = useState("");
+  const [variantList, setVariantList] = useState("");
+  const [inputMode, setInputMode] = useState("text"); // text, genes, variants, combined
   const [audienceLevel, setAudienceLevel] = useState("general");
   const [explanation, setExplanation] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [selectedVoice, setSelectedVoice] = useState(null);
+  const [availableVoices, setAvailableVoices] = useState([]);
 
   const audienceLevels = {
     child: "5-year-old child",
@@ -138,17 +162,33 @@ Make the explanation warm, clear, and empowering. Avoid unnecessary medical jarg
     // Remove markdown formatting for better speech
     const textToSpeak = explanation
       .replace(/[#*_`]/g, '')
-      .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+      .replace(/\*\*/g, '');
 
     const utterance = new SpeechSynthesisUtterance(textToSpeak);
     utterance.rate = 0.9;
     utterance.pitch = 1;
+    
+    // Use selected voice if available
+    if (selectedVoice) {
+      utterance.voice = selectedVoice;
+    }
     
     utterance.onend = () => setIsSpeaking(false);
     utterance.onerror = () => setIsSpeaking(false);
 
     window.speechSynthesis.speak(utterance);
     setIsSpeaking(true);
+  };
+
+  const getVoicesByLanguage = () => {
+    const grouped = {};
+    availableVoices.forEach(voice => {
+      const lang = voice.lang.split('-')[0];
+      if (!grouped[lang]) grouped[lang] = [];
+      grouped[lang].push(voice);
+    });
+    return grouped;
   };
 
   return (
@@ -166,23 +206,121 @@ Make the explanation warm, clear, and empowering. Avoid unnecessary medical jarg
         </div>
       </CardHeader>
       <CardContent>
+        <Tabs value={inputMode} onValueChange={setInputMode} className="mb-4">
+          <TabsList className="grid w-full grid-cols-4">
+            <TabsTrigger value="text" className="gap-2">
+              <FileText className="w-3 h-3" />
+              Text
+            </TabsTrigger>
+            <TabsTrigger value="genes" className="gap-2">
+              <Dna className="w-3 h-3" />
+              Genes
+            </TabsTrigger>
+            <TabsTrigger value="variants" className="gap-2">
+              <Brain className="w-3 h-3" />
+              Variants
+            </TabsTrigger>
+            <TabsTrigger value="combined" className="gap-2">
+              <Network className="w-3 h-3" />
+              Combined
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+
         <div className="space-y-4">
-          <div>
-            <Label htmlFor="genetic-text" className="text-base font-medium mb-2 block">
-              Paste Complex Genetic Information
-            </Label>
-            <Textarea
-              id="genetic-text"
-              placeholder="Paste technical genetic information, research findings, medical reports, gene descriptions, or any complex genomic text you want simplified..."
-              value={inputText}
-              onChange={(e) => setInputText(e.target.value)}
-              className="min-h-[150px] text-sm"
-              disabled={isLoading}
-            />
-            <p className="text-xs text-slate-500 mt-1">
-              Examples: Gene variant reports, research abstracts, clinical notes, pathway descriptions
-            </p>
-          </div>
+          {inputMode === "text" && (
+            <div>
+              <Label htmlFor="genetic-text" className="text-base font-medium mb-2 block">
+                Paste Complex Genetic Information
+              </Label>
+              <Textarea
+                id="genetic-text"
+                placeholder="Paste technical genetic information, research findings, medical reports, gene descriptions, or any complex genomic text you want simplified..."
+                value={inputText}
+                onChange={(e) => setInputText(e.target.value)}
+                className="min-h-[150px] text-sm"
+                disabled={isLoading}
+              />
+              <p className="text-xs text-slate-500 mt-1">
+                Examples: Gene variant reports, research abstracts, clinical notes, pathway descriptions
+              </p>
+            </div>
+          )}
+
+          {inputMode === "genes" && (
+            <div>
+              <Label htmlFor="gene-list" className="text-base font-medium mb-2 block">
+                Enter Gene List
+              </Label>
+              <Textarea
+                id="gene-list"
+                placeholder="Enter gene symbols (one per line or comma-separated)&#10;Examples:&#10;BRCA1, TP53, EGFR&#10;or&#10;BRCA1&#10;TP53&#10;EGFR"
+                value={geneList}
+                onChange={(e) => setGeneList(e.target.value)}
+                className="min-h-[150px] text-sm font-mono"
+                disabled={isLoading}
+              />
+              <p className="text-xs text-slate-500 mt-1">
+                AI will explain how these genes work together, their interactions, and combined implications
+              </p>
+            </div>
+          )}
+
+          {inputMode === "variants" && (
+            <div>
+              <Label htmlFor="variant-list" className="text-base font-medium mb-2 block">
+                Enter Genetic Variants
+              </Label>
+              <Textarea
+                id="variant-list"
+                placeholder="Enter variants from VCF or genetic test results&#10;Examples:&#10;rs1801133 (MTHFR)&#10;c.677C>T&#10;p.Ala222Val&#10;&#10;Or paste VCF lines directly"
+                value={variantList}
+                onChange={(e) => setVariantList(e.target.value)}
+                className="min-h-[150px] text-sm font-mono"
+                disabled={isLoading}
+              />
+              <p className="text-xs text-slate-500 mt-1">
+                AI will analyze combined effects, interactions, and compound implications
+              </p>
+            </div>
+          )}
+
+          {inputMode === "combined" && (
+            <div className="space-y-3">
+              <div>
+                <Label htmlFor="combined-genes" className="text-base font-medium mb-2 block">
+                  Gene List
+                </Label>
+                <Textarea
+                  id="combined-genes"
+                  placeholder="BRCA1, TP53, EGFR"
+                  value={geneList}
+                  onChange={(e) => setGeneList(e.target.value)}
+                  className="min-h-[100px] text-sm font-mono"
+                  disabled={isLoading}
+                />
+              </div>
+              <div>
+                <Label htmlFor="combined-variants" className="text-base font-medium mb-2 block">
+                  Variant List
+                </Label>
+                <Textarea
+                  id="combined-variants"
+                  placeholder="rs1801133, c.677C>T, p.Ala222Val"
+                  value={variantList}
+                  onChange={(e) => setVariantList(e.target.value)}
+                  className="min-h-[100px] text-sm font-mono"
+                  disabled={isLoading}
+                />
+              </div>
+              <Alert className="bg-indigo-50 border-indigo-200">
+                <Network className="h-4 w-4 text-indigo-600" />
+                <AlertDescription className="text-indigo-900 text-xs">
+                  <strong>Combined Analysis:</strong> AI will explain gene-variant relationships, pathway impacts, and synergistic effects
+                </AlertDescription>
+              </Alert>
+            </div>
+          )}
 
           <div>
             <Label htmlFor="audience-level" className="text-base font-medium mb-2 block">
@@ -204,18 +342,18 @@ Make the explanation warm, clear, and empowering. Avoid unnecessary medical jarg
 
           <Button
             onClick={explainText}
-            disabled={isLoading || !inputText.trim()}
+            disabled={isLoading}
             className="w-full bg-blue-600 hover:bg-blue-700"
           >
             {isLoading ? (
               <>
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Simplifying...
+                {inputMode === "combined" ? "Analyzing Combined Effects..." : "Simplifying..."}
               </>
             ) : (
               <>
                 <MessageSquare className="w-4 h-4 mr-2" />
-                Simplify for {audienceLevels[audienceLevel]}
+                {inputMode === "combined" ? "Analyze Combined Implications" : `Simplify for ${audienceLevels[audienceLevel]}`}
               </>
             )}
           </Button>
@@ -229,17 +367,56 @@ Make the explanation warm, clear, and empowering. Avoid unnecessary medical jarg
           {explanation && (
             <div className="mt-6">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-slate-900">Simplified Explanation</h3>
+                <h3 className="text-lg font-semibold text-slate-900">
+                  {inputMode === "combined" ? "Combined Analysis" : "Simplified Explanation"}
+                </h3>
                 {window.speechSynthesis && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={speakExplanation}
-                    className="gap-2"
-                  >
-                    <Volume2 className="w-4 h-4" />
-                    {isSpeaking ? "Stop" : "Read Aloud"}
-                  </Button>
+                  <div className="flex gap-2">
+                    {availableVoices.length > 0 && (
+                      <Select value={selectedVoice?.name} onValueChange={(voiceName) => {
+                        const voice = availableVoices.find(v => v.name === voiceName);
+                        setSelectedVoice(voice);
+                      }}>
+                        <SelectTrigger className="w-[180px] h-8 text-xs">
+                          <SelectValue placeholder="Select voice" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {Object.entries(getVoicesByLanguage()).map(([lang, voices]) => (
+                            <div key={lang}>
+                              <div className="px-2 py-1 text-xs font-semibold text-slate-500 uppercase">
+                                {lang === 'en' ? '🇺🇸 English' : 
+                                 lang === 'es' ? '🇪🇸 Spanish' :
+                                 lang === 'fr' ? '🇫🇷 French' :
+                                 lang === 'de' ? '🇩🇪 German' :
+                                 lang === 'it' ? '🇮🇹 Italian' :
+                                 lang === 'pt' ? '🇵🇹 Portuguese' :
+                                 lang === 'zh' ? '🇨🇳 Chinese' :
+                                 lang === 'ja' ? '🇯🇵 Japanese' :
+                                 lang === 'ko' ? '🇰🇷 Korean' :
+                                 lang === 'ar' ? '🇸🇦 Arabic' :
+                                 lang === 'hi' ? '🇮🇳 Hindi' :
+                                 `${lang.toUpperCase()}`}
+                              </div>
+                              {voices.map((voice) => (
+                                <SelectItem key={voice.name} value={voice.name} className="text-xs">
+                                  {voice.name.replace(/^.*\s/, '')} {voice.localService ? '(Local)' : ''}
+                                </SelectItem>
+                              ))}
+                            </div>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={speakExplanation}
+                      className="gap-2"
+                    >
+                      <Volume2 className="w-4 h-4" />
+                      {isSpeaking ? "Stop" : "Read Aloud"}
+                    </Button>
+                  </div>
                 )}
               </div>
               
@@ -283,8 +460,22 @@ Make the explanation warm, clear, and empowering. Avoid unnecessary medical jarg
                 </div>
               </div>
 
-              <div className="mt-4 text-xs text-slate-500 text-center">
-                💡 This explanation is tailored for: {audienceLevels[audienceLevel]}
+              <div className="mt-4 p-3 bg-slate-50 rounded-lg border border-slate-200">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-slate-600">
+                    💡 Tailored for: <strong>{audienceLevels[audienceLevel]}</strong>
+                  </span>
+                  {(inputMode === "genes" || inputMode === "combined") && geneList.split(/[,\s\n]+/).filter(g => g.trim()).length > 0 && (
+                    <Badge variant="secondary">
+                      {geneList.split(/[,\s\n]+/).filter(g => g.trim()).length} genes analyzed
+                    </Badge>
+                  )}
+                  {inputMode === "combined" && (
+                    <Badge variant="outline" className="bg-indigo-50 text-indigo-700 border-indigo-200">
+                      Combined Analysis
+                    </Badge>
+                  )}
+                </div>
               </div>
             </div>
           )}
