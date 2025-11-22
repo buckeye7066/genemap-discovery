@@ -17,9 +17,14 @@ import {
   MessageSquare,
   Info,
   Stethoscope,
-  FlaskConical
+  FlaskConical,
+  BookOpen,
+  Network
 } from "lucide-react";
 import ReactMarkdown from 'react-markdown';
+import ResearchSuggester from "../components/ai/ResearchSuggester";
+import GeneticExplainer from "../components/ai/GeneticExplainer";
+import PathwayPredictor from "../components/ai/PathwayPredictor";
 
 export default function AIAssistantsPage() {
   const [user, setUser] = useState(null);
@@ -28,6 +33,9 @@ export default function AIAssistantsPage() {
   const [messages, setMessages] = useState([]);
   const [inputMessage, setInputMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState("chat");
+  const [selectedGenes, setSelectedGenes] = useState([]);
+  const [phenotypes, setPhenotypes] = useState([]);
   const messagesEndRef = useRef(null);
 
 
@@ -301,6 +309,34 @@ Please provide a comprehensive response.`;
 
 
 
+        {/* Main Tabs */}
+        <Card className="shadow-lg mb-6">
+          <CardContent className="pt-6">
+            <Tabs value={activeTab} onValueChange={setActiveTab}>
+              <TabsList className="grid w-full grid-cols-4 h-auto">
+                <TabsTrigger value="chat" className="gap-2 py-3">
+                  <MessageSquare className="w-4 h-4" />
+                  AI Chat
+                </TabsTrigger>
+                <TabsTrigger value="research" className="gap-2 py-3">
+                  <BookOpen className="w-4 h-4" />
+                  Research Suggester
+                </TabsTrigger>
+                <TabsTrigger value="explainer" className="gap-2 py-3">
+                  <Brain className="w-4 h-4" />
+                  Simplifier
+                </TabsTrigger>
+                <TabsTrigger value="pathway" className="gap-2 py-3">
+                  <Network className="w-4 h-4" />
+                  Pathway Predictor
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </CardContent>
+        </Card>
+
+        {activeTab === "chat" && (
+          <>
         {/* Assistant Selector */}
         <Card className="shadow-lg mb-6">
           <CardContent className="pt-6">
@@ -656,6 +692,20 @@ Please provide a comprehensive response.`;
             </Card>
           </div>
         </div>
+        </>
+        )}
+
+        {activeTab === "research" && (
+          <ResearchSuggester genes={selectedGenes} phenotypes={phenotypes} />
+        )}
+
+        {activeTab === "explainer" && (
+          <GeneticExplainer />
+        )}
+
+        {activeTab === "pathway" && (
+          <PathwayPredictor genes={selectedGenes} />
+        )}
       </div>
     </div>
   );

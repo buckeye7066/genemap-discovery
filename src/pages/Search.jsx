@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import DnaIcon from "../components/icons/DnaIcon";
-import { Search, AlertCircle, GitCompare, BookmarkPlus, Library, Sparkles, BarChart3 } from "lucide-react"; // Added BarChart3
+import { Search, AlertCircle, GitCompare, BookmarkPlus, Library, Sparkles, BarChart3, Brain } from "lucide-react";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 
@@ -218,13 +218,19 @@ export default function SearchPage() {
             Search phenotypes or input genes of interest for comprehensive analysis
           </p>
           
-          {/* Visualization Hub Link */}
+          {/* Quick Actions */}
           {selectedGenes.length > 0 && (
-            <div className="mt-4">
+            <div className="mt-4 flex gap-2 justify-center">
               <Link to={createPageUrl("VisualizationHub")}>
                 <Button variant="outline" className="gap-2">
                   <BarChart3 className="w-4 h-4" />
-                  Open in Visualization Hub
+                  Visualization Hub
+                </Button>
+              </Link>
+              <Link to={createPageUrl("AIAssistants")}>
+                <Button variant="outline" className="gap-2">
+                  <Brain className="w-4 h-4" />
+                  AI Tools
                 </Button>
               </Link>
             </div>
