@@ -1,4 +1,3 @@
-
 import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
@@ -16,6 +15,7 @@ import GeneComparison from "../components/search/GeneComparison";
 import GeneInputForm from "../components/search/GeneInputForm";
 import GeneSetComparison from "../components/search/GeneSetComparison";
 import SavedGeneSets from "../components/search/SavedGeneSets";
+import GenomeBrowser from "../components/visualizations/GenomeBrowser";
 import ComparativeGenomics from "../components/search/ComparativeGenomics"; // Added new component import
 import { PhenotypeSearchService } from "../components/search/PhenotypeSearchService";
 
@@ -304,6 +304,18 @@ export default function SearchPage() {
                 selectedGenes={selectedGenes}
                 onGeneSelect={handleGeneSelect}
               />
+              
+              {selectedGenes.length > 0 && (
+                <div className="mt-6">
+                  <GenomeBrowser 
+                    genes={selectedGenes}
+                    onGeneClick={(gene) => {
+                      const element = document.getElementById(`gene-${gene.symbol}`);
+                      element?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }}
+                  />
+                </div>
+              )}
             )}
 
             {!searchResults && !isLoading && !geneSetComparison && (
