@@ -39,6 +39,8 @@ import PhenotypeNetwork from "../components/visualizations/PhenotypeNetwork";
 import ManhattanPlot from "../components/visualizations/ManhattanPlot";
 import ExpressionHeatmap from "../components/visualizations/ExpressionHeatmap";
 import CircosPlot from "../components/visualizations/CircosPlot";
+import PathwayEnrichmentViz from "../components/visualizations/PathwayEnrichmentViz";
+import ComparativePathwayViz from "../components/visualizations/ComparativePathwayViz";
 import { PhenotypeSearchService } from "../components/search/PhenotypeSearchService";
 
 export default function VisualizationHub() {
@@ -56,7 +58,9 @@ export default function VisualizationHub() {
     'phenotype',
     'manhattan',
     'heatmap',
-    'circos'
+    'circos',
+    'pathwayEnrichment',
+    'comparativePathway'
   ]);
   const [overlayMode, setOverlayMode] = useState(false);
   const [highlightedGene, setHighlightedGene] = useState(null);
@@ -642,6 +646,26 @@ Keep it concise and factual. Use NCBI Gene, Ensembl, UniProt as sources.
                     Circos
                   </label>
                 </div>
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="viz-pathwayEnrichment"
+                    checked={activeVisualizations.includes('pathwayEnrichment')}
+                    onCheckedChange={() => toggleVisualization('pathwayEnrichment')}
+                  />
+                  <label htmlFor="viz-pathwayEnrichment" className="text-sm cursor-pointer">
+                    Pathway Enrichment
+                  </label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="viz-comparativePathway"
+                    checked={activeVisualizations.includes('comparativePathway')}
+                    onCheckedChange={() => toggleVisualization('comparativePathway')}
+                  />
+                  <label htmlFor="viz-comparativePathway" className="text-sm cursor-pointer">
+                    Comparative Pathway
+                  </label>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -877,6 +901,38 @@ Keep it concise and factual. Use NCBI Gene, Ensembl, UniProt as sources.
                   userEducationLevel={user?.education_level}
                   highlightedGene={highlightedGene}
                   onGeneClick={handleGeneHighlight}
+                />
+              </div>
+            )}
+
+            {/* Pathway Enrichment */}
+            {activeVisualizations.includes('pathwayEnrichment') && selectedGenes.length > 0 && (
+              <div>
+                <h2 className="text-2xl font-bold text-slate-900 mb-4 flex items-center gap-2">
+                  <NetworkIcon className="w-6 h-6 text-purple-600" />
+                  Pathway Enrichment Analysis (KEGG/Reactome/GO)
+                </h2>
+                <PathwayEnrichmentViz
+                  genes={selectedGenes}
+                  userEducationLevel={user?.education_level}
+                />
+              </div>
+            )}
+
+            {/* Comparative Pathway Analysis */}
+            {activeVisualizations.includes('comparativePathway') && selectedGenes.length >= 2 && (
+              <div>
+                <h2 className="text-2xl font-bold text-slate-900 mb-4 flex items-center gap-2">
+                  <TrendingUp className="w-6 h-6 text-indigo-600" />
+                  Comparative Pathway Analysis
+                </h2>
+                <ComparativePathwayViz
+                  geneSet1={selectedGenes.slice(0, Math.ceil(selectedGenes.length / 2))}
+                  geneSet2={selectedGenes.slice(Math.ceil(selectedGenes.length / 2))}
+                  labels={[
+                    `Set A (${Math.ceil(selectedGenes.length / 2)} genes)`,
+                    `Set B (${selectedGenes.length - Math.ceil(selectedGenes.length / 2)} genes)`
+                  ]}
                 />
               </div>
             )}
