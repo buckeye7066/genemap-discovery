@@ -44,6 +44,13 @@ const navigationItems = [
     icon: Search,
   },
   {
+    title: "GSEA",
+    url: createPageUrl("GSEA"),
+    icon: Sparkles,
+    highlight: true,
+    badge: "New"
+  },
+  {
     title: "AI Assistants",
     url: createPageUrl("AIAssistants"),
     icon: MessageSquare,
