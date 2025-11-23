@@ -140,6 +140,18 @@ const navigationItems = [
     badge: "Admin"
   },
   {
+    title: "User Messages",
+    url: createPageUrl("AdminMessages"),
+    icon: MessageSquare,
+    highlight: true,
+    badge: "Admin"
+  },
+  {
+    title: "Contact Support",
+    url: createPageUrl("ContactSupport"),
+    icon: Mail,
+  },
+  {
     title: "Profile",
     url: createPageUrl("Profile"),
     icon: User,

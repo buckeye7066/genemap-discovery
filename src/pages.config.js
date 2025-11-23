@@ -21,6 +21,8 @@ import AxiomNewsletter from './pages/AxiomNewsletter';
 import UsersLog from './pages/UsersLog';
 import GSEA from './pages/GSEA';
 import AdminAnalytics from './pages/AdminAnalytics';
+import ContactSupport from './pages/ContactSupport';
+import AdminMessages from './pages/AdminMessages';
 import __Layout from './Layout.jsx';
 
 
@@ -48,6 +50,8 @@ export const PAGES = {
     "UsersLog": UsersLog,
     "GSEA": GSEA,
     "AdminAnalytics": AdminAnalytics,
+    "ContactSupport": ContactSupport,
+    "AdminMessages": AdminMessages,
 }
 
 export const pagesConfig = {
