@@ -25,16 +25,18 @@ export default function PlatformCompatibility() {
     const isWebView = /(iPhone|iPod|iPad).*AppleWebKit(?!.*Safari)|; wv\)/i.test(userAgent);
     
     // Add platform classes to body
-    document.body.classList.add(
-      isIOS ? 'platform-ios' : '',
-      isAndroid ? 'platform-android' : '',
-      isMacOS ? 'platform-macos' : '',
-      isWindows ? 'platform-windows' : '',
-      isLinux ? 'platform-linux' : '',
-      isStandalone ? 'display-standalone' : '',
-      isInAppBrowser ? 'in-app-browser' : '',
-      isWebView ? 'webview' : ''
-    );
+    const platformClasses = [
+      isIOS && 'platform-ios',
+      isAndroid && 'platform-android',
+      isMacOS && 'platform-macos',
+      isWindows && 'platform-windows',
+      isLinux && 'platform-linux',
+      isStandalone && 'display-standalone',
+      isInAppBrowser && 'in-app-browser',
+      isWebView && 'webview'
+    ].filter(Boolean);
+    
+    document.body.classList.add(...platformClasses);
     
     // Viewport height fix for mobile browsers (especially iOS Safari)
     const setViewportHeight = () => {
