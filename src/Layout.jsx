@@ -181,7 +181,7 @@ export default function Layout({ children, currentPageName }) {
                         asChild 
                         className={`hover:bg-blue-50 hover:text-blue-700 transition-all duration-200 rounded-xl mb-1 touch-manipulation ${
                           location.pathname === item.url ? 'bg-blue-100 text-blue-700 font-medium shadow-sm' : ''
-                        } ${item.highlight ? 'bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200' : ''}`}
+                        }${item.highlight ? ' bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200' : ''}`}
                       >
                         <Link to={item.url} className="flex items-center gap-3 px-4 py-4 min-h-[48px]">
                           {item.icon && <item.icon className={`w-5 h-5 ${item.highlight ? 'text-purple-600' : ''}`} />}
