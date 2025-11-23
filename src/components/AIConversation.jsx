@@ -181,7 +181,7 @@ export default function AIConversation() {
 
   const RobertAvatar = ({ isActive }) => (
     <div className={`relative ${isActive ? 'animate-pulse' : ''}`}>
-      <div className={`w-16 h-16 rounded-full bg-gradient-to-br from-purple-600 to-indigo-700 flex items-center justify-center shadow-lg transition-all duration-300 ${isActive ? 'ring-4 ring-purple-300 scale-110' : ''}`}>
+      <div className={`w-16 h-16 rounded-full bg-gradient-to-br from-purple-600 to-indigo-700 flex items-center justify-center shadow-lg transition-all duration-300${isActive ? ' ring-4 ring-purple-300 scale-110' : ''}`}>
         <Brain className="w-8 h-8 text-white" />
       </div>
       {isActive && (
@@ -194,7 +194,7 @@ export default function AIConversation() {
 
   const AnastasiaAvatar = ({ isActive }) => (
     <div className={`relative ${isActive ? 'animate-pulse' : ''}`}>
-      <div className={`w-16 h-16 rounded-full bg-gradient-to-br from-pink-500 to-rose-600 flex items-center justify-center shadow-lg transition-all duration-300 ${isActive ? 'ring-4 ring-pink-300 scale-110' : ''}`}>
+      <div className={`w-16 h-16 rounded-full bg-gradient-to-br from-pink-500 to-rose-600 flex items-center justify-center shadow-lg transition-all duration-300${isActive ? ' ring-4 ring-pink-300 scale-110' : ''}`}>
         <Heart className="w-8 h-8 text-white" />
       </div>
       {isActive && (
@@ -255,8 +255,8 @@ export default function AIConversation() {
           {displayedMessages.map((message, index) => (
             <div
               key={index}
-              className={`flex gap-4 items-start animate-slideIn ${
-                message.speaker === 'anastasia' ? 'flex-row-reverse' : ''
+              className={`flex gap-4 items-start animate-slideIn${
+                message.speaker === 'anastasia' ? ' flex-row-reverse' : ''
               }`}
             >
               <div className="flex-shrink-0">
@@ -267,7 +267,7 @@ export default function AIConversation() {
                 )}
               </div>
               
-              <div className={`flex-1 ${message.speaker === 'anastasia' ? 'text-right' : ''}`}>
+              <div className={`flex-1${message.speaker === 'anastasia' ? ' text-right' : ''}`}>
                 <div className="flex items-center gap-2 mb-1">
                   {message.speaker === 'robert' ? (
                     <>
