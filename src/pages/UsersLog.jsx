@@ -16,8 +16,10 @@ import {
   Loader2,
   AlertCircle,
   Download,
-  Filter
+  Filter,
+  Trash2
 } from "lucide-react";
+import { deleteUser } from "@/functions/deleteUser";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import {
@@ -37,6 +39,7 @@ export default function UsersLogPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [deletingUser, setDeletingUser] = useState(null);
 
   useEffect(() => {
     loadData();
@@ -140,6 +143,24 @@ export default function UsersLogPage() {
       admins: users.filter((u) => u.role === "admin" || u.super_admin).length,
       superAdmins: users.filter((u) => u.super_admin).length
     };
+  };
+
+  const handleDeleteUser = async (userEmail) => {
+    if (!confirm(`Are you sure you want to PERMANENTLY DELETE user ${userEmail}? This will delete the user and ALL their data. This action CANNOT be undone.`)) {
+      return;
+    }
+
+    setDeletingUser(userEmail);
+    try {
+      await deleteUser({ email: userEmail });
+      setError(null);
+      await loadData();
+      alert(`User ${userEmail} deleted successfully`);
+    } catch (err) {
+      setError(`Failed to delete user: ${err.message || 'Unknown error'}`);
+    } finally {
+      setDeletingUser(null);
+    }
   };
 
   if (isLoading) {
@@ -366,8 +387,29 @@ export default function UsersLogPage() {
                           )}
                         </div>
 
-                        <div className="text-xs text-slate-500">
-                          ID: {user.id}
+                        <div className="flex flex-col gap-2 items-end">
+                          <div className="text-xs text-slate-500">
+                            ID: {user.id}
+                          </div>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => handleDeleteUser(user.email)}
+                            disabled={deletingUser === user.email || user.email === currentUser?.email}
+                            className="gap-1"
+                          >
+                            {deletingUser === user.email ? (
+                              <>
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                                Deleting...
+                              </>
+                            ) : (
+                              <>
+                                <Trash2 className="w-3 h-3" />
+                                Delete
+                              </>
+                            )}
+                          </Button>
                         </div>
                       </div>
                     </CardContent>
