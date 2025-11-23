@@ -180,7 +180,7 @@ export default function AIConversation() {
   };
 
   const RobertAvatar = ({ isActive }) => (
-    <div className={`relative ${isActive ? 'animate-pulse' : ''}`}>
+    <div className={`relative${isActive ? ' animate-pulse' : ''}`}>
       <div className={`w-16 h-16 rounded-full bg-gradient-to-br from-purple-600 to-indigo-700 flex items-center justify-center shadow-lg transition-all duration-300${isActive ? ' ring-4 ring-purple-300 scale-110' : ''}`}>
         <Brain className="w-8 h-8 text-white" />
       </div>
@@ -193,7 +193,7 @@ export default function AIConversation() {
   );
 
   const AnastasiaAvatar = ({ isActive }) => (
-    <div className={`relative ${isActive ? 'animate-pulse' : ''}`}>
+    <div className={`relative${isActive ? ' animate-pulse' : ''}`}>
       <div className={`w-16 h-16 rounded-full bg-gradient-to-br from-pink-500 to-rose-600 flex items-center justify-center shadow-lg transition-all duration-300${isActive ? ' ring-4 ring-pink-300 scale-110' : ''}`}>
         <Heart className="w-8 h-8 text-white" />
       </div>
@@ -286,10 +286,10 @@ export default function AIConversation() {
                   )}
                 </div>
                 
-                <div className={`rounded-2xl p-4 shadow-md ${
+                <div className={`rounded-2xl p-4 shadow-md${
                   message.speaker === 'robert' 
-                    ? 'bg-gradient-to-br from-purple-50 to-indigo-50 border border-purple-200' 
-                    : 'bg-gradient-to-br from-pink-50 to-rose-50 border border-pink-200'
+                    ? ' bg-gradient-to-br from-purple-50 to-indigo-50 border border-purple-200' 
+                    : ' bg-gradient-to-br from-pink-50 to-rose-50 border border-pink-200'
                 }`}>
                   <p className="text-slate-800 leading-relaxed">{message.text}</p>
                 </div>
