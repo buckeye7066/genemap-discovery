@@ -20,6 +20,7 @@ import SuperAdminSetup from './pages/SuperAdminSetup';
 import AxiomNewsletter from './pages/AxiomNewsletter';
 import UsersLog from './pages/UsersLog';
 import GSEA from './pages/GSEA';
+import AdminAnalytics from './pages/AdminAnalytics';
 import __Layout from './Layout.jsx';
 
 
@@ -46,6 +47,7 @@ export const PAGES = {
     "AxiomNewsletter": AxiomNewsletter,
     "UsersLog": UsersLog,
     "GSEA": GSEA,
+    "AdminAnalytics": AdminAnalytics,
 }
 
 export const pagesConfig = {

@@ -133,6 +133,13 @@ const navigationItems = [
     badge: "Admin"
   },
   {
+    title: "Analytics",
+    url: createPageUrl("AdminAnalytics"),
+    icon: BarChart3,
+    highlight: true,
+    badge: "Admin"
+  },
+  {
     title: "Profile",
     url: createPageUrl("Profile"),
     icon: User,
