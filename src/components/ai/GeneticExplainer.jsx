@@ -629,6 +629,28 @@ Make the explanation warm, clear, and empowering. Avoid unnecessary medical jarg
               </div>
             </div>
           )}
+
+          {/* Clinical Trial Matcher Toggle */}
+          {explanation && (
+            <Button
+              onClick={() => setShowTrialMatcher(!showTrialMatcher)}
+              variant="outline"
+              className="w-full mt-4 gap-2"
+            >
+              <Stethoscope className="w-4 h-4" />
+              {showTrialMatcher ? 'Hide' : 'Find'} Matching Clinical Trials
+            </Button>
+          )}
+
+          {/* Clinical Trial Matcher */}
+          {showTrialMatcher && (
+            <div className="mt-4">
+              <ClinicalTrialMatcher
+                genes={getCurrentGenes()}
+                variants={parsedVcfVariants}
+              />
+            </div>
+          )}
         </div>
       </CardContent>
     </Card>
