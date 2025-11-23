@@ -7,7 +7,7 @@ import DemographicCheck from "./components/DemographicCheck";
 import MelissaBanner from "./components/MelissaBanner";
 import PlatformCompatibility from "./components/PlatformCompatibility";
 import UniversalLinkHandler from "./components/UniversalLinkHandler";
-import { Search, User, Crown, History, Home, FileText, Heart, Shield, BarChart3, Microscope, LayoutDashboard, MessageSquare, Building2, ShieldOff, Mail, Crown as CrownIcon, Users } from "lucide-react";
+import { Search, User, Crown, History, Home, FileText, Heart, Shield, BarChart3, Microscope, LayoutDashboard, MessageSquare, Building2, ShieldOff, Mail, Crown as CrownIcon, Users, Sparkles } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
