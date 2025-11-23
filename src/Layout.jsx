@@ -5,6 +5,8 @@ import DnaIcon from "./components/icons/DnaIcon";
 import BanCheck from "./components/BanCheck";
 import DemographicCheck from "./components/DemographicCheck";
 import MelissaBanner from "./components/MelissaBanner";
+import PlatformCompatibility from "./components/PlatformCompatibility";
+import UniversalLinkHandler from "./components/UniversalLinkHandler";
 import { Search, User, Crown, History, Home, FileText, Heart, Shield, BarChart3, Microscope, LayoutDashboard, MessageSquare, Building2, ShieldOff, Mail, Crown as CrownIcon, Users } from "lucide-react";
 import {
   Sidebar,
@@ -141,6 +143,8 @@ export default function Layout({ children, currentPageName }) {
   return (
     <BanCheck>
       <DemographicCheck>
+        <PlatformCompatibility />
+        <UniversalLinkHandler />
         <MelissaBanner />
         <SidebarProvider>
           <div className="min-h-screen flex w-full bg-gradient-to-br from-slate-50 to-blue-50">
