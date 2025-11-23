@@ -4,11 +4,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Loader2, Network, Sparkles, TrendingUp, AlertCircle, Info, Upload } from "lucide-react";
+import { Loader2, Network, Sparkles, TrendingUp, AlertCircle, Info, Upload, Stethoscope } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
 import ReactMarkdown from "react-markdown";
 import VCFParser from "../medical/VCFParser";
+import ClinicalTrialMatcher from "../clinical/ClinicalTrialMatcher";
 
 export default function PathwayPredictor({ genes = [] }) {
   const [predictions, setPredictions] = useState(null);
@@ -19,6 +20,8 @@ export default function PathwayPredictor({ genes = [] }) {
   const [vcfFileUrl, setVcfFileUrl] = useState(null);
   const [isUploadingVcf, setIsUploadingVcf] = useState(false);
   const [vcfGenes, setVcfGenes] = useState([]);
+  const [parsedVcfVariants, setParsedVcfVariants] = useState([]);
+  const [showTrialMatcher, setShowTrialMatcher] = useState(false);
 
   const predictInteractions = async () => {
     const activeGenes = inputMode === "vcf" ? vcfGenes : genes;
@@ -143,6 +146,7 @@ Provide evidence-based predictions with clear confidence levels. Be honest about
   };
 
   const handleVcfVariantsParsed = (variants) => {
+    setParsedVcfVariants(variants);
     // Extract unique genes from variants
     const uniqueGenes = [...new Set(
       variants
@@ -281,6 +285,28 @@ Provide evidence-based predictions with clear confidence levels. Be honest about
                 </>
               )}
             </Button>
+
+            {/* Clinical Trial Matcher Toggle */}
+            {predictions && (
+              <Button
+                onClick={() => setShowTrialMatcher(!showTrialMatcher)}
+                variant="outline"
+                className="w-full mt-4 gap-2"
+              >
+                <Stethoscope className="w-4 h-4" />
+                {showTrialMatcher ? 'Hide' : 'Find'} Matching Clinical Trials
+              </Button>
+            )}
+
+            {/* Clinical Trial Matcher */}
+            {showTrialMatcher && (
+              <div className="mt-4">
+                <ClinicalTrialMatcher
+                  genes={activeGenes}
+                  variants={parsedVcfVariants}
+                />
+              </div>
+            )}
 
             {error && (
               <Alert variant="destructive" className="mt-4">

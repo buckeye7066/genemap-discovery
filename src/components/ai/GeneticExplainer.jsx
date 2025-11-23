@@ -13,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Brain, Loader2, MessageSquare, Sparkles, Volume2, Dna, FileText, Network, Upload } from "lucide-react";
+import { Brain, Loader2, MessageSquare, Sparkles, Volume2, Dna, FileText, Network, Upload, Stethoscope } from "lucide-react";
 import {
   Tabs,
   TabsContent,
@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/tabs";
 import ReactMarkdown from "react-markdown";
 import VCFParser from "../medical/VCFParser";
+import ClinicalTrialMatcher from "../clinical/ClinicalTrialMatcher";
 
 export default function GeneticExplainer() {
   React.useEffect(() => {
@@ -51,6 +52,8 @@ export default function GeneticExplainer() {
   const [vcfFile, setVcfFile] = useState(null);
   const [vcfFileUrl, setVcfFileUrl] = useState(null);
   const [isUploadingVcf, setIsUploadingVcf] = useState(false);
+  const [parsedVcfVariants, setParsedVcfVariants] = useState([]);
+  const [showTrialMatcher, setShowTrialMatcher] = useState(false);
 
   const audienceLevels = {
     child: "5-year-old child",
@@ -260,6 +263,7 @@ Make the explanation warm, clear, and empowering. Avoid unnecessary medical jarg
   };
 
   const handleVcfVariantsParsed = (variants) => {
+    setParsedVcfVariants(variants);
     // Auto-populate variant list with parsed VCF data
     const variantStrings = variants.slice(0, 20).map(v => 
       `${v.rsid || '.'} (${v.chromosome}:${v.position} ${v.ref}>${v.alt}) - ${v.gene || 'Unknown gene'}${v.clinical_significance ? ` - ${v.clinical_significance}` : ''}`
@@ -267,6 +271,15 @@ Make the explanation warm, clear, and empowering. Avoid unnecessary medical jarg
     
     setVariantList(variantStrings);
     setInputMode('variants');
+  };
+
+  const getCurrentGenes = () => {
+    if (inputMode === 'genes' || inputMode === 'combined') {
+      return geneList.split(/[\n,]/).map(g => g.trim()).filter(Boolean);
+    } else if (inputMode === 'vcf' && parsedVcfVariants.length > 0) {
+      return [...new Set(parsedVcfVariants.map(v => v.gene).filter(Boolean))];
+    }
+    return [];
   };
 
   return (
