@@ -156,6 +156,21 @@ export default function UsersLogPage() {
     };
   };
 
+  const formatEST = (dateString) => {
+    const date = new Date(dateString);
+    // Convert to EST (UTC-5) or EDT (UTC-4) depending on daylight saving
+    const estString = date.toLocaleString('en-US', { 
+      timeZone: 'America/New_York',
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true
+    });
+    return `${estString} EST`;
+  };
+
   const handleDeleteUser = async (userEmail) => {
     if (!confirm(`Are you sure you want to PERMANENTLY DELETE user ${userEmail}? This will delete the user and ALL their data. This action CANNOT be undone.`)) {
       return;
@@ -392,7 +407,7 @@ export default function UsersLogPage() {
                             {user.last_active ? (
                               <div className="flex items-center gap-2 text-green-600">
                                 <UserCheck className="w-4 h-4" />
-                                Last active {format(new Date(user.last_active), "MMM d, yyyy 'at' h:mm a")}
+                                Last active {formatEST(user.last_active)}
                               </div>
                             ) : (
                               <div className="flex items-center gap-2 text-slate-400">
