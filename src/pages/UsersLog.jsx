@@ -60,15 +60,26 @@ export default function UsersLogPage() {
         return;
       }
 
-      // Fetch all users using service role
-      const response = await base44.functions.invoke('getAllUsers');
+      // Fetch all users and their last activity
+      const [response, allActivities] = await Promise.all([
+        base44.functions.invoke('getAllUsers'),
+        base44.entities.UserActivity.filter({}, '-created_date', 10000).catch(() => [])
+      ]);
+
       const data = response.data || response;
       
       if (data.error) {
         setError(data.error);
       } else {
-        setUsers(data.users || []);
-        setFilteredUsers(data.users || []);
+        // Map last activity to each user
+        const usersWithActivity = (data.users || []).map(user => {
+          const userActivities = allActivities.filter(a => a.created_by === user.email);
+          const lastActivity = userActivities.length > 0 ? userActivities[0].created_date : null;
+          return { ...user, last_active: lastActivity };
+        });
+
+        setUsers(usersWithActivity);
+        setFilteredUsers(usersWithActivity);
       }
     } catch (err) {
       console.error("Error loading users:", err);
@@ -376,6 +387,17 @@ export default function UsersLogPage() {
                               <div className="flex items-center gap-2">
                                 <Calendar className="w-4 h-4" />
                                 Joined {format(new Date(user.created_date), "MMM d, yyyy")}
+                              </div>
+                            )}
+                            {user.last_active ? (
+                              <div className="flex items-center gap-2 text-green-600">
+                                <UserCheck className="w-4 h-4" />
+                                Last active {format(new Date(user.last_active), "MMM d, yyyy 'at' h:mm a")}
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-2 text-slate-400">
+                                <UserX className="w-4 h-4" />
+                                Never active
                               </div>
                             )}
                           </div>
