@@ -78,6 +78,9 @@ export default function UsersLogPage() {
         const usersWithActivity = (data.users || []).map(user => {
           const activityDates = [];
           
+          // Check user's updated_date (indicates login/profile update)
+          if (user.updated_date) activityDates.push(new Date(user.updated_date));
+          
           // Check UserActivity
           const userActivities = allActivities.filter(a => a.created_by === user.email);
           if (userActivities.length > 0) activityDates.push(new Date(userActivities[0].created_date));
