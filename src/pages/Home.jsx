@@ -18,12 +18,22 @@ export default function HomePage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
 
-      {/* Hero Section */}
-      <div className="px-4 sm:px-6 py-8 sm:py-12 md:py-20">
-        <div className="max-w-6xl mx-auto text-center">
+      {/* Hero Section with 3D */}
+      <div className="px-4 sm:px-6 py-8 sm:py-12 md:py-20 relative overflow-hidden">
+        {/* 3D DNA Background */}
+        <div className="absolute left-0 top-1/2 -translate-y-1/2 opacity-30 hidden lg:block pointer-events-none">
+          <DNAHelix3D width={300} height={500} />
+        </div>
+        <div className="absolute right-0 top-1/2 -translate-y-1/2 opacity-30 hidden lg:block pointer-events-none">
+          <DNAHelix3D width={300} height={500} />
+        </div>
+
+        <div className="max-w-6xl mx-auto text-center relative z-10">
+          {/* Interactive 3D DNA */}
           <div className="flex justify-center mb-6">
-            <div className="w-16 h-16 sm:w-20 sm:h-20 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-2xl flex items-center justify-center shadow-xl">
-              <DnaIcon className="w-8 h-8 sm:w-10 sm:h-10 text-white" />
+            <div className="relative">
+              <div className="absolute inset-0 bg-gradient-to-r from-blue-600/20 to-indigo-600/20 rounded-full blur-3xl scale-150"></div>
+              <DNAHelix3D width={180} height={180} className="relative z-10" />
             </div>
           </div>
 
