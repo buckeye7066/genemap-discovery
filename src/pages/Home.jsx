@@ -6,6 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import DnaIcon from "../components/icons/DnaIcon";
 import AIConversation from "../components/AIConversation";
+import DNAHelix3D from "../components/3d/DNAHelix3D";
+import MoleculeViewer3D from "../components/3d/MoleculeViewer3D";
 import { Search, Zap, Shield, Crown, ArrowRight, CheckCircle, LayoutDashboard } from "lucide-react";
 
 export default function HomePage() {
