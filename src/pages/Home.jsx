@@ -96,9 +96,27 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* AI Conversation Section */}
+      {/* Interactive Molecules Section */}
       <div className="px-4 sm:px-6 py-12 sm:py-16 bg-white/50">
-        <div className="max-w-5xl mx-auto">
+        <div className="max-w-6xl mx-auto">
+          <h2 className="text-2xl sm:text-3xl font-bold text-center text-slate-900 mb-4">
+            Interactive Molecular Viewer
+          </h2>
+          <p className="text-center text-slate-600 mb-8 max-w-2xl mx-auto">
+            Explore 3D molecular structures. Click and drag to rotate.
+          </p>
+          
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 justify-items-center mb-12">
+            {['water', 'methane', 'benzene', 'caffeine', 'adenine'].map((mol) => (
+              <div key={mol} className="text-center">
+                <div className="bg-white rounded-2xl shadow-lg p-2 hover:shadow-xl transition-shadow border border-slate-100">
+                  <MoleculeViewer3D molecule={mol} width={140} height={140} />
+                </div>
+                <p className="mt-2 text-sm font-medium text-slate-700 capitalize">{mol}</p>
+              </div>
+            ))}
+          </div>
+
           <AIConversation />
         </div>
       </div>
