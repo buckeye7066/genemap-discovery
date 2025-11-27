@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
+import { log } from "../components/shared/logger";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -48,7 +49,7 @@ export default function ResearchMode() {
       // Grant access to admin or researchers/clinicians
       setHasAccess(isAdmin || isResearcher);
     } catch (err) {
-      console.error("Error checking access:", err);
+      log.error("Error checking access:", err);
       setHasAccess(false);
     } finally {
       setIsLoading(false);

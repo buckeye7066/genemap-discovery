@@ -1,4 +1,7 @@
 import { base44 } from "@/api/base44Client";
+import { log } from "../shared/logger";
+import { getErrorMessage } from "../shared/errorUtils";
+import { GENE_ENRICHMENT_CONCURRENCY } from "../shared/constants";
 
 export class PhenotypeSearchService {
   static async searchGenes(phenotypeQuery, isPremium = false) {
@@ -34,8 +37,8 @@ export class PhenotypeSearchService {
       };
       
     } catch (error) {
-      console.error("Search error:", error);
-      throw new Error("Failed to search for genes. Please try again.");
+      log.error("Search error:", error);
+      throw new Error(getErrorMessage(error) || "Failed to search for genes. Please try again.");
     }
   }
 
@@ -198,7 +201,7 @@ Return 3-8 most relevant candidate genes ranked by evidence strength.
 
   static async enrichGeneData(candidateGenes, isPremium, userPreferences) {
     const enrichedGenes = [];
-    const concurrency = 4;
+    const concurrency = GENE_ENRICHMENT_CONCURRENCY;
 
     // Process genes in parallel batches for better performance
     for (let i = 0; i < candidateGenes.length; i += concurrency) {
@@ -234,7 +237,7 @@ Return 3-8 most relevant candidate genes ranked by evidence strength.
               ...premiumData
             };
           } catch (error) {
-            console.error(`Error enriching gene ${gene.symbol}:`, error);
+            log.error(`Error enriching gene ${gene.symbol}:`, error);
             return {
               ...gene,
               genomeBuild: "GRCh38",
@@ -435,7 +438,7 @@ Use tissue names like: brain, heart, liver, kidney, muscle, lung, etc.
 
       return result.expression || [];
     } catch (error) {
-      console.error(`Error fetching expression data for ${geneSymbol}:`, error);
+      log.error(`Error fetching expression data for ${geneSymbol}:`, error);
       return [];
     }
   }
@@ -629,7 +632,7 @@ Return up to 5 most significant relationships.
 
       return result.relationships || [];
     } catch (error) {
-      console.error("Error getting functional relationships:", error);
+      log.error("Error getting functional relationships:", error);
       return [];
     }
   }

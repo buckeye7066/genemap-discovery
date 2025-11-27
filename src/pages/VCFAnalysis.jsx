@@ -2,6 +2,8 @@ import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
+import { log } from "../components/shared/logger";
+import { VCF_BATCH_SIZE } from "../components/shared/constants";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -45,7 +47,7 @@ export default function VCFAnalysisPage() {
       const currentUser = await base44.auth.me();
       setUser(currentUser);
     } catch (err) {
-      console.error("Error loading user:", err);
+      log.error("Error loading user:", err);
     }
   };
 
@@ -68,7 +70,7 @@ export default function VCFAnalysisPage() {
       const result = await base44.integrations.Core.UploadFile({ file });
       setUploadedFileUrl(result.file_url);
     } catch (err) {
-      console.error("Upload error:", err);
+      log.error("Upload error:", err);
       alert("Failed to upload file. Please try again.");
     } finally {
       setIsUploading(false);
@@ -103,7 +105,7 @@ export default function VCFAnalysisPage() {
       }
 
       const genesToAnalyze = geneSymbols.slice(0, 20);
-      const batchSize = 5;
+      const batchSize = VCF_BATCH_SIZE;
       const allGeneInfo = [];
 
       // Process genes in batches for better performance
@@ -140,7 +142,7 @@ Keep it concise and clinical.`;
 
       setRelatedGenes(allGeneInfo);
     } catch (err) {
-      console.error("Gene analysis error:", err);
+      log.error("Gene analysis error:", err);
     } finally {
       setIsAnalyzingGenes(false);
     }

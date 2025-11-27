@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
+import { log } from "../components/shared/logger";
+import { getErrorMessage } from "../components/shared/errorUtils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -111,8 +113,8 @@ export default function UsersLogPage() {
         setFilteredUsers(usersWithActivity);
       }
     } catch (err) {
-      console.error("Error loading users:", err);
-      setError("Failed to load users");
+      log.error("Error loading users:", err);
+      setError(getErrorMessage(err) || "Failed to load users");
     } finally {
       setIsLoading(false);
     }
@@ -212,7 +214,7 @@ export default function UsersLogPage() {
       await loadData();
       alert(`User ${userEmail} deleted successfully`);
     } catch (err) {
-      setError(`Failed to delete user: ${err.message || 'Unknown error'}`);
+      setError(`Failed to delete user: ${getErrorMessage(err)}`);
     } finally {
       setDeletingUser(null);
     }
