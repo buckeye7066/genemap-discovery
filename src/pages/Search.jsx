@@ -1,6 +1,9 @@
 import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQueryClient } from "@tanstack/react-query";
+import { log } from "../components/shared/logger";
+import { SAVE_SUCCESS_DELAY_MS } from "../components/shared/constants";
+import { getErrorMessage } from "../components/shared/errorUtils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -51,7 +54,7 @@ export default function SearchPage() {
       const currentUser = await base44.auth.me();
       setUser(currentUser);
     } catch (err) {
-      console.log("Not logged in or user fetch failed:", err);
+      log.debug("Not logged in or user fetch failed:", err);
     }
   };
 
@@ -94,12 +97,12 @@ export default function SearchPage() {
           results_count: results.candidateGenes.length
         });
       } catch (historyError) {
-        console.log("Could not save search history:", historyError);
+        log.debug("Could not save search history:", historyError);
       }
 
     } catch (err) {
-      setError(err.message || "Search failed. Please try again.");
-      console.error("Search error:", err);
+      setError(getErrorMessage(err) || "Search failed. Please try again.");
+      log.error("Search error:", err);
     } finally {
       setIsLoading(false);
     }
@@ -129,8 +132,8 @@ export default function SearchPage() {
       );
       setGeneSetComparison(comparison);
     } catch (err) {
-      setError(err.message || "Failed to compare gene sets");
-      console.error("Gene set comparison error:", err);
+      setError(getErrorMessage(err) || "Failed to compare gene sets");
+      log.error("Gene set comparison error:", err);
     } finally {
       setIsLoading(false);
     }
@@ -155,15 +158,15 @@ export default function SearchPage() {
         tags: tags || []
       });
 
-      // Invalidate and refetch gene sets cache
-      await queryClient.invalidateQueries({ queryKey: ['geneSets'] });
+      // Invalidate and refetch gene sets cache with user context
+      await queryClient.invalidateQueries({ queryKey: ['geneSets', user?.email] });
       
       setError(null);
       setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 3000);
+      setTimeout(() => setSaveSuccess(false), SAVE_SUCCESS_DELAY_MS);
     } catch (err) {
-      setError(err.message || "Failed to save gene set");
-      console.error("Save gene set error:", err);
+      setError(getErrorMessage(err) || "Failed to save gene set");
+      log.error("Save gene set error:", err);
     }
   };
 

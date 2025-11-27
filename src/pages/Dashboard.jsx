@@ -2,6 +2,8 @@ import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
+import { log } from "../components/shared/logger";
+import { DASHBOARD_REFRESH_INTERVAL_MS } from "../components/shared/constants";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -58,10 +60,10 @@ export default function Dashboard() {
     
     loadDashboardData(false, controller.signal);
     
-    // Auto-refresh every 30 seconds for real-time updates
+    // Auto-refresh for real-time updates
     const interval = setInterval(() => {
       loadDashboardData(true, controller.signal);
-    }, 30000);
+    }, DASHBOARD_REFRESH_INTERVAL_MS);
     
     return () => {
       clearInterval(interval);
@@ -122,12 +124,13 @@ export default function Dashboard() {
           '-created_date',
           5
         ),
+        // TODO: For large datasets, switch to server-side filtering + pagination.
         base44.entities.AIConversation.filter(
           { created_by: userEmail },
           '-updated_date',
           5
         ).catch(err => {
-          console.error("AIConversation fetch error:", err);
+          log.error("AIConversation fetch error:", err);
           return [];
         })
       ]);
@@ -145,7 +148,7 @@ export default function Dashboard() {
       }
 
     } catch (err) {
-      console.error("Error loading dashboard:", err);
+      log.error("Error loading dashboard:", err);
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -180,7 +183,7 @@ Keep each insight under 50 words, practical, and personalized.`;
 
       setPersonalizedInsights(response);
     } catch (err) {
-      console.error("Error generating insights:", err);
+      log.error("Error generating insights:", err);
     }
   };
 
