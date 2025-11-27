@@ -1,4 +1,3 @@
-
 import { base44 } from "@/api/base44Client";
 
 export class PhenotypeSearchService {
@@ -9,7 +8,7 @@ export class PhenotypeSearchService {
       let userPreferences = null;
       try {
         const user = await base44.auth.me();
-        isAdmin = user?.email === "buckeye7066@gmail.com";
+        isAdmin = user?.super_admin === true || user?.role === "admin";
         userPreferences = {
           age: user?.age,
           education_level: user?.education_level,
@@ -199,46 +198,57 @@ Return 3-8 most relevant candidate genes ranked by evidence strength.
 
   static async enrichGeneData(candidateGenes, isPremium, userPreferences) {
     const enrichedGenes = [];
+    const concurrency = 4;
 
-    for (const gene of candidateGenes) {
-      try {
-        const phenotypes = await this.getGenePhenotypes(gene.symbol);
-        const aiSummary = await this.generateGeneSummary(gene, phenotypes, userPreferences);
-        const keyTakeaways = await this.generateKeyTakeaways(gene, phenotypes, userPreferences);
-        const furtherReading = await this.generateFurtherReading(gene, userPreferences);
-        const expressionData = await this.getGeneExpressionData(gene.symbol);
-        
-        let premiumData = {};
-        if (isPremium) {
-          premiumData = await this.getPremiumGeneData(gene.symbol, userPreferences);
-        }
+    // Process genes in parallel batches for better performance
+    for (let i = 0; i < candidateGenes.length; i += concurrency) {
+      const batch = candidateGenes.slice(i, i + concurrency);
+      const batchResults = await Promise.all(
+        batch.map(async (gene) => {
+          try {
+            const [phenotypes, expressionData] = await Promise.all([
+              this.getGenePhenotypes(gene.symbol),
+              this.getGeneExpressionData(gene.symbol)
+            ]);
+            
+            const [aiSummary, keyTakeaways, furtherReading] = await Promise.all([
+              this.generateGeneSummary(gene, phenotypes, userPreferences),
+              this.generateKeyTakeaways(gene, phenotypes, userPreferences),
+              this.generateFurtherReading(gene, userPreferences)
+            ]);
+            
+            let premiumData = {};
+            if (isPremium) {
+              premiumData = await this.getPremiumGeneData(gene.symbol, userPreferences);
+            }
 
-        const enrichedGene = {
-          ...gene,
-          genomeBuild: "GRCh38",
-          phenotypes: phenotypes,
-          aiSummary: aiSummary,
-          keyTakeaways: keyTakeaways,
-          furtherReading: furtherReading,
-          expressionData: expressionData,
-          sources: ["MyGene.info", "Ensembl", "HPO", "GWAS", "UniProt", "HPA", "GTEx"],
-          ...premiumData
-        };
-
-        enrichedGenes.push(enrichedGene);
-      } catch (error) {
-        console.error(`Error enriching gene ${gene.symbol}:`, error);
-        enrichedGenes.push({
-          ...gene,
-          genomeBuild: "GRCh38",
-          phenotypes: [],
-          aiSummary: `${gene.symbol} is associated with the searched phenotype. ${gene.explanation || ''}`,
-          keyTakeaways: [],
-          furtherReading: null,
-          expressionData: [],
-          sources: ["Literature Review"]
-        });
-      }
+            return {
+              ...gene,
+              genomeBuild: "GRCh38",
+              phenotypes: phenotypes,
+              aiSummary: aiSummary,
+              keyTakeaways: keyTakeaways,
+              furtherReading: furtherReading,
+              expressionData: expressionData,
+              sources: ["MyGene.info", "Ensembl", "HPO", "GWAS", "UniProt", "HPA", "GTEx"],
+              ...premiumData
+            };
+          } catch (error) {
+            console.error(`Error enriching gene ${gene.symbol}:`, error);
+            return {
+              ...gene,
+              genomeBuild: "GRCh38",
+              phenotypes: [],
+              aiSummary: `${gene.symbol} is associated with the searched phenotype. ${gene.explanation || ''}`,
+              keyTakeaways: [],
+              furtherReading: null,
+              expressionData: [],
+              sources: ["Literature Review"]
+            };
+          }
+        })
+      );
+      enrichedGenes.push(...batchResults);
     }
 
     return enrichedGenes;

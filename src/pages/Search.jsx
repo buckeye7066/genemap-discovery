@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { base44 } from "@/api/base44Client";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -20,6 +21,7 @@ import ComparativeGenomics from "../components/search/ComparativeGenomics"; // A
 import { PhenotypeSearchService } from "../components/search/PhenotypeSearchService";
 
 export default function SearchPage() {
+  const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -27,11 +29,12 @@ export default function SearchPage() {
   const [searchType, setSearchType] = useState("free");
   const [selectedGenes, setSelectedGenes] = useState([]);
   const [showComparison, setShowComparison] = useState(false);
-  const [showComparativeGenomics, setShowComparativeGenomics] = useState(false); // New state variable
+  const [showComparativeGenomics, setShowComparativeGenomics] = useState(false);
   const [userInputGenes, setUserInputGenes] = useState([]);
   const [geneSetComparison, setGeneSetComparison] = useState(null);
   const [showSavedSets, setShowSavedSets] = useState(false);
-  const [user, setUser] = useState(null); // New state variable for user data
+  const [user, setUser] = useState(null);
+  const [saveSuccess, setSaveSuccess] = useState(false);
 
   React.useEffect(() => {
     loadUser(); // Load user on component mount
@@ -152,8 +155,12 @@ export default function SearchPage() {
         tags: tags || []
       });
 
+      // Invalidate and refetch gene sets cache
+      await queryClient.invalidateQueries({ queryKey: ['geneSets'] });
+      
       setError(null);
-      alert("Gene set saved successfully!");
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
     } catch (err) {
       setError(err.message || "Failed to save gene set");
       console.error("Save gene set error:", err);

@@ -102,11 +102,18 @@ export default function VCFAnalysisPage() {
         return;
       }
 
-      // Get gene information for all identified genes
-      const geneInfo = await Promise.all(
-        geneSymbols.slice(0, 20).map(async (symbol) => {
-          try {
-            const prompt = `Provide a brief summary for gene ${symbol} that was found in a VCF analysis.
+      const genesToAnalyze = geneSymbols.slice(0, 20);
+      const batchSize = 5;
+      const allGeneInfo = [];
+
+      // Process genes in batches for better performance
+      for (let i = 0; i < genesToAnalyze.length; i += batchSize) {
+        const batch = genesToAnalyze.slice(i, i + batchSize);
+        
+        const batchResults = await Promise.all(
+          batch.map(async (symbol) => {
+            try {
+              const prompt = `Provide a brief summary for gene ${symbol} that was found in a VCF analysis.
 
 Include:
 - Gene function (1-2 sentences)
@@ -116,25 +123,22 @@ Include:
 
 Keep it concise and clinical.`;
 
-            const summary = await base44.integrations.Core.InvokeLLM({
-              prompt,
-              add_context_from_internet: true
-            });
+              const summary = await base44.integrations.Core.InvokeLLM({
+                prompt,
+                add_context_from_internet: true
+              });
 
-            return {
-              symbol,
-              summary
-            };
-          } catch (err) {
-            return {
-              symbol,
-              summary: `Gene ${symbol} identified in VCF analysis.`
-            };
-          }
-        })
-      );
+              return { symbol, summary };
+            } catch (err) {
+              return { symbol, summary: `Gene ${symbol} identified in VCF analysis.` };
+            }
+          })
+        );
+        
+        allGeneInfo.push(...batchResults);
+      }
 
-      setRelatedGenes(geneInfo);
+      setRelatedGenes(allGeneInfo);
     } catch (err) {
       console.error("Gene analysis error:", err);
     } finally {

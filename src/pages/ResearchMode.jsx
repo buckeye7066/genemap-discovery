@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,8 +14,10 @@ import {
   TrendingUp,
   FileStack,
   Lock,
-  Beaker // Added Beaker icon
+  Beaker
 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { createPageUrl } from "@/utils";
 import BulkVCFAnalysis from "../components/research/BulkVCFAnalysis";
 import ExternalDatabaseIntegration from "../components/research/ExternalDatabaseIntegration";
 import PathwayEnrichment from "../components/research/PathwayEnrichment";
@@ -24,6 +25,7 @@ import HypothesisGenerator from "../components/research/HypothesisGenerator";
 import ProjectManager from "../components/research/ProjectManager"; // Added ProjectManager import
 
 export default function ResearchMode() {
+  const navigate = useNavigate();
   const [user, setUser] = useState(null);
   const [hasAccess, setHasAccess] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -37,8 +39,8 @@ export default function ResearchMode() {
       const currentUser = await base44.auth.me();
       setUser(currentUser);
 
-      // Check if user has research access (for now, admin backdoor or future premium feature)
-      const isAdmin = currentUser?.email === "buckeye7066@gmail.com";
+      // Check if user has research access
+      const isAdmin = currentUser?.super_admin === true || currentUser?.role === "admin";
       const isResearcher = currentUser?.education_level === 'researcher' || 
                           currentUser?.education_level === 'phd' ||
                           currentUser?.education_level === 'medical_professional';
@@ -125,7 +127,7 @@ export default function ResearchMode() {
               </div>
 
               <Button 
-                onClick={() => window.location.href = '/Profile'}
+                onClick={() => navigate(createPageUrl("Profile"))}
                 className="w-full bg-blue-600 hover:bg-blue-700"
               >
                 Update Profile to Enable Research Mode

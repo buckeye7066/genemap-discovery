@@ -54,64 +54,82 @@ export default function Dashboard() {
   });
 
   useEffect(() => {
-    loadDashboardData();
+    const controller = new AbortController();
+    
+    loadDashboardData(false, controller.signal);
     
     // Auto-refresh every 30 seconds for real-time updates
     const interval = setInterval(() => {
-      loadDashboardData(true);
+      loadDashboardData(true, controller.signal);
     }, 30000);
     
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      controller.abort();
+    };
   }, []);
 
-  const loadDashboardData = async (isAutoRefresh = false) => {
+  const loadDashboardData = async (isAutoRefresh = false, signal = null) => {
     if (!isAutoRefresh) {
       setIsLoading(true);
     }
     
     try {
+      // Check if aborted
+      if (signal?.aborted) return;
+      
       const currentUser = await base44.auth.me();
       setUser(currentUser);
+
+      if (!currentUser?.email) {
+        setIsLoading(false);
+        return;
+      }
 
       if (!currentUser.onboarding_completed) {
         setShowOnboarding(true);
       }
 
-      // Load all data in parallel
+      const userEmail = currentUser.email;
+
+      // Load all data in parallel with RLS fallback
       const [activities, searches, userProjects, records, sets, conversations] = await Promise.all([
         base44.entities.UserActivity.filter(
           { 
-            created_by: currentUser.email,
+            created_by: userEmail,
             activity_type: "gene_view"
           },
           '-created_date',
           10
         ),
         base44.entities.SearchHistory.filter(
-          { created_by: currentUser.email },
+          { created_by: userEmail },
           '-created_date',
           5
         ),
         base44.entities.ResearchProject.filter(
-          { created_by: currentUser.email },
+          { created_by: userEmail },
           '-updated_date',
           10
         ),
         base44.entities.MedicalData.filter(
-          { created_by: currentUser.email },
+          { created_by: userEmail },
           '-created_date',
           3
         ),
         base44.entities.GeneSet.filter(
-          { created_by: currentUser.email },
+          { created_by: userEmail },
           '-created_date',
           5
         ),
         base44.entities.AIConversation.filter(
-          { created_by: currentUser.email },
+          { created_by: userEmail },
           '-updated_date',
           5
-        ).catch(() => []) // AIConversation might not exist yet
+        ).catch(err => {
+          console.error("AIConversation fetch error:", err);
+          return [];
+        })
       ]);
 
       setRecentGenes(activities);
