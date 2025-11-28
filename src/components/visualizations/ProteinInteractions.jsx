@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
-import { createPageUrl } from "@/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import AskAIButtons from "../shared/AskAIButtons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -508,31 +508,13 @@ Source: STRING DB, BioGRID, IntAct, or literature evidence.`;
           </a>
         </div>
 
-        {/* AI Assistant Explanation Buttons */}
-        <div className="flex gap-2 mt-4">
-          <Button
-            variant="outline"
-            className="flex-1 bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-300 hover:bg-blue-100 min-h-[44px]"
-            onClick={() => {
-              const url = createPageUrl("AIAssistants") + `?context=protein_interactions&gene=${gene.symbol}`;
-              window.location.href = url;
-            }}
-          >
-            <span className="text-lg mr-2">🧠</span>
-            Ask Robert
-          </Button>
-          <Button
-            variant="outline"
-            className="flex-1 bg-gradient-to-r from-purple-50 to-pink-50 border-purple-300 hover:bg-purple-100 min-h-[44px]"
-            onClick={() => {
-              const url = createPageUrl("AIAssistants") + `?context=protein_interactions&gene=${gene.symbol}`;
-              window.location.href = url;
-            }}
-          >
-            <span className="text-lg mr-2">💜</span>
-            Ask Anastasia
-          </Button>
-        </div>
+        {/* AI Explanation Buttons */}
+        <AskAIButtons 
+          context="protein_interactions" 
+          gene={gene.symbol}
+          topic={`${gene.symbol} protein interaction network`}
+          className="mt-4"
+        />
 
         <div className="text-xs text-slate-500 text-center pt-2 border-t">
           Zoom: {Math.round(zoomLevel * 100)}% | {filteredInteractions.length} of {interactionData.interactions.length} interactions shown

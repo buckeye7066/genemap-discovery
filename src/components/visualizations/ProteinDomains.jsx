@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Box, Loader2, ZoomIn, ZoomOut, RotateCcw, Info, Eye, EyeOff } from "lucide-react";
+import AskAIButtons from "../shared/AskAIButtons";
 import {
   Tooltip,
   TooltipContent,
@@ -396,6 +397,14 @@ Explain domains as "${educationContext}".`;
           <div className="text-xs text-slate-500 text-center pt-2 border-t">
             Zoom: {Math.round(zoomLevel * 100)}% | Click domains for details | Use visibility toggle to hide/show
           </div>
+
+          {/* AI Explanation Buttons */}
+          <AskAIButtons 
+            context="protein_domains" 
+            gene={gene.symbol}
+            topic={`${gene.symbol} protein domain architecture and function`}
+            className="mt-4 pt-4 border-t border-slate-200"
+          />
         </div>
       </CardContent>
     </Card>

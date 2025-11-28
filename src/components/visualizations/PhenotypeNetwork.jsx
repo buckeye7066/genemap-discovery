@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from "recharts";
 import { Network, Info } from "lucide-react";
+import AskAIButtons from "../shared/AskAIButtons";
 
 const COLORS = ['#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#06b6d4'];
 
@@ -153,6 +154,13 @@ export default function PhenotypeNetwork({ phenotypes, userEducationLevel }) {
             </div>
           </div>
         </div>
+
+        {/* AI Explanation Buttons */}
+        <AskAIButtons 
+          context="phenotype_network" 
+          topic={`phenotype distribution and associated conditions`}
+          className="mt-4 pt-4 border-t border-cyan-200"
+        />
       </CardContent>
     </Card>
   );

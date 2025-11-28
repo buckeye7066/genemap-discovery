@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { MapPin, ZoomIn, ZoomOut, Maximize2 } from "lucide-react";
+import AskAIButtons from "../shared/AskAIButtons";
 
 export default function ChromosomeView({ gene, userEducationLevel }) {
   const [zoomLevel, setZoomLevel] = useState(1);
@@ -161,6 +162,14 @@ export default function ChromosomeView({ gene, userEducationLevel }) {
             <strong>Zoom: {zoomLevel}x</strong> - Gene region magnified for better visibility
           </div>
         )}
+
+        {/* AI Explanation Buttons */}
+        <AskAIButtons 
+          context="chromosome_location" 
+          gene={gene.symbol}
+          topic={`${gene.symbol} chromosomal location on Chr ${gene.chromosome}`}
+          className="mt-4 pt-4 border-t border-purple-200"
+        />
       </CardContent>
     </Card>
   );

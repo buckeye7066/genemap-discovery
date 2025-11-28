@@ -3,7 +3,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
-import { Activity, ZoomIn, ZoomOut, RotateCcw, Filter, Info, SortAsc, SortDesc } from "lucide-react"; // Added SortAsc, SortDesc (though not strictly used in current sort UI)
+import { Activity, ZoomIn, ZoomOut, RotateCcw, Filter, Info, SortAsc, SortDesc } from "lucide-react";
+import AskAIButtons from "../shared/AskAIButtons";
 import {
   BarChart,
   Bar,
@@ -401,6 +402,14 @@ export default function GeneExpressionChart({ expressionData, userEducationLevel
         <div className="mt-4 text-xs text-slate-500 text-center">
           Zoom: {Math.round(zoomLevel * 100)}% | Showing {sortedData.length} of {expressionData.length} tissues
         </div>
+
+        {/* AI Explanation Buttons */}
+        <AskAIButtons 
+          context="gene_expression" 
+          gene={geneSymbol}
+          topic={`${geneSymbol} tissue expression patterns`}
+          className="mt-4 pt-4 border-t border-slate-200"
+        />
       </CardContent>
     </Card>
   );
