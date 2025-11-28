@@ -224,7 +224,7 @@ Keep each insight under 50 words, practical, and personalized.`;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-4 sm:p-6">
-      <OnboardingTour onComplete={() => setShowOnboarding(false)} />
+      <OnboardingTour onComplete={() => setShowOnboarding(false)} forceShow={showOnboarding} />
 
       <div className="max-w-7xl mx-auto">
         <div className="mb-6 sm:mb-8">
