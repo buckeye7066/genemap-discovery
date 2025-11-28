@@ -22,6 +22,7 @@ import GSEA from './pages/GSEA';
 import AdminAnalytics from './pages/AdminAnalytics';
 import ContactSupport from './pages/ContactSupport';
 import AdminMessages from './pages/AdminMessages';
+import Home from './pages/Home';
 import __Layout from './Layout.jsx';
 
 
@@ -50,6 +51,7 @@ export const PAGES = {
     "AdminAnalytics": AdminAnalytics,
     "ContactSupport": ContactSupport,
     "AdminMessages": AdminMessages,
+    "Home": Home,
 }
 
 export const pagesConfig = {
