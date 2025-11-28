@@ -61,7 +61,7 @@ const tourSteps = [
   }
 ];
 
-export default function OnboardingTour({ onComplete }) {
+export default function OnboardingTour({ onComplete, forceShow = false }) {
   const [currentStep, setCurrentStep] = useState(0);
   const [isVisible, setIsVisible] = useState(false);
   const [user, setUser] = useState(null);
@@ -69,6 +69,14 @@ export default function OnboardingTour({ onComplete }) {
   useEffect(() => {
     checkOnboardingStatus();
   }, []);
+
+  // Allow parent to force show the tour
+  useEffect(() => {
+    if (forceShow) {
+      setIsVisible(true);
+      setCurrentStep(0);
+    }
+  }, [forceShow]);
 
   const checkOnboardingStatus = async () => {
     try {
