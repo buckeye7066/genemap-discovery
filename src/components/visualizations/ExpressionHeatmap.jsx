@@ -1,4 +1,3 @@
-
 import React, { useState, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -15,6 +14,7 @@ import { Download, Palette, Info } from "lucide-react";
 import html2canvas from 'html2canvas';
 import { Slider } from "@/components/ui/slider";
 import { Label } from "@/components/ui/label";
+import AskAIButtons from "../shared/AskAIButtons";
 
 export default function ExpressionHeatmap({ genes, samples, expressionData, userEducationLevel, highlightedGene, onGeneClick }) {
   const [colorScheme, setColorScheme] = useState("blue-red");
@@ -265,6 +265,14 @@ export default function ExpressionHeatmap({ genes, samples, expressionData, user
             </div>
           </div>
         </div>
+
+        {/* AI Explanation Buttons */}
+        <AskAIButtons 
+          context="expression_heatmap" 
+          gene={highlightedGene}
+          topic="gene expression heatmap and sample comparison"
+          className="mt-4 pt-4 border-t border-slate-200"
+        />
       </CardContent>
     </Card>
   );

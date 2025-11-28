@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/select";
 import { ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
 import { Download, ZoomIn, ZoomOut, RotateCcw, Info } from "lucide-react";
+import AskAIButtons from "../shared/AskAIButtons";
 
 export default function ManhattanPlot({ gwasData, userEducationLevel, highlightedGene, onGeneClick, allGenes = [] }) {
   const [zoomLevel, setZoomLevel] = useState(1);
@@ -301,6 +302,14 @@ export default function ManhattanPlot({ gwasData, userEducationLevel, highlighte
             </div>
           </div>
         )}
+
+        {/* AI Explanation Buttons */}
+        <AskAIButtons 
+          context="manhattan_plot" 
+          gene={highlightedGene}
+          topic="GWAS results and genome-wide association significance"
+          className="mt-4 pt-4 border-t border-slate-200"
+        />
       </CardContent>
     </Card>
   );

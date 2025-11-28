@@ -1,12 +1,12 @@
-
 import React, { useState, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Download, Info } from "lucide-react";
 import html2canvas from 'html2canvas';
-import { Badge } from "@/components/ui/badge"; // Added import
-import { Label } from "@/components/ui/label"; // Added import
+import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
+import AskAIButtons from "../shared/AskAIButtons";
 
 export default function CircosPlot({ genes, userEducationLevel, highlightedGene, onGeneClick }) {
   const circosRef = useRef(null);
@@ -303,6 +303,14 @@ export default function CircosPlot({ genes, userEducationLevel, highlightedGene,
             })()}
           </div>
         )}
+
+        {/* AI Explanation Buttons */}
+        <AskAIButtons 
+          context="circos_plot" 
+          gene={highlightedGene}
+          topic="circos plot genomic overview and gene relationships"
+          className="mt-4 pt-4 border-t border-slate-200"
+        />
       </CardContent>
     </Card>
   );
