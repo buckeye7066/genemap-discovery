@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
+import { createPageUrl } from "@/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -484,7 +485,7 @@ Source: STRING DB, BioGRID, IntAct, or literature evidence.`;
           </div>
         )}
 
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <a
             href={`https://string-db.org/network/${gene.symbol}`}
             target="_blank"
@@ -505,6 +506,32 @@ Source: STRING DB, BioGRID, IntAct, or literature evidence.`;
               BioGRID
             </Button>
           </a>
+        </div>
+
+        {/* AI Assistant Explanation Buttons */}
+        <div className="flex gap-2 mt-4">
+          <Button
+            variant="outline"
+            className="flex-1 bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-300 hover:bg-blue-100 min-h-[44px]"
+            onClick={() => {
+              const url = createPageUrl("AIAssistants") + `?context=protein_interactions&gene=${gene.symbol}`;
+              window.location.href = url;
+            }}
+          >
+            <span className="text-lg mr-2">🧠</span>
+            Ask Robert
+          </Button>
+          <Button
+            variant="outline"
+            className="flex-1 bg-gradient-to-r from-purple-50 to-pink-50 border-purple-300 hover:bg-purple-100 min-h-[44px]"
+            onClick={() => {
+              const url = createPageUrl("AIAssistants") + `?context=protein_interactions&gene=${gene.symbol}`;
+              window.location.href = url;
+            }}
+          >
+            <span className="text-lg mr-2">💜</span>
+            Ask Anastasia
+          </Button>
         </div>
 
         <div className="text-xs text-slate-500 text-center pt-2 border-t">
