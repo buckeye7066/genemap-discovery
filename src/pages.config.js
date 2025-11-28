@@ -1,4 +1,3 @@
-import Home from './pages/Home';
 import Search from './pages/Search';
 import Premium from './pages/Premium';
 import History from './pages/History';
@@ -27,7 +26,6 @@ import __Layout from './Layout.jsx';
 
 
 export const PAGES = {
-    "Home": Home,
     "Search": Search,
     "Premium": Premium,
     "History": History,
@@ -55,7 +53,7 @@ export const PAGES = {
 }
 
 export const pagesConfig = {
-    mainPage: "Home",
+    mainPage: "Search",
     Pages: PAGES,
     Layout: __Layout,
 };
