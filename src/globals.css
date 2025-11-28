@@ -9,6 +9,10 @@
   --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
   --safe-area-inset-left: env(safe-area-inset-left, 0px);
   --safe-area-inset-right: env(safe-area-inset-right, 0px);
+  
+  /* PWA Theme Colors */
+  --pwa-theme-color: #1e3a8a;
+  --pwa-background-color: #ffffff;
 }
 
 /* Cross-platform compatibility */
@@ -164,4 +168,44 @@ body {
 /* Dark mode device support */
 @media (prefers-color-scheme: dark) {
   /* Base44 theme system handles this, but ensure compatibility */
+}
+
+/* PWA Standalone Mode */
+@media (display-mode: standalone) {
+  body {
+    /* Remove any browser chrome styling when running as PWA */
+    padding-top: var(--safe-area-inset-top);
+  }
+  
+  .platform-ios {
+    /* iOS standalone mode adjustments */
+    padding-bottom: var(--safe-area-inset-bottom);
+  }
+}
+
+/* In-app browser specific fixes */
+.in-app-browser {
+  /* Ensure touch targets are large enough */
+  --min-touch-target: 48px;
+}
+
+.in-app-browser button,
+.in-app-browser a,
+.in-app-browser input {
+  min-height: var(--min-touch-target);
+}
+
+/* WebView compatibility */
+.webview-compat {
+  /* Prevent content from being cut off */
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Messenger/Instagram specific fixes */
+@supports (-webkit-touch-callout: none) {
+  /* iOS Safari and in-app browsers */
+  .external-link {
+    -webkit-touch-callout: default;
+  }
 }

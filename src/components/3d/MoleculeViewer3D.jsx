@@ -85,9 +85,21 @@ export default function MoleculeViewer3D({
   const rendererRef = useRef(null);
   const animationRef = useRef(null);
   const [isHovered, setIsHovered] = useState(false);
+  const [webGLAvailable, setWebGLAvailable] = useState(true);
+
+  // Check WebGL availability
+  useEffect(() => {
+    try {
+      const canvas = document.createElement("canvas");
+      const gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
+      if (!gl) setWebGLAvailable(false);
+    } catch (e) {
+      setWebGLAvailable(false);
+    }
+  }, []);
 
   useEffect(() => {
-    if (!containerRef.current) return;
+    if (!containerRef.current || !webGLAvailable) return;
 
     const moleculeData = MOLECULE_PRESETS[molecule] || MOLECULE_PRESETS.caffeine;
 
@@ -230,6 +242,30 @@ export default function MoleculeViewer3D({
       renderer.dispose();
     };
   }, [molecule, width, height, autoRotate]);
+
+  // Molecule emoji fallbacks
+  const moleculeEmojis = {
+    water: '💧',
+    methane: '⚗️',
+    caffeine: '☕',
+    benzene: '⬡',
+    adenine: '🧬'
+  };
+
+  // WebGL fallback
+  if (!webGLAvailable) {
+    return (
+      <div 
+        className={`flex items-center justify-center bg-gradient-to-br from-slate-100 to-blue-100 rounded-xl ${className}`}
+        style={{ width, height }}
+      >
+        <div className="text-center p-4">
+          <div className="text-3xl mb-1">{moleculeEmojis[molecule] || '⚛️'}</div>
+          <p className="text-xs text-slate-600 capitalize">{molecule}</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div 

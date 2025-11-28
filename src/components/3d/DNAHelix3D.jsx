@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import * as THREE from 'three';
 
 export default function DNAHelix3D({ width = 400, height = 400, className = "" }) {
@@ -6,9 +6,21 @@ export default function DNAHelix3D({ width = 400, height = 400, className = "" }
   const sceneRef = useRef(null);
   const rendererRef = useRef(null);
   const animationRef = useRef(null);
+  const [webGLAvailable, setWebGLAvailable] = useState(true);
+
+  // Check WebGL availability
+  useEffect(() => {
+    try {
+      const canvas = document.createElement("canvas");
+      const gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
+      if (!gl) setWebGLAvailable(false);
+    } catch (e) {
+      setWebGLAvailable(false);
+    }
+  }, []);
 
   useEffect(() => {
-    if (!containerRef.current) return;
+    if (!containerRef.current || !webGLAvailable) return;
 
     // Scene setup
     const scene = new THREE.Scene();
@@ -231,6 +243,21 @@ export default function DNAHelix3D({ width = 400, height = 400, className = "" }
       renderer.dispose();
     };
   }, [width, height]);
+
+  // WebGL fallback
+  if (!webGLAvailable) {
+    return (
+      <div 
+        className={`flex items-center justify-center bg-gradient-to-br from-blue-100 to-indigo-100 rounded-2xl ${className}`}
+        style={{ width, height }}
+      >
+        <div className="text-center p-4">
+          <div className="text-4xl mb-2">🧬</div>
+          <p className="text-sm text-slate-600">DNA Helix</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div 

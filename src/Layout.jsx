@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import DnaIcon from "./components/icons/DnaIcon";
@@ -7,6 +7,7 @@ import DemographicCheck from "./components/DemographicCheck";
 import MelissaBanner from "./components/MelissaBanner";
 import PlatformCompatibility from "./components/PlatformCompatibility";
 import UniversalLinkHandler from "./components/UniversalLinkHandler";
+import { getBrowserEnvironment } from "./components/shared/safeNavigate";
 import { Search, User, Crown, History, Home, FileText, Heart, Shield, BarChart3, Microscope, LayoutDashboard, MessageSquare, Building2, ShieldOff, Mail, Crown as CrownIcon, Users, Sparkles } from "lucide-react";
 import {
   Sidebar,
@@ -165,6 +166,62 @@ const navigationItems = [
 
 export default function Layout({ children, currentPageName }) {
   const location = useLocation();
+
+  // Add PWA meta tags and initialize cross-platform fixes
+  useEffect(() => {
+    const env = getBrowserEnvironment();
+    
+    // Add PWA meta tags dynamically
+    const addMetaTag = (name, content, httpEquiv = false) => {
+      let meta = document.querySelector(`meta[name="${name}"]`) || 
+                 document.querySelector(`meta[http-equiv="${name}"]`);
+      if (!meta) {
+        meta = document.createElement('meta');
+        if (httpEquiv) {
+          meta.setAttribute('http-equiv', name);
+        } else {
+          meta.setAttribute('name', name);
+        }
+        document.head.appendChild(meta);
+      }
+      meta.setAttribute('content', content);
+    };
+
+    // PWA and iOS support
+    addMetaTag('apple-mobile-web-app-capable', 'yes');
+    addMetaTag('apple-mobile-web-app-title', 'GeneMap');
+    addMetaTag('apple-mobile-web-app-status-bar-style', 'default');
+    addMetaTag('theme-color', '#1e3a8a');
+    addMetaTag('format-detection', 'telephone=no');
+    
+    // Security for embedded browsers
+    addMetaTag('referrer', 'no-referrer-when-downgrade');
+    
+    // Add manifest link
+    let manifestLink = document.querySelector('link[rel="manifest"]');
+    if (!manifestLink) {
+      manifestLink = document.createElement('link');
+      manifestLink.setAttribute('rel', 'manifest');
+      manifestLink.setAttribute('href', '/manifest.json');
+      document.head.appendChild(manifestLink);
+    }
+
+    // Add apple-touch-icon
+    let appleIcon = document.querySelector('link[rel="apple-touch-icon"]');
+    if (!appleIcon) {
+      appleIcon = document.createElement('link');
+      appleIcon.setAttribute('rel', 'apple-touch-icon');
+      appleIcon.setAttribute('href', '/icons/icon-192.png');
+      document.head.appendChild(appleIcon);
+    }
+
+    // Register service worker
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/service-worker.js').catch(() => {
+        // Service worker registration failed, non-critical
+      });
+    }
+  }, []);
 
   return (
     <BanCheck>
