@@ -1,8 +1,12 @@
 import { useEffect } from "react";
+import { isLocalStorageAvailable, memoryStorage } from "./shared/safeNavigate";
 
 /**
  * Platform Compatibility Component
  * Ensures the app works across all operating systems and embedded contexts
+ * Supports: iOS Safari, Android Chrome, in-app browsers (Messenger, Instagram, TikTok, Facebook, etc.)
+ * Desktop: Chrome, Safari, Edge, Firefox
+ * PWA: Standalone installable mode
  */
 export default function PlatformCompatibility() {
   useEffect(() => {
@@ -21,8 +25,14 @@ export default function PlatformCompatibility() {
       || window.navigator.standalone 
       || document.referrer.includes('android-app://');
     
-    const isInAppBrowser = /FBAN|FBAV|Instagram|Line|WhatsApp|LinkedIn|Twitter/i.test(userAgent);
+    const isInAppBrowser = /FBAN|FBAV|Instagram|Messenger|Line|WhatsApp|LinkedIn|Twitter|TikTok|Snapchat/i.test(userAgent);
     const isWebView = /(iPhone|iPod|iPad).*AppleWebKit(?!.*Safari)|; wv\)/i.test(userAgent);
+    
+    // Detect specific in-app browsers
+    const isFacebook = /FBAN|FBAV/i.test(userAgent);
+    const isInstagram = /Instagram/i.test(userAgent);
+    const isMessenger = /Messenger/i.test(userAgent);
+    const isTikTok = /TikTok/i.test(userAgent);
     
     // Add platform classes to body
     const platformClasses = [
@@ -32,11 +42,32 @@ export default function PlatformCompatibility() {
       isWindows && 'platform-windows',
       isLinux && 'platform-linux',
       isStandalone && 'display-standalone',
+      isStandalone && 'pwa-mode',
       isInAppBrowser && 'in-app-browser',
-      isWebView && 'webview'
+      isWebView && 'webview',
+      isWebView && 'webview-compat',
+      isFacebook && 'fb-browser',
+      isInstagram && 'ig-browser',
+      isMessenger && 'messenger-browser',
+      isTikTok && 'tiktok-browser'
     ].filter(Boolean);
     
     document.body.classList.add(...platformClasses);
+    
+    // Initialize localStorage fallback for restricted browsers (Messenger, Instagram, etc.)
+    if (!isLocalStorageAvailable()) {
+      console.warn("localStorage disabled — using fallback memory store");
+      try {
+        Object.defineProperty(window, 'localStorage', {
+          value: memoryStorage,
+          writable: true,
+          configurable: true
+        });
+      } catch (e) {
+        // Some browsers don't allow redefining localStorage
+        window.__memoryStorage = memoryStorage;
+      }
+    }
     
     // Viewport height fix for mobile browsers (especially iOS Safari)
     const setViewportHeight = () => {
@@ -112,7 +143,11 @@ export const usePlatformDetection = () => {
     isMobile: /mobile|android|iphone|ipad|ipod/.test(userAgent),
     isTablet: /ipad|android(?!.*mobile)/.test(userAgent),
     isStandalone: window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone,
-    isInAppBrowser: /FBAN|FBAV|Instagram|Line|WhatsApp|LinkedIn|Twitter/i.test(userAgent),
+    isInAppBrowser: /FBAN|FBAV|Instagram|Messenger|Line|WhatsApp|LinkedIn|Twitter|TikTok|Snapchat/i.test(userAgent),
+    isFacebook: /FBAN|FBAV/i.test(userAgent),
+    isInstagram: /Instagram/i.test(userAgent),
+    isMessenger: /Messenger/i.test(userAgent),
+    isTikTok: /TikTok/i.test(userAgent),
     isWebView: /(iPhone|iPod|iPad).*AppleWebKit(?!.*Safari)|; wv\)/i.test(userAgent),
     isTouchDevice: 'ontouchstart' in window || navigator.maxTouchPoints > 0,
     browserName: (() => {
