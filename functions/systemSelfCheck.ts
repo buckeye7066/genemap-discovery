@@ -1,29 +1,11 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.4';
+import { getSurfaceMap, runSurfaceTests } from './shared/surfaceMapper.js';
 
 const TIMEOUT_MS = 15000;
 const REQUIRED_ENV_VARS = [
   'BASE44_APP_ID',
   'STRIPE_SECRET_KEY',
   'STRIPE_WEBHOOK_SECRET'
-];
-
-// Known backend functions to test
-const KNOWN_FUNCTIONS = [
-  'createCheckoutSession',
-  'stripeWebhook',
-  'createInstitutionalCheckout',
-  'createPortalSession',
-  'deleteUser',
-  'getAllUsers',
-  'getBannedUsers',
-  'banUser',
-  'unbanUser',
-  'preBanUser',
-  'checkPreBanOnLogin',
-  'grantPremiumAccess',
-  'grantPremiumToUser',
-  'grantAdminPrivileges',
-  'searchUsers'
 ];
 
 // Known entities to verify
