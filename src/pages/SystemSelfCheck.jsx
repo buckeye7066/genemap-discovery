@@ -32,7 +32,9 @@ import {
   Lock,
   Zap,
   Clock,
-  RefreshCw
+  RefreshCw,
+  Copy,
+  FileText
 } from "lucide-react";
 
 export default function SystemSelfCheck() {
