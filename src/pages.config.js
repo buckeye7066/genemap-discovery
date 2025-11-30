@@ -23,6 +23,7 @@ import AdminAnalytics from './pages/AdminAnalytics';
 import ContactSupport from './pages/ContactSupport';
 import AdminMessages from './pages/AdminMessages';
 import Home from './pages/Home';
+import SystemSelfCheck from './pages/SystemSelfCheck';
 import __Layout from './Layout.jsx';
 
 
@@ -52,6 +53,7 @@ export const PAGES = {
     "ContactSupport": ContactSupport,
     "AdminMessages": AdminMessages,
     "Home": Home,
+    "SystemSelfCheck": SystemSelfCheck,
 }
 
 export const pagesConfig = {
