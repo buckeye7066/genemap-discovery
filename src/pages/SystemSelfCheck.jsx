@@ -206,6 +206,11 @@ export default function SystemSelfCheck() {
                 </p>
               </div>
               <div className="flex gap-2">
+                {results && (
+                  <Button variant="outline" onClick={clearResults} disabled={clearing} className="gap-2">
+                    Clear Results
+                  </Button>
+                )}
                 <Button
                   onClick={runDiagnostic}
                   disabled={isRunning}
