@@ -3,16 +3,46 @@
  * Comprehensive diagnostic system for all application layers
  * 
  * Features:
- * - Full function introspection and testing
+ * - Full function introspection and testing via FUNCTION_REGISTRY
  * - Entity/database health checks
  * - RLS policy validation
  * - Environment variable verification
  * - Integration health checks
  * - Cross-contamination detection
- * - Consolidated error reporting
+ * - Auto-Fix and Auto-Retry support
+ * - Consolidated error reporting with code snippets
  */
 
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.4';
+
+// ============================================
+// FUNCTION_REGISTRY - Complete list of all backend functions
+// ============================================
+const FUNCTION_REGISTRY = [
+  // STRIPE / BILLING
+  { name: 'createCheckoutSession', category: 'stripe', method: 'POST', expectError: null },
+  { name: 'stripeWebhook', category: 'stripe', method: 'POST', expectError: null },
+  { name: 'createInstitutionalCheckout', category: 'stripe', method: 'POST', expectError: null },
+  { name: 'createPortalSession', category: 'stripe', method: 'POST', expectError: null },
+  
+  // USER MANAGEMENT
+  { name: 'deleteUser', category: 'user_management', method: 'POST', expectError: null },
+  { name: 'getAllUsers', category: 'user_management', method: 'POST', expectError: null },
+  { name: 'getBannedUsers', category: 'user_management', method: 'POST', expectError: null },
+  { name: 'banUser', category: 'user_management', method: 'POST', expectError: null },
+  { name: 'unbanUser', category: 'user_management', method: 'POST', expectError: null },
+  { name: 'preBanUser', category: 'user_management', method: 'POST', expectError: null },
+  { name: 'checkPreBanOnLogin', category: 'user_management', method: 'POST', expectError: null },
+  { name: 'searchUsers', category: 'user_management', method: 'POST', expectError: null },
+  
+  // ADMIN
+  { name: 'grantPremiumAccess', category: 'admin', method: 'POST', expectError: null },
+  { name: 'grantPremiumToUser', category: 'admin', method: 'POST', expectError: null },
+  { name: 'grantAdminPrivileges', category: 'admin', method: 'POST', expectError: null },
+  
+  // SYSTEM (skips itself)
+  { name: 'systemSelfCheck', category: 'system', method: 'POST', expectError: null },
+];
 
 // Required environment variables
 const REQUIRED_ENV_VARS = [
@@ -21,25 +51,12 @@ const REQUIRED_ENV_VARS = [
   'STRIPE_WEBHOOK_SECRET'
 ];
 
-// Known entities to check
+// Known entities
 const KNOWN_ENTITIES = [
-  'Subscription',
-  'Message',
-  'AIConversation',
-  'PreBannedUser',
-  'SearchHistory',
-  'MedicalData',
-  'GeneSet',
-  'MedicalDataShare',
-  'UserActivity',
-  'ResearchProject',
-  'ProjectCollaborator',
-  'ProjectVersion',
-  'VisualizationConfig',
-  'InstitutionalLicense',
-  'LicenseAssignment',
-  'LicenseUsageLog',
-  'SystemCheckLog'
+  'Subscription', 'Message', 'AIConversation', 'PreBannedUser', 'SearchHistory',
+  'MedicalData', 'GeneSet', 'MedicalDataShare', 'UserActivity', 'ResearchProject',
+  'ProjectCollaborator', 'ProjectVersion', 'VisualizationConfig', 'InstitutionalLicense',
+  'LicenseAssignment', 'LicenseUsageLog', 'SystemCheckLog'
 ];
 
 // RLS test entities
@@ -54,55 +71,114 @@ const CONTAMINATION_ENTITIES = [
   { name: 'Subscription', field: 'created_by' }
 ];
 
-/**
- * FUNCTION_REGISTRY - Complete registry of all backend functions
- * 
- * Each entry must have:
- * - name: function filename without extension (invokable name)
- * - category: grouping (stripe, user_management, admin, general)
- * - method: "GET" or "POST" (default POST for Base44 functions)
- * - expectError: optional - if set, this error message is treated as ok
- */
-const FUNCTION_REGISTRY = [
-  // ============================================
-  // STRIPE / BILLING FUNCTIONS
-  // ============================================
-  { name: 'createCheckoutSession', category: 'stripe', method: 'POST', expectError: null },
-  { name: 'stripeWebhook', category: 'stripe', method: 'POST', expectError: null },
-  { name: 'createInstitutionalCheckout', category: 'stripe', method: 'POST', expectError: null },
-  { name: 'createPortalSession', category: 'stripe', method: 'POST', expectError: null },
-  
-  // ============================================
-  // USER MANAGEMENT FUNCTIONS
-  // ============================================
-  { name: 'deleteUser', category: 'user_management', method: 'POST', expectError: null },
-  { name: 'getAllUsers', category: 'user_management', method: 'POST', expectError: null },
-  { name: 'getBannedUsers', category: 'user_management', method: 'POST', expectError: null },
-  { name: 'banUser', category: 'user_management', method: 'POST', expectError: null },
-  { name: 'unbanUser', category: 'user_management', method: 'POST', expectError: null },
-  { name: 'preBanUser', category: 'user_management', method: 'POST', expectError: null },
-  { name: 'checkPreBanOnLogin', category: 'user_management', method: 'POST', expectError: null },
-  { name: 'searchUsers', category: 'user_management', method: 'POST', expectError: null },
-  
-  // ============================================
-  // ADMIN FUNCTIONS
-  // ============================================
-  { name: 'grantPremiumAccess', category: 'admin', method: 'POST', expectError: null },
-  { name: 'grantPremiumToUser', category: 'admin', method: 'POST', expectError: null },
-  { name: 'grantAdminPrivileges', category: 'admin', method: 'POST', expectError: null },
-  
-  // ============================================
-  // SYSTEM FUNCTIONS (self-check skips itself)
-  // ============================================
-  { name: 'systemSelfCheck', category: 'system', method: 'POST', expectError: null },
-];
-
-// Timeout configurations by category
+// Timeout configurations
 const TIMEOUT_CONFIG = {
   crawler: 15000,
   queue: 15000,
   stripe: 10000,
+  user_management: 8000,
+  admin: 8000,
   default: 5000
+};
+
+// Code snippets for each function (edit-time extracted)
+const CODE_SNIPPETS = {
+  createCheckoutSession: `Deno.serve(async (req) => {
+    const clonedReq = req.clone();
+    let body;
+    try { body = await clonedReq.json(); } catch { body = {}; }
+    if (body._selfTest === true) {
+        return Response.json({ ok: true, testMode: true, message: 'Self-test passed' });
+    }
+    // ... checkout logic
+});`,
+  stripeWebhook: `Deno.serve(async (req) => {
+    // Self-test mode check via query param or body
+    const url = new URL(req.url);
+    if (url.searchParams.get('_selfTest') === '1') {
+        return Response.json({ ok: true, testMode: true });
+    }
+    // ... webhook signature validation
+});`,
+  createInstitutionalCheckout: `Deno.serve(async (req) => {
+    const clonedReq = req.clone();
+    let body; try { body = await clonedReq.json(); } catch { body = {}; }
+    if (body._selfTest === true) { return Response.json({ ok: true, testMode: true }); }
+    // ... institutional checkout logic
+});`,
+  createPortalSession: `Deno.serve(async (req) => {
+    const clonedReq = req.clone();
+    let body; try { body = await clonedReq.json(); } catch { body = {}; }
+    if (body._selfTest === true) { return Response.json({ ok: true, testMode: true }); }
+    // ... portal session logic
+});`,
+  deleteUser: `Deno.serve(async (req) => {
+    const clonedReq = req.clone();
+    let bodyCheck; try { bodyCheck = await clonedReq.json(); } catch { bodyCheck = {}; }
+    if (bodyCheck._selfTest === true) { return Response.json({ ok: true, testMode: true }); }
+    // ... delete user logic
+});`,
+  getAllUsers: `Deno.serve(async (req) => {
+    const clonedReq = req.clone();
+    let body; try { body = await clonedReq.json(); } catch { body = {}; }
+    if (body._selfTest === true) { return Response.json({ ok: true, testMode: true }); }
+    // ... fetch all users with service role
+});`,
+  getBannedUsers: `Deno.serve(async (req) => {
+    const clonedReq = req.clone();
+    let body; try { body = await clonedReq.json(); } catch { body = {}; }
+    if (body._selfTest === true) { return Response.json({ ok: true, testMode: true }); }
+    // ... fetch banned users
+});`,
+  banUser: `Deno.serve(async (req) => {
+    const clonedReq = req.clone();
+    let bodyCheck; try { bodyCheck = await clonedReq.json(); } catch { bodyCheck = {}; }
+    if (bodyCheck._selfTest === true) { return Response.json({ ok: true, testMode: true }); }
+    // ... ban user logic
+});`,
+  unbanUser: `Deno.serve(async (req) => {
+    const clonedReq = req.clone();
+    let bodyCheck; try { bodyCheck = await clonedReq.json(); } catch { bodyCheck = {}; }
+    if (bodyCheck._selfTest === true) { return Response.json({ ok: true, testMode: true }); }
+    // ... unban user logic
+});`,
+  preBanUser: `Deno.serve(async (req) => {
+    const clonedReq = req.clone();
+    let bodyCheck; try { bodyCheck = await clonedReq.json(); } catch { bodyCheck = {}; }
+    if (bodyCheck._selfTest === true) { return Response.json({ ok: true, testMode: true }); }
+    // ... pre-ban user logic
+});`,
+  checkPreBanOnLogin: `Deno.serve(async (req) => {
+    const clonedReq = req.clone();
+    let body; try { body = await clonedReq.json(); } catch { body = {}; }
+    if (body._selfTest === true) { return Response.json({ ok: true, testMode: true }); }
+    // ... check pre-ban logic
+});`,
+  searchUsers: `Deno.serve(async (req) => {
+    const clonedReq = req.clone();
+    let bodyCheck; try { bodyCheck = await clonedReq.json(); } catch { bodyCheck = {}; }
+    if (bodyCheck._selfTest === true) { return Response.json({ ok: true, testMode: true }); }
+    // ... search users logic
+});`,
+  grantPremiumAccess: `Deno.serve(async (req) => {
+    const clonedReq = req.clone();
+    let body; try { body = await clonedReq.json(); } catch { body = {}; }
+    if (body._selfTest === true) { return Response.json({ ok: true, testMode: true }); }
+    // ... grant premium access
+});`,
+  grantPremiumToUser: `Deno.serve(async (req) => {
+    const clonedReq = req.clone();
+    let bodyCheck; try { bodyCheck = await clonedReq.json(); } catch { bodyCheck = {}; }
+    if (bodyCheck._selfTest === true) { return Response.json({ ok: true, testMode: true }); }
+    // ... grant premium to specific user
+});`,
+  grantAdminPrivileges: `Deno.serve(async (req) => {
+    const clonedReq = req.clone();
+    let bodyCheck; try { bodyCheck = await clonedReq.json(); } catch { bodyCheck = {}; }
+    if (bodyCheck._selfTest === true) { return Response.json({ ok: true, testMode: true }); }
+    // ... grant admin privileges
+});`,
+  systemSelfCheck: `// This is the self-check module itself - skipped to avoid recursion`
 };
 
 /**
@@ -118,10 +194,11 @@ async function runFunctionTest(entry, invokeFunction) {
     return {
       ok: true,
       filePath,
-      invokableName: entry.name,
+      name: entry.name,
       category: entry.category,
       errorMessage: null,
       stack: null,
+      codeSnippet: CODE_SNIPPETS[entry.name] || 'Code snippet not available',
       duration: 0,
       skipped: true,
       skipReason: 'Self-check module - skipped to avoid recursion'
@@ -142,10 +219,11 @@ async function runFunctionTest(entry, invokeFunction) {
     return {
       ok: isOk,
       filePath,
-      invokableName: entry.name,
+      name: entry.name,
       category: entry.category,
       errorMessage: isOk ? null : (data?.error || 'Self-test did not return ok'),
       stack: null,
+      codeSnippet: CODE_SNIPPETS[entry.name] || 'Code snippet not available',
       duration: Date.now() - startTime,
       skipped: false,
       skipReason: null
@@ -156,10 +234,11 @@ async function runFunctionTest(entry, invokeFunction) {
       return {
         ok: true,
         filePath,
-        invokableName: entry.name,
+        name: entry.name,
         category: entry.category,
         errorMessage: null,
         stack: null,
+        codeSnippet: CODE_SNIPPETS[entry.name] || 'Code snippet not available',
         duration: Date.now() - startTime,
         skipped: false,
         skipReason: null,
@@ -180,10 +259,11 @@ async function runFunctionTest(entry, invokeFunction) {
     return {
       ok: isExpectedError,
       filePath,
-      invokableName: entry.name,
+      name: entry.name,
       category: entry.category,
       errorMessage: isExpectedError ? null : (err.message || 'Unknown error'),
-      stack: isExpectedError ? null : err.stack,
+      stack: isExpectedError ? null : (err.stack || 'No stack trace'),
+      codeSnippet: CODE_SNIPPETS[entry.name] || 'Code snippet not available',
       duration: Date.now() - startTime,
       skipped: false,
       skipReason: null,
@@ -193,23 +273,91 @@ async function runFunctionTest(entry, invokeFunction) {
 }
 
 /**
- * Generate error report from function results
+ * Generate combined error report with code snippets
  */
-function generateFunctionErrorReport(results) {
-  const failures = results.filter(r => !r.ok && !r.skipped);
+function generateCombinedErrorReport(functionResults, entityChecks, rlsChecks, envChecks, contaminationResults) {
+  const sections = [];
   
-  if (failures.length === 0) {
-    return 'All function tests passed. No errors detected.';
+  // Environment failures
+  const envFailures = envChecks.filter(c => !c.ok);
+  if (envFailures.length > 0) {
+    sections.push(`
+==================================================
+MISSING ENVIRONMENT VARIABLES
+==================================================
+${envFailures.map(e => e.name.replace('ENV: ', '')).join(', ')}
+
+RECOVERY: Set these environment variables in your Base44 dashboard under Settings → Environment Variables.
+`);
   }
   
-  return failures.map(f => `
+  // Entity failures
+  const entityFailures = entityChecks.filter(c => !c.ok);
+  for (const f of entityFailures) {
+    sections.push(`
+--------------------------------------------------
+ENTITY CHECK FAILURE
 --------------------------------------------------
 FILE: ${f.filePath}
-FUNCTION: ${f.invokableName}
+ENTITY: ${f.name}
+ERROR: ${f.error}
+RECOVERY: Verify entity schema exists and is valid JSON.
+--------------------------------------------------`);
+  }
+  
+  // RLS failures
+  const rlsFailures = rlsChecks.filter(c => !c.ok);
+  for (const f of rlsFailures) {
+    sections.push(`
+--------------------------------------------------
+RLS POLICY FAILURE
+--------------------------------------------------
+FILE: ${f.filePath}
+ENTITY: ${f.name}
+ERROR: ${f.error}
+RECOVERY: Check RLS rules in entity schema allow user-scoped reads.
+--------------------------------------------------`);
+  }
+  
+  // Function failures
+  const functionFailures = functionResults.filter(r => !r.ok && !r.skipped);
+  for (const f of functionFailures) {
+    sections.push(`
+--------------------------------------------------
+FUNCTION TEST FAILURE
+--------------------------------------------------
+FILE: ${f.filePath}
+FUNCTION: ${f.name}
 CATEGORY: ${f.category}
-ERROR: ${f.errorMessage ?? 'unknown'}
-STACK: ${f.stack ?? 'no stack available'}
---------------------------------------------------`).join('\n\n');
+ERROR: ${f.errorMessage || 'unknown'}
+STACK:
+${f.stack || 'no stack available'}
+
+CODE SNIPPET:
+${f.codeSnippet || 'not available'}
+--------------------------------------------------`);
+  }
+  
+  // Contamination leaks
+  const leaks = contaminationResults.filter(c => c.leak);
+  for (const leak of leaks) {
+    sections.push(`
+--------------------------------------------------
+DATA CONTAMINATION LEAK DETECTED
+--------------------------------------------------
+DESCRIPTION: ${leak.description}
+FUNCTION: ${leak.functionName}
+FILE: ${leak.filePath}
+OFFENDING CODE: ${leak.offendingCode || 'no snippet available'}
+RECOVERY: Ensure all records have ${leak.field} field set on create.
+--------------------------------------------------`);
+  }
+  
+  if (sections.length === 0) {
+    return 'All checks passed. No errors detected.';
+  }
+  
+  return sections.join('\n');
 }
 
 /**
@@ -330,6 +478,7 @@ async function checkContamination(base44) {
           description: `${entityName} has ${recordsWithoutOwner.length} records without ${field} field`,
           filePath: `entities/${entityName}.json`,
           functionName: 'create/update',
+          field,
           offendingCode: `Records missing '${field}' field could leak to other users`
         });
       }
@@ -402,65 +551,21 @@ async function checkIntegrations(base44) {
 }
 
 /**
- * Build combined error report
+ * Sleep helper for retry delay
  */
-function buildCombinedErrorReport(failedChecks, contaminationLeaks, envMissing, functionReport) {
-  const report = [];
-  
-  // Environment errors
-  if (envMissing.length > 0) {
-    report.push(`
-==================================================
-MISSING ENVIRONMENT VARIABLES
-==================================================
-${envMissing.join(', ')}
-`);
-  }
-  
-  // Other check failures (database, RLS, integration)
-  for (const c of failedChecks) {
-    if (c.category !== 'backend_function') {
-      report.push(`
---------------------------------------------------
-ERROR IN: ${c.name}
-TYPE: ${c.category || 'unknown'}
-FILE: ${c.filePath ?? 'unknown'}
-MESSAGE: ${c.error ?? 'unknown'}
---------------------------------------------------`);
-    }
-  }
-  
-  // Contamination errors
-  for (const leak of contaminationLeaks) {
-    report.push(`
---------------------------------------------------
-DATA CONTAMINATION LEAK DETECTED
-DESCRIPTION: ${leak.description}
-FUNCTION: ${leak.functionName}
-FILE: ${leak.filePath}
-CODE: ${leak.offendingCode ?? 'no snippet available'}
---------------------------------------------------`);
-  }
-  
-  // Function test errors
-  if (functionReport && functionReport !== 'All function tests passed. No errors detected.') {
-    report.push(`
-==================================================
-FUNCTION TEST FAILURES
-==================================================
-${functionReport}`);
-  }
-  
-  if (report.length === 0) {
-    return 'All checks passed. No errors detected.';
-  }
-  
-  return report.join('\n');
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 // Main handler
 Deno.serve(async (req) => {
   const startTime = Date.now();
+  
+  // Parse URL for query params
+  const url = new URL(req.url);
+  const autoFix = url.searchParams.get('autoFix') === '1';
+  const autoRetry = url.searchParams.get('autoRetry') === '1';
+  const retryDelayMs = parseInt(url.searchParams.get('retryDelayMs') || '2000', 10);
   
   // Clone request for body reading
   const clonedReq = req.clone();
@@ -492,82 +597,137 @@ Deno.serve(async (req) => {
       }, { status: 403 });
     }
     
-    const allChecks = [];
-    
     // 1. Environment checks
     const { checks: envChecks, missing: envMissing } = checkEnvironment();
-    allChecks.push(...envChecks);
     
     // 2. Entity/database checks
     const entityChecks = await checkEntities(base44);
-    allChecks.push(...entityChecks);
     
     // 3. RLS policy checks
     const rlsChecks = await checkRLS(base44, user.email);
-    allChecks.push(...rlsChecks);
     
-    // 4. Function introspection and testing
-    const functionResults = [];
+    // 4. Function testing
+    let functionResults = [];
     for (const entry of FUNCTION_REGISTRY) {
       const result = await runFunctionTest(entry, (fnName, params) => base44.functions.invoke(fnName, params));
       functionResults.push(result);
     }
     
-    // Convert function results to check format
-    const functionChecks = functionResults.map(r => ({
-      category: 'backend_function',
-      name: `Function: ${r.invokableName}`,
-      ok: r.ok,
-      error: r.errorMessage,
-      filePath: r.filePath,
-      stack: r.stack,
-      skipped: r.skipped,
-      skipReason: r.skipReason,
-      duration: r.duration,
-      functionCategory: r.category
-    }));
-    allChecks.push(...functionChecks);
+    // 5. Auto-Retry failed functions if enabled
+    let retryResults = [];
+    if (autoRetry) {
+      const failedFunctions = functionResults.filter(r => !r.ok && !r.skipped);
+      if (failedFunctions.length > 0) {
+        await sleep(retryDelayMs);
+        
+        for (const failed of failedFunctions) {
+          const entry = FUNCTION_REGISTRY.find(e => e.name === failed.name);
+          if (entry) {
+            const retryResult = await runFunctionTest(entry, (fnName, params) => base44.functions.invoke(fnName, params));
+            retryResult.isRetry = true;
+            retryResults.push(retryResult);
+            
+            // Update original result if retry succeeded
+            if (retryResult.ok) {
+              const idx = functionResults.findIndex(r => r.name === failed.name);
+              if (idx >= 0) {
+                functionResults[idx] = { ...retryResult, recoveredOnRetry: true };
+              }
+            }
+          }
+        }
+      }
+    }
     
-    // 5. Integration checks
+    // 6. Integration checks
     const integrationChecks = await checkIntegrations(base44);
-    allChecks.push(...integrationChecks);
     
-    // 6. Contamination detection
+    // 7. Contamination detection
     const contaminationResults = await checkContamination(base44);
     const contaminationOk = contaminationResults.filter(c => c.leak).length === 0;
+    
+    // Compile all checks
+    const allChecks = [
+      ...envChecks,
+      ...entityChecks,
+      ...rlsChecks,
+      ...functionResults.map(r => ({
+        category: 'backend_function',
+        name: `Function: ${r.name}`,
+        ok: r.ok,
+        error: r.errorMessage,
+        filePath: r.filePath,
+        stack: r.stack,
+        codeSnippet: r.codeSnippet,
+        skipped: r.skipped,
+        skipReason: r.skipReason,
+        duration: r.duration,
+        functionCategory: r.category,
+        recoveredOnRetry: r.recoveredOnRetry
+      })),
+      ...integrationChecks
+    ];
     
     // Compile results
     const passed = allChecks.filter(c => c.ok).length;
     const failed = allChecks.filter(c => !c.ok).length;
-    const failedChecks = allChecks.filter(c => !c.ok);
     const functionFailures = functionResults.filter(r => !r.ok && !r.skipped);
     const duration = Date.now() - startTime;
     
-    // Generate reports
-    const functionErrorReport = generateFunctionErrorReport(functionResults);
-    const combinedErrorReport = buildCombinedErrorReport(
-      failedChecks,
-      contaminationResults.filter(c => c.leak),
-      envMissing,
-      functionErrorReport
+    // Generate combined error report
+    const combinedErrorReport = generateCombinedErrorReport(
+      functionResults,
+      entityChecks,
+      rlsChecks,
+      envChecks,
+      contaminationResults
     );
+    
+    // Auto-fix suggestions
+    const autoFixResults = [];
+    if (autoFix) {
+      // Add suggestions for missing self-test blocks
+      for (const f of functionFailures) {
+        if (f.errorMessage?.includes('Self-test did not return ok')) {
+          autoFixResults.push({
+            function: f.name,
+            suggestion: 'Add self-test block at top of handler',
+            codeToAdd: `if (body._selfTest === true) { return Response.json({ ok: true, testMode: true }); }`
+          });
+        }
+      }
+      
+      // Env var suggestions
+      for (const env of envMissing) {
+        autoFixResults.push({
+          type: 'environment',
+          variable: env,
+          suggestion: `Set ${env} in Base44 dashboard under Settings → Environment Variables`
+        });
+      }
+    }
     
     const result = {
       ok: failed === 0 && contaminationOk,
       timestamp: new Date().toISOString(),
       run_duration_ms: duration,
       executedBy: user.email,
+      options: { autoFix, autoRetry, retryDelayMs },
       summary: {
         total: allChecks.length,
         passed,
         failed,
         totalFunctions: FUNCTION_REGISTRY.length,
         functionFailures: functionFailures.length,
-        otherFailures: failed - functionFailures.length
+        otherFailures: failed - functionFailures.length,
+        retriedCount: retryResults.length,
+        recoveredCount: retryResults.filter(r => r.ok).length
       },
       combinedErrorReport,
       checks: allChecks,
       functionChecks: functionResults,
+      retryResults: autoRetry ? retryResults : undefined,
+      autoFixResults: autoFix ? autoFixResults : undefined,
       contamination: {
         ok: contaminationOk,
         results: contaminationResults
@@ -597,21 +757,26 @@ Deno.serve(async (req) => {
     return Response.json(result);
     
   } catch (error) {
-    const errorCheck = {
-      category: 'system',
-      name: 'Self-check initialization',
-      ok: false,
-      error: error.message,
-      stack: error.stack
-    };
-    
     return Response.json({
       ok: false,
       error: error.message,
       stack: error.stack,
       summary: { total: 1, passed: 0, failed: 1, totalFunctions: 0, functionFailures: 0, otherFailures: 1 },
-      combinedErrorReport: `System initialization error: ${error.message}\n${error.stack}`,
-      checks: [errorCheck],
+      combinedErrorReport: `
+==================================================
+SYSTEM INITIALIZATION ERROR
+==================================================
+ERROR: ${error.message}
+STACK:
+${error.stack}
+==================================================`,
+      checks: [{
+        category: 'system',
+        name: 'Self-check initialization',
+        ok: false,
+        error: error.message,
+        stack: error.stack
+      }],
       functionChecks: [],
       contamination: { ok: true, results: [] },
       env: { missing: [], ok: true }
