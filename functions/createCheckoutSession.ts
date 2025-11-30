@@ -4,21 +4,6 @@ import Stripe from 'npm:stripe@14.10.0';
 const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY"));
 
 Deno.serve(async (req) => {
-    // Self-test mode bypass
-    const url = new URL(req.url);
-    if (url.searchParams.get('_selfTest') === '1') {
-        return Response.json({
-            ok: true,
-            testMode: true,
-            message: 'Self-test passed for createCheckoutSession',
-            mockData: {
-                id: 'test_session_' + Date.now(),
-                status: 'mocked',
-                url: 'https://checkout.stripe.com/test'
-            }
-        });
-    }
-
     try {
         const base44 = createClientFromRequest(req);
         const user = await base44.auth.me();
@@ -27,12 +12,27 @@ Deno.serve(async (req) => {
             return Response.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
+        // Check for self-test mode in body
         let body;
         try {
             body = await req.json();
         } catch {
             body = {};
         }
+
+        if (body._selfTest === true) {
+            return Response.json({
+                ok: true,
+                testMode: true,
+                message: 'Self-test passed for createCheckoutSession',
+                mockData: {
+                    id: 'test_session_' + Date.now(),
+                    status: 'mocked',
+                    url: 'https://checkout.stripe.com/test'
+                }
+            });
+        }
+
         const { priceId } = body;
         const appBaseUrl = Deno.env.get("APP_BASE_URL");
 
