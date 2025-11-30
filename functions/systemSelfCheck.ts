@@ -126,16 +126,86 @@ Deno.serve(async (req) => {
     }
 
     // ========================================
-    // 4. BACKEND FUNCTION CHECKS
+    // 4. BACKEND FUNCTION CHECKS (via Surface Mapper)
     // ========================================
-    const baseUrl = req.headers.get('origin') || 
-                    req.headers.get('referer')?.replace(/\/[^/]*$/, '') || 
-                    '';
+    
+    // Get all discovered surfaces
+    let surfaceMap = [];
+    try {
+      surfaceMap = await getSurfaceMap();
+      checks.push({
+        category: 'surface_discovery',
+        name: 'Surface Mapper: Discovery',
+        ok: true,
+        error: null,
+        details: `Discovered ${surfaceMap.length} surfaces`
+      });
+    } catch (err) {
+      checks.push({
+        category: 'surface_discovery',
+        name: 'Surface Mapper: Discovery',
+        ok: false,
+        error: err.message || 'Failed to discover surfaces',
+        stack: err.stack
+      });
+    }
 
-    for (const fnName of KNOWN_FUNCTIONS) {
+    // Run tests on all discovered surfaces
+    let surfaceTestResults = [];
+    try {
+      surfaceTestResults = await runSurfaceTests(
+        (fnName, params) => base44.functions.invoke(fnName, params)
+      );
+    } catch (err) {
+      checks.push({
+        category: 'surface_discovery',
+        name: 'Surface Mapper: Test Runner',
+        ok: false,
+        error: err.message || 'Failed to run surface tests',
+        stack: err.stack
+      });
+    }
+
+    // Convert surface test results to checks
+    for (const { surface, testResult } of surfaceTestResults) {
+      if (testResult.skipped) {
+        checks.push({
+          category: 'backend_function',
+          name: `Function: ${surface.name}`,
+          ok: true,
+          error: null,
+          filePath: surface.filePath,
+          skipped: true,
+          skipReason: testResult.reason
+        });
+      } else {
+        checks.push({
+          category: 'backend_function',
+          name: `Function: ${surface.name}`,
+          ok: testResult.ok,
+          error: testResult.error || null,
+          filePath: surface.filePath,
+          stack: testResult.stack || null,
+          offendingCode: testResult.offendingCode || null,
+          duration: testResult.duration,
+          surfaceType: surface.type,
+          exportType: surface.exportType
+        });
+      }
+    }
+
+    // Also test any functions not discovered by surface mapper
+    const discoveredFunctionNames = surfaceMap.map(s => s.name);
+    const additionalFunctions = [
+      'createCheckoutSession',
+      'stripeWebhook',
+      'createInstitutionalCheckout',
+      'createPortalSession'
+    ].filter(fn => !discoveredFunctionNames.includes(fn));
+
+    for (const fnName of additionalFunctions) {
       try {
-        // Dry-run test with _selfTest flag
-        const testResult = await Promise.race([
+        await Promise.race([
           base44.functions.invoke(fnName, { _selfTest: true }),
           new Promise((_, reject) => 
             setTimeout(() => reject(new Error('Function timeout (15s)')), TIMEOUT_MS)
@@ -150,7 +220,6 @@ Deno.serve(async (req) => {
           filePath: `functions/${fnName}.js`
         });
       } catch (err) {
-        // Expected errors for self-test mode are OK
         const isExpectedError = err.message?.includes('_selfTest') || 
                                 err.message?.includes('Unauthorized') ||
                                 err.message?.includes('Missing required');
