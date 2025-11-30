@@ -260,29 +260,35 @@ Deno.serve(async (req) => {
 
     for (const fnName of additionalFunctions) {
       try {
-        await Promise.race([
-          base44.functions.invoke(fnName, { _selfTest: true }),
+        // Use query param for self-test
+        const result = await Promise.race([
+          base44.functions.invoke(`${fnName}?_selfTest=1`, {}),
           new Promise((_, reject) => 
             setTimeout(() => reject(new Error('Function timeout (15s)')), TIMEOUT_MS)
           )
         ]);
         
-        checks.push({
-          category: 'backend_function',
-          name: `Function: ${fnName}`,
-          ok: true,
-          error: null,
-          filePath: `functions/${fnName}.js`
-        });
-      } catch (err) {
-        const isExpectedError = err.message?.includes('_selfTest') || 
-                                err.message?.includes('Unauthorized') ||
-                                err.message?.includes('Missing required');
+        // Check if response indicates successful self-test
+        const isOk = result?.data?.ok === true || result?.data?.testMode === true;
         
         checks.push({
           category: 'backend_function',
           name: `Function: ${fnName}`,
-          ok: isExpectedError || err.status === 400 || err.status === 401,
+          ok: isOk,
+          error: isOk ? null : (result?.data?.error || 'Self-test did not return ok'),
+          filePath: `functions/${fnName}.js`
+        });
+      } catch (err) {
+        const isExpectedError = err.message?.includes('Unauthorized') ||
+                                err.message?.includes('Missing required') ||
+                                err.status === 400 || 
+                                err.status === 401 ||
+                                err.status === 403;
+        
+        checks.push({
+          category: 'backend_function',
+          name: `Function: ${fnName}`,
+          ok: isExpectedError,
           error: isExpectedError ? null : (err.message || 'Function check failed'),
           filePath: `functions/${fnName}.js`,
           stack: isExpectedError ? null : err.stack
