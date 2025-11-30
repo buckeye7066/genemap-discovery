@@ -260,9 +260,9 @@ Deno.serve(async (req) => {
 
     for (const fnName of additionalFunctions) {
       try {
-        // Use query param for self-test
+        // Use body param for self-test
         const result = await Promise.race([
-          base44.functions.invoke(`${fnName}?_selfTest=1`, {}),
+          base44.functions.invoke(fnName, { _selfTest: true }),
           new Promise((_, reject) => 
             setTimeout(() => reject(new Error('Function timeout (15s)')), TIMEOUT_MS)
           )
