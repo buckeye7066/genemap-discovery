@@ -54,23 +54,47 @@ const CONTAMINATION_ENTITIES = [
   { name: 'Subscription', field: 'created_by' }
 ];
 
-// All known invokable backend functions
-const KNOWN_FUNCTIONS = [
-  { filePath: 'functions/createCheckoutSession.js', invokableName: 'createCheckoutSession', category: 'stripe' },
-  { filePath: 'functions/stripeWebhook.js', invokableName: 'stripeWebhook', category: 'stripe' },
-  { filePath: 'functions/createInstitutionalCheckout.js', invokableName: 'createInstitutionalCheckout', category: 'stripe' },
-  { filePath: 'functions/createPortalSession.js', invokableName: 'createPortalSession', category: 'stripe' },
-  { filePath: 'functions/deleteUser.js', invokableName: 'deleteUser', category: 'user_management' },
-  { filePath: 'functions/getAllUsers.js', invokableName: 'getAllUsers', category: 'user_management' },
-  { filePath: 'functions/getBannedUsers.js', invokableName: 'getBannedUsers', category: 'user_management' },
-  { filePath: 'functions/banUser.js', invokableName: 'banUser', category: 'user_management' },
-  { filePath: 'functions/unbanUser.js', invokableName: 'unbanUser', category: 'user_management' },
-  { filePath: 'functions/preBanUser.js', invokableName: 'preBanUser', category: 'user_management' },
-  { filePath: 'functions/checkPreBanOnLogin.js', invokableName: 'checkPreBanOnLogin', category: 'user_management' },
-  { filePath: 'functions/searchUsers.js', invokableName: 'searchUsers', category: 'user_management' },
-  { filePath: 'functions/grantPremiumAccess.js', invokableName: 'grantPremiumAccess', category: 'admin' },
-  { filePath: 'functions/grantPremiumToUser.js', invokableName: 'grantPremiumToUser', category: 'admin' },
-  { filePath: 'functions/grantAdminPrivileges.js', invokableName: 'grantAdminPrivileges', category: 'admin' },
+/**
+ * FUNCTION_REGISTRY - Complete registry of all backend functions
+ * 
+ * Each entry must have:
+ * - name: function filename without extension (invokable name)
+ * - category: grouping (stripe, user_management, admin, general)
+ * - method: "GET" or "POST" (default POST for Base44 functions)
+ * - expectError: optional - if set, this error message is treated as ok
+ */
+const FUNCTION_REGISTRY = [
+  // ============================================
+  // STRIPE / BILLING FUNCTIONS
+  // ============================================
+  { name: 'createCheckoutSession', category: 'stripe', method: 'POST', expectError: null },
+  { name: 'stripeWebhook', category: 'stripe', method: 'POST', expectError: null },
+  { name: 'createInstitutionalCheckout', category: 'stripe', method: 'POST', expectError: null },
+  { name: 'createPortalSession', category: 'stripe', method: 'POST', expectError: null },
+  
+  // ============================================
+  // USER MANAGEMENT FUNCTIONS
+  // ============================================
+  { name: 'deleteUser', category: 'user_management', method: 'POST', expectError: null },
+  { name: 'getAllUsers', category: 'user_management', method: 'POST', expectError: null },
+  { name: 'getBannedUsers', category: 'user_management', method: 'POST', expectError: null },
+  { name: 'banUser', category: 'user_management', method: 'POST', expectError: null },
+  { name: 'unbanUser', category: 'user_management', method: 'POST', expectError: null },
+  { name: 'preBanUser', category: 'user_management', method: 'POST', expectError: null },
+  { name: 'checkPreBanOnLogin', category: 'user_management', method: 'POST', expectError: null },
+  { name: 'searchUsers', category: 'user_management', method: 'POST', expectError: null },
+  
+  // ============================================
+  // ADMIN FUNCTIONS
+  // ============================================
+  { name: 'grantPremiumAccess', category: 'admin', method: 'POST', expectError: null },
+  { name: 'grantPremiumToUser', category: 'admin', method: 'POST', expectError: null },
+  { name: 'grantAdminPrivileges', category: 'admin', method: 'POST', expectError: null },
+  
+  // ============================================
+  // SYSTEM FUNCTIONS (self-check skips itself)
+  // ============================================
+  { name: 'systemSelfCheck', category: 'system', method: 'POST', expectError: null },
 ];
 
 // Timeout configurations by category
@@ -84,17 +108,18 @@ const TIMEOUT_CONFIG = {
 /**
  * Run a single function test
  */
-async function runFunctionTest(surface, invokeFunction) {
+async function runFunctionTest(entry, invokeFunction) {
   const startTime = Date.now();
-  const timeout = TIMEOUT_CONFIG[surface.category] || TIMEOUT_CONFIG.default;
+  const timeout = TIMEOUT_CONFIG[entry.category] || TIMEOUT_CONFIG.default;
+  const filePath = `functions/${entry.name}.js`;
   
   // Skip self-check to avoid recursion
-  if (surface.invokableName === 'systemSelfCheck') {
+  if (entry.name === 'systemSelfCheck') {
     return {
       ok: true,
-      filePath: surface.filePath,
-      invokableName: surface.invokableName,
-      category: surface.category,
+      filePath,
+      invokableName: entry.name,
+      category: entry.category,
       errorMessage: null,
       stack: null,
       duration: 0,
@@ -105,7 +130,7 @@ async function runFunctionTest(surface, invokeFunction) {
   
   try {
     const result = await Promise.race([
-      invokeFunction(surface.invokableName, { _selfTest: true }),
+      invokeFunction(entry.name, { _selfTest: true }),
       new Promise((_, reject) => 
         setTimeout(() => reject(new Error(`Function timeout (${timeout}ms)`)), timeout)
       )
@@ -116,9 +141,9 @@ async function runFunctionTest(surface, invokeFunction) {
     
     return {
       ok: isOk,
-      filePath: surface.filePath,
-      invokableName: surface.invokableName,
-      category: surface.category,
+      filePath,
+      invokableName: entry.name,
+      category: entry.category,
       errorMessage: isOk ? null : (data?.error || 'Self-test did not return ok'),
       stack: null,
       duration: Date.now() - startTime,
@@ -126,6 +151,22 @@ async function runFunctionTest(surface, invokeFunction) {
       skipReason: null
     };
   } catch (err) {
+    // Check if this is an expected error for this function
+    if (entry.expectError && err.message?.includes(entry.expectError)) {
+      return {
+        ok: true,
+        filePath,
+        invokableName: entry.name,
+        category: entry.category,
+        errorMessage: null,
+        stack: null,
+        duration: Date.now() - startTime,
+        skipped: false,
+        skipReason: null,
+        expectedError: err.message
+      };
+    }
+    
     const isExpectedError = 
       err.message?.includes('Unauthorized') ||
       err.message?.includes('Missing required') ||
@@ -138,9 +179,9 @@ async function runFunctionTest(surface, invokeFunction) {
     
     return {
       ok: isExpectedError,
-      filePath: surface.filePath,
-      invokableName: surface.invokableName,
-      category: surface.category,
+      filePath,
+      invokableName: entry.name,
+      category: entry.category,
       errorMessage: isExpectedError ? null : (err.message || 'Unknown error'),
       stack: isExpectedError ? null : err.stack,
       duration: Date.now() - startTime,
@@ -466,10 +507,9 @@ Deno.serve(async (req) => {
     allChecks.push(...rlsChecks);
     
     // 4. Function introspection and testing
-    const invokableFunctions = KNOWN_FUNCTIONS;
     const functionResults = [];
-    for (const fn of invokableFunctions) {
-      const result = await runFunctionTest(fn, (fnName, params) => base44.functions.invoke(fnName, params));
+    for (const entry of FUNCTION_REGISTRY) {
+      const result = await runFunctionTest(entry, (fnName, params) => base44.functions.invoke(fnName, params));
       functionResults.push(result);
     }
     
@@ -521,7 +561,7 @@ Deno.serve(async (req) => {
         total: allChecks.length,
         passed,
         failed,
-        totalFunctions: invokableFunctions.length,
+        totalFunctions: FUNCTION_REGISTRY.length,
         functionFailures: functionFailures.length,
         otherFailures: failed - functionFailures.length
       },
