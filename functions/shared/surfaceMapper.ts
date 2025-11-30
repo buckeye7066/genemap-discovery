@@ -109,9 +109,9 @@ function determineSurfaceType(filePath) {
  */
 async function validateSurface(functionName, invokeFunction) {
   try {
-    // Attempt a dry-run invoke with _selfTest query param
+    // Attempt a dry-run invoke with _selfTest in body
     const result = await Promise.race([
-      invokeFunction(`${functionName}?_selfTest=1`, {}),
+      invokeFunction(functionName, { _selfTest: true }),
       new Promise((_, reject) => 
         setTimeout(() => reject(new Error('Validation timeout (5s)')), 5000)
       )
@@ -248,9 +248,9 @@ export async function runSurfaceTests(invokeFunction) {
     try {
       const startTime = Date.now();
       
-      // Dry-run test with self-test query param
+      // Dry-run test with self-test in body
       const result = await Promise.race([
-        invokeFunction(`${surface.name}?_selfTest=1`, {}),
+        invokeFunction(surface.name, { _selfTest: true }),
         new Promise((_, reject) => 
           setTimeout(() => reject(new Error('Function timeout (15s)')), 15000)
         )
