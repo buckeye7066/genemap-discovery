@@ -109,18 +109,20 @@ function determineSurfaceType(filePath) {
  */
 async function validateSurface(functionName, invokeFunction) {
   try {
-    // Attempt a dry-run invoke with _selfTest flag
-    await Promise.race([
-      invokeFunction(functionName, { _selfTest: true, _surfaceValidation: true }),
+    // Attempt a dry-run invoke with _selfTest query param
+    const result = await Promise.race([
+      invokeFunction(`${functionName}?_selfTest=1`, {}),
       new Promise((_, reject) => 
         setTimeout(() => reject(new Error('Validation timeout (5s)')), 5000)
       )
     ]);
-    return { valid: true };
+    
+    // Check if response indicates successful self-test
+    const isOk = result?.data?.ok === true || result?.data?.testMode === true;
+    return { valid: isOk, error: isOk ? null : 'Self-test did not return ok' };
   } catch (err) {
     // Expected errors are OK (unauthorized, missing params, etc.)
     const isExpectedError = 
-      err.message?.includes('_selfTest') ||
       err.message?.includes('Unauthorized') ||
       err.message?.includes('Missing required') ||
       err.message?.includes('Admin') ||
@@ -246,25 +248,28 @@ export async function runSurfaceTests(invokeFunction) {
     try {
       const startTime = Date.now();
       
-      // Dry-run test with timeout
-      await Promise.race([
-        invokeFunction(surface.name, { _selfTest: true }),
+      // Dry-run test with self-test query param
+      const result = await Promise.race([
+        invokeFunction(`${surface.name}?_selfTest=1`, {}),
         new Promise((_, reject) => 
           setTimeout(() => reject(new Error('Function timeout (15s)')), 15000)
         )
       ]);
       
+      // Check if the function returned a successful self-test response
+      const isOk = result?.data?.ok === true || result?.data?.testMode === true;
+      
       results.push({
         surface,
         testResult: {
-          ok: true,
-          duration: Date.now() - startTime
+          ok: isOk,
+          duration: Date.now() - startTime,
+          error: isOk ? null : (result?.data?.error || 'Self-test did not return ok')
         }
       });
     } catch (err) {
-      // Determine if this is an expected error
+      // Determine if this is an expected error (auth/validation errors are acceptable)
       const isExpectedError = 
-        err.message?.includes('_selfTest') ||
         err.message?.includes('Unauthorized') ||
         err.message?.includes('Missing required') ||
         err.message?.includes('Admin') ||
