@@ -45,6 +45,7 @@ export default function SystemSelfCheck() {
   const [error, setError] = useState(null);
   const [expandedRows, setExpandedRows] = useState({});
   const [previousLogs, setPreviousLogs] = useState([]);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     loadUser();
