@@ -273,6 +273,43 @@ export default function SystemSelfCheck() {
               </CardContent>
             </Card>
 
+            {/* Combined Error Report */}
+            {results.combinedErrorReport && (
+              <Card className="shadow-lg border-slate-200">
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="flex items-center gap-2">
+                      <FileText className="w-5 h-5 text-slate-600" />
+                      Combined Error Report
+                    </CardTitle>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={copyErrorReport}
+                      className="gap-2"
+                    >
+                      {copied ? (
+                        <>
+                          <CheckCircle2 className="w-4 h-4 text-green-600" />
+                          Copied!
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-4 h-4" />
+                          Copy Full Report
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <pre className="bg-slate-900 text-slate-100 p-4 rounded-lg overflow-x-auto text-xs font-mono whitespace-pre-wrap max-h-96 overflow-y-auto">
+                    {results.combinedErrorReport}
+                  </pre>
+                </CardContent>
+              </Card>
+            )}
+
             {/* Contamination Results */}
             <Card className={`shadow-lg ${results.contamination?.ok ? 'border-green-200' : 'border-red-200'}`}>
               <CardHeader>
