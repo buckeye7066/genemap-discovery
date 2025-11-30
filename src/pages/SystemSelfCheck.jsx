@@ -46,6 +46,7 @@ export default function SystemSelfCheck() {
   const [expandedRows, setExpandedRows] = useState({});
   const [previousLogs, setPreviousLogs] = useState([]);
   const [copied, setCopied] = useState(false);
+  const [clearing, setClearing] = useState(false);
 
   useEffect(() => {
     loadUser();
@@ -142,6 +143,13 @@ export default function SystemSelfCheck() {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }
+  };
+
+  const clearResults = () => {
+    setClearing(true);
+    setResults(null);
+    setError(null);
+    setTimeout(() => setClearing(false), 300);
   };
 
   if (isLoading) {
