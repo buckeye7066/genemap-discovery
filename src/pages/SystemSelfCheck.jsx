@@ -188,10 +188,10 @@ export default function SystemSelfCheck() {
             </div>
           </div>
           <h1 className="text-3xl md:text-4xl font-bold text-slate-900 mb-2">
-            System Self-Check
+            System Self-Check v2.0
           </h1>
           <p className="text-lg text-slate-600">
-            Comprehensive diagnostic for all application layers
+            Full function introspection, entity health, RLS validation, and more
           </p>
         </div>
 
@@ -263,7 +263,7 @@ export default function SystemSelfCheck() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
                   <div className="text-center p-4 bg-slate-50 rounded-lg">
                     <p className="text-3xl font-bold text-slate-900">{results.summary.total}</p>
                     <p className="text-sm text-slate-600">Total Checks</p>
@@ -275,6 +275,14 @@ export default function SystemSelfCheck() {
                   <div className="text-center p-4 bg-red-50 rounded-lg">
                     <p className="text-3xl font-bold text-red-600">{results.summary.failed}</p>
                     <p className="text-sm text-slate-600">Failed</p>
+                  </div>
+                  <div className="text-center p-4 bg-purple-50 rounded-lg">
+                    <p className="text-3xl font-bold text-purple-600">{results.summary.totalFunctions || 0}</p>
+                    <p className="text-sm text-slate-600">Functions</p>
+                  </div>
+                  <div className="text-center p-4 bg-orange-50 rounded-lg">
+                    <p className="text-3xl font-bold text-orange-600">{results.summary.functionFailures || 0}</p>
+                    <p className="text-sm text-slate-600">Fn Failures</p>
                   </div>
                   <div className="text-center p-4 bg-blue-50 rounded-lg">
                     <p className="text-3xl font-bold text-blue-600">
