@@ -136,6 +136,14 @@ export default function SystemSelfCheck() {
     }, {});
   };
 
+  const copyErrorReport = () => {
+    if (results?.combinedErrorReport) {
+      navigator.clipboard.writeText(results.combinedErrorReport);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-6 flex items-center justify-center">
