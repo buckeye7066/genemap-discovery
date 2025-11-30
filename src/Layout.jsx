@@ -113,9 +113,9 @@ const navigationItems = [
     badge: "Admin"
   },
   {
-    title: "System Self-Check",
-    url: createPageUrl("SystemSelfCheck"),
-    icon: Shield,
+    title: "Function Tester",
+    url: createPageUrl("AdminFunctionTester"),
+    icon: Server,
     highlight: true,
     badge: "Admin"
   },
