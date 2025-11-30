@@ -8,6 +8,61 @@ const REQUIRED_ENV_VARS = [
   'STRIPE_WEBHOOK_SECRET'
 ];
 
+/**
+ * Build a consolidated error report from all check failures
+ */
+function buildCombinedErrorReport(failedChecks, contaminationLeaks, envMissing) {
+  const report = [];
+
+  // Backend/middleware/API/database/RLS errors
+  for (const c of failedChecks) {
+    report.push(
+`--------------------------------------------------
+ERROR IN: ${c.name}
+TYPE: ${c.category || 'unknown'}
+FILE: ${c.filePath ?? 'unknown'}
+MESSAGE: ${c.error ?? 'unknown'}
+STACK:
+${c.stack ?? 'no stack available'}
+
+OFFENDING CODE SNIPPET:
+${c.offendingCode ?? 'no snippet available'}
+--------------------------------------------------`
+    );
+  }
+
+  // Contamination errors
+  for (const leak of contaminationLeaks) {
+    report.push(
+`--------------------------------------------------
+DATA CONTAMINATION LEAK DETECTED
+DESCRIPTION: ${leak.description}
+FUNCTION: ${leak.functionName}
+FILE: ${leak.filePath}
+
+OFFENDING CODE SNIPPET:
+${leak.offendingCode ?? 'no snippet available'}
+--------------------------------------------------`
+    );
+  }
+
+  // Missing environment variables
+  if (envMissing.length > 0) {
+    report.push(
+`--------------------------------------------------
+MISSING ENVIRONMENT VARIABLES:
+${envMissing.join(', ')}
+--------------------------------------------------`
+    );
+  }
+
+  if (report.length === 0) {
+    return 'All checks passed. No errors detected.';
+  }
+
+  return report.join('\n\n');
+}
+
 // Known entities to verify
 const KNOWN_ENTITIES = [
   'Subscription',
