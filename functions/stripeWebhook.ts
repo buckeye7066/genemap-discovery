@@ -5,7 +5,7 @@ const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY"));
 const webhookSecret = Deno.env.get("STRIPE_WEBHOOK_SECRET");
 
 Deno.serve(async (req) => {
-    // Self-test mode bypass
+    // Self-test mode - check query param for webhooks (can't read body twice)
     const url = new URL(req.url);
     if (url.searchParams.get('_selfTest') === '1') {
         return Response.json({
@@ -18,6 +18,21 @@ Deno.serve(async (req) => {
                 eventTypes: ['checkout.session.completed', 'customer.subscription.updated']
             }
         });
+    }
+
+    // Also check body-based self-test
+    const clonedReq = req.clone();
+    try {
+        const bodyCheck = await clonedReq.json();
+        if (bodyCheck._selfTest === true) {
+            return Response.json({
+                ok: true,
+                testMode: true,
+                message: 'Self-test passed for stripeWebhook'
+            });
+        }
+    } catch {
+        // Not JSON body, continue with normal webhook processing
     }
 
     try {

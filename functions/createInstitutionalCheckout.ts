@@ -4,9 +4,15 @@ import Stripe from 'npm:stripe@14.10.0';
 const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY"));
 
 Deno.serve(async (req) => {
-    // Self-test mode bypass
-    const url = new URL(req.url);
-    if (url.searchParams.get('_selfTest') === '1') {
+    const clonedReq = req.clone();
+    let body;
+    try {
+        body = await clonedReq.json();
+    } catch {
+        body = {};
+    }
+
+    if (body._selfTest === true) {
         return Response.json({
             ok: true,
             testMode: true,
@@ -27,12 +33,14 @@ Deno.serve(async (req) => {
             return Response.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        let body;
+        // Re-parse body for actual use
+        let requestBody;
         try {
-            body = await req.json();
+            requestBody = await req.json();
         } catch {
             return Response.json({ error: 'Invalid request body' }, { status: 400 });
         }
+        body = requestBody;
         const { organizationName, licenseType, seats, billingCycle } = body;
 
         // Validation

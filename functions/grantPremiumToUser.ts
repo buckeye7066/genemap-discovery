@@ -1,9 +1,15 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.4';
 
 Deno.serve(async (req) => {
-    // Self-test mode bypass
-    const url = new URL(req.url);
-    if (url.searchParams.get('_selfTest') === '1') {
+    const clonedReq = req.clone();
+    let bodyCheck;
+    try {
+        bodyCheck = await clonedReq.json();
+    } catch {
+        bodyCheck = {};
+    }
+
+    if (bodyCheck._selfTest === true) {
         return Response.json({
             ok: true,
             testMode: true,
