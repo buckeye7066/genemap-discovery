@@ -13,8 +13,6 @@
  */
 
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.4';
-import { mapAllFunctions, getInvokableFunctions } from './shared/functionMapper.js';
-import { runAllFunctionTests, generateErrorReport } from './shared/functionTester.js';
 
 // Required environment variables
 const REQUIRED_ENV_VARS = [
@@ -55,6 +53,123 @@ const CONTAMINATION_ENTITIES = [
   { name: 'AIConversation', field: 'created_by' },
   { name: 'Subscription', field: 'created_by' }
 ];
+
+// All known invokable backend functions
+const KNOWN_FUNCTIONS = [
+  { filePath: 'functions/createCheckoutSession.js', invokableName: 'createCheckoutSession', category: 'stripe' },
+  { filePath: 'functions/stripeWebhook.js', invokableName: 'stripeWebhook', category: 'stripe' },
+  { filePath: 'functions/createInstitutionalCheckout.js', invokableName: 'createInstitutionalCheckout', category: 'stripe' },
+  { filePath: 'functions/createPortalSession.js', invokableName: 'createPortalSession', category: 'stripe' },
+  { filePath: 'functions/deleteUser.js', invokableName: 'deleteUser', category: 'user_management' },
+  { filePath: 'functions/getAllUsers.js', invokableName: 'getAllUsers', category: 'user_management' },
+  { filePath: 'functions/getBannedUsers.js', invokableName: 'getBannedUsers', category: 'user_management' },
+  { filePath: 'functions/banUser.js', invokableName: 'banUser', category: 'user_management' },
+  { filePath: 'functions/unbanUser.js', invokableName: 'unbanUser', category: 'user_management' },
+  { filePath: 'functions/preBanUser.js', invokableName: 'preBanUser', category: 'user_management' },
+  { filePath: 'functions/checkPreBanOnLogin.js', invokableName: 'checkPreBanOnLogin', category: 'user_management' },
+  { filePath: 'functions/searchUsers.js', invokableName: 'searchUsers', category: 'user_management' },
+  { filePath: 'functions/grantPremiumAccess.js', invokableName: 'grantPremiumAccess', category: 'admin' },
+  { filePath: 'functions/grantPremiumToUser.js', invokableName: 'grantPremiumToUser', category: 'admin' },
+  { filePath: 'functions/grantAdminPrivileges.js', invokableName: 'grantAdminPrivileges', category: 'admin' },
+];
+
+// Timeout configurations by category
+const TIMEOUT_CONFIG = {
+  crawler: 15000,
+  queue: 15000,
+  stripe: 10000,
+  default: 5000
+};
+
+/**
+ * Run a single function test
+ */
+async function runFunctionTest(surface, invokeFunction) {
+  const startTime = Date.now();
+  const timeout = TIMEOUT_CONFIG[surface.category] || TIMEOUT_CONFIG.default;
+  
+  // Skip self-check to avoid recursion
+  if (surface.invokableName === 'systemSelfCheck') {
+    return {
+      ok: true,
+      filePath: surface.filePath,
+      invokableName: surface.invokableName,
+      category: surface.category,
+      errorMessage: null,
+      stack: null,
+      duration: 0,
+      skipped: true,
+      skipReason: 'Self-check module - skipped to avoid recursion'
+    };
+  }
+  
+  try {
+    const result = await Promise.race([
+      invokeFunction(surface.invokableName, { _selfTest: true }),
+      new Promise((_, reject) => 
+        setTimeout(() => reject(new Error(`Function timeout (${timeout}ms)`)), timeout)
+      )
+    ]);
+    
+    const data = result?.data || result;
+    const isOk = data?.ok === true || data?.testMode === true;
+    
+    return {
+      ok: isOk,
+      filePath: surface.filePath,
+      invokableName: surface.invokableName,
+      category: surface.category,
+      errorMessage: isOk ? null : (data?.error || 'Self-test did not return ok'),
+      stack: null,
+      duration: Date.now() - startTime,
+      skipped: false,
+      skipReason: null
+    };
+  } catch (err) {
+    const isExpectedError = 
+      err.message?.includes('Unauthorized') ||
+      err.message?.includes('Missing required') ||
+      err.message?.includes('Admin') ||
+      err.message?.includes('user_email') ||
+      err.message?.includes('Missing') ||
+      err.status === 400 ||
+      err.status === 401 ||
+      err.status === 403;
+    
+    return {
+      ok: isExpectedError,
+      filePath: surface.filePath,
+      invokableName: surface.invokableName,
+      category: surface.category,
+      errorMessage: isExpectedError ? null : (err.message || 'Unknown error'),
+      stack: isExpectedError ? null : err.stack,
+      duration: Date.now() - startTime,
+      skipped: false,
+      skipReason: null,
+      expectedError: isExpectedError ? err.message : null
+    };
+  }
+}
+
+/**
+ * Generate error report from function results
+ */
+function generateFunctionErrorReport(results) {
+  const failures = results.filter(r => !r.ok && !r.skipped);
+  
+  if (failures.length === 0) {
+    return 'All function tests passed. No errors detected.';
+  }
+  
+  return failures.map(f => `
+--------------------------------------------------
+FILE: ${f.filePath}
+FUNCTION: ${f.invokableName}
+CATEGORY: ${f.category}
+ERROR: ${f.errorMessage ?? 'unknown'}
+STACK: ${f.stack ?? 'no stack available'}
+--------------------------------------------------`).join('\n\n');
+}
 
 /**
  * Check environment variables
@@ -351,11 +466,12 @@ Deno.serve(async (req) => {
     allChecks.push(...rlsChecks);
     
     // 4. Function introspection and testing
-    const invokableFunctions = await getInvokableFunctions();
-    const functionResults = await runAllFunctionTests(
-      invokableFunctions,
-      (fnName, params) => base44.functions.invoke(fnName, params)
-    );
+    const invokableFunctions = KNOWN_FUNCTIONS;
+    const functionResults = [];
+    for (const fn of invokableFunctions) {
+      const result = await runFunctionTest(fn, (fnName, params) => base44.functions.invoke(fnName, params));
+      functionResults.push(result);
+    }
     
     // Convert function results to check format
     const functionChecks = functionResults.map(r => ({
@@ -388,7 +504,7 @@ Deno.serve(async (req) => {
     const duration = Date.now() - startTime;
     
     // Generate reports
-    const functionErrorReport = generateErrorReport(functionResults);
+    const functionErrorReport = generateFunctionErrorReport(functionResults);
     const combinedErrorReport = buildCombinedErrorReport(
       failedChecks,
       contaminationResults.filter(c => c.leak),
