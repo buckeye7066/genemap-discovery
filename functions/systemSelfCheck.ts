@@ -410,8 +410,20 @@ Deno.serve(async (req) => {
     // ========================================
     const passed = checks.filter(c => c.ok).length;
     const failed = checks.filter(c => !c.ok).length;
-    const contaminationOk = contaminationResults.filter(c => c.leak).length === 0;
+    const failedChecks = checks.filter(c => !c.ok);
+    const contaminationLeaks = contaminationResults.filter(c => c.leak);
+    const contaminationOk = contaminationLeaks.length === 0;
+    const envMissing = checks
+      .filter(c => c.category === 'environment' && !c.ok)
+      .map(c => c.name.replace('ENV: ', ''));
     const duration = Date.now() - startTime;
+
+    // Build consolidated error report
+    const combinedErrorReport = buildCombinedErrorReport(
+      failedChecks,
+      contaminationLeaks,
+      envMissing
+    );
 
     const result = {
       ok: failed === 0 && contaminationOk,
@@ -422,10 +434,16 @@ Deno.serve(async (req) => {
         passed,
         failed
       },
+      combinedErrorReport,
+      errors: failedChecks,
       checks,
       contamination: {
         ok: contaminationOk,
         results: contaminationResults
+      },
+      env: {
+        missing: envMissing,
+        ok: envMissing.length === 0
       }
     };
 
@@ -436,6 +454,7 @@ Deno.serve(async (req) => {
           summary: result.summary,
           checks: result.checks,
           contamination: result.contamination,
+          combinedErrorReport,
           run_duration_ms: duration,
           app_name: 'GeneMap'
         });
