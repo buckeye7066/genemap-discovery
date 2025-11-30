@@ -466,18 +466,26 @@ Deno.serve(async (req) => {
     return Response.json(result);
 
   } catch (error) {
+    const errorCheck = {
+      category: 'system',
+      name: 'Self-check initialization',
+      ok: false,
+      error: error.message,
+      stack: error.stack
+    };
+    
+    const combinedErrorReport = buildCombinedErrorReport([errorCheck], [], []);
+    
     return Response.json({
       ok: false,
       error: error.message,
       stack: error.stack,
-      summary: { total: 0, passed: 0, failed: 1 },
-      checks: [{
-        category: 'system',
-        name: 'Self-check initialization',
-        ok: false,
-        error: error.message
-      }],
-      contamination: { ok: true, results: [] }
+      summary: { total: 1, passed: 0, failed: 1 },
+      combinedErrorReport,
+      errors: [errorCheck],
+      checks: [errorCheck],
+      contamination: { ok: true, results: [] },
+      env: { missing: [], ok: true }
     }, { status: 500 });
   }
 });
