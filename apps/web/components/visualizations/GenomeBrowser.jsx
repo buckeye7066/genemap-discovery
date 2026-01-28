@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ZoomIn, ZoomOut, RotateCcw, Info } from "lucide-react";
-import { base44 } from "@/api/base44Client";
+import { apiClient } from "@genemap/shared";
 
 export default function GenomeBrowser({ genes = [], onGeneClick }) {
   const [zoomLevel, setZoomLevel] = useState(1);
@@ -36,7 +36,12 @@ export default function GenomeBrowser({ genes = [], onGeneClick }) {
     
     setIsLoadingNearby(true);
     try {
-      const response = await base44.integrations.Core.InvokeLLM({
+      // BACKEND_NEEDED: LLM integration needs API implementation
+      // const response = await apiClient.invokeLLM({
+      //   prompt: `List 8-12 real genes that are located near ${mainGene.symbol}...
+      const response = { genes: [] }; // Placeholder
+      /*
+      response = await apiClient.invokeLLM({
         prompt: `List 8-12 real genes that are located near ${mainGene.symbol} on chromosome ${chromosome}. 
 Include genes within ~1-5 Mb of position ${geneStart}.
 
@@ -67,6 +72,7 @@ Make positions realistic for chromosome ${chromosome}. Focus on well-known genes
           }
         }
       });
+      */
 
       if (response.genes) {
         setNearbyGenes(response.genes);

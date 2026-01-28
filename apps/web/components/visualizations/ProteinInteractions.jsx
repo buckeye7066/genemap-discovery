@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { base44 } from "@/api/base44Client";
+import { apiClient } from "@genemap/shared";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import AskAIButtons from "../shared/AskAIButtons";
 import { Badge } from "@/components/ui/badge";
@@ -53,7 +53,14 @@ Tailor explanation for ${educationContext}.
 
 Source: STRING DB, BioGRID, IntAct, or literature evidence.`;
 
-      const response = await base44.integrations.Core.InvokeLLM({
+      // BACKEND_NEEDED: LLM integration with internet context needs API implementation
+      // const response = await apiClient.invokeLLM({
+      //   prompt,
+      //   add_context_from_internet: true,
+      //   response_json_schema: {
+      const response = { total_interactions: 0, interactions: [], pathways: [], summary: '' }; // Placeholder
+      /*
+      response = await apiClient.invokeLLM({
         prompt,
         add_context_from_internet: true,
         response_json_schema: {
@@ -81,6 +88,7 @@ Source: STRING DB, BioGRID, IntAct, or literature evidence.`;
           }
         }
       });
+      */
 
       setInteractionData(response);
     } catch (err) {

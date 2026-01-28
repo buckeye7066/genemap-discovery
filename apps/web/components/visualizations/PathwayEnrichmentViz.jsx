@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { base44 } from "@/api/base44Client";
+import { apiClient } from "@genemap/shared";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -100,7 +100,14 @@ export default function PathwayEnrichmentViz({ genes = [], userEducationLevel = 
   ]
 }`;
 
-      const response = await base44.integrations.Core.InvokeLLM({
+      // BACKEND_NEEDED: LLM integration with internet context needs API implementation
+      // const response = await apiClient.invokeLLM({
+      //   prompt,
+      //   add_context_from_internet: true,
+      //   response_json_schema: {
+      const response = { pathways: [], summary: '', interactions: [] }; // Placeholder
+      /*
+      response = await apiClient.invokeLLM({
         prompt,
         add_context_from_internet: true,
         response_json_schema: {
@@ -142,6 +149,7 @@ export default function PathwayEnrichmentViz({ genes = [], userEducationLevel = 
           }
         }
       });
+      */
 
       setEnrichmentData(response);
     } catch (err) {

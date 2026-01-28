@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { base44 } from "@/api/base44Client";
+import { apiClient } from "@genemap/shared";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -32,7 +32,14 @@ Tailor explanation for ${educationContext}.
 
 If no PDB structure exists, provide information about predicted structure or structure of homologs.`;
 
-      const response = await base44.integrations.Core.InvokeLLM({
+      // BACKEND_NEEDED: LLM integration with internet context needs API implementation
+      // const response = await apiClient.invokeLLM({
+      //   prompt,
+      //   add_context_from_internet: true,
+      //   response_json_schema: {
+      const response = { has_structure: false, pdb_ids: [], structure_type: '', description: '', structural_features: [], function_relationship: '' }; // Placeholder
+      /*
+      response = await apiClient.invokeLLM({
         prompt,
         add_context_from_internet: true,
         response_json_schema: {
@@ -53,6 +60,7 @@ If no PDB structure exists, provide information about predicted structure or str
           }
         }
       });
+      */
 
       setStructureInfo(response);
     } catch (err) {

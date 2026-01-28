@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { base44 } from "@/api/base44Client";
+import { apiClient } from "@genemap/shared";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -51,7 +51,14 @@ Return detailed domain architecture including:
 
 Explain domains as "${educationContext}".`;
 
-      const response = await base44.integrations.Core.InvokeLLM({
+      // BACKEND_NEEDED: LLM integration with internet context needs API implementation
+      // const response = await apiClient.invokeLLM({
+      //   prompt,
+      //   add_context_from_internet: true,
+      //   response_json_schema: {
+      const response = { protein_length: 0, domains: [] }; // Placeholder
+      /*
+      response = await apiClient.invokeLLM({
         prompt,
         add_context_from_internet: true,
         response_json_schema: {
@@ -74,6 +81,7 @@ Explain domains as "${educationContext}".`;
           }
         }
       });
+      */
 
       setDomainData(response);
     } catch (err) {

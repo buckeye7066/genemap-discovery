@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { base44 } from "@/api/base44Client";
+import { apiClient } from "@genemap/shared";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -16,14 +16,15 @@ export default function RenewalNotifications() {
   }, []);
 
   const checkRenewals = async () => {
-    try {
-      const user = await base44.auth.me();
+    try:
+      const user = await apiClient.getMe();
       
-      // Get licenses where user is admin
-      const allLicenses = await base44.entities.InstitutionalLicense.list();
-      const userLicenses = allLicenses.filter(license => 
-        license.admin_users && license.admin_users.includes(user.email)
-      );
+      // BACKEND_NEEDED: InstitutionalLicense entity needs API implementation
+      // const allLicenses = await apiClient.getInstitutionalLicenses();
+      // const userLicenses = allLicenses.filter(license => 
+      //   license.admin_users && license.admin_users.includes(user.email)
+      // );
+      const userLicenses = [];
 
       setLicenses(userLicenses);
 

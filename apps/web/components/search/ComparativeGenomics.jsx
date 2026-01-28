@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { base44 } from "@/api/base44Client";
+import { apiClient } from "@genemap/shared";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -89,7 +89,14 @@ Provide a detailed comparative analysis covering:
 
 Tailor complexity to user's education level. Be comprehensive but clear.`;
 
-      const response = await base44.integrations.Core.InvokeLLM({
+      // BACKEND_NEEDED: LLM integration with internet context needs API implementation
+      // const response = await apiClient.invokeLLM({
+      //   prompt,
+      //   add_context_from_internet: true,
+      //   response_json_schema: {
+      const response = {}; // Placeholder
+      /*
+      response = await apiClient.invokeLLM({
         prompt,
         add_context_from_internet: true,
         response_json_schema: {
@@ -150,6 +157,7 @@ Tailor complexity to user's education level. Be comprehensive but clear.`;
           }
         }
       });
+      */
 
       setComparisonData(response);
     } catch (err) {

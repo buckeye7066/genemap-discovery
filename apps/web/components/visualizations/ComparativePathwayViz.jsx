@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { base44 } from "@/api/base44Client";
+import { apiClient } from "@genemap/shared";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -110,7 +110,14 @@ export default function ComparativePathwayViz({ geneSet1 = [], geneSet2 = [], la
   }
 }`;
 
-      const response = await base44.integrations.Core.InvokeLLM({
+      // BACKEND_NEEDED: LLM integration with internet context needs API implementation
+      // const response = await apiClient.invokeLLM({
+      //   prompt,
+      //   add_context_from_internet: true,
+      //   response_json_schema: {
+      const response = { uniqueToSet1: [], uniqueToSet2: [], shared: [], summary: {}, geneOverlap: {} }; // Placeholder
+      /*
+      response = await apiClient.invokeLLM({
         prompt,
         add_context_from_internet: true,
         response_json_schema: {
@@ -165,6 +172,7 @@ export default function ComparativePathwayViz({ geneSet1 = [], geneSet2 = [], la
           }
         }
       });
+      */
 
       setComparisonData(response);
     } catch (err) {

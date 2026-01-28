@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { base44 } from "@/api/base44Client";
+import { apiClient } from "@genemap/shared";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -60,22 +60,16 @@ For comparison_analysis:
 
 Return complete, valid FHIR Bundle with all resources.`;
 
-      const fhirBundle = await base44.integrations.Core.InvokeLLM({
-        prompt,
-        response_json_schema: {
-          type: "object",
-          properties: {
-            resourceType: { type: "string" },
-            type: { type: "string" },
-            entry: {
-              type: "array",
-              items: {
-                type: "object"
-              }
-            }
-          }
-        }
-      });
+      // BACKEND_NEEDED: LLM integration needs API implementation
+      // const fhirBundle = await apiClient.invokeLLM({
+      //   prompt,
+      //   response_json_schema: { ... }
+      // });
+      const fhirBundle = {
+        resourceType: "Bundle",
+        type: "document",
+        entry: []
+      };
 
       // Download the FHIR bundle
       const blob = new Blob([JSON.stringify(fhirBundle, null, 2)], { 

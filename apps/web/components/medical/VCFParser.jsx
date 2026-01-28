@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { base44 } from "@/api/base44Client";
+import { apiClient } from "@genemap/shared";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -109,7 +109,13 @@ ${vcfText.substring(0, 50000)}
 
       setParseProgress(50);
 
-      const result = await base44.integrations.Core.InvokeLLM({
+      // BACKEND_NEEDED: LLM integration needs API implementation
+      // const result = await apiClient.invokeLLM({
+      //   prompt,
+      //   response_json_schema: {
+      const result = { variants: [], summary: {} }; // Placeholder
+      /*
+      result = await apiClient.invokeLLM({
         prompt,
         response_json_schema: {
           type: "object",
@@ -145,6 +151,7 @@ ${vcfText.substring(0, 50000)}
           }
         }
       });
+      */
 
       setParseProgress(100);
       setVariants(result.variants || []);
@@ -227,7 +234,14 @@ Return enriched variant data with all available information.`;
 
       setEnrichProgress(40);
 
-      const enriched = await base44.integrations.Core.InvokeLLM({
+      // BACKEND_NEEDED: LLM integration with internet context needs API implementation
+      // const enriched = await apiClient.invokeLLM({
+      //   prompt,
+      //   add_context_from_internet: true,
+      //   response_json_schema: {
+      const enriched = { enriched_variants: [] }; // Placeholder
+      /*
+      enriched = await apiClient.invokeLLM({
         prompt,
         add_context_from_internet: true,
         response_json_schema: {
@@ -281,6 +295,7 @@ Return enriched variant data with all available information.`;
           }
         }
       });
+      */
 
       setEnrichProgress(100);
       setEnrichedVariants(enriched.enriched_variants || []);

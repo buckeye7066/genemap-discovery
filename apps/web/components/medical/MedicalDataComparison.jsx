@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from "react";
-import { base44 } from "@/api/base44Client";
+import { apiClient } from "@genemap/shared";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -32,7 +32,7 @@ export default function MedicalDataComparison({ records, onClose, userEducationL
   const loadComparison = async () => {
     setIsLoading(true);
     try {
-      const currentUser = await base44.auth.me();
+      const currentUser = await apiClient.getMe();
       setUser(currentUser);
 
       const educationContext = getEducationContext(userEducationLevel || currentUser?.education_level);
@@ -143,7 +143,14 @@ ${getEducationGuidance(userEducationLevel || currentUser?.education_level)}
 
 Format with clear sections, use tables for comparisons, highlight key findings.`;
 
-      const response = await base44.integrations.Core.InvokeLLM({
+      // BACKEND_NEEDED: LLM integration needs API implementation
+      // const response = await apiClient.invokeLLM({
+      //   prompt,
+      //   add_context_from_internet: false,
+      //   response_json_schema: {
+      const response = { executive_summary: '', detailed_analysis: '' }; // Placeholder
+      /*
+      response = await apiClient.invokeLLM({
         prompt,
         add_context_from_internet: false,
         response_json_schema: {
@@ -154,6 +161,7 @@ Format with clear sections, use tables for comparisons, highlight key findings.`
           }
         }
       });
+      */
 
       const hasCriticalFindings = response.detailed_analysis.toLowerCase().includes('urgent') ||
                                   response.detailed_analysis.toLowerCase().includes('critical') ||

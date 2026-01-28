@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { base44 } from "@/api/base44Client";
+import { apiClient } from "@genemap/shared";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -24,11 +24,10 @@ export default function SavedGeneSets({ onLoad, onClose }) {
 
   const loadGeneSets = async () => {
     try {
-      const user = await base44.auth.me();
-      const sets = await base44.entities.GeneSet.filter(
-        { created_by: user.email },
-        '-created_date'
-      );
+      const user = await apiClient.getMe();
+      // BACKEND_NEEDED: GeneSet entity needs API implementation
+      // const sets = await apiClient.getGeneSets({ created_by: user.email });
+      const sets = []; // Placeholder
       setGeneSets(sets);
     } catch (err) {
       console.error("Error loading gene sets:", err);
@@ -43,7 +42,8 @@ export default function SavedGeneSets({ onLoad, onClose }) {
     }
 
     try {
-      await base44.entities.GeneSet.delete(setId);
+      // BACKEND_NEEDED: GeneSet entity needs API implementation
+      // await apiClient.deleteGeneSet(setId);
       await loadGeneSets();
     } catch (err) {
       console.error("Error deleting gene set:", err);

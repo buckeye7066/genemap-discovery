@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { base44 } from "@/api/base44Client";
+import { apiClient } from "@genemap/shared";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -75,14 +75,15 @@ export default function GeneCard({ gene, rank, isPremium, isSelected = false, on
 
   const trackGeneView = async (geneSymbol) => {
     try {
-      await base44.entities.UserActivity.create({
-        activity_type: "gene_view",
-        gene_symbol: geneSymbol,
-        metadata: {
-          confidence_score: gene.score,
-          phenotypes: gene.phenotypes?.map(p => p.name) || []
-        }
-      });
+      // BACKEND_NEEDED: UserActivity entity needs API implementation
+      // await apiClient.createUserActivity({
+      //   activity_type: "gene_view",
+      //   gene_symbol: geneSymbol,
+      //   metadata: {
+      //     confidence_score: gene.score,
+      //     phenotypes: gene.phenotypes?.map(p => p.name) || []
+      //   }
+      // });
     } catch (err) {
       // Silently fail - activity tracking shouldn't break the app
       console.log("Could not track activity:", err);
@@ -102,15 +103,13 @@ export default function GeneCard({ gene, rank, isPremium, isSelected = false, on
 
   const loadUserAndContext = async () => {
     try {
-      const currentUser = await base44.auth.me();
+      const currentUser = await apiClient.getMe();
       setUser(currentUser);
       
       try {
-        const records = await base44.entities.MedicalData.filter(
-          { created_by: currentUser.email },
-          '-created_date',
-          5
-        );
+        // BACKEND_NEEDED: MedicalData entity needs API implementation
+        // const records = await apiClient.getMedicalData({ created_by: currentUser.email }, 5);
+        const records = []; // Placeholder
         
         if (records && records.length > 0) {
           const context = {
@@ -232,10 +231,12 @@ Provide a cohesive, personalized synthesis that includes:
 
 Synthesize all the information into a cohesive, personalized narrative. Don't just repeat what's already said - add deeper insights and personal relevance.`;
 
-    const response = await base44.integrations.Core.InvokeLLM({
-      prompt,
-      add_context_from_internet: false
-    });
+    // BACKEND_NEEDED: LLM integration needs API implementation
+    // const response = await apiClient.invokeLLM({
+    //   prompt,
+    //   add_context_from_internet: false
+    // });
+    const response = "Comprehensive synthesis of gene information"; // Placeholder
 
     return response;
   };
@@ -264,10 +265,12 @@ Adjust your language complexity and focus based on the user's background. Be hon
 
 Keep your response concise (3-4 short paragraphs) and use clear formatting.`;
 
-    const response = await base44.integrations.Core.InvokeLLM({
-      prompt,
-      add_context_from_internet: false
-    });
+    // BACKEND_NEEDED: LLM integration needs API implementation
+    // const response = await apiClient.invokeLLM({
+    //   prompt,
+    //   add_context_from_internet: false
+    // });
+    const response = `The ${Math.round(score * 100)}% confidence score indicates moderate to high association.`; // Placeholder
 
     return response;
   };
@@ -376,10 +379,12 @@ ${getEducationGuidance(user?.education_level)}
 
 Provide comprehensive, evidence-based analysis formatted with clear sections.`;
 
-      const response = await base44.integrations.Core.InvokeLLM({
-        prompt,
-        add_context_from_internet: true
-      });
+      // BACKEND_NEEDED: LLM integration with internet context needs API implementation
+      // const response = await apiClient.invokeLLM({
+      //   prompt,
+      //   add_context_from_internet: true
+      // });
+      const response = `Analysis of ${gene.symbol} variant`; // Placeholder
 
       // Parse for high-risk indicators
       const hasHighRisk = response.toLowerCase().includes('pathogenic') || 

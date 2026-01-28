@@ -1,4 +1,4 @@
-import { base44 } from "@/api/base44Client";
+import { apiClient } from "@genemap/shared";
 import { log } from "../shared/logger";
 import { getErrorMessage } from "../shared/errorUtils";
 import { GENE_ENRICHMENT_CONCURRENCY } from "../shared/constants";
@@ -10,7 +10,7 @@ export class PhenotypeSearchService {
       let isAdmin = false;
       let userPreferences = null;
       try {
-        const user = await base44.auth.me();
+        const user = await apiClient.getMe();
         isAdmin = user?.super_admin === true || user?.role === "admin";
         userPreferences = {
           age: user?.age,
@@ -93,7 +93,13 @@ If it's a disease:
 Provide a comprehensive analysis for gene discovery.
 `;
 
-    const analysis = await base44.integrations.Core.InvokeLLM({
+    // BACKEND_NEEDED: LLM integration needs API implementation
+    // const analysis = await apiClient.invokeLLM({
+    //   prompt,
+    //   response_json_schema: {
+    const analysis = {}; // Placeholder
+    /*
+    analysis = await apiClient.invokeLLM({
       prompt,
       response_json_schema: {
         type: "object",
@@ -113,6 +119,7 @@ Provide a comprehensive analysis for gene discovery.
         }
       }
     });
+    */
 
     return analysis;
   }
@@ -168,7 +175,14 @@ Return 3-8 most relevant candidate genes ranked by evidence strength.
 `;
     }
 
-    const geneResults = await base44.integrations.Core.InvokeLLM({
+    // BACKEND_NEEDED: LLM integration with internet context needs API implementation
+    // const geneResults = await apiClient.invokeLLM({
+    //   prompt,
+    //   add_context_from_internet: true,
+    //   response_json_schema: {
+    const geneResults = { candidateGenes: [] }; // Placeholder
+    /*
+    geneResults = await apiClient.invokeLLM({
       prompt,
       add_context_from_internet: true,
       response_json_schema: {
@@ -195,6 +209,7 @@ Return 3-8 most relevant candidate genes ranked by evidence strength.
         }
       }
     });
+    */
 
     return geneResults.candidateGenes || [];
   }
@@ -264,7 +279,14 @@ Include HPO terms where applicable.
 Focus on well-established gene-phenotype associations from OMIM, ClinVar, UniProt, and medical literature.
 `;
 
-    const phenotypeData = await base44.integrations.Core.InvokeLLM({
+    // BACKEND_NEEDED: LLM integration with internet context needs API implementation
+    // const phenotypeData = await apiClient.invokeLLM({
+    //   prompt,
+    //   add_context_from_internet: true,
+    //   response_json_schema: {
+    const phenotypeData = { phenotypes: [] }; // Placeholder
+    /*
+    phenotypeData = await apiClient.invokeLLM({
       prompt,
       add_context_from_internet: true,
       response_json_schema: {
@@ -283,6 +305,7 @@ Focus on well-established gene-phenotype associations from OMIM, ClinVar, UniPro
         }
       }
     });
+    */
 
     return phenotypeData.phenotypes || [];
   }
@@ -309,10 +332,12 @@ Keep it factual and source-aware. Reference data from UniProt, HPA, or GTEx if r
 Match the complexity and terminology to the reader's background.
 `;
 
-    const summary = await base44.integrations.Core.InvokeLLM({
-      prompt,
-      add_context_from_internet: true
-    });
+    // BACKEND_NEEDED: LLM integration with internet context needs API implementation
+    // const summary = await apiClient.invokeLLM({
+    //   prompt,
+    //   add_context_from_internet: true
+    // });
+    const summary = `${geneSymbol} is associated with the searched phenotype.`; // Placeholder
 
     return summary;
   }
@@ -339,7 +364,14 @@ Each takeaway should be:
 Return ONLY an array of strings, no additional formatting.
 `;
 
-    const result = await base44.integrations.Core.InvokeLLM({
+    // BACKEND_NEEDED: LLM integration with internet context needs API implementation
+    // const result = await apiClient.invokeLLM({
+    //   prompt,
+    //   add_context_from_internet: true,
+    //   response_json_schema: {
+    const result = { takeaways: [] }; // Placeholder
+    /*
+    result = await apiClient.invokeLLM({
       prompt,
       add_context_from_internet: true,
       response_json_schema: {
@@ -352,6 +384,7 @@ Return ONLY an array of strings, no additional formatting.
         }
       }
     });
+    */
 
     return result.takeaways || [];
   }
@@ -377,7 +410,14 @@ Format resources as:
 Adjust complexity of search terms based on user background.
 `;
 
-    const result = await base44.integrations.Core.InvokeLLM({
+    // BACKEND_NEEDED: LLM integration needs API implementation
+    // const result = await apiClient.invokeLLM({
+    //   prompt,
+    //   add_context_from_internet: false,
+    //   response_json_schema: {
+    const result = { resources: [], pubmedSearchTerms: [] }; // Placeholder
+    /*
+    result = await apiClient.invokeLLM({
       prompt,
       add_context_from_internet: false,
       response_json_schema: {
@@ -400,6 +440,7 @@ Adjust complexity of search terms based on user background.
         }
       }
     });
+    */
 
     return result;
   }
@@ -435,6 +476,7 @@ Use tissue names like: brain, heart, liver, kidney, muscle, lung, etc.
           }
         }
       });
+      */
 
       return result.expression || [];
     } catch (error) {
@@ -461,7 +503,14 @@ IMPORTANT: Tailor all explanations for ${explanationStyle}.
 Adjust technical depth, terminology, and focus based on the reader's background.
 `;
 
-    const premiumData = await base44.integrations.Core.InvokeLLM({
+    // BACKEND_NEEDED: LLM integration with internet context needs API implementation
+    // const premiumData = await apiClient.invokeLLM({
+    //   prompt,
+    //   add_context_from_internet: true,
+    //   response_json_schema: {
+    const premiumData = { prevalence: {}, geneHistory: {}, mutations: [], treatments: [] }; // Placeholder
+    /*
+    premiumData = await apiClient.invokeLLM({
       prompt,
       add_context_from_internet: true,
       response_json_schema: {
@@ -508,6 +557,7 @@ Adjust technical depth, terminology, and focus based on the reader's background.
         }
       }
     });
+    */
 
     return {
       prevalenceData: premiumData.prevalence,
@@ -528,7 +578,7 @@ Adjust technical depth, terminology, and focus based on the reader's background.
     // Get user preferences
     let userPreferences = null;
     try {
-      const user = await base44.auth.me();
+      const user = await apiClient.getMe();
       userPreferences = {
         age: user?.age,
         education_level: user?.education_level,
@@ -568,10 +618,12 @@ Provide a comprehensive analysis tailored for ${educationContext}.
 Use clear, engaging language appropriate for the user's background. Format with markdown for readability.
 `;
 
-    const analysis = await base44.integrations.Core.InvokeLLM({
-      prompt,
-      add_context_from_internet: true
-    });
+    // BACKEND_NEEDED: LLM integration with internet context needs API implementation
+    // const analysis = await apiClient.invokeLLM({
+    //   prompt,
+    //   add_context_from_internet: true
+    // });
+    const analysis = "Analysis of gene set comparison";
 
     // Get functional relationships for overlapping genes
     let functionalRelationships = [];
@@ -629,6 +681,7 @@ Return up to 5 most significant relationships.
           }
         }
       });
+      */
 
       return result.relationships || [];
     } catch (error) {

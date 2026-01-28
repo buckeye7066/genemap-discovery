@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Search, Dna } from "lucide-react";
-import { base44 } from "@/api/base44Client";
+import { apiClient } from "@genemap/shared";
 
 export default function AutocompleteSearch({ 
   value, 
@@ -40,8 +40,12 @@ export default function AutocompleteSearch({
 
       setIsLoadingSuggestions(true);
       try {
-        // Fetch gene suggestions
-        const response = await base44.integrations.Core.InvokeLLM({
+        // BACKEND_NEEDED: LLM integration needs API implementation
+        // const response = await apiClient.invokeLLM({
+        //   prompt: `Given the search query "${value}", suggest 5-8 relevant:
+        const response = { suggestions: [] }; // Placeholder
+        /*
+        response = await apiClient.invokeLLM({
           prompt: `Given the search query "${value}", suggest 5-8 relevant:
 - Gene symbols (if it looks like a gene name)
 - Disease names (if it looks like a disease)
@@ -70,6 +74,7 @@ Focus on the most common and relevant matches.`,
             }
           }
         });
+        */
 
         if (response.suggestions) {
           setSuggestions(response.suggestions.slice(0, 8));
