@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { base44 } from "@/api/base44Client";
+import { apiClient } from "@genemap/shared";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -63,14 +63,16 @@ export default function AIAssistantsPage() {
 
   const loadData = async () => {
     try {
-      const currentUser = await base44.auth.me();
+      const currentUser = await apiClient.getMe();
       setUser(currentUser);
       
-      const records = await base44.entities.MedicalData.filter(
-        { created_by: currentUser.email },
-        '-created_date'
-      );
-      setMedicalRecords(records);
+      // BACKEND_NEEDED: MedicalData entity needs API implementation
+      // const records = await base44.entities.MedicalData.filter(
+      //   { created_by: currentUser.email },
+      //   '-created_date'
+      // );
+      // setMedicalRecords(records);
+      setMedicalRecords([]);
 
       const welcomeMessage = getWelcomeMessage("robert");
       setMessages([{
@@ -262,12 +264,14 @@ ${medicalRecords.length > 0 && activeAssistant === 'robert'
 
 Please provide a comprehensive response.`;
 
-    const response = await base44.integrations.Core.InvokeLLM({
-      prompt,
-      add_context_from_internet: true
-    });
-
-    return response;
+    // BACKEND_NEEDED: Core.InvokeLLM integration needs API implementation
+    // const response = await base44.integrations.Core.InvokeLLM({
+    //   prompt,
+    //   add_context_from_internet: true
+    // });
+    // return response;
+    
+    throw new Error('LLM integration not yet implemented');
   };
 
   const quickPromptsRobert = [

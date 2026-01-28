@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { base44 } from "@/api/base44Client";
+import { apiClient } from "@genemap/shared";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -40,7 +40,7 @@ export default function AxiomNewsletterPage() {
 
   const loadData = async () => {
     try {
-      const user = await base44.auth.me();
+      const user = await apiClient.getMe();
       setCurrentUser(user);
 
       // Check if user is administrator
@@ -50,19 +50,20 @@ export default function AxiomNewsletterPage() {
         return;
       }
 
+      // BACKEND_NEEDED: getAllUsers function needs API implementation
       // Load all users who opted into mailing list via backend function
-      const response = await base44.functions.invoke('getAllUsers');
-
-      const data = response.data || response;
-
-      if (data.error) {
-        throw new Error(data.error);
-      }
-
-      const users = (data.users || []).filter(u => u.mailing_list_opt_in);
+      // const response = await base44.functions.invoke('getAllUsers');
+      // const data = response.data || response;
+      // if (data.error) {
+      //   throw new Error(data.error);
+      // }
+      // const users = (data.users || []).filter(u => u.mailing_list_opt_in);
+      // setSubscribedUsers(users);
+      // setFilteredUsers(users);
       
-      setSubscribedUsers(users);
-      setFilteredUsers(users);
+      setSubscribedUsers([]);
+      setFilteredUsers([]);
+      setError('getAllUsers function not yet implemented');
     } catch (err) {
       console.error("Error loading data:", err);
       setError("Failed to load newsletter subscribers");

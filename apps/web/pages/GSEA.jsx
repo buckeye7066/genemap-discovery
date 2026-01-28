@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { base44 } from "@/api/base44Client";
+import { apiClient } from "@genemap/shared";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Sparkles, Info } from "lucide-react";
@@ -19,7 +19,7 @@ export default function GSEAPage() {
 
   const loadUser = async () => {
     try {
-      const currentUser = await base44.auth.me();
+      const currentUser = await apiClient.getMe();
       setUser(currentUser);
     } catch (err) {
       console.log("Not logged in");
@@ -107,88 +107,27 @@ ${geneSymbols}
   ]
 }`;
 
-      const response = await base44.integrations.Core.InvokeLLM({
-        prompt,
-        add_context_from_internet: true,
-        response_json_schema: {
-          type: "object",
-          properties: {
-            pathways: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  database: { type: "string" },
-                  id: { type: "string" },
-                  name: { type: "string" },
-                  pValue: { type: "number" },
-                  adjustedPValue: { type: "number" },
-                  geneCount: { type: "number" },
-                  totalGenes: { type: "number" },
-                  enrichmentScore: { type: "number" },
-                  genes: { type: "array", items: { type: "string" } },
-                  description: { type: "string" }
-                }
-              }
-            },
-            goTerms: {
-              type: "object",
-              properties: {
-                biologicalProcess: { type: "array" },
-                molecularFunction: { type: "array" },
-                cellularComponent: { type: "array" }
-              }
-            },
-            diseases: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  name: { type: "string" },
-                  association: { type: "string" },
-                  evidence: { type: "string" },
-                  genes: { type: "array", items: { type: "string" } },
-                  databases: { type: "array", items: { type: "string" } }
-                }
-              }
-            },
-            summary: {
-              type: "object",
-              properties: {
-                mainFunctions: { type: "array", items: { type: "string" } },
-                biologicalContext: { type: "string" },
-                clinicalRelevance: { type: "string" },
-                novelInsights: { type: "string" }
-              }
-            },
-            geneInteractions: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  gene1: { type: "string" },
-                  gene2: { type: "string" },
-                  interactionType: { type: "string" },
-                  confidence: { type: "string" }
-                }
-              }
-            }
-          }
-        }
-      });
+      // BACKEND_NEEDED: Core.InvokeLLM integration needs API implementation
+      // const response = await base44.integrations.Core.InvokeLLM({
+      //   prompt,
+      //   add_context_from_internet: true,
+      //   response_json_schema: { ... }
+      // });
+      // setEnrichmentData(response);
 
-      setEnrichmentData(response);
+      setError('LLM integration not yet implemented');
       
       // Save to activity log
       try {
-        await base44.entities.UserActivity.create({
-          activity_type: "analysis",
-          search_query: `GSEA: ${genes.length} genes`,
-          metadata: {
-            geneCount: genes.length,
-            genes: genes.slice(0, 10)
-          }
-        });
+        // BACKEND_NEEDED: UserActivity entity needs API implementation
+        // await base44.entities.UserActivity.create({
+        //   activity_type: "analysis",
+        //   search_query: `GSEA: ${genes.length} genes`,
+        //   metadata: {
+        //     geneCount: genes.length,
+        //     genes: genes.slice(0, 10)
+        //   }
+        // });
       } catch (err) {
         console.log("Could not save activity:", err);
       }

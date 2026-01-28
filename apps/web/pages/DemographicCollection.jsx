@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { base44 } from "@/api/base44Client";
+import { apiClient } from "@genemap/shared";
 import { createPageUrl } from "@/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -25,7 +25,7 @@ export default function DemographicCollectionPage() {
 
   const loadUser = async () => {
     try {
-      const currentUser = await base44.auth.me();
+      const currentUser = await apiClient.getMe();
       setUser(currentUser);
 
       // If already collected, redirect to home
@@ -61,14 +61,16 @@ export default function DemographicCollectionPage() {
     setError(null);
 
     try {
-      await base44.auth.updateMe({
-        phone_number: phoneNumber,
-        mailing_list_opt_in: mailingListOptIn,
-        demographics_collected: true
-      });
+      // BACKEND_NEEDED: User profile update API needs implementation
+      // await apiClient.updateMe({
+      //   phone_number: phoneNumber,
+      //   mailing_list_opt_in: mailingListOptIn,
+      //   demographics_collected: true
+      // });
 
-      // Redirect to home
-      navigate(createPageUrl("Home"));
+      // For now, just navigate (will need proper implementation)
+      setError('User profile update API not yet implemented');
+      // navigate(createPageUrl("Home"));
     } catch (err) {
       console.error("Error saving demographics:", err);
       setError("Failed to save information. Please try again.");

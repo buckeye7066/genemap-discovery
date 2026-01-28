@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { base44 } from "@/api/base44Client";
+import { apiClient } from "@genemap/shared";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -66,20 +66,21 @@ export default function InstitutionalAdminPage() {
 
   const loadData = async () => {
     try {
-      const currentUser = await base44.auth.me();
+      const currentUser = await apiClient.getMe();
       setUser(currentUser);
 
+      // BACKEND_NEEDED: InstitutionalLicense entity needs API implementation
       // Load licenses where user is admin
-      const allLicenses = await base44.entities.InstitutionalLicense.list();
-      const userLicenses = allLicenses.filter(license => 
-        license.admin_users && license.admin_users.includes(currentUser.email)
-      );
-
-      setLicenses(userLicenses);
-
-      if (userLicenses.length > 0) {
-        setSelectedLicense(userLicenses[0]);
-      }
+      // const allLicenses = await base44.entities.InstitutionalLicense.list();
+      // const userLicenses = allLicenses.filter(license => 
+      //   license.admin_users && license.admin_users.includes(currentUser.email)
+      // );
+      // setLicenses(userLicenses);
+      // if (userLicenses.length > 0) {
+      //   setSelectedLicense(userLicenses[0]);
+      // }
+      
+      setLicenses([]);
 
     } catch (err) {
       console.error("Error loading data:", err);
@@ -91,20 +92,24 @@ export default function InstitutionalAdminPage() {
 
   const loadLicenseDetails = async (licenseId) => {
     try {
-      const licenseAssignments = await base44.entities.LicenseAssignment.filter({
-        license_id: licenseId
-      });
-      setAssignments(licenseAssignments);
+      // BACKEND_NEEDED: LicenseAssignment entity needs API implementation
+      // const licenseAssignments = await base44.entities.LicenseAssignment.filter({
+      //   license_id: licenseId
+      // });
+      // setAssignments(licenseAssignments);
 
       // Load usage logs for the last 30 days
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
       
-      const usage = await base44.entities.LicenseUsageLog.filter({
-        license_id: licenseId
-      }, '-created_date', 1000);
+      // BACKEND_NEEDED: LicenseUsageLog entity needs API implementation
+      // const usage = await base44.entities.LicenseUsageLog.filter({
+      //   license_id: licenseId
+      // }, '-created_date', 1000);
+      // setUsageLogs(usage);
       
-      setUsageLogs(usage);
+      setAssignments([]);
+      setUsageLogs([]);
 
     } catch (err) {
       console.error("Error loading license details:", err);
@@ -132,59 +137,43 @@ export default function InstitutionalAdminPage() {
         throw new Error(`Not enough seats available. You have ${availableSeats} seats remaining.`);
       }
 
+      // BACKEND_NEEDED: LicenseAssignment entity needs API implementation
       // Create assignments
-      for (const email of emails) {
-        await base44.entities.LicenseAssignment.create({
-          license_id: selectedLicense.id,
-          user_email: email,
-          assigned_by: user.email,
-          status: 'pending',
-          invitation_sent: true,
-          department: inviteDepartment || null
-        });
+      // for (const email of emails) {
+      //   await base44.entities.LicenseAssignment.create({
+      //     license_id: selectedLicense.id,
+      //     user_email: email,
+      //     assigned_by: user.email,
+      //     status: 'pending',
+      //     invitation_sent: true,
+      //     department: inviteDepartment || null
+      //   });
 
-        // Send invitation email
-        await base44.integrations.Core.SendEmail({
-          to: email,
-          from_name: selectedLicense.organization_name,
-          subject: `You've been invited to ${selectedLicense.organization_name} on GeneMap`,
-          body: `Hello!
+      //   // BACKEND_NEEDED: Core.SendEmail integration needs API implementation
+      //   await base44.integrations.Core.SendEmail({
+      //     to: email,
+      //     from_name: selectedLicense.organization_name,
+      //     subject: `You've been invited to ${selectedLicense.organization_name} on GeneMap`,
+      //     body: `...`
+      //   });
+      // }
 
-You've been invited by ${user.full_name || user.email} to join ${selectedLicense.organization_name}'s institutional license on GeneMap.
-
-This gives you premium access to all GeneMap features, including:
-• Advanced gene discovery
-• Clinical decision support
-• Research collaboration tools
-• And much more!
-
-To accept your invitation and activate your premium access:
-1. Log in to GeneMap at ${window.location.origin}
-2. Your premium access will be automatically activated
-
-If you don't have an account yet, you can create one at ${window.location.origin}
-
-Welcome to the team!
-
-Best regards,
-The GeneMap Team`
-        });
-      }
-
+      // BACKEND_NEEDED: InstitutionalLicense entity needs API implementation
       // Update license assigned seats count
-      await base44.entities.InstitutionalLicense.update(selectedLicense.id, {
-        assigned_seats: selectedLicense.assigned_seats + emails.length
-      });
+      // await base44.entities.InstitutionalLicense.update(selectedLicense.id, {
+      //   assigned_seats: selectedLicense.assigned_seats + emails.length
+      // });
 
-      setSuccess(`Successfully invited ${emails.length} user${emails.length > 1 ? 's' : ''}!`);
-      setInviteDialogOpen(false);
-      setInviteEmail("");
-      setBulkEmails("");
-      setInviteDepartment("");
+      setError('User invitation API not yet implemented');
+      // setSuccess(`Successfully invited ${emails.length} user${emails.length > 1 ? 's' : ''}!`);
+      // setInviteDialogOpen(false);
+      // setInviteEmail("");
+      // setBulkEmails("");
+      // setInviteDepartment("");
       
       // Reload data
-      await loadData();
-      await loadLicenseDetails(selectedLicense.id);
+      // await loadData();
+      // await loadLicenseDetails(selectedLicense.id);
 
     } catch (err) {
       console.error("Error inviting users:", err);
@@ -200,18 +189,22 @@ The GeneMap Team`
     }
 
     try {
-      await base44.entities.LicenseAssignment.update(assignmentId, {
-        status: 'revoked'
-      });
+      // BACKEND_NEEDED: LicenseAssignment entity needs API implementation
+      // await base44.entities.LicenseAssignment.update(assignmentId, {
+      //   status: 'revoked'
+      // });
 
+      // BACKEND_NEEDED: InstitutionalLicense entity needs API implementation
       // Update license assigned seats count
-      await base44.entities.InstitutionalLicense.update(selectedLicense.id, {
-        assigned_seats: Math.max(0, selectedLicense.assigned_seats - 1)
-      });
+      // await base44.entities.InstitutionalLicense.update(selectedLicense.id, {
+      //   assigned_seats: Math.max(0, selectedLicense.assigned_seats - 1)
+      // });
 
-      setSuccess(`Access revoked for ${userEmail}`);
-      await loadData();
-      await loadLicenseDetails(selectedLicense.id);
+      // setSuccess(`Access revoked for ${userEmail}`);
+      // await loadData();
+      // await loadLicenseDetails(selectedLicense.id);
+      
+      setError('Access revocation API not yet implemented');
 
     } catch (err) {
       console.error("Error revoking access:", err);

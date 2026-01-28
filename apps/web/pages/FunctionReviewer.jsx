@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { base44 } from "@/api/base44Client";
+import { apiClient } from "@genemap/shared";
 import { KNOWN_FUNCTIONS, getFunctionById, getAllCategories } from "../components/functionRegistry";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -94,7 +94,7 @@ export default function FunctionReviewer() {
 
   const loadUser = async () => {
     try {
-      const currentUser = await base44.auth.me();
+      const currentUser = await apiClient.getMe();
       setUser(currentUser);
     } catch (err) {
       console.error("Auth error:", err);
@@ -132,19 +132,22 @@ export default function FunctionReviewer() {
         }))
       }, null, 2);
 
-      const response = await base44.functions.invoke('syncToGitHub', { codeBundle });
-      const data = response.data || response;
+      // BACKEND_NEEDED: syncToGitHub function needs API implementation
+      // const response = await base44.functions.invoke('syncToGitHub', { codeBundle });
+      // const data = response.data || response;
       
-      if (data.ok) {
-        setSyncResult(data);
-        setShowBeginScreen(false);
-        // Auto-select first function after sync
-        if (KNOWN_FUNCTIONS.length > 0) {
-          setSelectedFunctionId(KNOWN_FUNCTIONS[0].functionId);
-        }
-      } else {
-        setError(data.error || 'Sync failed');
-      }
+      // if (data.ok) {
+      //   setSyncResult(data);
+      //   setShowBeginScreen(false);
+      //   // Auto-select first function after sync
+      //   if (KNOWN_FUNCTIONS.length > 0) {
+      //     setSelectedFunctionId(KNOWN_FUNCTIONS[0].functionId);
+      //   }
+      // } else {
+      //   setError(data.error || 'Sync failed');
+      // }
+      
+      setError('GitHub sync function not yet implemented');
     } catch (err) {
       setError(err.message || 'Failed to sync to GitHub');
     } finally {
@@ -164,23 +167,35 @@ export default function FunctionReviewer() {
     setError(null);
     
     try {
-      const response = await base44.functions.invoke('getFunctionDetails', { functionId });
-      const data = response.data || response;
+      // BACKEND_NEEDED: getFunctionDetails function needs API implementation
+      // const response = await base44.functions.invoke('getFunctionDetails', { functionId });
+      // const data = response.data || response;
       
-      if (data.ok) {
-        setFunctionDetails(data.data);
-      } else {
-        setError(data.error || 'Failed to load function details');
-        // Use local registry data as fallback
-        const localFn = getFunctionById(functionId);
-        if (localFn) {
-          setFunctionDetails({
-            ...localFn,
-            sourceCode: '// Source code not available via API.\n// View in Base44 editor.',
-            dependencies: [],
-            sourceAvailable: false
-          });
-        }
+      // if (data.ok) {
+      //   setFunctionDetails(data.data);
+      // } else {
+      //   setError(data.error || 'Failed to load function details');
+      //   // Use local registry data as fallback
+      //   const localFn = getFunctionById(functionId);
+      //   if (localFn) {
+      //     setFunctionDetails({
+      //       ...localFn,
+      //       sourceCode: '// Source code not available via API.\n// View in Base44 editor.',
+      //       dependencies: [],
+      //       sourceAvailable: false
+      //     });
+      //   }
+      // }
+      
+      // Use local registry data as fallback
+      const localFn = getFunctionById(functionId);
+      if (localFn) {
+        setFunctionDetails({
+          ...localFn,
+          sourceCode: '// API call not available. View source in the codebase.',
+          dependencies: [],
+          sourceAvailable: false
+        });
       }
     } catch (err) {
       setError(err.message || 'Failed to load function details');
@@ -189,7 +204,7 @@ export default function FunctionReviewer() {
       if (localFn) {
         setFunctionDetails({
           ...localFn,
-          sourceCode: '// API call failed. View source in Base44 editor.',
+          sourceCode: '// API call failed. View source in codebase.',
           dependencies: [],
           sourceAvailable: false
         });

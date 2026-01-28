@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { base44 } from "@/api/base44Client";
+import { apiClient } from "@genemap/shared";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -28,7 +28,7 @@ export default function AdminFunctionTester() {
 
   const loadUser = async () => {
     try {
-      const currentUser = await base44.auth.me();
+      const currentUser = await apiClient.getMe();
       setUser(currentUser);
     } catch (err) {
       console.error("Auth error:", err);
@@ -43,8 +43,10 @@ export default function AdminFunctionTester() {
     setResults(null);
 
     try {
-      const response = await base44.functions.invoke('testAllFunctions', {});
-      setResults(response.data || response);
+      // BACKEND_NEEDED: testAllFunctions needs API implementation
+      // const response = await base44.functions.invoke('testAllFunctions', {});
+      // setResults(response.data || response);
+      setError('Backend function testAllFunctions not yet implemented');
     } catch (err) {
       setError(err.message || 'Failed to run tests');
     } finally {
