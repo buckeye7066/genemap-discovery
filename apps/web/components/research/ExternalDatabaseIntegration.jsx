@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { base44 } from "@/api/base44Client";
+import { apiClient } from "@genemap/shared";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -133,10 +133,12 @@ export default function ExternalDatabaseIntegration({ userEducationLevel }) {
 
 Be comprehensive but practical. Include specific search strategies and resource links.`;
 
-      const response = await base44.integrations.Core.InvokeLLM({
-        prompt,
-        add_context_from_internet: true
-      });
+      // BACKEND_NEEDED: InvokeLLM integration needs API implementation
+      // const response = await base44.integrations.Core.InvokeLLM({
+      //   prompt,
+      //   add_context_from_internet: true
+      // });
+      const response = "Database integration feature requires backend integration";
 
       setResults({
         database: db,

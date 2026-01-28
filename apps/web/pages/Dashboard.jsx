@@ -124,7 +124,6 @@ export default function Dashboard() {
           '-created_date',
           5
         ),
-        // TODO: For large datasets, switch to server-side filtering + pagination.
         base44.entities.AIConversation.filter(
           { created_by: userEmail },
           '-updated_date',

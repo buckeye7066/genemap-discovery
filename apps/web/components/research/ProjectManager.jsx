@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { base44 } from "@/api/base44Client";
+import { apiClient } from "@genemap/shared";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -57,10 +57,12 @@ export default function ProjectManager() {
 
   const loadProjects = async () => {
     try {
-      const userProjects = await base44.entities.ResearchProject.filter(
-        {},
-        '-updated_date'
-      );
+      // BACKEND_NEEDED: ResearchProject entity needs API implementation
+      // const userProjects = await base44.entities.ResearchProject.filter(
+      //   {},
+      //   '-updated_date'
+      // );
+      const userProjects = [];
       setProjects(userProjects);
     } catch (err) {
       console.error("Error loading projects:", err);
@@ -73,7 +75,7 @@ export default function ProjectManager() {
     if (!newProject.name.trim()) return;
 
     try {
-      const currentUser = await base44.auth.me();
+      const currentUser = await apiClient.getMe();
       
       const projectData = {
         name: newProject.name,
@@ -85,17 +87,19 @@ export default function ProjectManager() {
         current_version: 1
       };
 
-      const created = await base44.entities.ResearchProject.create(projectData);
+      // BACKEND_NEEDED: ResearchProject entity needs API implementation
+      // const created = await base44.entities.ResearchProject.create(projectData);
+      const created = { id: Date.now() };
 
-      // Create initial version
-      await base44.entities.ProjectVersion.create({
-        project_id: created.id,
-        version_number: 1,
-        change_type: "created",
-        changes_description: "Project created",
-        snapshot_data: projectData,
-        modified_by: currentUser.email
-      });
+      // BACKEND_NEEDED: ProjectVersion entity needs API implementation
+      // await base44.entities.ProjectVersion.create({
+      //   project_id: created.id,
+      //   version_number: 1,
+      //   change_type: "created",
+      //   changes_description: "Project created",
+      //   snapshot_data: projectData,
+      //   modified_by: currentUser.email
+      // });
 
       setNewProject({ name: "", description: "", genes: "", phenotypes: "", tags: "" });
       setCreateDialogOpen(false);
@@ -109,7 +113,7 @@ export default function ProjectManager() {
 
   const handleUpdateProject = async (projectId, updates) => {
     try {
-      const currentUser = await base44.auth.me();
+      const currentUser = await apiClient.getMe();
       const project = projects.find(p => p.id === projectId);
       
       // Determine change type
@@ -124,20 +128,21 @@ export default function ProjectManager() {
 
       const newVersion = (project.current_version || 1) + 1;
       
-      await base44.entities.ResearchProject.update(projectId, {
-        ...updates,
-        current_version: newVersion
-      });
+      // BACKEND_NEEDED: ResearchProject entity needs API implementation
+      // await base44.entities.ResearchProject.update(projectId, {
+      //   ...updates,
+      //   current_version: newVersion
+      // });
 
-      // Create version record
-      await base44.entities.ProjectVersion.create({
-        project_id: projectId,
-        version_number: newVersion,
-        change_type: changeType,
-        changes_description: `${changeType.replace('_', ' ')} by ${currentUser.email}`,
-        snapshot_data: { ...project, ...updates },
-        modified_by: currentUser.email
-      });
+      // BACKEND_NEEDED: ProjectVersion entity needs API implementation
+      // await base44.entities.ProjectVersion.create({
+      //   project_id: projectId,
+      //   version_number: newVersion,
+      //   change_type: changeType,
+      //   changes_description: `${changeType.replace('_', ' ')} by ${currentUser.email}`,
+      //   snapshot_data: { ...project, ...updates },
+      //   modified_by: currentUser.email
+      // });
 
       await loadProjects();
       
@@ -152,7 +157,8 @@ export default function ProjectManager() {
     }
 
     try {
-      await base44.entities.ResearchProject.delete(projectId);
+      // BACKEND_NEEDED: ResearchProject entity needs API implementation
+      // await base44.entities.ResearchProject.delete(projectId);
       await loadProjects();
       setSelectedProject(null);
     } catch (err) {

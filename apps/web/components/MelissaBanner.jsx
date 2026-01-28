@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { base44 } from "@/api/base44Client";
+import { apiClient } from "@genemap/shared";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Heart, X, Crown } from "lucide-react";
@@ -14,7 +14,7 @@ export default function MelissaBanner() {
 
   const checkUser = async () => {
     try {
-      const currentUser = await base44.auth.me();
+      const currentUser = await apiClient.getMe();
       setUser(currentUser);
 
       // Check if user is Melissa and hasn't dismissed the banner

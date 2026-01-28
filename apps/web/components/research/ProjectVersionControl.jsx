@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { base44 } from "@/api/base44Client";
+import { apiClient } from "@genemap/shared";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -32,11 +32,13 @@ export default function ProjectVersionControl({ project, onRestore }) {
 
   const loadVersions = async () => {
     try {
-      const projectVersions = await base44.entities.ProjectVersion.filter(
-        { project_id: project.id },
-        '-version_number',
-        20
-      );
+      // BACKEND_NEEDED: ProjectVersion entity needs API implementation
+      // const projectVersions = await base44.entities.ProjectVersion.filter(
+      //   { project_id: project.id },
+      //   '-version_number',
+      //   20
+      // );
+      const projectVersions = [];
       setVersions(projectVersions);
     } catch (err) {
       console.error("Error loading versions:", err);
@@ -54,19 +56,21 @@ export default function ProjectVersionControl({ project, onRestore }) {
       // Create new version with restored data
       const currentVersion = project.current_version || versions.length;
       
-      await base44.entities.ResearchProject.update(project.id, {
-        ...version.snapshot_data,
-        current_version: currentVersion + 1
-      });
+      // BACKEND_NEEDED: ResearchProject entity needs API implementation
+      // await base44.entities.ResearchProject.update(project.id, {
+      //   ...version.snapshot_data,
+      //   current_version: currentVersion + 1
+      // });
 
-      await base44.entities.ProjectVersion.create({
-        project_id: project.id,
-        version_number: currentVersion + 1,
-        change_type: "metadata_updated",
-        changes_description: `Restored from version ${version.version_number}`,
-        snapshot_data: version.snapshot_data,
-        modified_by: (await base44.auth.me()).email
-      });
+      // BACKEND_NEEDED: ProjectVersion entity needs API implementation
+      // await base44.entities.ProjectVersion.create({
+      //   project_id: project.id,
+      //   version_number: currentVersion + 1,
+      //   change_type: "metadata_updated",
+      //   changes_description: `Restored from version ${version.version_number}`,
+      //   snapshot_data: version.snapshot_data,
+      //   modified_by: (await apiClient.getMe()).email
+      // });
 
       if (onRestore) onRestore();
       await loadVersions();

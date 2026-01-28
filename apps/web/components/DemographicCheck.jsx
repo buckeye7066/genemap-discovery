@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { base44 } from "@/api/base44Client";
+import { apiClient } from "@genemap/shared";
 import { createPageUrl } from "@/utils";
 
 export default function DemographicCheck({ children }) {
@@ -22,7 +22,7 @@ export default function DemographicCheck({ children }) {
     }
 
     try {
-      const user = await base44.auth.me();
+      const user = await apiClient.getMe();
 
       // If demographics not collected, redirect
       if (!user.demographics_collected) {

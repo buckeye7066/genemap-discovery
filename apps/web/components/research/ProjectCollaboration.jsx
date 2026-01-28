@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { base44 } from "@/api/base44Client";
+import { apiClient } from "@genemap/shared";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -47,12 +47,14 @@ export default function ProjectCollaboration({ project, onUpdate }) {
 
   const loadData = async () => {
     try {
-      const currentUser = await base44.auth.me();
+      const currentUser = await apiClient.getMe();
       setUser(currentUser);
 
-      const collabs = await base44.entities.ProjectCollaborator.filter({
-        project_id: project.id
-      });
+      // BACKEND_NEEDED: ProjectCollaborator entity needs API implementation
+      // const collabs = await base44.entities.ProjectCollaborator.filter({
+      //   project_id: project.id
+      // });
+      const collabs = [];
       setCollaborators(collabs);
     } catch (err) {
       console.error("Error loading collaborators:", err);
@@ -71,37 +73,38 @@ export default function ProjectCollaboration({ project, onUpdate }) {
         viewer: { can_edit: false, can_share: false, can_delete: false }
       };
 
-      await base44.entities.ProjectCollaborator.create({
-        project_id: project.id,
-        user_email: inviteEmail.trim(),
-        role: inviteRole,
-        invited_by: user.email,
-        status: "pending",
-        permissions: permissions[inviteRole]
-      });
+      // BACKEND_NEEDED: ProjectCollaborator entity needs API implementation
+      // await base44.entities.ProjectCollaborator.create({
+      //   project_id: project.id,
+      //   user_email: inviteEmail.trim(),
+      //   role: inviteRole,
+      //   invited_by: user.email,
+      //   status: "pending",
+      //   permissions: permissions[inviteRole]
+      // });
 
-      // Send invitation email
-      await base44.integrations.Core.SendEmail({
-        to: inviteEmail.trim(),
-        subject: `Invitation to collaborate on "${project.name}"`,
-        body: `${user.full_name || user.email} has invited you to collaborate on the research project "${project.name}" on GeneMap.
+      // BACKEND_NEEDED: SendEmail integration needs API implementation
+      // await base44.integrations.Core.SendEmail({
+      //   to: inviteEmail.trim(),
+      //   subject: `Invitation to collaborate on "${project.name}"`,
+      //   body: `${user.full_name || user.email} has invited you to collaborate on the research project "${project.name}" on GeneMap.
+      //
+      // Role: ${inviteRole}
+      // Project: ${project.name}
+      // Description: ${project.description || 'No description'}
+      //
+      // Log in to GeneMap to accept this invitation and start collaborating!
+      //
+      // Best regards,
+      // GeneMap Team`
+      // });
 
-Role: ${inviteRole}
-Project: ${project.name}
-Description: ${project.description || 'No description'}
-
-Log in to GeneMap to accept this invitation and start collaborating!
-
-Best regards,
-GeneMap Team`
-      });
-
-      // Update project collaborative status
-      if (!project.is_collaborative) {
-        await base44.entities.ResearchProject.update(project.id, {
-          is_collaborative: true
-        });
-      }
+      // BACKEND_NEEDED: ResearchProject entity needs API implementation
+      // if (!project.is_collaborative) {
+      //   await base44.entities.ResearchProject.update(project.id, {
+      //     is_collaborative: true
+      //   });
+      // }
 
       setInviteEmail("");
       setInviteRole("viewer");
@@ -123,9 +126,10 @@ GeneMap Team`
     }
 
     try {
-      await base44.entities.ProjectCollaborator.update(collaboratorId, {
-        status: "revoked"
-      });
+      // BACKEND_NEEDED: ProjectCollaborator entity needs API implementation
+      // await base44.entities.ProjectCollaborator.update(collaboratorId, {
+      //   status: "revoked"
+      // });
       await loadData();
     } catch (err) {
       console.error("Error revoking access:", err);

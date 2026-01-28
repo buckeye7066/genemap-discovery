@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { base44 } from "@/api/base44Client";
+import { apiClient } from "@genemap/shared";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -54,7 +54,7 @@ export default function ProfilePage() {
 
   const loadUser = async () => {
     try {
-      const currentUser = await base44.auth.me();
+      const currentUser = await apiClient.getMe();
       setUser(currentUser);
       setAge(currentUser.age || "");
       setEducationLevel(currentUser.education_level || "");
@@ -89,18 +89,22 @@ export default function ProfilePage() {
     setIsUploadingPicture(true);
     setError(null);
 
-    try {
-      const { file_url } = await base44.integrations.Core.UploadFile({ file });
-      setProfilePicture(file_url);
-      
-      await base44.auth.updateMe({ profile_picture: file_url });
-      setSuccess(true);
-      setTimeout(() => setSuccess(false), 3000);
-    } catch (err) {
-      setError(err.message || "Failed to upload profile picture");
-    } finally {
-      setIsUploadingPicture(false);
-    }
+    // BACKEND_NEEDED: File upload needs API implementation
+    setError("Profile picture upload is not yet available");
+    setIsUploadingPicture(false);
+
+    // try {
+    //   const { file_url } = await base44.integrations.Core.UploadFile({ file });
+    //   setProfilePicture(file_url);
+    //   
+    //   await apiClient.updateMe({ profile_picture: file_url });
+    //   setSuccess(true);
+    //   setTimeout(() => setSuccess(false), 3000);
+    // } catch (err) {
+    //   setError(err.message || "Failed to upload profile picture");
+    // } finally {
+    //   setIsUploadingPicture(false);
+    // }
   };
 
   const handleSubmit = async (e) => {
@@ -109,29 +113,33 @@ export default function ProfilePage() {
     setError(null);
     setSuccess(false);
 
-    try {
-      await base44.auth.updateMe({
-        age,
-        education_level: educationLevel,
-        field_of_study: fieldOfStudy,
-        research_interests: researchInterests,
-        current_projects: currentProjects,
-        publications: publications,
-        linkedin_url: linkedinUrl,
-        orcid_id: orcidId,
-      });
+    // BACKEND_NEEDED: User profile update needs API implementation
+    setError("Profile updates are not yet available");
+    setIsSaving(false);
 
-      setSuccess(true);
-      setTimeout(() => setSuccess(false), 3000);
-    } catch (err) {
-      setError(err.message || "Failed to update profile");
-    } finally {
-      setIsSaving(false);
-    }
+    // try {
+    //   await apiClient.updateMe({
+    //     age,
+    //     education_level: educationLevel,
+    //     field_of_study: fieldOfStudy,
+    //     research_interests: researchInterests,
+    //     current_projects: currentProjects,
+    //     publications: publications,
+    //     linkedin_url: linkedinUrl,
+    //     orcid_id: orcidId,
+    //   });
+    //
+    //   setSuccess(true);
+    //   setTimeout(() => setSuccess(false), 3000);
+    // } catch (err) {
+    //   setError(err.message || "Failed to update profile");
+    // } finally {
+    //   setIsSaving(false);
+    // }
   };
 
   const handleLogout = () => {
-    base44.auth.logout();
+    apiClient.logout();
   };
 
   if (isLoading) {
