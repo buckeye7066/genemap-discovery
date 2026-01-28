@@ -16,7 +16,7 @@ export default function RenewalNotifications() {
   }, []);
 
   const checkRenewals = async () => {
-    try:
+    try {
       const user = await apiClient.getMe();
       
       // BACKEND_NEEDED: InstitutionalLicense entity needs API implementation

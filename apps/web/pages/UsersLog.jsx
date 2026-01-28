@@ -21,7 +21,8 @@ import {
   Filter,
   Trash2
 } from "lucide-react";
-import { deleteUser } from "@/functions/deleteUser";
+// BACKEND_NEEDED: deleteUser function needs API implementation
+// import { deleteUser } from "@/functions/deleteUser";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import {
@@ -216,10 +217,12 @@ export default function UsersLogPage() {
 
     setDeletingUser(userEmail);
     try {
-      await deleteUser({ email: userEmail });
-      setError(null);
-      await loadData();
-      alert(`User ${userEmail} deleted successfully`);
+      // BACKEND_NEEDED: deleteUser function needs API implementation
+      // await deleteUser({ email: userEmail });
+      setError("User deletion is not yet available");
+      // setError(null);
+      // await loadData();
+      // alert(`User ${userEmail} deleted successfully`);
     } catch (err) {
       setError(`Failed to delete user: ${getErrorMessage(err)}`);
     } finally {
