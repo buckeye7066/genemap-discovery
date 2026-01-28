@@ -534,11 +534,11 @@ Return structured analysis with all sections.`;
         return;
 
         // await base44.entities.MedicalData.update(recordId, {
-          vcf_variants: variants, // Top-level for direct access
-          extracted_data: updatedExtractedData // Also within extracted_data
-        });
-        setSuccess("VCF variants parsed and saved successfully!");
-        await loadData(); // Reload to show the updated record
+        //   vcf_variants: variants,
+        //   extracted_data: updatedExtractedData
+        // });
+        // setSuccess("VCF variants parsed and saved successfully!");
+        // await loadData();
       }
     } catch (err) {
       console.error("Error saving variants:", err);
