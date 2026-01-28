@@ -30,8 +30,12 @@ await fastify.register(cors, {
 });
 
 await fastify.register(cookie, {
-  secret: process.env.COOKIE_SECRET || 'cookie-secret-change-in-production',
+  secret: process.env.COOKIE_SECRET,
 });
+
+if (!process.env.COOKIE_SECRET) {
+  throw new Error('COOKIE_SECRET must be set in environment variables');
+}
 
 await fastify.register(rateLimit, {
   max: 100,
@@ -48,11 +52,12 @@ fastify.addContentTypeParser('application/json', { parseAs: 'string' }, function
   }
 });
 
-await fastify.register(rateLimit, {
-  max: 10,
-  timeWindow: '15 minutes',
-}, (instance) => {
-  instance.register(authRoutes, { prefix: '/auth' });
+await fastify.register(async (authScope) => {
+  await authScope.register(rateLimit, {
+    max: 10,
+    timeWindow: '15 minutes',
+  });
+  await authScope.register(authRoutes, { prefix: '/auth' });
 });
 
 await fastify.register(billingRoutes, { prefix: '/billing' });

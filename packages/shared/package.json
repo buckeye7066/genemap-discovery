@@ -8,7 +8,7 @@
     ".": "./src/index.js",
     "./client": "./src/client.js",
     "./schemas": "./src/schemas.js",
-    "./types": "./src/types.js"
+    "./types": "./src/types.d.ts"
   },
   "dependencies": {
     "zod": "^3.24.2"

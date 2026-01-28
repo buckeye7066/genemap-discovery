@@ -1,10 +1,14 @@
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
-const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'your-refresh-secret-key-change-in-production';
+const JWT_SECRET = process.env.JWT_SECRET;
+const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET;
 const ACCESS_TOKEN_EXPIRY = '15m';
 const REFRESH_TOKEN_EXPIRY = '7d';
+
+if (!JWT_SECRET || !JWT_REFRESH_SECRET) {
+  throw new Error('JWT_SECRET and JWT_REFRESH_SECRET must be set in environment variables');
+}
 
 export async function hashPassword(password) {
   return bcrypt.hash(password, 10);

@@ -210,6 +210,15 @@ export default async function billingRoutes(fastify) {
     const sig = request.headers['stripe-signature'];
     const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
     
+    if (!sig) {
+      return reply.status(400).send({ error: 'Missing stripe-signature header' });
+    }
+    
+    if (!webhookSecret) {
+      console.error('STRIPE_WEBHOOK_SECRET not configured');
+      return reply.status(500).send({ error: 'Webhook not configured' });
+    }
+    
     let event;
     
     try {

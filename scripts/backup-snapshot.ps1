@@ -58,10 +58,12 @@ Get-ChildItem -Path $RepoRoot -Recurse | Where-Object {
 }
 
 Write-Host "[2/5] Backing up database (if DATABASE_URL is set)..." -ForegroundColor Yellow
+$DbDumpSuccess = $false
 if ($env:DATABASE_URL) {
     Write-Host "  Exporting database..."
     try {
         & pg_dump $env:DATABASE_URL > "$TempDir\database-dump.sql"
+        $DbDumpSuccess = $true
     }
     catch {
         Write-Host "  Warning: Database backup failed. Continuing without DB dump." -ForegroundColor Yellow
@@ -120,7 +122,7 @@ Write-Host "Backup summary:" -ForegroundColor Cyan
 Write-Host "  - Repository code: ✅"
 Write-Host "  - Configuration files: ✅"
 
-$DbStatus = if (Test-Path "$TempDir\database-dump.sql") { "✅" } else { "⚠️  (skipped)" }
+$DbStatus = if ($DbDumpSuccess) { "✅" } else { "⚠️  (skipped)" }
 Write-Host "  - Database dump: $DbStatus"
 
 $RemoteStatus = if ($env:DRIVE_DIR) { "✅" } else { "⚠️  (not configured)" }

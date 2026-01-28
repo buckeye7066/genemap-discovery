@@ -34,8 +34,6 @@ rsync -a \
   --exclude '*.log' \
   "${REPO_ROOT}/" "${TEMP_DIR}/"
 
-DB_DUMP_SUCCESS=false
-
 echo "[2/5] Backing up database (if DATABASE_URL is set)..."
 if [ -n "$DATABASE_URL" ]; then
   echo "  Exporting database..."
@@ -43,7 +41,6 @@ if [ -n "$DATABASE_URL" ]; then
     echo "  Warning: Database backup failed. Continuing without DB dump."
     echo "  (This is normal if database is not accessible)"
   }
-  DB_DUMP_SUCCESS=true
 else
   echo "  DATABASE_URL not set, skipping database backup"
   echo "  (Database will be backed up by Railway automatically)"
@@ -87,7 +84,7 @@ fi
 echo "Backup summary:"
 echo "  - Repository code: ✅"
 echo "  - Configuration files: ✅"
-echo "  - Database dump: $([ "$DB_DUMP_SUCCESS" = true ] && echo "✅" || echo "⚠️  (skipped)")"
+echo "  - Database dump: $([ -f "${TEMP_DIR}/database-dump.sql" ] && echo "✅" || echo "⚠️  (skipped)")"
 echo "  - Remote copy: $([ -n "$DRIVE_DIR" ] && echo "✅" || echo "⚠️  (not configured)")"
 echo ""
 echo "To restore this backup, see docs/BACKUP.md"

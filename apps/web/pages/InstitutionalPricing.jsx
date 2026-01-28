@@ -112,8 +112,8 @@ export default function InstitutionalPricingPage() {
         cancelUrl,
       });
 
-      if (response.data && response.data.url) {
-        window.location.href = response.data.url;
+      if (response && response.url) {
+        window.location.href = response.url;
       } else {
         throw new Error("No checkout URL returned");
       }
