@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { base44 } from "@/api/base44Client";
+import { apiClient } from "@genemap/shared";
 import { log } from "../components/shared/logger";
 import { getErrorMessage } from "../components/shared/errorUtils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -53,7 +53,7 @@ export default function UsersLogPage() {
 
   const loadData = async () => {
     try {
-      const user = await base44.auth.me();
+      const user = await apiClient.getMe();
       setCurrentUser(user);
 
       if (!user.super_admin) {
@@ -62,56 +62,63 @@ export default function UsersLogPage() {
         return;
       }
 
+      // BACKEND_NEEDED: getAllUsers function needs API implementation
+      // BACKEND_NEEDED: UserActivity entity needs API implementation
+      // BACKEND_NEEDED: SearchHistory entity needs API implementation
+      // BACKEND_NEEDED: AIConversation entity needs API implementation
+      // BACKEND_NEEDED: Message entity needs API implementation
       // Fetch all users and activity from multiple sources
-      const [response, allActivities, allSearches, allConversations, allMessages] = await Promise.all([
-        base44.functions.invoke('getAllUsers'),
-        base44.entities.UserActivity.filter({}, '-created_date', 10000).catch(() => []),
-        base44.entities.SearchHistory.filter({}, '-created_date', 10000).catch(() => []),
-        base44.entities.AIConversation.filter({}, '-updated_date', 10000).catch(() => []),
-        base44.entities.Message.filter({}, '-created_date', 10000).catch(() => [])
-      ]);
+      // const [response, allActivities, allSearches, allConversations, allMessages] = await Promise.all([
+      //   base44.functions.invoke('getAllUsers'),
+      //   base44.entities.UserActivity.filter({}, '-created_date', 10000).catch(() => []),
+      //   base44.entities.SearchHistory.filter({}, '-created_date', 10000).catch(() => []),
+      //   base44.entities.AIConversation.filter({}, '-updated_date', 10000).catch(() => []),
+      //   base44.entities.Message.filter({}, '-created_date', 10000).catch(() => [])
+      // ]);
 
-      const data = response.data || response;
+      // const data = response.data || response;
       
-      if (data.error) {
-        setError(data.error);
-      } else {
-        // Map last activity to each user from multiple sources
-        const usersWithActivity = (data.users || []).map(user => {
-          const activityDates = [];
+      // if (data.error) {
+      //   setError(data.error);
+      // } else {
+      //   // Map last activity to each user from multiple sources
+      //   const usersWithActivity = (data.users || []).map(user => {
+      //     const activityDates = [];
           
-          // Check user's updated_date (indicates login/profile update)
-          if (user.updated_date) activityDates.push(new Date(user.updated_date));
+      //     // Check user's updated_date (indicates login/profile update)
+      //     if (user.updated_date) activityDates.push(new Date(user.updated_date));
           
-          // Check UserActivity
-          const userActivities = allActivities.filter(a => a.created_by === user.email);
-          if (userActivities.length > 0) activityDates.push(new Date(userActivities[0].created_date));
+      //     // Check UserActivity
+      //     const userActivities = allActivities.filter(a => a.created_by === user.email);
+      //     if (userActivities.length > 0) activityDates.push(new Date(userActivities[0].created_date));
           
-          // Check SearchHistory
-          const userSearches = allSearches.filter(s => s.created_by === user.email);
-          if (userSearches.length > 0) activityDates.push(new Date(userSearches[0].created_date));
+      //     // Check SearchHistory
+      //     const userSearches = allSearches.filter(s => s.created_by === user.email);
+      //     if (userSearches.length > 0) activityDates.push(new Date(userSearches[0].created_date));
           
-          // Check AIConversation (use updated_date for ongoing conversations)
-          const userConversations = allConversations.filter(c => c.created_by === user.email);
-          if (userConversations.length > 0) {
-            activityDates.push(new Date(userConversations[0].updated_date || userConversations[0].created_date));
-          }
+      //     // Check AIConversation (use updated_date for ongoing conversations)
+      //     const userConversations = allConversations.filter(c => c.created_by === user.email);
+      //     if (userConversations.length > 0) {
+      //       activityDates.push(new Date(userConversations[0].updated_date || userConversations[0].created_date));
+      //     }
           
-          // Check Messages
-          const userMessages = allMessages.filter(m => m.created_by === user.email);
-          if (userMessages.length > 0) activityDates.push(new Date(userMessages[0].created_date));
+      //     // Check Messages
+      //     const userMessages = allMessages.filter(m => m.created_by === user.email);
+      //     if (userMessages.length > 0) activityDates.push(new Date(userMessages[0].created_date));
           
-          // Get the most recent activity date
-          const lastActivity = activityDates.length > 0 
-            ? new Date(Math.max(...activityDates)).toISOString()
-            : null;
+      //     // Get the most recent activity date
+      //     const lastActivity = activityDates.length > 0 
+      //       ? new Date(Math.max(...activityDates)).toISOString()
+      //       : null;
           
-          return { ...user, last_active: lastActivity };
-        });
+      //     return { ...user, last_active: lastActivity };
+      //   });
 
-        setUsers(usersWithActivity);
-        setFilteredUsers(usersWithActivity);
-      }
+      //   setUsers(usersWithActivity);
+      //   setFilteredUsers(usersWithActivity);
+      // }
+      setUsers([]);
+      setFilteredUsers([]);
     } catch (err) {
       log.error("Error loading users:", err);
       setError(getErrorMessage(err) || "Failed to load users");

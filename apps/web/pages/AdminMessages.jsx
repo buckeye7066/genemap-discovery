@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { base44 } from "@/api/base44Client";
+import { apiClient } from "@genemap/shared";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -36,7 +36,7 @@ export default function AdminMessages() {
   const loadData = async () => {
     setIsLoading(true);
     try {
-      const currentUser = await base44.auth.me();
+      const currentUser = await apiClient.getMe();
       setUser(currentUser);
 
       if (currentUser.role !== 'admin' && !currentUser.super_admin) {
@@ -44,8 +44,10 @@ export default function AdminMessages() {
         return;
       }
 
-      const allMessages = await base44.entities.Message.filter({}, '-created_date', 500);
-      setMessages(allMessages || []);
+      // BACKEND_NEEDED: Message entity needs API implementation
+      // const allMessages = await base44.entities.Message.filter({}, '-created_date', 500);
+      // setMessages(allMessages || []);
+      setMessages([]);
     } catch (err) {
       console.error('Error loading messages:', err);
       setError(err.message || 'Failed to load messages');
@@ -64,19 +66,21 @@ export default function AdminMessages() {
     setError(null);
 
     try {
-      await base44.entities.Message.update(message.id, {
-        response,
-        response_by: user.email,
-        response_date: new Date().toISOString(),
-        status: 'responded'
-      });
+      // BACKEND_NEEDED: Message entity needs API implementation
+      // await base44.entities.Message.update(message.id, {
+      //   response,
+      //   response_by: user.email,
+      //   response_date: new Date().toISOString(),
+      //   status: 'responded'
+      // });
 
-      setSuccess('Response sent successfully!');
-      setResponse("");
-      setSelectedMessage(null);
-      await loadData();
+      // setSuccess('Response sent successfully!');
+      // setResponse("");
+      // setSelectedMessage(null);
+      // await loadData();
 
-      setTimeout(() => setSuccess(null), 3000);
+      // setTimeout(() => setSuccess(null), 3000);
+      setError('Response functionality not yet implemented');
     } catch (err) {
       setError(err.message || 'Failed to send response');
     } finally {
@@ -86,10 +90,12 @@ export default function AdminMessages() {
 
   const handleMarkClosed = async (message) => {
     try {
-      await base44.entities.Message.update(message.id, {
-        status: 'closed'
-      });
-      await loadData();
+      // BACKEND_NEEDED: Message entity needs API implementation
+      // await base44.entities.Message.update(message.id, {
+      //   status: 'closed'
+      // });
+      // await loadData();
+      setError('Close message functionality not yet implemented');
     } catch (err) {
       setError('Failed to close message');
     }

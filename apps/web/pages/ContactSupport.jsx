@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { base44 } from "@/api/base44Client";
+import { apiClient } from "@genemap/shared";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -47,7 +47,7 @@ export default function ContactSupport() {
 
   const loadUser = async () => {
     try {
-      const currentUser = await base44.auth.me();
+      const currentUser = await apiClient.getMe();
       setUser(currentUser);
       
       // Load saved preferences
@@ -61,11 +61,12 @@ export default function ContactSupport() {
 
   const saveCustomization = async () => {
     try {
-      await base44.auth.updateMe({
-        message_theme_color: themeColor,
-        message_font_size: fontSize,
-        message_font_family: fontFamily
-      });
+      // BACKEND_NEEDED: User preferences update needs API implementation
+      // await base44.auth.updateMe({
+      //   message_theme_color: themeColor,
+      //   message_font_size: fontSize,
+      //   message_font_family: fontFamily
+      // });
       setSuccess(true);
       setTimeout(() => setSuccess(false), 2000);
     } catch (err) {
@@ -125,23 +126,25 @@ export default function ContactSupport() {
     setError(null);
 
     try {
-      const prompt = `You are helping a user write a message to Dr. John White about their genomics platform issue.
+      // BACKEND_NEEDED: Core LLM integration needs API implementation
+      // const prompt = `You are helping a user write a message to Dr. John White about their genomics platform issue.
 
-Subject: ${subject}
+      // Subject: ${subject}
 
-Write a clear, professional message describing the issue. Include:
-1. What the user was trying to do
-2. What went wrong or what they need help with
-3. Any relevant context
+      // Write a clear, professional message describing the issue. Include:
+      // 1. What the user was trying to do
+      // 2. What went wrong or what they need help with
+      // 3. Any relevant context
 
-Keep it concise (3-4 sentences) and professional but friendly.`;
+      // Keep it concise (3-4 sentences) and professional but friendly.`;
 
-      const response = await base44.integrations.Core.InvokeLLM({
-        prompt,
-        add_context_from_internet: false
-      });
+      // const response = await base44.integrations.Core.InvokeLLM({
+      //   prompt,
+      //   add_context_from_internet: false
+      // });
 
-      setMessage(response);
+      // setMessage(response);
+      setError("AI assist not yet implemented. Please write it manually.");
     } catch (err) {
       setError("Failed to generate message. Please write it manually.");
     } finally {
@@ -161,19 +164,21 @@ Keep it concise (3-4 sentences) and professional but friendly.`;
     setError(null);
 
     try {
-      await base44.entities.Message.create({
-        subject,
-        message,
-        is_issue: isIssue,
-        status: "open"
-      });
+      // BACKEND_NEEDED: Message entity needs API implementation
+      // await base44.entities.Message.create({
+      //   subject,
+      //   message,
+      //   is_issue: isIssue,
+      //   status: "open"
+      // });
 
-      setSuccess(true);
-      setSubject("");
-      setMessage("");
-      setIsIssue(false);
+      // setSuccess(true);
+      // setSubject("");
+      // setMessage("");
+      // setIsIssue(false);
 
-      setTimeout(() => setSuccess(false), 5000);
+      // setTimeout(() => setSuccess(false), 5000);
+      setError("Message sending not yet implemented");
     } catch (err) {
       setError(err.message || "Failed to send message");
     } finally {

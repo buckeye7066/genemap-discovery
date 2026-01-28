@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { base44 } from "@/api/base44Client";
+import { apiClient } from "@genemap/shared";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -48,7 +48,7 @@ export default function AdminAnalytics() {
   const loadAnalytics = async () => {
     setIsLoading(true);
     try {
-      const currentUser = await base44.auth.me();
+      const currentUser = await apiClient.getMe();
       setUser(currentUser);
 
       if (currentUser.role !== 'admin') {
@@ -56,18 +56,26 @@ export default function AdminAnalytics() {
         return;
       }
 
+      // BACKEND_NEEDED: UserActivity entity needs API implementation
+      // BACKEND_NEEDED: SearchHistory entity needs API implementation
+      // BACKEND_NEEDED: MedicalData entity needs API implementation
+      // BACKEND_NEEDED: AIConversation entity needs API implementation
       // Load all activity data using service role
-      const [activityData, searchData, medicalData, aiData] = await Promise.all([
-        base44.entities.UserActivity.filter({}, '-created_date', 1000),
-        base44.entities.SearchHistory.filter({}, '-created_date', 1000),
-        base44.entities.MedicalData.filter({}, '-created_date', 1000),
-        base44.entities.AIConversation.filter({}, '-created_date', 1000).catch(() => [])
-      ]);
+      // const [activityData, searchData, medicalData, aiData] = await Promise.all([
+      //   base44.entities.UserActivity.filter({}, '-created_date', 1000),
+      //   base44.entities.SearchHistory.filter({}, '-created_date', 1000),
+      //   base44.entities.MedicalData.filter({}, '-created_date', 1000),
+      //   base44.entities.AIConversation.filter({}, '-created_date', 1000).catch(() => [])
+      // ]);
 
-      setActivities(activityData || []);
-      setSearches(searchData || []);
-      setMedicalRecords(medicalData || []);
-      setAiConversations(aiData || []);
+      // setActivities(activityData || []);
+      // setSearches(searchData || []);
+      // setMedicalRecords(medicalData || []);
+      // setAiConversations(aiData || []);
+      setActivities([]);
+      setSearches([]);
+      setMedicalRecords([]);
+      setAiConversations([]);
     } catch (err) {
       console.error('Error loading analytics:', err);
       setError(err.message || 'Failed to load analytics');
