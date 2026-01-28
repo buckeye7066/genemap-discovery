@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { base44 } from "@/api/base44Client";
+import { apiClient } from "@genemap/shared";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -23,13 +23,13 @@ export default function SuperAdminSetupPage() {
 
   const loadUser = async () => {
     try {
-      const isAuth = await base44.auth.isAuthenticated();
+      const isAuth = await apiClient.isAuthenticated();
       if (!isAuth) {
         navigate(createPageUrl("Home"));
         return;
       }
 
-      const user = await base44.auth.me();
+      const user = await apiClient.getMe();
       setCurrentUser(user);
 
       // Redirect non-admins
@@ -45,7 +45,7 @@ export default function SuperAdminSetupPage() {
   };
 
   const handleLogout = () => {
-    base44.auth.logout();
+    apiClient.logout();
   };
 
   const handleGrantSuperAdmin = async () => {
@@ -63,26 +63,27 @@ export default function SuperAdminSetupPage() {
     setSuccess(null);
 
     try {
-      // Call backend function to grant admin privileges
-      const response = await base44.functions.invoke('grantAdminPrivileges', {
-        targetEmail: searchEmail.trim()
-      });
+      // BACKEND_NEEDED: grantAdminPrivileges function needs API implementation
+      // const response = await apiClient.grantAdminPrivileges({
+      //   targetEmail: searchEmail.trim()
+      // });
 
-      if (response.error) {
-        setError(response.error);
-        return;
-      }
+      // if (response.error) {
+      //   setError(response.error);
+      //   return;
+      // }
 
-      setSuccess(`Successfully granted administrator privileges to ${searchEmail}`);
-      setSearchEmail("");
+      // setSuccess(`Successfully granted administrator privileges to ${searchEmail}`);
+      // setSearchEmail("");
 
-      // If granting to self, reload user and page
-      if (searchEmail.trim() === currentUser.email) {
-        setTimeout(async () => {
-          await loadUser();
-          window.location.reload(); // Reload page to refresh permissions
-        }, 1000);
-      }
+      // // If granting to self, reload user and page
+      // if (searchEmail.trim() === currentUser.email) {
+      //   setTimeout(async () => {
+      //     await loadUser();
+      //     window.location.reload(); // Reload page to refresh permissions
+      //   }, 1000);
+      // }
+      setError("Admin privilege granting is not yet implemented");
     } catch (err) {
       console.error("Error granting admin:", err);
       setError(err.message || "Failed to grant privileges. Please try again.");
@@ -101,14 +102,16 @@ export default function SuperAdminSetupPage() {
     setSuccess(null);
 
     try {
-      const response = await base44.functions.invoke('grantPremiumAccess');
+      // BACKEND_NEEDED: grantPremiumAccess function needs API implementation
+      // const response = await apiClient.grantPremiumAccess();
 
-      if (response.error) {
-        setError(response.error);
-        return;
-      }
+      // if (response.error) {
+      //   setError(response.error);
+      //   return;
+      // }
 
-      setSuccess('Premium access granted! Reload the page to see changes.');
+      // setSuccess('Premium access granted! Reload the page to see changes.');
+      setError("Premium access granting is not yet implemented");
     } catch (err) {
       console.error("Error granting premium:", err);
       setError(err.message || "Failed to grant premium access.");

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { base44 } from "@/api/base44Client";
+import { apiClient } from "@genemap/shared";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { log } from "../components/shared/logger";
@@ -80,7 +80,7 @@ export default function Dashboard() {
       // Check if aborted
       if (signal?.aborted) return;
       
-      const currentUser = await base44.auth.me();
+      const currentUser = await apiClient.getMe();
       setUser(currentUser);
 
       if (!currentUser?.email) {
@@ -94,45 +94,18 @@ export default function Dashboard() {
 
       const userEmail = currentUser.email;
 
-      // Load all data in parallel with RLS fallback
-      const [activities, searches, userProjects, records, sets, conversations] = await Promise.all([
-        base44.entities.UserActivity.filter(
-          { 
-            created_by: userEmail,
-            activity_type: "gene_view"
-          },
-          '-created_date',
-          10
-        ),
-        base44.entities.SearchHistory.filter(
-          { created_by: userEmail },
-          '-created_date',
-          5
-        ),
-        base44.entities.ResearchProject.filter(
-          { created_by: userEmail },
-          '-updated_date',
-          10
-        ),
-        base44.entities.MedicalData.filter(
-          { created_by: userEmail },
-          '-created_date',
-          3
-        ),
-        base44.entities.GeneSet.filter(
-          { created_by: userEmail },
-          '-created_date',
-          5
-        ),
-        base44.entities.AIConversation.filter(
-          { created_by: userEmail },
-          '-updated_date',
-          5
-        ).catch(err => {
-          log.error("AIConversation fetch error:", err);
-          return [];
-        })
-      ]);
+      // BACKEND_NEEDED: UserActivity entity needs API implementation
+      // BACKEND_NEEDED: SearchHistory entity needs API implementation
+      // BACKEND_NEEDED: ResearchProject entity needs API implementation
+      // BACKEND_NEEDED: MedicalData entity needs API implementation
+      // BACKEND_NEEDED: GeneSet entity needs API implementation
+      // BACKEND_NEEDED: AIConversation entity needs API implementation
+      const activities = [];
+      const searches = [];
+      const userProjects = [];
+      const records = [];
+      const sets = [];
+      const conversations = [];
 
       setRecentGenes(activities);
       setRecentSearches(searches);
@@ -175,12 +148,13 @@ export default function Dashboard() {
 
 Keep each insight under 50 words, practical, and personalized.`;
 
-      const response = await base44.integrations.Core.InvokeLLM({
-        prompt,
-        add_context_from_internet: false
-      });
-
-      setPersonalizedInsights(response);
+      // BACKEND_NEEDED: InvokeLLM integration needs API implementation
+      // const response = await apiClient.invokeLLM({
+      //   prompt,
+      //   add_context_from_internet: false
+      // });
+      // setPersonalizedInsights(response);
+      setPersonalizedInsights(null);
     } catch (err) {
       log.error("Error generating insights:", err);
     }

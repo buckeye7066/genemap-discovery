@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from "react";
-import { base44 } from "@/api/base44Client";
+import { apiClient } from "@genemap/shared";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -79,29 +79,27 @@ export default function MedicalDataPage() {
 
   const loadData = async () => {
     try {
-      const currentUser = await base44.auth.me();
+      const currentUser = await apiClient.getMe();
       setUser(currentUser);
 
-      const records = await base44.entities.MedicalData.filter(
-        { created_by: currentUser.email },
-        '-created_date'
-      );
-      setMedicalRecords(records);
+      // BACKEND_NEEDED: MedicalData entity needs API implementation
+      // const records = await apiClient.getMedicalData({
+      //   created_by: currentUser.email
+      // });
+      // setMedicalRecords(records);
+      setMedicalRecords([]);
 
-      // Load shared records the user has access to
-      try {
-        const shares = await base44.entities.MedicalDataShare.filter({
-          shared_with_email: currentUser.email,
-          status: 'active'
-        });
-
-        // Get the actual records that were shared
-        // For now, we'll just track the shares objects, as fetching actual records by ID list
-        // might require a different backend API or multiple calls.
-        setSharedRecords(shares);
-      } catch (err) {
-        console.log("No shared records found for current user or error fetching shares:", err.message);
-      }
+      // BACKEND_NEEDED: MedicalDataShare entity needs API implementation
+      // try {
+      //   const shares = await apiClient.getMedicalDataShares({
+      //     shared_with_email: currentUser.email,
+      //     status: 'active'
+      //   });
+      //   setSharedRecords(shares);
+      // } catch (err) {
+      //   console.log("No shared records found for current user or error fetching shares:", err.message);
+      // }
+      setSharedRecords([]);
     } catch (err) {
       console.error("Error loading data:", err);
       setError("Failed to load medical records");
@@ -131,64 +129,73 @@ export default function MedicalDataPage() {
     setUploadProgress("Uploading file...");
 
     try {
-      // Upload file
-      const uploadResult = await base44.integrations.Core.UploadFile({
-        file: uploadForm.file
-      });
+      // BACKEND_NEEDED: UploadFile integration needs API implementation
+      // const uploadResult = await apiClient.uploadFile({
+      //   file: uploadForm.file
+      // });
+      // const fileUrl = uploadResult.file_url;
+      setError("File upload is not yet implemented");
+      return;
 
-      const fileUrl = uploadResult.file_url;
-      setUploadProgress("Analyzing file with Robert...");
+      // setUploadProgress("Analyzing file with Robert...");
 
       // Determine JSON schema based on file type
-      const schema = getSchemaForFileType(uploadForm.fileType);
+      // const schema = getSchemaForFileType(uploadForm.fileType);
 
-      // Extract data from file
-      const extractionResult = await base44.integrations.Core.ExtractDataFromUploadedFile({
-        file_url: fileUrl,
-        json_schema: schema
-      });
+      // BACKEND_NEEDED: ExtractDataFromUploadedFile integration needs API implementation
+      // const extractionResult = await apiClient.extractDataFromUploadedFile({
+      //   file_url: fileUrl,
+      //   json_schema: schema
+      // });
 
-      if (extractionResult.status === "error") {
-        throw new Error(extractionResult.details || "Failed to extract data from file");
-      }
+      // setUploadProgress("Analyzing file with Robert...");
 
-      setUploadProgress("Generating insights...");
+      // Determine JSON schema based on file type
+      // const schema = getSchemaForFileType(uploadForm.fileType);
+
+      // BACKEND_NEEDED: ExtractDataFromUploadedFile integration needs API implementation
+      // const extractionResult = await apiClient.extractDataFromUploadedFile({
+      //   file_url: fileUrl,
+      //   json_schema: schema
+      // });
+
+      // if (extractionResult.status === "error") {
+      //   throw new Error(extractionResult.details || "Failed to extract data from file");
+      // }
+
+      // setUploadProgress("Generating insights...");
 
       // Generate AI summary and identify relevant genes/phenotypes
-      const analysisResult = await analyzeExtractedData(
-        extractionResult.output,
-        uploadForm.fileType
-      );
+      // const analysisResult = await analyzeExtractedData(
+      //   extractionResult.output,
+      //   uploadForm.fileType
+      // );
 
-      // Save to database
-      await base44.entities.MedicalData.create({
-        file_type: uploadForm.fileType,
-        file_url: fileUrl,
-        // The display code expects key_findings, risks, recommendations inside extracted_data.
-        // We combine the original extracted data with the new AI analysis components
-        // into the 'extracted_data' field.
-        extracted_data: {
-          ...extractionResult.output, // Raw extracted data
-          key_findings: analysisResult.key_findings,
-          risks: analysisResult.risks,
-          recommendations: analysisResult.recommendations,
-        },
-        // Keep these as top-level for backward compatibility and direct access
-        summary: analysisResult.summary,
-        relevant_genes: analysisResult.genes,
-        phenotypes_identified: analysisResult.phenotypes,
-        notes: uploadForm.notes
-      });
+      // BACKEND_NEEDED: MedicalData entity needs API implementation
+      // await apiClient.createMedicalData({
+      //   file_type: uploadForm.fileType,
+      //   file_url: fileUrl,
+      //   extracted_data: {
+      //     ...extractionResult.output,
+      //     key_findings: analysisResult.key_findings,
+      //     risks: analysisResult.risks,
+      //     recommendations: analysisResult.recommendations,
+      //   },
+      //   summary: analysisResult.summary,
+      //   relevant_genes: analysisResult.genes,
+      //   phenotypes_identified: analysisResult.phenotypes,
+      //   notes: uploadForm.notes
+      // });
 
-      setSuccess("Medical data uploaded and analyzed successfully! Visit Anastasia AI for detailed counseling.");
-      setUploadForm({ file: null, fileType: "genetic_test", notes: "" });
+      // setSuccess("Medical data uploaded and analyzed successfully! Visit Anastasia AI for detailed counseling.");
+      // setUploadForm({ file: null, fileType: "genetic_test", notes: "" });
 
       // Reset file input
-      const fileInput = document.getElementById('file-upload');
-      if (fileInput) fileInput.value = '';
+      // const fileInput = document.getElementById('file-upload');
+      // if (fileInput) fileInput.value = '';
 
       // Reload data
-      await loadData();
+      // await loadData();
 
     } catch (err) {
       console.error("Upload error:", err);
@@ -352,48 +359,49 @@ ${JSON.stringify(extractedData, null, 2)}
 
 Return structured analysis with all sections.`;
 
-    const analysis = await base44.integrations.Core.InvokeLLM({
-      prompt,
-      response_json_schema: {
-        type: "object",
-        properties: {
-          summary: { type: "string" },
-          key_findings: {
-            type: "array",
-            items: { type: "string" }
-          },
-          genes: {
-            type: "array",
-            items: { type: "string" }
-          },
-          phenotypes: {
-            type: "array",
-            items: { type: "string" }
-          },
-          risks: {
-            type: "object",
-            properties: {
-              identified: { type: "boolean" },
-              level: { type: "string" },
-              description: { type: "string" },
-              urgency: { type: "string" }
-            }
-          },
-          recommendations: {
-            type: "array",
-            items: { type: "string" }
-          }
-        }
-      }
-    });
+    // BACKEND_NEEDED: InvokeLLM integration needs API implementation
+    // const analysis = await apiClient.invokeLLM({
+    //   prompt,
+    //   response_json_schema: {
+    //     type: "object",
+    //     properties: {
+    //       summary: { type: "string" },
+    //       key_findings: {
+    //         type: "array",
+    //         items: { type: "string" }
+    //       },
+    //       genes: {
+    //         type: "array",
+    //         items: { type: "string" }
+    //       },
+    //       phenotypes: {
+    //         type: "array",
+    //         items: { type: "string" }
+    //       },
+    //       risks: {
+    //         type: "object",
+    //         properties: {
+    //           identified: { type: "boolean" },
+    //           level: { type: "string" },
+    //           description: { type: "string" },
+    //           urgency: { type: "string" }
+    //         }
+    //       },
+    //       recommendations: {
+    //         type: "array",
+    //         items: { type: "string" }
+    //       }
+    //     }
+    //   }
+    // });
 
     return {
-      summary: analysis.summary,
-      key_findings: analysis.key_findings || [],
-      genes: analysis.genes || [],
-      phenotypes: analysis.phenotypes || [],
-      risks: analysis.risks || null,
-      recommendations: analysis.recommendations || []
+      summary: "",
+      key_findings: [],
+      genes: [],
+      phenotypes: [],
+      risks: null,
+      recommendations: []
     };
   };
 
@@ -419,8 +427,12 @@ Return structured analysis with all sections.`;
     }
 
     try {
-      await base44.entities.MedicalData.delete(recordId);
-      setSuccess("Record deleted successfully");
+      // BACKEND_NEEDED: MedicalData entity needs API implementation
+      // await apiClient.deleteMedicalData(recordId);
+      setError("Record deletion is not yet implemented");
+      return;
+
+      // setSuccess("Record deleted successfully");
       await loadData();
     } catch (err) {
       setError("Failed to delete record");
@@ -458,23 +470,25 @@ Return structured analysis with all sections.`;
     setError(null);
     setSuccess(null);
     try {
-      // Create share permissions for each selected record
-      for (const recordId of selectedRecords) {
-        await base44.entities.MedicalDataShare.create({
-          record_id: recordId,
-          shared_with_email: shareWithEmail.trim(),
-          shared_by_email: user.email,
-          permission_level: 'compare', // As specified in the outline
-          purpose: sharePurpose.trim(),
-          status: 'active'
-        });
-      }
+      // BACKEND_NEEDED: MedicalDataShare entity needs API implementation
+      // for (const recordId of selectedRecords) {
+      //   await apiClient.createMedicalDataShare({
+      //     record_id: recordId,
+      //     shared_with_email: shareWithEmail.trim(),
+      //     shared_by_email: user.email,
+      //     permission_level: 'compare',
+      //     purpose: sharePurpose.trim(),
+      //     status: 'active'
+      //   });
+      // }
+      setError("Record sharing is not yet implemented");
+      return;
 
-      setSuccess(`Successfully shared ${selectedRecords.length} record(s) with ${shareWithEmail}`);
-      setShareDialogOpen(false);
-      setShareWithEmail("");
-      setSharePurpose("");
-      setSelectedRecords([]); // Clear selection after sharing
+      // setSuccess(`Successfully shared ${selectedRecords.length} record(s) with ${shareWithEmail}`);
+      // setShareDialogOpen(false);
+      // setShareWithEmail("");
+      // setSharePurpose("");
+      // setSelectedRecords([]);
     } catch (err) {
       console.error("Error sharing records:", err);
       setError("Failed to share records. Please try again. " + err.message);
@@ -489,11 +503,15 @@ Return structured analysis with all sections.`;
     }
 
     try {
-      await base44.entities.MedicalDataShare.update(shareId, {
-        status: 'revoked'
-      });
-      setSuccess("Sharing permission revoked successfully");
-      await loadData(); // Reload to reflect changes
+      // BACKEND_NEEDED: MedicalDataShare entity needs API implementation
+      // await apiClient.updateMedicalDataShare(shareId, {
+      //   status: 'revoked'
+      // });
+      setError("Share revocation is not yet implemented");
+      return;
+
+      // setSuccess("Sharing permission revoked successfully");
+      // await loadData();
     } catch (err) {
       setError("Failed to revoke sharing permission");
     }
@@ -504,13 +522,18 @@ Return structured analysis with all sections.`;
       // Update the record with parsed variants
       const record = medicalRecords.find(r => r.id === recordId);
       if (record) {
-        // Also add to extracted_data for potential AI analysis later
-        const updatedExtractedData = {
-          ...(record.extracted_data || {}),
-          vcf_variants: variants
-        };
+        // BACKEND_NEEDED: MedicalData entity needs API implementation
+        // const updatedExtractedData = {
+        //   ...(record.extracted_data || {}),
+        //   vcf_variants: variants
+        // };
 
-        await base44.entities.MedicalData.update(recordId, {
+        // await apiClient.updateMedicalData(recordId, {
+        //   extracted_data: updatedExtractedData
+        // });
+        return;
+
+        // await base44.entities.MedicalData.update(recordId, {
           vcf_variants: variants, // Top-level for direct access
           extracted_data: updatedExtractedData // Also within extracted_data
         });

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { base44 } from "@/api/base44Client";
+import { apiClient } from "@genemap/shared";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { log } from "../components/shared/logger";
@@ -44,7 +44,7 @@ export default function VCFAnalysisPage() {
 
   const loadUser = async () => {
     try {
-      const currentUser = await base44.auth.me();
+      const currentUser = await apiClient.getMe();
       setUser(currentUser);
     } catch (err) {
       log.error("Error loading user:", err);
@@ -67,8 +67,10 @@ export default function VCFAnalysisPage() {
 
     setIsUploading(true);
     try {
-      const result = await base44.integrations.Core.UploadFile({ file });
-      setUploadedFileUrl(result.file_url);
+      // BACKEND_NEEDED: UploadFile integration needs API implementation
+      // const result = await apiClient.uploadFile({ file });
+      // setUploadedFileUrl(result.file_url);
+      alert("File upload is not yet implemented");
     } catch (err) {
       log.error("Upload error:", err);
       alert("Failed to upload file. Please try again.");
@@ -115,22 +117,13 @@ export default function VCFAnalysisPage() {
         const batchResults = await Promise.all(
           batch.map(async (symbol) => {
             try {
-              const prompt = `Provide a brief summary for gene ${symbol} that was found in a VCF analysis.
-
-Include:
-- Gene function (1-2 sentences)
-- Associated diseases/conditions
-- Clinical significance
-- Why this gene matters
-
-Keep it concise and clinical.`;
-
-              const summary = await base44.integrations.Core.InvokeLLM({
-                prompt,
-                add_context_from_internet: true
-              });
-
-              return { symbol, summary };
+              // BACKEND_NEEDED: InvokeLLM integration needs API implementation
+              // const summary = await apiClient.invokeLLM({
+              //   prompt: `Provide a brief summary for gene ${symbol} that was found in a VCF analysis...`,
+              //   add_context_from_internet: true
+              // });
+              // return { symbol, summary };
+              return { symbol, summary: `Gene ${symbol} identified in VCF analysis.` };
             } catch (err) {
               return { symbol, summary: `Gene ${symbol} identified in VCF analysis.` };
             }

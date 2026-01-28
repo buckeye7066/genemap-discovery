@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { base44 } from "@/api/base44Client";
+import { apiClient } from "@genemap/shared";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -77,7 +77,7 @@ export default function VisualizationHub() {
 
   const loadUser = async () => {
     try {
-      const currentUser = await base44.auth.me();
+      const currentUser = await apiClient.getMe();
       setUser(currentUser);
     } catch (err) {
       console.log("Not logged in");
@@ -86,14 +86,13 @@ export default function VisualizationHub() {
 
   const loadSavedConfigs = async () => {
     try {
-      const configs = await base44.entities.VisualizationConfig.filter(
-        {},
-        '-created_date'
-      );
-      setSavedConfigs(configs || []);
+      // BACKEND_NEEDED: VisualizationConfig entity needs API implementation
+      // const configs = await apiClient.getVisualizationConfigs();
+      // setSavedConfigs(configs || []);
+      setSavedConfigs([]);
     } catch (err) {
       console.log("No saved configs found or error fetching configs:", err);
-      setSavedConfigs([]); // Ensure it's an empty array on error
+      setSavedConfigs([]);
     }
   };
 
@@ -107,52 +106,43 @@ export default function VisualizationHub() {
     setError(null);
 
     try {
-      // For simple gene lookups in Visualization Hub, use a lightweight approach
-      const prompt = `
-For the gene symbol ${gene}, provide basic genomic information:
+      // BACKEND_NEEDED: InvokeLLM integration needs API implementation
+      // const result = await apiClient.invokeLLM({
+      //   prompt,
+      //   add_context_from_internet: true,
+      //   response_json_schema: {
+      //     type: "object",
+      //     properties: {
+      //       symbol: { type: "string" },
+      //       name: { type: "string" },
+      //       chromosome: { type: "string" },
+      //       start: { type: "number" },
+      //       end: { type: "number" },
+      //       phenotypes: {
+      //         type: "array",
+      //         items: {
+      //           type: "object",
+      //           properties: {
+      //             name: { type: "string" },
+      //             hpoId: { type: "string" }
+      //           }
+      //         }
+      //       },
+      //       expressionData: {
+      //         type: "array",
+      //         items: {
+      //           type: "object",
+      //           properties: {
+      //             tissue: { type: "string" },
+      //             expression: { type: "number" }
+      //           }
+      //         }
+      //       }
+      //     }
+      //   }
+      // });
 
-1. Full gene name
-2. Chromosomal location (chromosome, start, end positions)
-3. Top 3-5 associated phenotypes or diseases
-4. Top 5 tissues where it's highly expressed (with relative expression levels)
-
-Keep it concise and factual. Use NCBI Gene, Ensembl, UniProt as sources.
-`;
-
-      const result = await base44.integrations.Core.InvokeLLM({
-        prompt,
-        add_context_from_internet: true,
-        response_json_schema: {
-          type: "object",
-          properties: {
-            symbol: { type: "string" },
-            name: { type: "string" },
-            chromosome: { type: "string" },
-            start: { type: "number" },
-            end: { type: "number" },
-            phenotypes: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  name: { type: "string" },
-                  hpoId: { type: "string" }
-                }
-              }
-            },
-            expressionData: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  tissue: { type: "string" },
-                  expression: { type: "number" }
-                }
-              }
-            }
-          }
-        }
-      });
+      const result = null; // Placeholder until API is implemented
 
       if (result && result.symbol) {
         const geneInfo = {
@@ -212,20 +202,22 @@ Keep it concise and factual. Use NCBI Gene, Ensembl, UniProt as sources.
     }
 
     try {
-      await base44.entities.VisualizationConfig.create({
-        name: configName,
-        description: configDescription,
-        genes: selectedGenes.map(g => g.symbol),
-        active_visualizations: activeVisualizations,
-        settings: {
-          overlay_mode: overlayMode
-        }
-      });
+      // BACKEND_NEEDED: VisualizationConfig entity needs API implementation
+      // await apiClient.createVisualizationConfig({
+      //   name: configName,
+      //   description: configDescription,
+      //   genes: selectedGenes.map(g => g.symbol),
+      //   active_visualizations: activeVisualizations,
+      //   settings: {
+      //     overlay_mode: overlayMode
+      //   }
+      // });
 
-      setConfigName("");
-      setConfigDescription("");
-      setSaveDialogOpen(false);
-      await loadSavedConfigs();
+      // setConfigName("");
+      // setConfigDescription("");
+      // setSaveDialogOpen(false);
+      // await loadSavedConfigs();
+      setError("Configuration saving is not yet implemented");
       
     } catch (err) {
       console.error("Error saving configuration:", err);

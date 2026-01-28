@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from "react";
-import { base44 } from "@/api/base44Client";
+import { apiClient } from "@genemap/shared";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -41,14 +41,15 @@ export default function AnastasiaPage() {
 
   const loadData = async () => {
     try {
-      const currentUser = await base44.auth.me();
+      const currentUser = await apiClient.getMe();
       setUser(currentUser);
 
-      const records = await base44.entities.MedicalData.filter(
-        { created_by: currentUser.email },
-        '-created_date'
-      );
-      setMedicalRecords(records);
+      // BACKEND_NEEDED: MedicalData entity needs API implementation
+      // const records = await apiClient.getMedicalData({
+      //   created_by: currentUser.email
+      // });
+      // setMedicalRecords(records);
+      setMedicalRecords([]);
 
       const welcomeMessage = getWelcomeMessage(currentUser);
       setMessages([{
@@ -220,12 +221,14 @@ ${userMessage}
 
 **Remember:** You're Anastasia - smart, friendly, and amazing at making genetics make sense! Be yourself - warm, witty, and wonderfully clear. 💜`;
 
-    const response = await base44.integrations.Core.InvokeLLM({
-      prompt: contextPrompt,
-      add_context_from_internet: true
-    });
+    // BACKEND_NEEDED: InvokeLLM integration needs API implementation
+    // const response = await apiClient.invokeLLM({
+    //   prompt: contextPrompt,
+    //   add_context_from_internet: true
+    // });
+    // return response;
 
-    return response;
+    return "I'm sorry, I'm not fully connected to my AI brain yet! The backend integration is still being set up. But I'm still here to help guide you through the interface! 😊";
   };
 
   const quickPrompts = [
