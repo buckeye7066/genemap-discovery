@@ -457,26 +457,27 @@ Use tissue names like: brain, heart, liver, kidney, muscle, lung, etc.
 `;
 
     try {
-      const result = await base44.integrations.Core.InvokeLLM({
-        prompt,
-        add_context_from_internet: true,
-        response_json_schema: {
-          type: "object",
-          properties: {
-            expression: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  tissue: { type: "string" },
-                  expression: { type: "number" }
-                }
-              }
-            }
-          }
-        }
-      });
-      */
+      // BACKEND_NEEDED: LLM integration with internet context needs API implementation
+      // const result = await apiClient.invokeLLM({
+      //   prompt,
+      //   add_context_from_internet: true,
+      //   response_json_schema: {
+      //     type: "object",
+      //     properties: {
+      //       expression: {
+      //         type: "array",
+      //         items: {
+      //           type: "object",
+      //           properties: {
+      //             tissue: { type: "string" },
+      //             expression: { type: "number" }
+      //           }
+      //         }
+      //       }
+      //     }
+      //   }
+      // });
+      const result = { expression: [] }; // Placeholder
 
       return result.expression || [];
     } catch (error) {
@@ -660,28 +661,29 @@ Return up to 5 most significant relationships.
 `;
 
     try {
-      const result = await base44.integrations.Core.InvokeLLM({
-        prompt,
-        add_context_from_internet: true,
-        response_json_schema: {
-          type: "object",
-          properties: {
-            relationships: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  gene1: { type: "string" },
-                  gene2: { type: "string" },
-                  relationship: { type: "string" },
-                  evidence: { type: "string" }
-                }
-              }
-            }
-          }
-        }
-      });
-      */
+      // BACKEND_NEEDED: LLM integration with internet context needs API implementation
+      // const result = await apiClient.invokeLLM({
+      //   prompt,
+      //   add_context_from_internet: true,
+      //   response_json_schema: {
+      //     type: "object",
+      //     properties: {
+      //       relationships: {
+      //         type: "array",
+      //         items: {
+      //           type: "object",
+      //           properties: {
+      //             gene1: { type: "string" },
+      //             gene2: { type: "string" },
+      //             relationship: { type: "string" },
+      //             evidence: { type: "string" }
+      //           }
+      //         }
+      //       }
+      //     }
+      //   }
+      // });
+      const result = { relationships: [] }; // Placeholder
 
       return result.relationships || [];
     } catch (error) {
