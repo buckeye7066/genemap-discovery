@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { base44 } from "@/api/base44Client";
+import { apiClient } from "@genemap/shared";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { X, Sparkles, MessageSquare, Palette, Search, BarChart3, ChevronRight, ChevronLeft } from "lucide-react";
@@ -80,7 +80,7 @@ export default function OnboardingTour({ onComplete, forceShow = false }) {
 
   const checkOnboardingStatus = async () => {
     try {
-      const currentUser = await base44.auth.me();
+      const currentUser = await apiClient.getMe();
       setUser(currentUser);
       
       // Show tour if user hasn't completed onboarding
@@ -120,9 +120,9 @@ export default function OnboardingTour({ onComplete, forceShow = false }) {
 
   const markComplete = async () => {
     try {
-      await base44.auth.updateMe({
-        onboarding_completed: true
-      });
+      // BACKEND_NEEDED: updateMe needs API implementation
+      // await apiClient.updateMe({ onboarding_completed: true });
+      console.log("Onboarding complete");
     } catch (err) {
       console.error("Failed to mark onboarding complete:", err);
     }

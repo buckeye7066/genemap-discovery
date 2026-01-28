@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { base44 } from "@/api/base44Client";
+import { apiClient } from "@genemap/shared";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -190,10 +190,8 @@ ${audienceLevel === 'expert' ? `
 
 Make the explanation warm, clear, and empowering. Avoid unnecessary medical jargon unless appropriate for the audience.`;
 
-      const response = await base44.integrations.Core.InvokeLLM({
-        prompt,
-        add_context_from_internet: false
-      });
+      // BACKEND_NEEDED: InvokeLLM needs API implementation
+      const response = "Genetic explanation feature is currently unavailable. API implementation needed.";
 
       setExplanation(response);
     } catch (err) {
@@ -251,9 +249,11 @@ Make the explanation warm, clear, and empowering. Avoid unnecessary medical jarg
 
     setIsUploadingVcf(true);
     try {
-      const { file_url } = await base44.integrations.Core.UploadFile({ file });
+      // BACKEND_NEEDED: UploadFile needs API implementation
+      // const { file_url } = await apiClient.uploadFile({ file });
       setVcfFile(file);
-      setVcfFileUrl(file_url);
+      // setVcfFileUrl(file_url);
+      setError("File upload feature is currently unavailable. API implementation needed.");
     } catch (err) {
       console.error("Error uploading VCF:", err);
       setError("Failed to upload VCF file. Please try again.");

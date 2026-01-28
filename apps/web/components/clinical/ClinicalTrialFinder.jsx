@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { base44 } from "@/api/base44Client";
+import { apiClient } from "@genemap/shared";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -128,35 +128,8 @@ ${medicalContext ? `
 
 Search comprehensively and provide actionable information.`;
 
-      const response = await base44.integrations.Core.InvokeLLM({
-        prompt,
-        add_context_from_internet: true,
-        response_json_schema: {
-          type: "object",
-          properties: {
-            trials: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  nct_id: { type: "string" },
-                  title: { type: "string" },
-                  summary: { type: "string" },
-                  phase: { type: "string" },
-                  status: { type: "string" },
-                  study_type: { type: "string" },
-                  locations: { type: "string" },
-                  enrollment: { type: "string" },
-                  url: { type: "string" },
-                  eligibility_likely: { type: "string" },
-                  relevance_rank: { type: "number" }
-                }
-              }
-            },
-            personalized_analysis: { type: "string" }
-          }
-        }
-      });
+      // BACKEND_NEEDED: InvokeLLM needs API implementation
+      const response = { trials: [], personalized_analysis: "Clinical trial search feature is currently unavailable. API implementation needed." };
 
       setTrials(response.trials || []);
       setRobertAnalysis(response.personalized_analysis);

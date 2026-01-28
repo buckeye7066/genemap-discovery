@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from "react";
-import { base44 } from "@/api/base44Client";
+import { apiClient } from "@genemap/shared";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -34,14 +34,16 @@ export default function RobertClinicalSupport({ gene, disease, targets, userEduc
   const loadUserAndMedicalData = async () => {
     setIsLoading(true);
     try {
-      const currentUser = await base44.auth.me();
+      const currentUser = await apiClient.getMe();
       setUser(currentUser);
 
+      // BACKEND_NEEDED: MedicalData entity needs API implementation
       // Load user's medical records
-      const records = await base44.entities.MedicalData.filter(
-        { created_by: currentUser.email },
-        '-created_date'
-      );
+      // const records = await base44.entities.MedicalData.filter(
+      //   { created_by: currentUser.email },
+      //   '-created_date'
+      // );
+      const records = [];
 
       if (records && records.length > 0) {
         setMedicalData(records);
@@ -202,10 +204,8 @@ ${isBatchAnalysis ? '- Organize analysis by target, then provide cross-reference
 
 Provide a comprehensive but accessible clinical analysis formatted in clear sections with markdown.`;
 
-      const response = await base44.integrations.Core.InvokeLLM({
-        prompt,
-        add_context_from_internet: true
-      });
+      // BACKEND_NEEDED: InvokeLLM needs API implementation
+      const response = "Clinical analysis feature is currently unavailable. API implementation needed.";
 
       // Check for concerning findings or drug warnings
       const hasConcerningFindings = response.toLowerCase().includes('urgent') ||

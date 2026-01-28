@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { base44 } from "@/api/base44Client";
+import { apiClient } from "@genemap/shared";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -124,67 +124,8 @@ For EACH trial, provide:
 
 Return comprehensive trial matches with all details.`;
 
-      const response = await base44.integrations.Core.InvokeLLM({
-        prompt,
-        add_context_from_internet: true,
-        response_json_schema: {
-          type: "object",
-          properties: {
-            trials: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  nct_id: { type: "string" },
-                  title: { type: "string" },
-                  summary: { type: "string" },
-                  phase: { type: "string" },
-                  status: { type: "string" },
-                  start_date: { type: "string" },
-                  genetic_relevance: {
-                    type: "object",
-                    properties: {
-                      matched_genes: { type: "array", items: { type: "string" } },
-                      targeted_mutations: { type: "array", items: { type: "string" } },
-                      mechanism: { type: "string" },
-                      confidence: { type: "string" }
-                    }
-                  },
-                  eligibility: {
-                    type: "object",
-                    properties: {
-                      inclusion: { type: "array", items: { type: "string" } },
-                      exclusion: { type: "array", items: { type: "string" } },
-                      age_range: { type: "string" },
-                      biomarker_required: { type: "string" }
-                    }
-                  },
-                  logistics: {
-                    type: "object",
-                    properties: {
-                      locations: { type: "array", items: { type: "string" } },
-                      num_sites: { type: "number" },
-                      enrollment: { type: "number" },
-                      contact: { type: "string" },
-                      url: { type: "string" }
-                    }
-                  },
-                  treatment: {
-                    type: "object",
-                    properties: {
-                      intervention_type: { type: "string" },
-                      drug_names: { type: "array", items: { type: "string" } },
-                      approach: { type: "string" },
-                      duration: { type: "string" }
-                    }
-                  },
-                  match_explanation: { type: "string" }
-                }
-              }
-            }
-          }
-        }
-      });
+      // BACKEND_NEEDED: InvokeLLM needs API implementation
+      const response = { trials: [] };
 
       setTrials(response.trials || []);
     } catch (err) {
