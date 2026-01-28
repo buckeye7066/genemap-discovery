@@ -1,0 +1,23 @@
+{
+  "name": "@genemap/shared",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "./src/index.js",
+  "types": "./src/index.d.ts",
+  "exports": {
+    ".": "./src/index.js",
+    "./client": "./src/client.js",
+    "./schemas": "./src/schemas.js",
+    "./types": "./src/types.js"
+  },
+  "dependencies": {
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.2",
+    "vitest": "^3.0.0"
+  },
+  "scripts": {
+    "test": "vitest"
+  }
+}

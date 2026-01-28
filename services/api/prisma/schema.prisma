@@ -1,0 +1,128 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String   @id @default(uuid())
+  email         String   @unique
+  passwordHash  String   @map("password_hash")
+  role          String   @default("user")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+  
+  sessions      Session[]
+  subscriptions Subscription[]
+  auditLogs     AuditLog[]
+  
+  @@map("users")
+}
+
+model Session {
+  id               String   @id @default(uuid())
+  userId           String   @map("user_id")
+  refreshTokenHash String   @map("refresh_token_hash")
+  expiresAt        DateTime @map("expires_at")
+  createdAt        DateTime @default(now()) @map("created_at")
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("sessions")
+}
+
+model Subscription {
+  id                   String    @id @default(uuid())
+  userId               String    @map("user_id")
+  stripeCustomerId     String?   @map("stripe_customer_id")
+  stripeSubscriptionId String?   @unique @map("stripe_subscription_id")
+  status               String
+  planType             String    @map("plan_type")
+  currentPeriodEnd     DateTime? @map("current_period_end")
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("subscriptions")
+}
+
+model InstitutionalLicense {
+  id                   String   @id @default(uuid())
+  organizationName     String   @map("organization_name")
+  contactEmail         String   @map("contact_email")
+  licenseType          String   @map("license_type")
+  maxSeats             Int      @map("max_seats")
+  assignedSeats        Int      @default(0) @map("assigned_seats")
+  status               String
+  startDate            DateTime @map("start_date")
+  endDate              DateTime @map("end_date")
+  renewalDate          DateTime @map("renewal_date")
+  autoRenew            Boolean  @default(false) @map("auto_renew")
+  stripeCustomerId     String?  @map("stripe_customer_id")
+  stripeSubscriptionId String?  @map("stripe_subscription_id")
+  pricing              Json
+  adminUsers           String[] @map("admin_users")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+  
+  assignments LicenseAssignment[]
+  usageLogs   LicenseUsageLog[]
+  
+  @@map("institutional_licenses")
+}
+
+model LicenseAssignment {
+  id             String   @id @default(uuid())
+  licenseId      String   @map("license_id")
+  userEmail      String   @map("user_email")
+  assignedBy     String   @map("assigned_by")
+  status         String
+  invitationSent Boolean  @default(false) @map("invitation_sent")
+  department     String?
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+  
+  license InstitutionalLicense @relation(fields: [licenseId], references: [id], onDelete: Cascade)
+  
+  @@map("license_assignments")
+}
+
+model LicenseUsageLog {
+  id        String   @id @default(uuid())
+  licenseId String   @map("license_id")
+  userEmail String   @map("user_email")
+  action    String
+  metadata  Json?
+  createdAt DateTime @default(now()) @map("created_at")
+  
+  license InstitutionalLicense @relation(fields: [licenseId], references: [id], onDelete: Cascade)
+  
+  @@map("license_usage_logs")
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String?  @map("user_id")
+  action     String
+  entityType String   @map("entity_type")
+  entityId   String?  @map("entity_id")
+  metadata   Json?
+  createdAt  DateTime @default(now()) @map("created_at")
+  
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+  
+  @@map("audit_log")
+}
+
+model StripeEvent {
+  id            String   @id @default(uuid())
+  stripeEventId String   @unique @map("stripe_event_id")
+  type          String
+  receivedAt    DateTime @default(now()) @map("received_at")
+  
+  @@map("stripe_events")
+}

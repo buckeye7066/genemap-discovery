@@ -19,7 +19,7 @@ import {
   Mail,
   Loader2
 } from "lucide-react";
-import { createInstitutionalCheckout } from "@/functions/createInstitutionalCheckout";
+import { apiClient } from '@genemap/shared';
 
 export default function InstitutionalPricingPage() {
   const [selectedTier, setSelectedTier] = useState("team");
@@ -99,11 +99,17 @@ export default function InstitutionalPricingPage() {
     setError(null);
 
     try {
-      const response = await createInstitutionalCheckout({
-        organizationName,
-        licenseType: selectedTier,
-        seats,
-        billingCycle
+      const successUrl = `${window.location.origin}${window.location.pathname}?success=true`;
+      const cancelUrl = `${window.location.origin}${window.location.pathname}?canceled=true`;
+      
+      const response = await apiClient.createInstitutionalCheckout({
+        organizationName: formData.organizationName,
+        contactEmail: formData.contactEmail,
+        licenseType: selectedPlan,
+        billing: billingCycle,
+        seats: parseInt(formData.seats),
+        successUrl,
+        cancelUrl,
       });
 
       if (response.data && response.data.url) {
