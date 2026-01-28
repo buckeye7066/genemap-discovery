@@ -1,6 +1,7 @@
-#env
+# Environment variables
 .env
 .env.*
+!.env.example
 
 # Logs
 logs
@@ -11,10 +12,21 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# Dependencies
 node_modules
+
+# Build output
 dist
 dist-ssr
+build
+.next
 *.local
+
+# Backups
+backups/
+*.zip
+*.sql
+*.sql.gz
 
 # Editor directories and files
 .vscode/*
@@ -27,4 +39,12 @@ dist-ssr
 *.sln
 *.sw?
 
-.env
+# Prisma
+services/api/prisma/migrations/*
+!services/api/prisma/migrations/.gitkeep
+
+# Testing
+coverage
+.nyc_output
+playwright-report
+test-results
