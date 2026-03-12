@@ -6,27 +6,31 @@ on:
   pull_request:
     branches: [main, develop]
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   lint-and-typecheck:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
-      - uses: pnpm/action-setup@v2
+
+      - uses: pnpm/action-setup@v4
         with:
           version: 8
-      
+
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'pnpm'
-      
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-      
+
       - name: Lint
         run: pnpm lint
-      
+
       - name: Type check
         run: pnpm typecheck
 
@@ -34,19 +38,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
-      - uses: pnpm/action-setup@v2
+
+      - uses: pnpm/action-setup@v4
         with:
           version: 8
-      
+
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'pnpm'
-      
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-      
+
       - name: Run tests
         run: pnpm test
 
@@ -55,20 +59,31 @@ jobs:
     needs: [lint-and-typecheck, test]
     steps:
       - uses: actions/checkout@v4
-      
-      - uses: pnpm/action-setup@v2
+
+      - uses: pnpm/action-setup@v4
         with:
           version: 8
-      
+
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'pnpm'
-      
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-      
+
+      - name: Build shared package
+        run: pnpm --filter @genemap/shared build
+        continue-on-error: true
+
       - name: Build Web
         run: pnpm build:web
         env:
           VITE_API_URL: http://localhost:3000
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          path: apps/web/dist
+          retention-days: 7

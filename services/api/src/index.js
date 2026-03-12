@@ -9,10 +9,19 @@ import authRoutes from './routes/auth.js';
 import billingRoutes from './routes/billing.js';
 import educationRoutes from './routes/education.js';
 
-const prisma = new PrismaClient();
+// Validate required env vars early
+if (!process.env.COOKIE_SECRET) {
+  throw new Error('COOKIE_SECRET must be set in environment variables');
+}
+
+const prisma = new PrismaClient({
+  log: process.env.NODE_ENV === 'development' ? ['query', 'warn', 'error'] : ['error'],
+});
 
 const fastify = Fastify({
-  logger: true,
+  logger: {
+    level: process.env.LOG_LEVEL || (process.env.NODE_ENV === 'production' ? 'warn' : 'info'),
+  },
   bodyLimit: 1048576,
 });
 
@@ -20,7 +29,7 @@ fastify.decorate('prisma', prisma);
 
 await fastify.register(compress, { global: true });
 
-const allowedOrigins = (process.env.CORS_ORIGINS || 'http://localhost:5173').split(',');
+const allowedOrigins = (process.env.CORS_ORIGINS || 'http://localhost:5173').split(',').map(o => o.trim());
 
 await fastify.register(cors, {
   origin: (origin, cb) => {
@@ -36,10 +45,6 @@ await fastify.register(cors, {
 await fastify.register(cookie, {
   secret: process.env.COOKIE_SECRET,
 });
-
-if (!process.env.COOKIE_SECRET) {
-  throw new Error('COOKIE_SECRET must be set in environment variables');
-}
 
 await fastify.register(rateLimit, {
   max: 100,
@@ -67,7 +72,7 @@ await fastify.register(async (authScope) => {
 await fastify.register(billingRoutes, { prefix: '/billing' });
 await fastify.register(educationRoutes, { prefix: '/education' });
 
-fastify.get('/health', async (request, reply) => {
+fastify.get('/health', async () => {
   return { status: 'ok', timestamp: new Date().toISOString() };
 });
 
@@ -77,9 +82,8 @@ const start = async () => {
   try {
     const port = process.env.PORT || 3000;
     const host = process.env.HOST || '0.0.0.0';
-    
     await fastify.listen({ port, host });
-    console.log(`Server listening on ${host}:${port}`);
+    fastify.log.info(`Server listening on ${host}:${port}`);
   } catch (err) {
     fastify.log.error(err);
     process.exit(1);
@@ -88,7 +92,16 @@ const start = async () => {
 
 start();
 
-process.on('SIGINT', async () => {
+let isShuttingDown = false;
+
+const gracefulShutdown = async (signal) => {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+  fastify.log.info(`Received ${signal}, shutting down gracefully...`);
+  await fastify.close();
   await prisma.$disconnect();
   process.exit(0);
-});
+};
+
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
