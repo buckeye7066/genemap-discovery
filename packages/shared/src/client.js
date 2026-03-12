@@ -72,6 +72,53 @@ export class ApiClient {
       body: JSON.stringify(data),
     });
   }
+
+  async getTopics() {
+    return this.request('/education/topics');
+  }
+
+  async getExplanation(data) {
+    return this.request('/education/explain', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async generateImage(data) {
+    return this.request('/education/image', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async generateQuiz(data) {
+    return this.request('/education/quiz', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async chat(data) {
+    return this.request('/education/chat', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getLearningProgress() {
+    return this.request('/education/progress');
+  }
+
+  async getEducationEntitlements() {
+    return this.request('/education/entitlements');
+  }
+
+  async updateLearningProgress(data) {
+    return this.request('/education/progress', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
 }
 
 export const apiClient = new ApiClient();

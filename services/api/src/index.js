@@ -6,6 +6,7 @@ import { PrismaClient } from '@prisma/client';
 import { errorHandler } from './middleware/errorHandler.js';
 import authRoutes from './routes/auth.js';
 import billingRoutes from './routes/billing.js';
+import educationRoutes from './routes/education.js';
 
 const prisma = new PrismaClient();
 
@@ -61,6 +62,7 @@ await fastify.register(async (authScope) => {
 });
 
 await fastify.register(billingRoutes, { prefix: '/billing' });
+await fastify.register(educationRoutes, { prefix: '/education' });
 
 fastify.get('/health', async (request, reply) => {
   return { status: 'ok', timestamp: new Date().toISOString() };

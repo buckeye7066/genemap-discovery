@@ -8,7 +8,7 @@ import MelissaBanner from "./components/MelissaBanner";
 import PlatformCompatibility from "./components/PlatformCompatibility";
 import UniversalLinkHandler from "./components/UniversalLinkHandler";
 import { getBrowserEnvironment } from "./components/shared/safeNavigate";
-import { Search, User, Crown, History, Home, FileText, Heart, Shield, BarChart3, Microscope, LayoutDashboard, MessageSquare, Building2, ShieldOff, Mail, Crown as CrownIcon, Users, Sparkles, Server, Code2 } from "lucide-react";
+import { Search, User, Crown, History, Home, FileText, Heart, Shield, BarChart3, Microscope, LayoutDashboard, MessageSquare, Building2, ShieldOff, Mail, Crown as CrownIcon, Users, Sparkles, Server, Code2, BookOpen, GraduationCap, HelpCircle, Route } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -25,161 +25,97 @@ import {
 } from "@/components/ui/sidebar";
 import { Badge } from "@/components/ui/badge";
 import MobileOptimization from "./components/MobileOptimization";
+import { useEducationLevel, EDUCATION_LEVELS } from "./lib/EducationLevelContext";
 
-const navigationItems = [
-  {
-    title: "Home",
-    url: createPageUrl("Home"),
-    icon: Home,
-  },
-  {
-    title: "Dashboard",
-    url: createPageUrl("Dashboard"),
-    icon: LayoutDashboard,
-    highlight: true,
-    badge: "New"
-  },
-  {
-    title: "Gene Search",
-    url: createPageUrl("Search"),
-    icon: Search,
-  },
-  {
-    title: "GSEA",
-    url: createPageUrl("GSEA"),
-    icon: Sparkles,
-    highlight: true,
-    badge: "New"
-  },
-  {
-    title: "AI Assistants",
-    url: createPageUrl("AIAssistants"),
-    icon: MessageSquare,
-    highlight: true,
-    badge: "Voice" // Changed from "Chat" to "Voice"
-  },
-  {
-    title: "VCF Analysis",
-    url: createPageUrl("VCFAnalysis"),
-    icon: FileText,
-    highlight: true,
-    badge: "New"
-  },
-  {
-    title: "Visualization Hub",
-    url: createPageUrl("VisualizationHub"),
-    icon: BarChart3,
-    highlight: true,
-  },
-  {
-    title: "Research Mode",
-    url: createPageUrl("ResearchMode"),
-    icon: Microscope,
-    highlight: true,
-    badge: "Research"
-  },
-  {
-    title: "Robert Clinical",
-    url: createPageUrl("RobertClinical"),
-    icon: Shield,
-  },
-  {
-    title: "Anastasia",
-    url: createPageUrl("Anastasia"),
-    icon: Heart,
-  },
-  {
-    title: "Medical Data",
-    url: createPageUrl("MedicalData"),
-    icon: FileText,
-  },
-  {
-    title: "Search History",
-    url: createPageUrl("History"),
-    icon: History,
-  },
-  {
-    title: "License Manager",
-    url: createPageUrl("InstitutionalAdmin"),
-    icon: Building2,
-    highlight: true,
-    badge: "Teams"
-  },
-  {
-    title: "Banned Users",
-    url: createPageUrl("BannedUsers"),
-    icon: ShieldOff,
-    highlight: true,
-    badge: "Admin"
-  },
-  {
-    title: "Function Tester",
-    url: createPageUrl("AdminFunctionTester"),
-    icon: Server,
-    highlight: true,
-    badge: "Admin"
-  },
-  {
-    title: "Function Reviewer",
-    url: createPageUrl("FunctionReviewer"),
-    icon: Code2,
-    highlight: true,
-    badge: "Admin"
-  },
-  {
-    title: "Admin Setup",
-    url: createPageUrl("SuperAdminSetup"),
-    icon: Crown,
-    highlight: true,
-    badge: "Setup"
-  },
-  {
-    title: "Newsletter Subs",
-    url: createPageUrl("AxiomNewsletter"),
-    icon: Mail,
-    highlight: true,
-    badge: "Admin"
-  },
-  {
-    title: "Users Log",
-    url: createPageUrl("UsersLog"),
-    icon: Users,
-    highlight: true,
-    badge: "Admin"
-  },
-  {
-    title: "Analytics",
-    url: createPageUrl("AdminAnalytics"),
-    icon: BarChart3,
-    highlight: true,
-    badge: "Admin"
-  },
-  {
-    title: "User Messages",
-    url: createPageUrl("AdminMessages"),
-    icon: MessageSquare,
-    highlight: true,
-    badge: "Admin"
-  },
-  {
-    title: "Contact Support",
-    url: createPageUrl("ContactSupport"),
-    icon: Mail,
-  },
-  {
-    title: "Profile",
-    url: createPageUrl("Profile"),
-    icon: User,
-  },
-  {
-    title: "Premium",
-    url: createPageUrl("Premium"),
-    icon: Crown,
-  },
+const educationNav = [
+  { title: "Learn Genetics", url: createPageUrl("LearnGenetics"), icon: BookOpen },
+  { title: "Learning Path", url: createPageUrl("LearningPath"), icon: GraduationCap },
+  { title: "Take a Quiz", url: createPageUrl("QuizMode"), icon: HelpCircle },
 ];
+
+const researchNav = [
+  { title: "Home", url: createPageUrl("Home"), icon: Home },
+  { title: "Dashboard", url: createPageUrl("Dashboard"), icon: LayoutDashboard },
+  { title: "Gene Search", url: createPageUrl("Search"), icon: Search },
+  { title: "GSEA", url: createPageUrl("GSEA"), icon: Sparkles },
+  { title: "AI Assistants", url: createPageUrl("AIAssistants"), icon: MessageSquare },
+  { title: "VCF Analysis", url: createPageUrl("VCFAnalysis"), icon: FileText },
+  { title: "Visualization Hub", url: createPageUrl("VisualizationHub"), icon: BarChart3 },
+  { title: "Research Mode", url: createPageUrl("ResearchMode"), icon: Microscope },
+];
+
+const personalNav = [
+  { title: "Robert Clinical", url: createPageUrl("RobertClinical"), icon: Shield },
+  { title: "Anastasia", url: createPageUrl("Anastasia"), icon: Heart },
+  { title: "Medical Data", url: createPageUrl("MedicalData"), icon: FileText },
+  { title: "Search History", url: createPageUrl("History"), icon: History },
+  { title: "Contact Support", url: createPageUrl("ContactSupport"), icon: Mail },
+];
+
+const adminNav = [
+  { title: "License Manager", url: createPageUrl("InstitutionalAdmin"), icon: Building2, badge: "Teams" },
+  { title: "Banned Users", url: createPageUrl("BannedUsers"), icon: ShieldOff },
+  { title: "Function Tester", url: createPageUrl("AdminFunctionTester"), icon: Server },
+  { title: "Function Reviewer", url: createPageUrl("FunctionReviewer"), icon: Code2 },
+  { title: "Admin Setup", url: createPageUrl("SuperAdminSetup"), icon: Crown },
+  { title: "Newsletter Subs", url: createPageUrl("AxiomNewsletter"), icon: Mail },
+  { title: "Users Log", url: createPageUrl("UsersLog"), icon: Users },
+  { title: "Analytics", url: createPageUrl("AdminAnalytics"), icon: BarChart3 },
+  { title: "User Messages", url: createPageUrl("AdminMessages"), icon: MessageSquare },
+];
+
+const accountNav = [
+  { title: "Profile", url: createPageUrl("Profile"), icon: User },
+  { title: "Premium", url: createPageUrl("Premium"), icon: Crown },
+];
+
+function NavGroup({ label, items, location, accent = 'slate' }) {
+  const accentColors = {
+    blue: { active: 'bg-blue-50 text-blue-700 font-medium', hover: 'hover:bg-blue-50/60 hover:text-blue-700', icon: 'text-blue-600' },
+    purple: { active: 'bg-purple-50 text-purple-700 font-medium', hover: 'hover:bg-slate-50 hover:text-slate-900', icon: 'text-purple-600' },
+    slate: { active: 'bg-slate-100 text-slate-900 font-medium', hover: 'hover:bg-slate-50 hover:text-slate-900', icon: 'text-slate-600' },
+  };
+  const colors = accentColors[accent] || accentColors.slate;
+
+  return (
+    <SidebarGroup>
+      <SidebarGroupLabel className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-3 py-1.5">
+        {label}
+      </SidebarGroupLabel>
+      <SidebarGroupContent>
+        <SidebarMenu>
+          {items.map((item) => {
+            const isActive = location.pathname === item.url;
+            return (
+              <SidebarMenuItem key={item.title}>
+                <SidebarMenuButton
+                  asChild
+                  className={`transition-all duration-150 rounded-lg mb-0.5 touch-manipulation ${
+                    isActive ? colors.active : colors.hover
+                  }`}
+                >
+                  <Link to={item.url} className="flex items-center gap-3 px-3 py-2.5 min-h-[40px]">
+                    {item.icon && <item.icon className={`w-[18px] h-[18px] ${isActive ? colors.icon : 'text-slate-400'}`} />}
+                    <span className="text-[13px]">{item.title}</span>
+                    {item.badge && (
+                      <Badge className="ml-auto bg-slate-200 text-slate-600 text-[10px] font-semibold px-1.5 py-0">
+                        {item.badge}
+                      </Badge>
+                    )}
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            );
+          })}
+        </SidebarMenu>
+      </SidebarGroupContent>
+    </SidebarGroup>
+  );
+}
 
 export default function Layout({ children, currentPageName }) {
   const location = useLocation();
+  const { level, levelConfig } = useEducationLevel();
 
   // Add PWA meta tags and initialize cross-platform fixes
   useEffect(() => {
@@ -244,114 +180,56 @@ export default function Layout({ children, currentPageName }) {
         <UniversalLinkHandler />
         <MelissaBanner />
         <SidebarProvider>
-          <div className="min-h-screen flex w-full bg-gradient-to-br from-slate-50 to-blue-50">
+          <div className="min-h-screen flex w-full bg-gradient-to-br from-slate-50 to-blue-50" style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}>
         <Sidebar className="border-r border-slate-200/50">
-          <SidebarHeader className="border-b border-slate-200/50 p-4">
+          <SidebarHeader className="border-b border-slate-100 p-4">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl shadow-lg flex items-center justify-center">
+              <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-xl shadow-lg shadow-blue-500/20 flex items-center justify-center">
                 <DnaIcon className="w-6 h-6 text-white" />
               </div>
               <div>
-                <h2 className="font-bold text-slate-900 text-lg">GeneMap</h2>
-                <p className="text-xs text-slate-500">Phenotype → Gene Discovery</p>
+                <h2 className="font-extrabold text-slate-900 text-lg tracking-tight">GeneMap</h2>
+                <p className="text-[11px] text-slate-400 font-medium">Genetics Education</p>
               </div>
             </div>
           </SidebarHeader>
           
-          <SidebarContent className="p-3">
-            <SidebarGroup>
-              <SidebarGroupLabel className="text-xs font-semibold text-slate-500 uppercase tracking-wider px-3 py-2">
-                Navigation
-              </SidebarGroupLabel>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  {navigationItems.map((item) => (
-                    <SidebarMenuItem key={item.title}>
-                      <SidebarMenuButton 
-                        asChild 
-                        className={`hover:bg-blue-50 hover:text-blue-700 transition-all duration-200 rounded-xl mb-1 touch-manipulation ${
-                          location.pathname === item.url ? 'bg-blue-100 text-blue-700 font-medium shadow-sm' : ''
-                        }${item.highlight ? ' bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200' : ''}`}
-                      >
-                        <Link to={item.url} className="flex items-center gap-3 px-4 py-4 min-h-[48px]">
-                          {item.icon && <item.icon className={`w-5 h-5 ${item.highlight ? 'text-purple-600' : ''}`} />}
-                          <span>{item.title}</span>
-                          {item.badge && (
-                            <Badge className="ml-auto bg-purple-600 text-white text-xs">
-                              {item.badge}
-                            </Badge>
-                          )}
-                        </Link>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  ))}
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </SidebarGroup>
-
-            <SidebarGroup>
-              <SidebarGroupLabel className="text-xs font-semibold text-slate-500 uppercase tracking-wider px-3 py-2">
-                Data Sources
-              </SidebarGroupLabel>
-              <SidebarGroupContent>
-                <div className="px-4 py-2 space-y-2 text-xs">
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                    <span className="text-slate-600">MyGene.info</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                    <span className="text-slate-600">Ensembl REST</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                    <span className="text-slate-600">HPO Monarch</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                    <span className="text-slate-600">GWAS Catalog</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                    <span className="text-slate-600">UniProt</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                    <span className="text-slate-600">HPA</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                    <span className="text-slate-600">GTEx</span>
-                  </div>
-                </div>
-              </SidebarGroupContent>
-            </SidebarGroup>
+          <SidebarContent className="p-2 scrollbar-thin">
+            <NavGroup label="Education" items={educationNav} location={location} accent="blue" />
+            <NavGroup label="Research Tools" items={researchNav} location={location} accent="slate" />
+            <NavGroup label="Personal" items={personalNav} location={location} accent="slate" />
+            <NavGroup label="Admin" items={adminNav} location={location} accent="purple" />
+            <NavGroup label="Account" items={accountNav} location={location} accent="slate" />
           </SidebarContent>
 
-          <SidebarFooter className="border-t border-slate-200/50 p-4">
+          <SidebarFooter className="border-t border-slate-100 p-3">
             <div className="space-y-3">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 bg-slate-200 rounded-full flex items-center justify-center">
-                  <User className="w-4 h-4 text-slate-600" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium text-slate-900 text-sm truncate">Research User</p>
-                  <p className="text-xs text-slate-500 truncate">Gene discovery platform</p>
-                </div>
-              </div>
-              
-              <div className="pt-2 border-t border-slate-200 space-y-2">
-                <p className="text-xs text-slate-500 text-center">
-                  Created by <span className="font-medium text-slate-700">Dr. John White</span>
+              {levelConfig && (
+                <Link to="/learngenetics" className="block p-2.5 rounded-xl bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 hover:border-blue-200 transition-all hover:shadow-sm group">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-500 flex items-center justify-center shadow-sm">
+                      <GraduationCap className="w-4 h-4 text-white" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-semibold text-blue-900">{levelConfig.label}</p>
+                      <p className="text-[10px] text-blue-500">Change level</p>
+                    </div>
+                  </div>
+                </Link>
+              )}
+
+              <div className="pt-2 border-t border-slate-100 space-y-1.5">
+                <p className="text-[11px] text-slate-400 text-center">
+                  Created by <span className="font-medium text-slate-500">Dr. John White</span>
                 </p>
                 <div className="text-center">
                   <a
                     href="https://www.axiombiolabs.com"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-xs text-blue-600 hover:text-blue-700 font-medium inline-flex items-center gap-1"
+                    className="text-[11px] text-blue-500 hover:text-blue-600 font-medium inline-flex items-center gap-1 transition-colors"
                   >
-                    Sponsored by Axiom Biolabs
+                    Axiom Biolabs
                     <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                     </svg>

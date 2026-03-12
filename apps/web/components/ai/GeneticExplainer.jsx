@@ -190,10 +190,19 @@ ${audienceLevel === 'expert' ? `
 
 Make the explanation warm, clear, and empowering. Avoid unnecessary medical jargon unless appropriate for the audience.`;
 
-      // BACKEND_NEEDED: InvokeLLM needs API implementation
-      const response = "Genetic explanation feature is currently unavailable. API implementation needed.";
+      const response = await apiClient.getExplanation({
+        topic: prompt,
+        level: audienceLevel === 'child' ? 'elementary'
+             : audienceLevel === 'teen' ? 'high_school'
+             : audienceLevel === 'general' ? 'high_school'
+             : audienceLevel === 'undergrad' ? 'undergraduate'
+             : audienceLevel === 'professional' ? 'graduate'
+             : audienceLevel === 'expert' ? 'postgraduate'
+             : 'undergraduate',
+        context: inputContext,
+      });
 
-      setExplanation(response);
+      setExplanation(response.explanation || 'No explanation returned.');
     } catch (err) {
       console.error("Error generating explanation:", err);
       setError("Failed to generate explanation. Please try again.");

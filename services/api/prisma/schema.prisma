@@ -8,16 +8,20 @@ datasource db {
 }
 
 model User {
-  id            String   @id @default(uuid())
-  email         String   @unique
-  passwordHash  String   @map("password_hash")
-  role          String   @default("user")
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  id              String   @id @default(uuid())
+  email           String   @unique
+  passwordHash    String   @map("password_hash")
+  role            String   @default("user")
+  educationLevel  String?  @map("education_level")
+  displayName     String?  @map("display_name")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
   
-  sessions      Session[]
-  subscriptions Subscription[]
-  auditLogs     AuditLog[]
+  sessions          Session[]
+  subscriptions     Subscription[]
+  auditLogs         AuditLog[]
+  learningSessions  LearningSession[]
+  learningProgress  LearningProgress[]
   
   @@map("users")
 }
@@ -125,4 +129,34 @@ model StripeEvent {
   receivedAt    DateTime @default(now()) @map("received_at")
   
   @@map("stripe_events")
+}
+
+model LearningSession {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  topic     String
+  level     String
+  type      String
+  content   Json?
+  createdAt DateTime @default(now()) @map("created_at")
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("learning_sessions")
+}
+
+model LearningProgress {
+  id             String   @id @default(uuid())
+  userId         String   @map("user_id")
+  topicId        String   @map("topic_id")
+  bestScore      Int      @default(0) @map("best_score")
+  totalQuestions  Int      @default(0) @map("total_questions")
+  attempts       Int      @default(0)
+  lastAttemptAt  DateTime @default(now()) @map("last_attempt_at")
+  createdAt      DateTime @default(now()) @map("created_at")
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, topicId])
+  @@map("learning_progress")
 }

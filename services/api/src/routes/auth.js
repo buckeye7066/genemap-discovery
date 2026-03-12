@@ -214,6 +214,7 @@ export default async function authRoutes(fastify) {
       id: user.id,
       email: user.email,
       role: user.role,
+      education_level: user.educationLevel || null,
       entitlements,
     });
   });

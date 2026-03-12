@@ -25,10 +25,18 @@ import AdminMessages from './pages/AdminMessages';
 import Home from './pages/Home';
 import AdminFunctionTester from './pages/AdminFunctionTester';
 import FunctionReviewer from './pages/FunctionReviewer';
+import LearnGenetics from './pages/LearnGenetics';
+import TopicExplorer from './pages/TopicExplorer';
+import QuizMode from './pages/QuizMode';
+import LearningPath from './pages/LearningPath';
 import __Layout from './Layout.jsx';
 
 
 export const PAGES = {
+    "LearnGenetics": LearnGenetics,
+    "TopicExplorer": TopicExplorer,
+    "QuizMode": QuizMode,
+    "LearningPath": LearningPath,
     "Search": Search,
     "Premium": Premium,
     "History": History,
@@ -59,7 +67,7 @@ export const PAGES = {
 }
 
 export const pagesConfig = {
-    mainPage: "Search",
+    mainPage: "LearnGenetics",
     Pages: PAGES,
     Layout: __Layout,
 };
