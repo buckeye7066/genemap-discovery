@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { apiClient } from "@genemap/shared";
+import { useAuth } from "../lib/AuthContext";
 import { KNOWN_FUNCTIONS, getFunctionById, getAllCategories } from "../components/functionRegistry";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -45,7 +46,7 @@ import {
 const CODE_BUNDLE = {};
 
 export default function FunctionReviewer() {
-  const [user, setUser] = useState(null);
+  const { user, isLoadingAuth } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
   const [selectedFunctionId, setSelectedFunctionId] = useState(null);
   const [functionDetails, setFunctionDetails] = useState(null);
@@ -83,25 +84,16 @@ export default function FunctionReviewer() {
   }, [filteredFunctions, selectedFunctionId]);
 
   useEffect(() => {
-    loadUser();
-  }, []);
+    if (user !== undefined) {
+      setIsLoading(false);
+    }
+  }, [user]);
 
   useEffect(() => {
     if (selectedFunctionId) {
       loadFunctionDetails(selectedFunctionId);
     }
   }, [selectedFunctionId]);
-
-  const loadUser = async () => {
-    try {
-      const currentUser = await apiClient.getMe();
-      setUser(currentUser);
-    } catch (err) {
-      console.error("Auth error:", err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   const handleBeginSync = async () => {
     setIsSyncing(true);

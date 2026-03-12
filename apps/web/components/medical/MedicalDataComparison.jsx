@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from "react";
-import { apiClient } from "@genemap/shared";
+import { useAuth } from '../../lib/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -23,24 +23,21 @@ import FHIRExporter from "./FHIRExporter";
 export default function MedicalDataComparison({ records, onClose, userEducationLevel }) {
   const [comparison, setComparison] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [user, setUser] = useState(null);
+  const { user } = useAuth();
 
   useEffect(() => {
     loadComparison();
-  }, []);
+  }, [user?.email]);
 
   const loadComparison = async () => {
     setIsLoading(true);
     try {
-      const currentUser = await apiClient.getMe();
-      setUser(currentUser);
-
-      const educationContext = getEducationContext(userEducationLevel || currentUser?.education_level);
+      const educationContext = getEducationContext(userEducationLevel || user?.education_level);
 
       const prompt = `You are Robert, an AI clinical analysis assistant. Perform a comprehensive side-by-side comparison of these ${records.length} medical records.
 
 **Patient Context:**
-- Age: ${currentUser?.age || 'Not specified'}
+- Age: ${user?.age || 'Not specified'}
 - Education Level: ${educationContext}
 
 **Records Being Compared:**
@@ -129,7 +126,7 @@ Create a 3-4 sentence holistic overview that captures:
    | Risk Level | [...] | [...] | [...] |
 
 **Education-Level Adaptation:**
-${getEducationGuidance(userEducationLevel || currentUser?.education_level)}
+${getEducationGuidance(userEducationLevel || user?.education_level)}
 
 **Critical Guidelines:**
 - Highlight clinically significant differences

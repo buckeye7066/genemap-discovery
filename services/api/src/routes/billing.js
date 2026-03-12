@@ -329,19 +329,16 @@ export default async function billingRoutes(fastify) {
         case 'customer.subscription.deleted': {
           const subscription = event.data.object;
           
-          await prisma.subscription.updateMany({
-            where: { stripeSubscriptionId: subscription.id },
-            data: {
-              status: 'canceled',
-            },
-          });
-          
-          await prisma.institutionalLicense.updateMany({
-            where: { stripeSubscriptionId: subscription.id },
-            data: {
-              status: 'canceled',
-            },
-          });
+          await Promise.all([
+            prisma.subscription.updateMany({
+              where: { stripeSubscriptionId: subscription.id },
+              data: { status: 'canceled' },
+            }),
+            prisma.institutionalLicense.updateMany({
+              where: { stripeSubscriptionId: subscription.id },
+              data: { status: 'canceled' },
+            }),
+          ]);
           break;
         }
         

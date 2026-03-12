@@ -116,6 +116,7 @@ export default async function educationRoutes(fastify) {
   const prisma = fastify.prisma;
 
   fastify.get('/topics', async (request, reply) => {
+    reply.header('Cache-Control', 'public, max-age=3600, s-maxage=86400');
     reply.send({ categories: TOPICS_CATALOG });
   });
 
@@ -247,15 +248,16 @@ export default async function educationRoutes(fastify) {
   });
 
   fastify.get('/progress', { preHandler: authenticate }, async (request, reply) => {
-    const sessions = await prisma.learningSession.findMany({
-      where: { userId: request.user.userId },
-      orderBy: { createdAt: 'desc' },
-      take: 50,
-    });
-
-    const progress = await prisma.learningProgress.findMany({
-      where: { userId: request.user.userId },
-    });
+    const [sessions, progress] = await Promise.all([
+      prisma.learningSession.findMany({
+        where: { userId: request.user.userId },
+        orderBy: { createdAt: 'desc' },
+        take: 50,
+      }),
+      prisma.learningProgress.findMany({
+        where: { userId: request.user.userId },
+      }),
+    ]);
 
     reply.send({ sessions, progress });
   });
@@ -293,17 +295,23 @@ export default async function educationRoutes(fastify) {
   });
 
   fastify.get('/entitlements', { preHandler: [authenticate, checkEducationEntitlement] }, async (request, reply) => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    let todayUsage = null;
 
-    let todayUsage = {};
     if (!request.entitlements.isPremium) {
-      const types = ['explanation', 'image', 'quiz', 'chat'];
-      for (const type of types) {
-        const count = await prisma.learningSession.count({
-          where: { userId: request.user.userId, type, createdAt: { gte: today } },
-        });
-        todayUsage[type] = count;
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const grouped = await prisma.learningSession.groupBy({
+        by: ['type'],
+        where: { userId: request.user.userId, createdAt: { gte: today } },
+        _count: { type: true },
+      });
+
+      todayUsage = { explanation: 0, image: 0, quiz: 0, chat: 0 };
+      for (const row of grouped) {
+        if (row.type in todayUsage) {
+          todayUsage[row.type] = row._count.type;
+        }
       }
     }
 
@@ -312,7 +320,7 @@ export default async function educationRoutes(fastify) {
       isPremium: request.entitlements.isPremium,
       isInstitutional: request.entitlements.isInstitutional,
       limits: request.entitlements.limits,
-      todayUsage: request.entitlements.isPremium ? null : todayUsage,
+      todayUsage,
     });
   });
 }

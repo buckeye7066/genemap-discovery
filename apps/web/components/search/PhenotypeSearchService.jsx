@@ -11,7 +11,7 @@ export class PhenotypeSearchService {
       let userPreferences = null;
       try {
         const user = await apiClient.getMe();
-        isAdmin = user?.super_admin === true || user?.role === "admin";
+        isAdmin = user?.super_admin === true || user?.role === "admin" || user?.role === "super_admin" || user?.entitlements?.isAdmin === true;
         userPreferences = {
           age: user?.age,
           education_level: user?.education_level,

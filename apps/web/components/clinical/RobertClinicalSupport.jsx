@@ -1,6 +1,7 @@
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { apiClient } from "@genemap/shared";
+import { useAuth } from '../../lib/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -21,33 +22,87 @@ import {
 } from "lucide-react";
 import ReactMarkdown from 'react-markdown';
 
-export default function RobertClinicalSupport({ gene, disease, targets, userEducationLevel, onClose, includeDrugAnalysis = false }) {
+const MARKDOWN_COMPONENTS = {
+  p: ({ children }) => <p className="mb-4 text-slate-800 leading-relaxed">{children}</p>,
+  strong: ({ children }) => <strong className="font-semibold text-purple-900">{children}</strong>,
+  em: ({ children }) => <em className="text-purple-800">{children}</em>,
+  ul: ({ children }) => <ul className="ml-6 mb-4 space-y-2 list-disc">{children}</ul>,
+  ol: ({ children }) => <ol className="ml-6 mb-4 space-y-2 list-decimal">{children}</ol>,
+  li: ({ children }) => <li className="text-slate-700">{children}</li>,
+  h1: ({ children }) => (
+    <h1 className="text-2xl font-bold text-purple-900 mt-6 mb-4 pb-2 border-b-2 border-purple-200 flex items-center gap-2">
+      <TrendingUp className="w-6 h-6" />
+      {children}
+    </h1>
+  ),
+  h2: ({ children }) => (
+    <h2 className="text-xl font-semibold text-indigo-900 mt-5 mb-3 flex items-center gap-2">
+      <CheckCircle2 className="w-5 h-5" />
+      {children}
+    </h2>
+  ),
+  h3: ({ children }) => (
+    <h3 className="text-lg font-semibold text-slate-900 mt-4 mb-2">
+      {children}
+    </h3>
+  ),
+  blockquote: ({ children }) => (
+    <blockquote className="border-l-4 border-red-500 pl-4 my-4 bg-red-50 py-3 rounded-r">
+      <div className="flex items-start gap-2">
+        <AlertTriangleIcon className="w-5 h-5 text-red-600 mt-1 flex-shrink-0" />
+        <div className="text-red-900 font-medium">{children}</div>
+      </div>
+    </blockquote>
+  ),
+  code: ({ inline, children }) =>
+    inline ? (
+      <code className="bg-slate-100 text-purple-800 px-1.5 py-0.5 rounded text-sm font-mono">
+        {children}
+      </code>
+    ) : (
+      <code className="block bg-slate-900 text-slate-100 p-4 rounded-lg my-4 overflow-x-auto">
+        {children}
+      </code>
+    ),
+  table: ({ children }) => (
+    <div className="overflow-x-auto my-4">
+      <table className="min-w-full divide-y divide-slate-200 border border-slate-200">
+        {children}
+      </table>
+    </div>
+  ),
+  th: ({ children }) => (
+    <th className="px-4 py-2 bg-purple-50 text-left text-sm font-semibold text-purple-900">
+      {children}
+    </th>
+  ),
+  td: ({ children }) => (
+    <td className="px-4 py-2 border-t border-slate-200 text-sm text-slate-700">
+      {children}
+    </td>
+  ),
+};
+
+export default function RobertClinicalSupport({ gene, disease, targets, userEducationLevel, currentUser: externalUser, onClose, includeDrugAnalysis = false }) {
   const [analysis, setAnalysis] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [medicalData, setMedicalData] = useState(null);
-  const [user, setUser] = useState(null);
+  const { user: authUser } = useAuth();
+  const user = externalUser || authUser;
 
   useEffect(() => {
-    loadUserAndMedicalData();
-  }, []);
+    loadMedicalData();
+  }, [user?.email]);
 
-  const loadUserAndMedicalData = async () => {
+  const loadMedicalData = async () => {
     setIsLoading(true);
     try {
-      const currentUser = await apiClient.getMe();
-      setUser(currentUser);
-
       // BACKEND_NEEDED: MedicalData entity needs API implementation
-      // Load user's medical records
-      // const records = await base44.entities.MedicalData.filter(
-      //   { created_by: currentUser.email },
-      //   '-created_date'
-      // );
       const records = [];
 
       if (records && records.length > 0) {
         setMedicalData(records);
-        await performClinicalAnalysis(currentUser, records);
+        await performClinicalAnalysis(user, records);
       } else {
         setAnalysis({
           no_data: true,
@@ -478,68 +533,7 @@ Provide a comprehensive but accessible clinical analysis formatted in clear sect
         </CardHeader>
         <CardContent>
           <div className="prose prose-sm max-w-none">
-            <ReactMarkdown
-              components={{
-                p: ({ children }) => <p className="mb-4 text-slate-800 leading-relaxed">{children}</p>,
-                strong: ({ children }) => <strong className="font-semibold text-purple-900">{children}</strong>,
-                em: ({ children }) => <em className="text-purple-800">{children}</em>,
-                ul: ({ children }) => <ul className="ml-6 mb-4 space-y-2 list-disc">{children}</ul>,
-                ol: ({ children }) => <ol className="ml-6 mb-4 space-y-2 list-decimal">{children}</ol>,
-                li: ({ children }) => <li className="text-slate-700">{children}</li>,
-                h1: ({ children }) => (
-                  <h1 className="text-2xl font-bold text-purple-900 mt-6 mb-4 pb-2 border-b-2 border-purple-200 flex items-center gap-2">
-                    <TrendingUp className="w-6 h-6" />
-                    {children}
-                  </h1>
-                ),
-                h2: ({ children }) => (
-                  <h2 className="text-xl font-semibold text-indigo-900 mt-5 mb-3 flex items-center gap-2">
-                    <CheckCircle2 className="w-5 h-5" />
-                    {children}
-                  </h2>
-                ),
-                h3: ({ children }) => (
-                  <h3 className="text-lg font-semibold text-slate-900 mt-4 mb-2">
-                    {children}
-                  </h3>
-                ),
-                blockquote: ({ children }) => (
-                  <blockquote className="border-l-4 border-red-500 pl-4 my-4 bg-red-50 py-3 rounded-r">
-                    <div className="flex items-start gap-2">
-                      <AlertTriangleIcon className="w-5 h-5 text-red-600 mt-1 flex-shrink-0" />
-                      <div className="text-red-900 font-medium">{children}</div>
-                    </div>
-                  </blockquote>
-                ),
-                code: ({ inline, children }) =>
-                  inline ? (
-                    <code className="bg-slate-100 text-purple-800 px-1.5 py-0.5 rounded text-sm font-mono">
-                      {children}
-                    </code>
-                  ) : (
-                    <code className="block bg-slate-900 text-slate-100 p-4 rounded-lg my-4 overflow-x-auto">
-                      {children}
-                    </code>
-                  ),
-                table: ({ children }) => (
-                  <div className="overflow-x-auto my-4">
-                    <table className="min-w-full divide-y divide-slate-200 border border-slate-200">
-                      {children}
-                    </table>
-                  </div>
-                ),
-                th: ({ children }) => (
-                  <th className="px-4 py-2 bg-purple-50 text-left text-sm font-semibold text-purple-900">
-                    {children}
-                  </th>
-                ),
-                td: ({ children }) => (
-                  <td className="px-4 py-2 border-t border-slate-200 text-sm text-slate-700">
-                    {children}
-                  </td>
-                ),
-              }}
-            >
+            <ReactMarkdown components={MARKDOWN_COMPONENTS}>
               {analysis.clinical_analysis}
             </ReactMarkdown>
           </div>

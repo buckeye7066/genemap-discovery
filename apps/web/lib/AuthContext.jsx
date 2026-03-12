@@ -1,4 +1,4 @@
-import React, { createContext, useState, useContext, useEffect, useCallback } from 'react';
+import React, { createContext, useState, useContext, useEffect, useCallback, useMemo } from 'react';
 import { apiClient } from '@genemap/shared';
 
 const AuthContext = createContext();
@@ -10,11 +10,7 @@ export const AuthProvider = ({ children }) => {
   const [isLoadingPublicSettings, setIsLoadingPublicSettings] = useState(false);
   const [authError, setAuthError] = useState(null);
 
-  useEffect(() => {
-    checkAuth();
-  }, []);
-
-  const checkAuth = async () => {
+  const checkAuth = useCallback(async () => {
     try {
       setIsLoadingAuth(true);
       setAuthError(null);
@@ -30,47 +26,53 @@ export const AuthProvider = ({ children }) => {
     } finally {
       setIsLoadingAuth(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    checkAuth();
+  }, [checkAuth]);
 
   const navigateToLogin = useCallback(() => {
     window.location.href = '/login';
   }, []);
 
-  const login = async (credentials) => {
+  const login = useCallback(async (credentials) => {
     const response = await apiClient.login(credentials);
     setUser(response.user);
     setIsAuthenticated(true);
     setAuthError(null);
     return response;
-  };
+  }, []);
 
-  const register = async (credentials) => {
+  const register = useCallback(async (credentials) => {
     const response = await apiClient.register(credentials);
     setUser(response.user);
     setIsAuthenticated(true);
     setAuthError(null);
     return response;
-  };
+  }, []);
 
-  const logout = async () => {
+  const logout = useCallback(async () => {
     await apiClient.logout();
     setUser(null);
     setIsAuthenticated(false);
-  };
+  }, []);
+
+  const value = useMemo(() => ({
+    user,
+    isAuthenticated,
+    isLoadingAuth,
+    isLoadingPublicSettings,
+    authError,
+    navigateToLogin,
+    login,
+    register,
+    logout,
+    checkAuth,
+  }), [user, isAuthenticated, isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin, login, register, logout, checkAuth]);
 
   return (
-    <AuthContext.Provider value={{ 
-      user, 
-      isAuthenticated, 
-      isLoadingAuth,
-      isLoadingPublicSettings,
-      authError,
-      navigateToLogin,
-      login,
-      register,
-      logout,
-      checkAuth
-    }}>
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );

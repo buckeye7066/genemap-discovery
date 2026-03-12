@@ -1,4 +1,4 @@
-import React, { createContext, useState, useContext, useEffect, useCallback } from 'react';
+import React, { createContext, useState, useContext, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from './AuthContext';
 
 const EducationLevelContext = createContext();
@@ -121,18 +121,20 @@ export const EducationLevelProvider = ({ children }) => {
     }
   }, []);
 
-  const levelConfig = level ? EDUCATION_LEVELS[level] : null;
+  const levelConfig = useMemo(() => level ? EDUCATION_LEVELS[level] : null, [level]);
   const needsOnboarding = !level;
 
+  const value = useMemo(() => ({
+    level,
+    setLevel,
+    levelConfig,
+    needsOnboarding,
+    allLevels: EDUCATION_LEVELS,
+    levelOrder: LEVEL_ORDER,
+  }), [level, setLevel, levelConfig, needsOnboarding]);
+
   return (
-    <EducationLevelContext.Provider value={{
-      level,
-      setLevel,
-      levelConfig,
-      needsOnboarding,
-      allLevels: EDUCATION_LEVELS,
-      levelOrder: LEVEL_ORDER,
-    }}>
+    <EducationLevelContext.Provider value={value}>
       {children}
     </EducationLevelContext.Provider>
   );

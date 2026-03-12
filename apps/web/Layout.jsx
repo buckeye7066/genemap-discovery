@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, memo } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import DnaIcon from "./components/icons/DnaIcon";
@@ -69,13 +69,14 @@ const accountNav = [
   { title: "Premium", url: createPageUrl("Premium"), icon: Crown },
 ];
 
-function NavGroup({ label, items, location, accent = 'slate' }) {
-  const accentColors = {
-    blue: { active: 'bg-blue-50 text-blue-700 font-medium', hover: 'hover:bg-blue-50/60 hover:text-blue-700', icon: 'text-blue-600' },
-    purple: { active: 'bg-purple-50 text-purple-700 font-medium', hover: 'hover:bg-slate-50 hover:text-slate-900', icon: 'text-purple-600' },
-    slate: { active: 'bg-slate-100 text-slate-900 font-medium', hover: 'hover:bg-slate-50 hover:text-slate-900', icon: 'text-slate-600' },
-  };
-  const colors = accentColors[accent] || accentColors.slate;
+const ACCENT_COLORS = {
+  blue: { active: 'bg-blue-50 text-blue-700 font-medium', hover: 'hover:bg-blue-50/60 hover:text-blue-700', icon: 'text-blue-600' },
+  purple: { active: 'bg-purple-50 text-purple-700 font-medium', hover: 'hover:bg-slate-50 hover:text-slate-900', icon: 'text-purple-600' },
+  slate: { active: 'bg-slate-100 text-slate-900 font-medium', hover: 'hover:bg-slate-50 hover:text-slate-900', icon: 'text-slate-600' },
+};
+
+const NavGroup = memo(function NavGroup({ label, items, pathname, accent = 'slate' }) {
+  const colors = ACCENT_COLORS[accent] || ACCENT_COLORS.slate;
 
   return (
     <SidebarGroup>
@@ -85,7 +86,7 @@ function NavGroup({ label, items, location, accent = 'slate' }) {
       <SidebarGroupContent>
         <SidebarMenu>
           {items.map((item) => {
-            const isActive = location.pathname === item.url;
+            const isActive = pathname === item.url;
             return (
               <SidebarMenuItem key={item.title}>
                 <SidebarMenuButton
@@ -111,7 +112,7 @@ function NavGroup({ label, items, location, accent = 'slate' }) {
       </SidebarGroupContent>
     </SidebarGroup>
   );
-}
+});
 
 export default function Layout({ children, currentPageName }) {
   const location = useLocation();
@@ -195,11 +196,11 @@ export default function Layout({ children, currentPageName }) {
           </SidebarHeader>
           
           <SidebarContent className="p-2 scrollbar-thin">
-            <NavGroup label="Education" items={educationNav} location={location} accent="blue" />
-            <NavGroup label="Research Tools" items={researchNav} location={location} accent="slate" />
-            <NavGroup label="Personal" items={personalNav} location={location} accent="slate" />
-            <NavGroup label="Admin" items={adminNav} location={location} accent="purple" />
-            <NavGroup label="Account" items={accountNav} location={location} accent="slate" />
+            <NavGroup label="Education" items={educationNav} pathname={location.pathname} accent="blue" />
+            <NavGroup label="Research Tools" items={researchNav} pathname={location.pathname} accent="slate" />
+            <NavGroup label="Personal" items={personalNav} pathname={location.pathname} accent="slate" />
+            <NavGroup label="Admin" items={adminNav} pathname={location.pathname} accent="purple" />
+            <NavGroup label="Account" items={accountNav} pathname={location.pathname} accent="slate" />
           </SidebarContent>
 
           <SidebarFooter className="border-t border-slate-100 p-3">

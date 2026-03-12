@@ -35,6 +35,7 @@ model Session {
   
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   
+  @@index([userId])
   @@map("sessions")
 }
 
@@ -51,6 +52,7 @@ model Subscription {
   
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   
+  @@index([userId, status])
   @@map("subscriptions")
 }
 
@@ -92,6 +94,8 @@ model LicenseAssignment {
   
   license InstitutionalLicense @relation(fields: [licenseId], references: [id], onDelete: Cascade)
   
+  @@index([userEmail, status])
+  @@index([licenseId])
   @@map("license_assignments")
 }
 
@@ -119,6 +123,7 @@ model AuditLog {
   
   user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
   
+  @@index([userId, createdAt])
   @@map("audit_log")
 }
 
@@ -142,6 +147,7 @@ model LearningSession {
   
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   
+  @@index([userId, type, createdAt])
   @@map("learning_sessions")
 }
 
@@ -158,5 +164,6 @@ model LearningProgress {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   
   @@unique([userId, topicId])
+  @@index([userId])
   @@map("learning_progress")
 }

@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@genemap/shared": "workspace:*",
+    "@fastify/compress": "^8.0.1",
     "@fastify/cors": "^10.0.1",
     "@fastify/cookie": "^10.0.1",
     "@fastify/rate-limit": "^10.1.1",

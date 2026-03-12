@@ -10,6 +10,21 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Lightbulb, Loader2, Sparkles, Info } from "lucide-react";
 import ReactMarkdown from 'react-markdown';
 
+const dataTypeOptions = [
+  { key: 'genomics', label: 'Genomics (DNA variants, CNVs)', icon: '🧬' },
+  { key: 'transcriptomics', label: 'Transcriptomics (RNA-seq, expression)', icon: '📊' },
+  { key: 'proteomics', label: 'Proteomics (protein abundance)', icon: '🔬' },
+  { key: 'metabolomics', label: 'Metabolomics (metabolite profiles)', icon: '⚗️' },
+  { key: 'epigenomics', label: 'Epigenomics (methylation, ChIP-seq)', icon: '🎯' }
+];
+
+function getEducationContext(level) {
+  if (level === 'medical_professional') {
+    return "clinical researchers - emphasize translational applications";
+  }
+  return "research scientists - provide comprehensive technical details";
+}
+
 export default function HypothesisGenerator({ userEducationLevel }) {
   const [researchContext, setResearchContext] = useState("");
   const [dataTypes, setDataTypes] = useState({
@@ -139,13 +154,6 @@ Generate creative, scientifically rigorous hypotheses that integrate multi-omic 
     }
   };
 
-  const getEducationContext = (level) => {
-    if (level === 'medical_professional') {
-      return "clinical researchers - emphasize translational applications";
-    }
-    return "research scientists - provide comprehensive technical details";
-  };
-
   return (
     <div className="space-y-6">
       <Card className="shadow-lg">
@@ -179,13 +187,7 @@ Generate creative, scientifically rigorous hypotheses that integrate multi-omic 
           <div>
             <Label className="mb-3 block">Available Data Types</Label>
             <div className="grid md:grid-cols-2 gap-3">
-              {[
-                { key: 'genomics', label: 'Genomics (DNA variants, CNVs)', icon: '🧬' },
-                { key: 'transcriptomics', label: 'Transcriptomics (RNA-seq, expression)', icon: '📊' },
-                { key: 'proteomics', label: 'Proteomics (protein abundance)', icon: '🔬' },
-                { key: 'metabolomics', label: 'Metabolomics (metabolite profiles)', icon: '⚗️' },
-                { key: 'epigenomics', label: 'Epigenomics (methylation, ChIP-seq)', icon: '🎯' }
-              ].map((dataType) => (
+              {dataTypeOptions.map((dataType) => (
                 <div key={dataType.key} className="flex items-center space-x-2">
                   <Checkbox
                     id={dataType.key}

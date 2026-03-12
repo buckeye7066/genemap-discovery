@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -26,6 +26,60 @@ import { Alert, AlertDescription } from "@/components/ui/alert"; // Added Alert 
 
 const COLORS = ['#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#06b6d4', '#6366f1', '#ef4444'];
 
+const TISSUE_SIMPLIFICATIONS = {
+  'brain': 'Brain',
+  'heart': 'Heart',
+  'liver': 'Liver',
+  'kidney': 'Kidney',
+  'muscle': 'Muscle',
+  'lung': 'Lung',
+  'blood': 'Blood',
+  'skin': 'Skin'
+};
+
+function ExpressionTooltip({ active, payload, isSimplified }) {
+  if (active && payload && payload.length) {
+    const data = payload[0].payload;
+    return (
+      <div className="bg-white border-2 border-blue-200 rounded-lg shadow-lg p-3">
+        <p className="font-semibold text-slate-900 mb-1">{data.displayName}</p>
+        <p className="text-sm text-blue-600 font-medium">
+          Expression: {data.expression.toFixed(2)} TPM
+        </p>
+        {!isSimplified && (
+          <p className="text-xs text-slate-500 mt-1">
+            Transcripts Per Million
+          </p>
+        )}
+      </div>
+    );
+  }
+  return null;
+}
+
+function ExpressionXAxisTick({ x, y, payload, highlightedTissue, onHighlight, zoomLevel }) {
+  const isHighlighted = highlightedTissue === payload.value;
+  return (
+    <g transform={`translate(${x},${y})`}>
+      <text
+        x={0}
+        y={0}
+        dy={16}
+        textAnchor="end"
+        fill={isHighlighted ? "#3b82f6" : "#475569"}
+        fontSize={10 * zoomLevel}
+        fontWeight={isHighlighted ? 600 : 400}
+        transform="rotate(-45)"
+        className="cursor-pointer select-none"
+        onMouseEnter={() => onHighlight(payload.value)}
+        onMouseLeave={() => onHighlight(null)}
+      >
+        {payload.value}
+      </text>
+    </g>
+  );
+}
+
 export default function GeneExpressionChart({ expressionData, userEducationLevel, highlightedGene, onGeneClick, geneSymbol }) {
   const [zoomLevel, setZoomLevel] = useState(1);
   const [selectedTissues, setSelectedTissues] = useState([]); // Initialized as empty as per outline
@@ -43,18 +97,8 @@ export default function GeneExpressionChart({ expressionData, userEducationLevel
   const isSimplified = userEducationLevel === 'high_school';
 
   const simplifyTissueName = (tissue) => {
-    const simplifications = {
-      'brain': 'Brain',
-      'heart': 'Heart',
-      'liver': 'Liver',
-      'kidney': 'Kidney',
-      'muscle': 'Muscle',
-      'lung': 'Lung',
-      'blood': 'Blood',
-      'skin': 'Skin'
-    };
     const lower = tissue.toLowerCase();
-    for (const [key, value] of Object.entries(simplifications)) {
+    for (const [key, value] of Object.entries(TISSUE_SIMPLIFICATIONS)) {
       if (lower.includes(key)) return value;
     }
     return tissue;
@@ -102,42 +146,22 @@ export default function GeneExpressionChart({ expressionData, userEducationLevel
     setSelectedTissues([]);
   };
 
-  // Process and sort data (renamed processedData to sortedData)
-  let sortedData = expressionData
-    .filter(d => selectedTissues.length === 0 || selectedTissues.includes(d.tissue)) // Filter logic updated
-    .map(d => ({
-      ...d,
-      displayName: isSimplified ? simplifyTissueName(d.tissue) : d.tissue
-    }));
+  const sortedData = useMemo(() => {
+    let data = expressionData
+      .filter(d => selectedTissues.length === 0 || selectedTissues.includes(d.tissue))
+      .map(d => ({
+        ...d,
+        displayName: isSimplified ? simplifyTissueName(d.tissue) : d.tissue
+      }));
 
-  // Apply sorting based on new sortBy state
-  if (sortBy === 'value') { // Corresponds to High->Low expression
-    sortedData = [...sortedData].sort((a, b) => b.expression - a.expression);
-  } else if (sortBy === 'alphabetical') { // New sort option
-    sortedData = [...sortedData].sort((a, b) => a.tissue.localeCompare(b.tissue));
-  }
-  // If sortBy is 'default' or anything else, it will use the original order of expressionData after filtering.
-  // Given sortBy defaults to "value", this block is sufficient.
-
-  const CustomTooltip = ({ active, payload }) => {
-    if (active && payload && payload.length) {
-      const data = payload[0].payload;
-      return (
-        <div className="bg-white border-2 border-blue-200 rounded-lg shadow-lg p-3">
-          <p className="font-semibold text-slate-900 mb-1">{data.displayName}</p>
-          <p className="text-sm text-blue-600 font-medium">
-            Expression: {data.expression.toFixed(2)} TPM
-          </p>
-          {!isSimplified && (
-            <p className="text-xs text-slate-500 mt-1">
-              Transcripts Per Million
-            </p>
-          )}
-        </div>
-      );
+    if (sortBy === 'value') {
+      data = [...data].sort((a, b) => b.expression - a.expression);
+    } else if (sortBy === 'alphabetical') {
+      data = [...data].sort((a, b) => a.tissue.localeCompare(b.tissue));
     }
-    return null;
-  };
+
+    return data;
+  }, [expressionData, selectedTissues, sortBy, isSimplified]);
 
   const CustomYAxisTick = ({ x, y, payload }) => {
     return (
@@ -152,29 +176,6 @@ export default function GeneExpressionChart({ expressionData, userEducationLevel
           className="select-none"
         >
           {isSimplified ? Math.round(payload.value) : payload.value}
-        </text>
-      </g>
-    );
-  };
-
-  const CustomXAxisTick = ({ x, y, payload }) => {
-    const isHighlighted = highlightedTissue === payload.value;
-    return (
-      <g transform={`translate(${x},${y})`}>
-        <text
-          x={0}
-          y={0}
-          dy={16}
-          textAnchor="end"
-          fill={isHighlighted ? "#3b82f6" : "#475569"}
-          fontSize={10 * zoomLevel}
-          fontWeight={isHighlighted ? 600 : 400}
-          transform="rotate(-45)"
-          className="cursor-pointer select-none"
-          onMouseEnter={() => setHighlightedTissue(payload.value)}
-          onMouseLeave={() => setHighlightedTissue(null)}
-        >
-          {payload.value}
         </text>
       </g>
     );
@@ -365,7 +366,7 @@ export default function GeneExpressionChart({ expressionData, userEducationLevel
                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                 <XAxis
                   dataKey="displayName"
-                  tick={<CustomXAxisTick />}
+                  tick={<ExpressionXAxisTick highlightedTissue={highlightedTissue} onHighlight={setHighlightedTissue} zoomLevel={zoomLevel} />}
                   interval={0}
                   height={80}
                 />
@@ -378,7 +379,7 @@ export default function GeneExpressionChart({ expressionData, userEducationLevel
                   }}
                   tick={<CustomYAxisTick />}
                 />
-                <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(59, 130, 246, 0.1)' }} />
+                <Tooltip content={<ExpressionTooltip isSimplified={isSimplified} />} cursor={{ fill: 'rgba(59, 130, 246, 0.1)' }} />
                 <Bar
                   dataKey="expression"
                   radius={[8, 8, 0, 0]}

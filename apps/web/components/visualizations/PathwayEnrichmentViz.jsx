@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { apiClient } from "@genemap/shared";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Network, Loader2, Download, Info, ExternalLink, Plus, Minus, Filter, ZoomIn, ZoomOut } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 
+const PATHWAY_COLOR_SCHEMES = {
+  default: { high: '#ef4444', medium: '#f59e0b', low: '#3b82f6' },
+  viridis: { high: '#fde724', medium: '#21908c', low: '#440154' },
+  cool: { high: '#06b6d4', medium: '#3b82f6', low: '#8b5cf6' },
+  warm: { high: '#dc2626', medium: '#f59e0b', low: '#fbbf24' }
+};
+
 export default function PathwayEnrichmentViz({ genes = [], userEducationLevel = "general" }) {
   const [enrichmentData, setEnrichmentData] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -39,26 +46,7 @@ export default function PathwayEnrichmentViz({ genes = [], userEducationLevel = 
   const lastPos = useRef({ x: 0, y: 0 });
   const nodePositions = useRef([]);
 
-  const colorSchemes = {
-    default: { high: '#ef4444', medium: '#f59e0b', low: '#3b82f6' },
-    viridis: { high: '#fde724', medium: '#21908c', low: '#440154' },
-    cool: { high: '#06b6d4', medium: '#3b82f6', low: '#8b5cf6' },
-    warm: { high: '#dc2626', medium: '#f59e0b', low: '#fbbf24' }
-  };
-
-  useEffect(() => {
-    if (genes.length > 0) {
-      fetchEnrichmentData();
-    }
-  }, [genes, selectedDatabase]);
-
-  useEffect(() => {
-    if (enrichmentData) {
-      drawPathwayNetwork(enrichmentData);
-    }
-  }, [enrichmentData, zoom, pan, hoveredPathway, filters, colorScheme]);
-
-  const fetchEnrichmentData = async () => {
+  const fetchEnrichmentData = useCallback(async () => {
     setIsLoading(true);
     try {
       const geneSymbols = genes.map(g => g.symbol || g).join(', ');
@@ -157,7 +145,19 @@ export default function PathwayEnrichmentViz({ genes = [], userEducationLevel = 
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [genes, selectedDatabase]);
+
+  useEffect(() => {
+    if (genes.length > 0) {
+      fetchEnrichmentData();
+    }
+  }, [genes, selectedDatabase, fetchEnrichmentData]);
+
+  useEffect(() => {
+    if (enrichmentData) {
+      drawPathwayNetwork(enrichmentData);
+    }
+  }, [enrichmentData, zoom, pan, hoveredPathway, filters, colorScheme]);
 
   const getFilteredPathways = () => {
     if (!enrichmentData?.pathways) return [];
@@ -188,7 +188,7 @@ export default function PathwayEnrichmentViz({ genes = [], userEducationLevel = 
     const radius = Math.min(width, height) / (3 * zoom);
     
     nodePositions.current = [];
-    const scheme = colorSchemes[colorScheme];
+    const scheme = PATHWAY_COLOR_SCHEMES[colorScheme];
 
     // Draw interactions first
     if (data.interactions) {
@@ -336,7 +336,7 @@ export default function PathwayEnrichmentViz({ genes = [], userEducationLevel = 
     );
   }
 
-  const filteredPathways = getFilteredPathways();
+  const filteredPathways = useMemo(() => getFilteredPathways(), [enrichmentData, filters]);
   const hoveredData = hoveredPathway !== null ? filteredPathways[hoveredPathway] : null;
 
   return (

@@ -1,9 +1,9 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { CheckCircle2, BookOpen, ArrowRight } from 'lucide-react';
 
-export default function TopicCard({ topic, progress, onClick }) {
+function TopicCard({ topic, progress, onClick }) {
   const hasProgress = progress && progress.attempts > 0;
   const isMastered = progress && progress.bestScore >= progress.totalQuestions * 0.8;
 
@@ -51,3 +51,5 @@ export default function TopicCard({ topic, progress, onClick }) {
     </Card>
   );
 }
+
+export default memo(TopicCard);

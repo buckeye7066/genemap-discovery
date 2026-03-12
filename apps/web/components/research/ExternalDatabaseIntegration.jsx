@@ -16,49 +16,59 @@ import {
 import { Database, Search, Loader2, ExternalLink, Info, CheckCircle2 } from "lucide-react";
 import ReactMarkdown from 'react-markdown';
 
+const databases = [
+  {
+    id: "clingen",
+    name: "ClinGen",
+    description: "Clinical Genome Resource - Gene-disease validity",
+    url: "https://clinicalgenome.org",
+    icon: "🧬"
+  },
+  {
+    id: "dbgap",
+    name: "dbGaP",
+    description: "Database of Genotypes and Phenotypes",
+    url: "https://www.ncbi.nlm.nih.gov/gap/",
+    icon: "📊"
+  },
+  {
+    id: "cosmic",
+    name: "COSMIC",
+    description: "Catalogue of Somatic Mutations in Cancer",
+    url: "https://cancer.sanger.ac.uk/cosmic",
+    icon: "🔬"
+  },
+  {
+    id: "decipher",
+    name: "DECIPHER",
+    description: "Database of genomic variation and phenotype",
+    url: "https://www.deciphergenomics.org",
+    icon: "🧪"
+  },
+  {
+    id: "gtex",
+    name: "GTEx",
+    description: "Genotype-Tissue Expression project",
+    url: "https://gtexportal.org",
+    icon: "🫀"
+  }
+];
+
+function getEducationContext(level) {
+  if (level === 'medical_professional') {
+    return "clinical researchers";
+  }
+  if (level === 'phd' || level === 'researcher') {
+    return "research scientists";
+  }
+  return "advanced researchers";
+}
+
 export default function ExternalDatabaseIntegration({ userEducationLevel }) {
   const [selectedDatabase, setSelectedDatabase] = useState("clingen");
   const [searchQuery, setSearchQuery] = useState("");
   const [isSearching, setIsSearching] = useState(false);
   const [results, setResults] = useState(null);
-
-  const databases = [
-    {
-      id: "clingen",
-      name: "ClinGen",
-      description: "Clinical Genome Resource - Gene-disease validity",
-      url: "https://clinicalgenome.org",
-      icon: "🧬"
-    },
-    {
-      id: "dbgap",
-      name: "dbGaP",
-      description: "Database of Genotypes and Phenotypes",
-      url: "https://www.ncbi.nlm.nih.gov/gap/",
-      icon: "📊"
-    },
-    {
-      id: "cosmic",
-      name: "COSMIC",
-      description: "Catalogue of Somatic Mutations in Cancer",
-      url: "https://cancer.sanger.ac.uk/cosmic",
-      icon: "🔬"
-    },
-    {
-      id: "decipher",
-      name: "DECIPHER",
-      description: "Database of genomic variation and phenotype",
-      url: "https://www.deciphergenomics.org",
-      icon: "🧪"
-    },
-    {
-      id: "gtex",
-      name: "GTEx",
-      description: "Genotype-Tissue Expression project",
-      url: "https://gtexportal.org",
-      icon: "🫀"
-    }
-  ];
 
   const handleSearch = async () => {
     if (!searchQuery.trim()) return;
@@ -151,16 +161,6 @@ Be comprehensive but practical. Include specific search strategies and resource 
     } finally {
       setIsSearching(false);
     }
-  };
-
-  const getEducationContext = (level) => {
-    if (level === 'medical_professional') {
-      return "clinical researchers";
-    }
-    if (level === 'phd' || level === 'researcher') {
-      return "research scientists";
-    }
-    return "advanced researchers";
   };
 
   return (

@@ -10,6 +10,28 @@ import { GitBranch, Loader2, TrendingUp, Info } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import ReactMarkdown from 'react-markdown';
 
+function getEducationContext(level) {
+  if (level === 'medical_professional') {
+    return "clinical researchers - focus on disease mechanisms and therapeutic implications";
+  }
+  return "research scientists - provide comprehensive molecular biology details";
+}
+
+function PathwayTooltipContent({ payload }) {
+  if (payload && payload.length > 0) {
+    const data = payload[0].payload;
+    return (
+      <div className="bg-white p-3 border border-slate-200 rounded shadow-lg">
+        <p className="font-semibold text-sm">{data.pathway}</p>
+        <p className="text-xs text-slate-600">Genes: {data.genes_in_pathway}/{data.total_genes}</p>
+        <p className="text-xs text-slate-600">P-value: {data.pvalue.toExponential(2)}</p>
+        <p className="text-xs text-slate-600">FDR: {data.fdr.toExponential(2)}</p>
+      </div>
+    );
+  }
+  return null;
+}
+
 export default function PathwayEnrichment({ userEducationLevel }) {
   const [geneList, setGeneList] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -137,13 +159,6 @@ Return comprehensive analysis with specific pathways and statistical measures.`;
     }
   };
 
-  const getEducationContext = (level) => {
-    if (level === 'medical_professional') {
-      return "clinical researchers - focus on disease mechanisms and therapeutic implications";
-    }
-    return "research scientists - provide comprehensive molecular biology details";
-  };
-
   return (
     <div className="space-y-6">
       <Card className="shadow-lg">
@@ -218,22 +233,7 @@ Return comprehensive analysis with specific pathways and statistical measures.`;
                       tick={{ fontSize: 12 }}
                     />
                     <YAxis label={{ value: '-log10(FDR)', angle: -90, position: 'insideLeft' }} />
-                    <Tooltip 
-                      content={({ payload }) => {
-                        if (payload && payload.length > 0) {
-                          const data = payload[0].payload;
-                          return (
-                            <div className="bg-white p-3 border border-slate-200 rounded shadow-lg">
-                              <p className="font-semibold text-sm">{data.pathway}</p>
-                              <p className="text-xs text-slate-600">Genes: {data.genes_in_pathway}/{data.total_genes}</p>
-                              <p className="text-xs text-slate-600">P-value: {data.pvalue.toExponential(2)}</p>
-                              <p className="text-xs text-slate-600">FDR: {data.fdr.toExponential(2)}</p>
-                            </div>
-                          );
-                        }
-                        return null;
-                      }}
-                    />
+                    <Tooltip content={<PathwayTooltipContent />} />
                     <Legend />
                     <Bar 
                       dataKey={(data) => -Math.log10(data.fdr)} 

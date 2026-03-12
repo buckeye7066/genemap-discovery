@@ -6,6 +6,12 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { X, Plus, Sparkles } from "lucide-react";
 
+const exampleGeneSets = [
+  { name: "BRCA Family", genes: ["BRCA1", "BRCA2", "PALB2", "CHEK2"] },
+  { name: "Cystic Fibrosis", genes: ["CFTR"] },
+  { name: "Cardiac", genes: ["MYH7", "TNNT2", "MYBPC3", "SCN5A"] }
+];
+
 export default function GeneInputForm({ onGenesSubmit, isLoading, initialGenes = [] }) {
   const [geneInput, setGeneInput] = useState("");
   const [genes, setGenes] = useState(initialGenes);
@@ -50,12 +56,6 @@ export default function GeneInputForm({ onGenesSubmit, isLoading, initialGenes =
     setGeneInput("");
     onGenesSubmit([]);
   };
-
-  const exampleGeneSets = [
-    { name: "BRCA Family", genes: ["BRCA1", "BRCA2", "PALB2", "CHEK2"] },
-    { name: "Cystic Fibrosis", genes: ["CFTR"] },
-    { name: "Cardiac", genes: ["MYH7", "TNNT2", "MYBPC3", "SCN5A"] }
-  ];
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">

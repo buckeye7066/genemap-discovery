@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { apiClient } from "@genemap/shared";
 import { Link } from "react-router-dom";
+import { useAuth } from "../lib/AuthContext";
 import { createPageUrl } from "@/utils";
 import { log } from "../components/shared/logger";
 import { VCF_BATCH_SIZE } from "../components/shared/constants";
@@ -28,7 +29,7 @@ import {
 import VCFParser from "../components/medical/VCFParser";
 
 export default function VCFAnalysisPage() {
-  const [user, setUser] = useState(null);
+  const { user } = useAuth();
   const [file, setFile] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadedFileUrl, setUploadedFileUrl] = useState(null);
@@ -37,19 +38,6 @@ export default function VCFAnalysisPage() {
   const [relatedGenes, setRelatedGenes] = useState([]);
   const [isAnalyzingGenes, setIsAnalyzingGenes] = useState(false);
   const [analysisReady, setAnalysisReady] = useState(false);
-
-  useEffect(() => {
-    loadUser();
-  }, []);
-
-  const loadUser = async () => {
-    try {
-      const currentUser = await apiClient.getMe();
-      setUser(currentUser);
-    } catch (err) {
-      log.error("Error loading user:", err);
-    }
-  };
 
   const handleFileChange = (e) => {
     const selectedFile = e.target.files[0];

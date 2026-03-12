@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { apiClient } from "@genemap/shared";
+import { useAuth } from "../lib/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -20,8 +21,8 @@ import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 
 export default function HistoryPage() {
+  const { user } = useAuth();
   const [searchHistory, setSearchHistory] = useState([]);
-  const [user, setUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
@@ -33,12 +34,9 @@ export default function HistoryPage() {
 
   const loadData = async () => {
     try {
-      const currentUser = await apiClient.getMe();
-      setUser(currentUser);
-      
       // BACKEND_NEEDED: SearchHistory entity needs API implementation
       // const history = await base44.entities.SearchHistory.filter(
-      //   { created_by: currentUser.email },
+      //   { created_by: user?.email },
       //   '-created_date',
       //   50
       // );

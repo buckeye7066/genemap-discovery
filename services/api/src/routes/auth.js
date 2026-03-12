@@ -4,6 +4,15 @@ import { authenticate } from '../middleware/auth.js';
 import { ValidationError, UnauthorizedError } from '../utils/errors.js';
 import { createAuditLog } from '../utils/audit.js';
 
+const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || 'buckeye7066@gmail.com')
+  .split(',')
+  .map(e => e.trim().toLowerCase())
+  .filter(Boolean);
+
+function resolveRole(email) {
+  return ADMIN_EMAILS.includes(email.toLowerCase()) ? 'admin' : 'user';
+}
+
 const registerSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8),
@@ -33,7 +42,7 @@ export default async function authRoutes(fastify) {
       data: {
         email,
         passwordHash,
-        role: 'user',
+        role: resolveRole(email),
       },
     });
     
@@ -98,6 +107,15 @@ export default async function authRoutes(fastify) {
       throw new UnauthorizedError('Invalid credentials');
     }
     
+    const expectedRole = resolveRole(user.email);
+    if (expectedRole === 'admin' && user.role !== 'admin' && user.role !== 'super_admin') {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { role: 'admin' },
+      });
+      user.role = 'admin';
+    }
+    
     await createAuditLog(prisma, {
       userId: user.id,
       action: 'user.login',
@@ -146,20 +164,22 @@ export default async function authRoutes(fastify) {
   fastify.post('/logout', { preHandler: authenticate }, async (request, reply) => {
     const refreshToken = request.cookies.refreshToken;
     
+    const logoutOps = [
+      createAuditLog(prisma, {
+        userId: request.user.userId,
+        action: 'user.logout',
+        entityType: 'user',
+        entityId: request.user.userId,
+      }),
+    ];
     if (refreshToken) {
-      await prisma.session.deleteMany({
-        where: {
-          userId: request.user.userId,
-        },
-      });
+      logoutOps.push(
+        prisma.session.deleteMany({
+          where: { userId: request.user.userId },
+        })
+      );
     }
-    
-    await createAuditLog(prisma, {
-      userId: request.user.userId,
-      action: 'user.logout',
-      entityType: 'user',
-      entityId: request.user.userId,
-    });
+    await Promise.all(logoutOps);
     
     reply
       .clearCookie('accessToken', { path: '/' })
@@ -168,42 +188,37 @@ export default async function authRoutes(fastify) {
   });
   
   fastify.get('/me', { preHandler: authenticate }, async (request, reply) => {
-    const user = await prisma.user.findUnique({
-      where: { id: request.user.userId },
-      include: {
-        subscriptions: {
-          where: {
-            status: {
-              in: ['active', 'trialing'],
-            },
+    const [user, licenseAssignment] = await Promise.all([
+      prisma.user.findUnique({
+        where: { id: request.user.userId },
+        include: {
+          subscriptions: {
+            where: { status: { in: ['active', 'trialing'] } },
+            orderBy: { createdAt: 'desc' },
+            take: 1,
           },
-          orderBy: {
-            createdAt: 'desc',
-          },
-          take: 1,
         },
-      },
-    });
+      }),
+      prisma.licenseAssignment.findFirst({
+        where: {
+          userEmail: request.user.email,
+          status: 'active',
+        },
+        include: { license: true },
+      }),
+    ]);
     
     if (!user) {
       throw new UnauthorizedError('User not found');
     }
     
-    const licenseAssignment = await prisma.licenseAssignment.findFirst({
-      where: {
-        userEmail: user.email,
-        status: 'active',
-      },
-      include: {
-        license: true,
-      },
-    });
-    
-    const isPremium = user.subscriptions.length > 0 || 
+    const isAdmin = user.role === 'admin' || user.role === 'super_admin';
+    const isPremium = isAdmin || user.subscriptions.length > 0 || 
                       (licenseAssignment && licenseAssignment.license.status === 'active');
     
     const entitlements = {
       isPremium,
+      isAdmin,
       licenseInfo: licenseAssignment ? {
         organizationName: licenseAssignment.license.organizationName,
         licenseType: licenseAssignment.license.licenseType,

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { apiClient } from "@genemap/shared";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import AskAIButtons from "../shared/AskAIButtons";
@@ -176,15 +176,17 @@ Source: STRING DB, BioGRID, IntAct, or literature evidence.`;
     );
   }
 
-  const displayedInteractions = showAll 
-    ? interactionData.interactions 
-    : interactionData.interactions.slice(0, 10);
+  const filteredInteractions = useMemo(() => {
+    const displayed = showAll
+      ? interactionData.interactions
+      : interactionData.interactions.slice(0, 10);
 
-  const filteredInteractions = displayedInteractions.filter(interaction => {
-    const confidenceMatch = confidenceFilter.includes(getConfidenceLevel(interaction.confidence));
-    const typeMatch = typeFilter.some(t => interaction.type && interaction.type.toLowerCase().includes(t));
-    return confidenceMatch && typeMatch;
-  });
+    return displayed.filter(interaction => {
+      const confidenceMatch = confidenceFilter.includes(getConfidenceLevel(interaction.confidence));
+      const typeMatch = typeFilter.some(t => interaction.type && interaction.type.toLowerCase().includes(t));
+      return confidenceMatch && typeMatch;
+    });
+  }, [interactionData.interactions, showAll, confidenceFilter, typeFilter]);
 
   return (
     <Card className="shadow-md hover:shadow-lg transition-shadow">

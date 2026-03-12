@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, lazy, Suspense } from "react";
 import { apiClient } from "@genemap/shared";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -21,8 +21,50 @@ import {
   TabsTrigger,
 } from "@/components/ui/tabs";
 import ReactMarkdown from "react-markdown";
-import VCFParser from "../medical/VCFParser";
-import ClinicalTrialMatcher from "../clinical/ClinicalTrialMatcher";
+
+const VCFParser = lazy(() => import("../medical/VCFParser"));
+const ClinicalTrialMatcher = lazy(() => import("../clinical/ClinicalTrialMatcher"));
+
+const AUDIENCE_LEVELS = {
+  child: "5-year-old child",
+  teen: "Teenager (high school level)",
+  general: "General adult audience",
+  undergrad: "Undergraduate student",
+  professional: "Medical professional",
+  expert: "Genetics researcher"
+};
+
+const EXPLAINER_MD_COMPONENTS = {
+  h1: ({ children }) => (
+    <h1 className="text-2xl font-bold text-blue-900 mb-3">{children}</h1>
+  ),
+  h2: ({ children }) => (
+    <h2 className="text-xl font-bold text-blue-800 mt-5 mb-2">{children}</h2>
+  ),
+  h3: ({ children }) => (
+    <h3 className="text-lg font-semibold text-slate-900 mt-4 mb-2">{children}</h3>
+  ),
+  p: ({ children }) => (
+    <p className="mb-3 text-slate-800 leading-relaxed">{children}</p>
+  ),
+  ul: ({ children }) => (
+    <ul className="space-y-2 my-3 ml-6 list-disc">{children}</ul>
+  ),
+  ol: ({ children }) => (
+    <ol className="space-y-2 my-3 ml-6 list-decimal">{children}</ol>
+  ),
+  li: ({ children }) => (
+    <li className="text-slate-700">{children}</li>
+  ),
+  strong: ({ children }) => (
+    <strong className="font-semibold text-blue-900">{children}</strong>
+  ),
+  blockquote: ({ children }) => (
+    <blockquote className="border-l-4 border-blue-400 pl-4 my-3 italic text-blue-900">
+      {children}
+    </blockquote>
+  ),
+};
 
 export default function GeneticExplainer() {
   React.useEffect(() => {
@@ -55,14 +97,6 @@ export default function GeneticExplainer() {
   const [parsedVcfVariants, setParsedVcfVariants] = useState([]);
   const [showTrialMatcher, setShowTrialMatcher] = useState(false);
 
-  const audienceLevels = {
-    child: "5-year-old child",
-    teen: "Teenager (high school level)",
-    general: "General adult audience",
-    undergrad: "Undergraduate student",
-    professional: "Medical professional",
-    expert: "Genetics researcher"
-  };
 
   const explainText = async () => {
     // Validate input based on mode
@@ -99,7 +133,7 @@ export default function GeneticExplainer() {
 
 ${inputContext}
 
-**Target Audience:** ${audienceLevels[audienceLevel]}
+**Target Audience:** ${AUDIENCE_LEVELS[audienceLevel]}
 
 ${inputMode === "genes" || inputMode === "combined" ? `
 **For Multiple Genes - Include:**
@@ -466,10 +500,12 @@ Make the explanation warm, clear, and empowering. Avoid unnecessary medical jarg
               </div>
 
               {vcfFileUrl && (
-                <VCFParser
-                  fileUrl={vcfFileUrl}
-                  onVariantsParsed={handleVcfVariantsParsed}
-                />
+                <Suspense fallback={<Loader2 className="w-6 h-6 animate-spin mx-auto" />}>
+                  <VCFParser
+                    fileUrl={vcfFileUrl}
+                    onVariantsParsed={handleVcfVariantsParsed}
+                  />
+                </Suspense>
               )}
 
               <Alert className="bg-blue-50 border-blue-200">
@@ -490,7 +526,7 @@ Make the explanation warm, clear, and empowering. Avoid unnecessary medical jarg
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {Object.entries(audienceLevels).map(([key, label]) => (
+                {Object.entries(AUDIENCE_LEVELS).map(([key, label]) => (
                   <SelectItem key={key} value={key}>
                     {label}
                   </SelectItem>
@@ -512,7 +548,7 @@ Make the explanation warm, clear, and empowering. Avoid unnecessary medical jarg
             ) : (
               <>
                 <MessageSquare className="w-4 h-4 mr-2" />
-                {inputMode === "combined" ? "Analyze Combined Implications" : `Simplify for ${audienceLevels[audienceLevel]}`}
+                {inputMode === "combined" ? "Analyze Combined Implications" : `Simplify for ${AUDIENCE_LEVELS[audienceLevel]}`}
               </>
             )}
           </Button>
@@ -581,39 +617,7 @@ Make the explanation warm, clear, and empowering. Avoid unnecessary medical jarg
               
               <div className="bg-gradient-to-br from-blue-50 to-indigo-50 p-6 rounded-lg border-2 border-blue-200">
                 <div className="prose prose-sm max-w-none">
-                  <ReactMarkdown
-                    components={{
-                      h1: ({ children }) => (
-                        <h1 className="text-2xl font-bold text-blue-900 mb-3">{children}</h1>
-                      ),
-                      h2: ({ children }) => (
-                        <h2 className="text-xl font-bold text-blue-800 mt-5 mb-2">{children}</h2>
-                      ),
-                      h3: ({ children }) => (
-                        <h3 className="text-lg font-semibold text-slate-900 mt-4 mb-2">{children}</h3>
-                      ),
-                      p: ({ children }) => (
-                        <p className="mb-3 text-slate-800 leading-relaxed">{children}</p>
-                      ),
-                      ul: ({ children }) => (
-                        <ul className="space-y-2 my-3 ml-6 list-disc">{children}</ul>
-                      ),
-                      ol: ({ children }) => (
-                        <ol className="space-y-2 my-3 ml-6 list-decimal">{children}</ol>
-                      ),
-                      li: ({ children }) => (
-                        <li className="text-slate-700">{children}</li>
-                      ),
-                      strong: ({ children }) => (
-                        <strong className="font-semibold text-blue-900">{children}</strong>
-                      ),
-                      blockquote: ({ children }) => (
-                        <blockquote className="border-l-4 border-blue-400 pl-4 my-3 italic text-blue-900">
-                          {children}
-                        </blockquote>
-                      ),
-                    }}
-                  >
+                  <ReactMarkdown components={EXPLAINER_MD_COMPONENTS}>
                     {explanation}
                   </ReactMarkdown>
                 </div>
@@ -622,7 +626,7 @@ Make the explanation warm, clear, and empowering. Avoid unnecessary medical jarg
               <div className="mt-4 p-3 bg-slate-50 rounded-lg border border-slate-200">
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-slate-600">
-                    💡 Tailored for: <strong>{audienceLevels[audienceLevel]}</strong>
+                    💡 Tailored for: <strong>{AUDIENCE_LEVELS[audienceLevel]}</strong>
                   </span>
                   {(inputMode === "genes" || inputMode === "combined") && geneList.split(/[,\s\n]+/).filter(g => g.trim()).length > 0 && (
                     <Badge variant="secondary">
@@ -654,10 +658,12 @@ Make the explanation warm, clear, and empowering. Avoid unnecessary medical jarg
           {/* Clinical Trial Matcher */}
           {showTrialMatcher && (
             <div className="mt-4">
-              <ClinicalTrialMatcher
-                genes={getCurrentGenes()}
-                variants={parsedVcfVariants}
-              />
+              <Suspense fallback={<Loader2 className="w-6 h-6 animate-spin mx-auto" />}>
+                <ClinicalTrialMatcher
+                  genes={getCurrentGenes()}
+                  variants={parsedVcfVariants}
+                />
+              </Suspense>
             </div>
           )}
         </div>

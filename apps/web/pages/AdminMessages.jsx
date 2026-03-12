@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { apiClient } from "@genemap/shared";
+import { useAuth } from "../lib/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -20,7 +20,7 @@ import {
 import { format } from "date-fns";
 
 export default function AdminMessages() {
-  const [user, setUser] = useState(null);
+  const { user } = useAuth();
   const [messages, setMessages] = useState([]);
   const [selectedMessage, setSelectedMessage] = useState(null);
   const [response, setResponse] = useState("");
@@ -36,10 +36,7 @@ export default function AdminMessages() {
   const loadData = async () => {
     setIsLoading(true);
     try {
-      const currentUser = await apiClient.getMe();
-      setUser(currentUser);
-
-      if (currentUser.role !== 'admin' && !currentUser.super_admin) {
+      if (user?.role !== 'admin' && !user?.super_admin) {
         setError('Admin access required');
         return;
       }

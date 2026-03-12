@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { apiClient } from "@genemap/shared";
+import { useAuth } from "../lib/AuthContext";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { log } from "../components/shared/logger";
@@ -33,7 +34,7 @@ import OnboardingTour from "../components/dashboard/OnboardingTour";
 
 
 export default function Dashboard() {
-  const [user, setUser] = useState(null);
+  const { user } = useAuth();
   const [recentGenes, setRecentGenes] = useState([]);
   const [recentSearches, setRecentSearches] = useState([]);
   const [projects, setProjects] = useState([]);
@@ -56,6 +57,8 @@ export default function Dashboard() {
   });
 
   useEffect(() => {
+    if (!user?.email) return;
+
     const controller = new AbortController();
     
     loadDashboardData(false, controller.signal);
@@ -69,7 +72,7 @@ export default function Dashboard() {
       clearInterval(interval);
       controller.abort();
     };
-  }, []);
+  }, [user]);
 
   const loadDashboardData = async (isAutoRefresh = false, signal = null) => {
     if (!isAutoRefresh) {
@@ -77,22 +80,18 @@ export default function Dashboard() {
     }
     
     try {
-      // Check if aborted
       if (signal?.aborted) return;
       
-      const currentUser = await apiClient.getMe();
-      setUser(currentUser);
-
-      if (!currentUser?.email) {
+      if (!user?.email) {
         setIsLoading(false);
         return;
       }
 
-      if (!currentUser.onboarding_completed) {
+      if (!user.onboarding_completed) {
         setShowOnboarding(true);
       }
 
-      const userEmail = currentUser.email;
+      const userEmail = user.email;
 
       // BACKEND_NEEDED: UserActivity entity needs API implementation
       // BACKEND_NEEDED: SearchHistory entity needs API implementation
@@ -116,7 +115,7 @@ export default function Dashboard() {
 
       // Generate personalized insights
       if (activities.length > 0 || records.length > 0 || searches.length > 0) {
-        generatePersonalizedInsights(currentUser, activities, records, searches);
+        generatePersonalizedInsights(user, activities, records, searches);
       }
 
     } catch (err) {

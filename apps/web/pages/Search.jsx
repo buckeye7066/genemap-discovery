@@ -1,6 +1,7 @@
-import React, { useState } from "react";
+import React, { useState, lazy, Suspense } from "react";
 import { apiClient } from "@genemap/shared";
 import { useQueryClient } from "@tanstack/react-query";
+import { useAuth } from "../lib/AuthContext";
 import { log } from "../components/shared/logger";
 import { SAVE_SUCCESS_DELAY_MS } from "../components/shared/constants";
 import { getErrorMessage } from "../components/shared/errorUtils";
@@ -15,16 +16,17 @@ import { createPageUrl } from "@/utils";
 import SearchForm from "../components/search/SearchForm";
 import GeneResults from "../components/search/GeneResults";
 import LoadingSpinner from "../components/search/LoadingSpinner";
-import GeneComparison from "../components/search/GeneComparison";
-import GeneInputForm from "../components/search/GeneInputForm";
-import GeneSetComparison from "../components/search/GeneSetComparison";
-import SavedGeneSets from "../components/search/SavedGeneSets";
-import GenomeBrowser from "../components/visualizations/GenomeBrowser";
-import ComparativeGenomics from "../components/search/ComparativeGenomics"; // Added new component import
+const GeneComparison = lazy(() => import("../components/search/GeneComparison"));
+const GeneInputForm = lazy(() => import("../components/search/GeneInputForm"));
+const GeneSetComparison = lazy(() => import("../components/search/GeneSetComparison"));
+const SavedGeneSets = lazy(() => import("../components/search/SavedGeneSets"));
+const GenomeBrowser = lazy(() => import("../components/visualizations/GenomeBrowser"));
+const ComparativeGenomics = lazy(() => import("../components/search/ComparativeGenomics"));
 import { PhenotypeSearchService } from "../components/search/PhenotypeSearchService";
 
 export default function SearchPage() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -36,11 +38,9 @@ export default function SearchPage() {
   const [userInputGenes, setUserInputGenes] = useState([]);
   const [geneSetComparison, setGeneSetComparison] = useState(null);
   const [showSavedSets, setShowSavedSets] = useState(false);
-  const [user, setUser] = useState(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
   React.useEffect(() => {
-    loadUser(); // Load user on component mount
     const urlParams = new URLSearchParams(window.location.search);
     const queryParam = urlParams.get('query');
     if (queryParam) {
@@ -48,15 +48,6 @@ export default function SearchPage() {
       handleSearch(queryParam, false);
     }
   }, []);
-
-  const loadUser = async () => {
-    try {
-      const currentUser = await apiClient.getMe();
-      setUser(currentUser);
-    } catch (err) {
-      log.debug("Not logged in or user fetch failed:", err);
-    }
-  };
 
   const handleSearch = async (query, isPremium = false) => {
     if (!query.trim()) {

@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { apiClient } from "@genemap/shared";
+import { useAuth } from "../lib/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Sparkles, Info } from "lucide-react";
@@ -7,24 +8,11 @@ import GeneSetInput from "../components/gsea/GeneSetInput";
 import EnrichmentResults from "../components/gsea/EnrichmentResults";
 
 export default function GSEAPage() {
+  const { user } = useAuth();
   const [geneList, setGeneList] = useState([]);
   const [enrichmentData, setEnrichmentData] = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [error, setError] = useState(null);
-  const [user, setUser] = useState(null);
-
-  React.useEffect(() => {
-    loadUser();
-  }, []);
-
-  const loadUser = async () => {
-    try {
-      const currentUser = await apiClient.getMe();
-      setUser(currentUser);
-    } catch (err) {
-      console.log("Not logged in");
-    }
-  };
 
   const handleGenesSubmit = async (genes) => {
     if (genes.length === 0) {

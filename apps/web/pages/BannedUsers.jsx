@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { apiClient } from "@genemap/shared";
+import { useAuth } from "../lib/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,7 +24,7 @@ import {
 import { format } from "date-fns";
 
 export default function BannedUsersPage() {
-  const [currentUser, setCurrentUser] = useState(null);
+  const { user: currentUser } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState([]);
   const [bannedUsers, setBannedUsers] = useState([]);
@@ -45,11 +46,7 @@ export default function BannedUsersPage() {
 
   const loadData = async () => {
     try {
-      const user = await apiClient.getMe();
-      setCurrentUser(user);
-
-      // Check if user is administrator
-      if (!user.super_admin) {
+      if (!currentUser?.super_admin) {
         setError("Access denied. Administrator privileges required.");
         setIsLoading(false);
         return;

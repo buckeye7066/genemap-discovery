@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Download, Info } from "lucide-react";
-import html2canvas from 'html2canvas';
+// html2canvas loaded dynamically on export
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import AskAIButtons from "../shared/AskAIButtons";
@@ -48,6 +48,7 @@ export default function CircosPlot({ genes, userEducationLevel, highlightedGene,
   const handleExport = async () => {
     if (!circosRef.current) return;
     
+    const html2canvas = (await import('html2canvas')).default;
     const canvas = await html2canvas(circosRef.current, {
       scale: 2,
       backgroundColor: '#ffffff'

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { apiClient } from "@genemap/shared";
+import { useAuth } from "../lib/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,7 +33,7 @@ import {
 } from "lucide-react";
 
 export default function ProfilePage() {
-  const [user, setUser] = useState(null);
+  const { user, isLoadingAuth } = useAuth();
   const [age, setAge] = useState("");
   const [educationLevel, setEducationLevel] = useState("");
   const [fieldOfStudy, setFieldOfStudy] = useState("");
@@ -43,34 +44,23 @@ export default function ProfilePage() {
   const [orcidId, setOrcidId] = useState("");
   const [profilePicture, setProfilePicture] = useState("");
   const [isUploadingPicture, setIsUploadingPicture] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(false);
 
   useEffect(() => {
-    loadUser();
-  }, []);
-
-  const loadUser = async () => {
-    try {
-      const currentUser = await apiClient.getMe();
-      setUser(currentUser);
-      setAge(currentUser.age || "");
-      setEducationLevel(currentUser.education_level || "");
-      setFieldOfStudy(currentUser.field_of_study || "");
-      setResearchInterests(currentUser.research_interests || "");
-      setCurrentProjects(currentUser.current_projects || "");
-      setPublications(currentUser.publications || "");
-      setLinkedinUrl(currentUser.linkedin_url || "");
-      setOrcidId(currentUser.orcid_id || "");
-      setProfilePicture(currentUser.profile_picture || "");
-    } catch (err) {
-      setError("Failed to load profile");
-    } finally {
-      setIsLoading(false);
+    if (user) {
+      setAge(user.age || "");
+      setEducationLevel(user.education_level || "");
+      setFieldOfStudy(user.field_of_study || "");
+      setResearchInterests(user.research_interests || "");
+      setCurrentProjects(user.current_projects || "");
+      setPublications(user.publications || "");
+      setLinkedinUrl(user.linkedin_url || "");
+      setOrcidId(user.orcid_id || "");
+      setProfilePicture(user.profile_picture || "");
     }
-  };
+  }, [user]);
 
   const handleProfilePictureUpload = async (e) => {
     const file = e.target.files?.[0];
@@ -142,7 +132,7 @@ export default function ProfilePage() {
     apiClient.logout();
   };
 
-  if (isLoading) {
+  if (isLoadingAuth) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-6">
         <div className="max-w-4xl mx-auto flex items-center justify-center py-20">

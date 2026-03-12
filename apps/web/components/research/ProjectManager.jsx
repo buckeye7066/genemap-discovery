@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { apiClient } from "@genemap/shared";
+import { useAuth } from '../../lib/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -43,6 +44,7 @@ export default function ProjectManager() {
   const [isLoading, setIsLoading] = useState(true);
   const [selectedProject, setSelectedProject] = useState(null);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const { user } = useAuth();
   const [newProject, setNewProject] = useState({
     name: "",
     description: "",
@@ -75,8 +77,6 @@ export default function ProjectManager() {
     if (!newProject.name.trim()) return;
 
     try {
-      const currentUser = await apiClient.getMe();
-      
       const projectData = {
         name: newProject.name,
         description: newProject.description,
@@ -98,7 +98,7 @@ export default function ProjectManager() {
       //   change_type: "created",
       //   changes_description: "Project created",
       //   snapshot_data: projectData,
-      //   modified_by: currentUser.email
+      //   modified_by: user?.email
       // });
 
       setNewProject({ name: "", description: "", genes: "", phenotypes: "", tags: "" });
@@ -113,7 +113,6 @@ export default function ProjectManager() {
 
   const handleUpdateProject = async (projectId, updates) => {
     try {
-      const currentUser = await apiClient.getMe();
       const project = projects.find(p => p.id === projectId);
       
       // Determine change type
@@ -139,9 +138,9 @@ export default function ProjectManager() {
       //   project_id: projectId,
       //   version_number: newVersion,
       //   change_type: changeType,
-      //   changes_description: `${changeType.replace('_', ' ')} by ${currentUser.email}`,
+      //   changes_description: `${changeType.replace('_', ' ')} by ${user?.email}`,
       //   snapshot_data: { ...project, ...updates },
-      //   modified_by: currentUser.email
+      //   modified_by: user?.email
       // });
 
       await loadProjects();

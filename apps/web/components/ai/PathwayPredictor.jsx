@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, lazy, Suspense } from "react";
 import { apiClient } from "@genemap/shared";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,8 +8,49 @@ import { Loader2, Network, Sparkles, TrendingUp, AlertCircle, Info, Upload, Stet
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
 import ReactMarkdown from "react-markdown";
-import VCFParser from "../medical/VCFParser";
-import ClinicalTrialMatcher from "../clinical/ClinicalTrialMatcher";
+
+const VCFParser = lazy(() => import("../medical/VCFParser"));
+const ClinicalTrialMatcher = lazy(() => import("../clinical/ClinicalTrialMatcher"));
+
+const PREDICTOR_MD_COMPONENTS = {
+  h2: ({ children }) => (
+    <h2 className="text-xl font-bold text-green-900 mt-6 mb-3 flex items-center gap-2">
+      {children}
+    </h2>
+  ),
+  h3: ({ children }) => (
+    <h3 className="text-lg font-semibold text-slate-800 mt-4 mb-2">
+      {children}
+    </h3>
+  ),
+  ul: ({ children }) => (
+    <ul className="space-y-2 my-3 ml-6">{children}</ul>
+  ),
+  li: ({ children }) => (
+    <li className="text-slate-700 leading-relaxed">{children}</li>
+  ),
+  strong: ({ children }) => (
+    <strong className="font-semibold text-slate-900">{children}</strong>
+  ),
+  p: ({ children }) => (
+    <p className="mb-3 text-slate-800 leading-relaxed">{children}</p>
+  ),
+  blockquote: ({ children }) => (
+    <blockquote className="border-l-4 border-green-400 bg-green-50 pl-4 py-2 my-3 rounded-r">
+      <div className="text-green-900">{children}</div>
+    </blockquote>
+  ),
+  code: ({ inline, children }) =>
+    inline ? (
+      <code className="bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded text-xs font-mono">
+        {children}
+      </code>
+    ) : (
+      <code className="block bg-slate-900 text-slate-100 p-3 rounded-lg overflow-x-auto text-sm my-3">
+        {children}
+      </code>
+    ),
+};
 
 export default function PathwayPredictor({ genes = [] }) {
   const [predictions, setPredictions] = useState(null);
@@ -220,10 +261,12 @@ Provide evidence-based predictions with clear confidence levels. Be honest about
             </div>
 
             {vcfFileUrl && (
-              <VCFParser
-                fileUrl={vcfFileUrl}
-                onVariantsParsed={handleVcfVariantsParsed}
-              />
+              <Suspense fallback={<Loader2 className="w-6 h-6 animate-spin mx-auto" />}>
+                <VCFParser
+                  fileUrl={vcfFileUrl}
+                  onVariantsParsed={handleVcfVariantsParsed}
+                />
+              </Suspense>
             )}
 
             {vcfGenes.length > 0 && (
@@ -301,10 +344,12 @@ Provide evidence-based predictions with clear confidence levels. Be honest about
             {/* Clinical Trial Matcher */}
             {showTrialMatcher && (
               <div className="mt-4">
-                <ClinicalTrialMatcher
-                  genes={activeGenes}
-                  variants={parsedVcfVariants}
-                />
+                <Suspense fallback={<Loader2 className="w-6 h-6 animate-spin mx-auto" />}>
+                  <ClinicalTrialMatcher
+                    genes={activeGenes}
+                    variants={parsedVcfVariants}
+                  />
+                </Suspense>
               </div>
             )}
 
@@ -316,47 +361,7 @@ Provide evidence-based predictions with clear confidence levels. Be honest about
 
             {predictions && (
               <div className="mt-6 prose prose-sm max-w-none">
-                <ReactMarkdown
-                  components={{
-                    h2: ({ children }) => (
-                      <h2 className="text-xl font-bold text-green-900 mt-6 mb-3 flex items-center gap-2">
-                        {children}
-                      </h2>
-                    ),
-                    h3: ({ children }) => (
-                      <h3 className="text-lg font-semibold text-slate-800 mt-4 mb-2">
-                        {children}
-                      </h3>
-                    ),
-                    ul: ({ children }) => (
-                      <ul className="space-y-2 my-3 ml-6">{children}</ul>
-                    ),
-                    li: ({ children }) => (
-                      <li className="text-slate-700 leading-relaxed">{children}</li>
-                    ),
-                    strong: ({ children }) => (
-                      <strong className="font-semibold text-slate-900">{children}</strong>
-                    ),
-                    p: ({ children }) => (
-                      <p className="mb-3 text-slate-800 leading-relaxed">{children}</p>
-                    ),
-                    blockquote: ({ children }) => (
-                      <blockquote className="border-l-4 border-green-400 bg-green-50 pl-4 py-2 my-3 rounded-r">
-                        <div className="text-green-900">{children}</div>
-                      </blockquote>
-                    ),
-                    code: ({ inline, children }) =>
-                      inline ? (
-                        <code className="bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded text-xs font-mono">
-                          {children}
-                        </code>
-                      ) : (
-                        <code className="block bg-slate-900 text-slate-100 p-3 rounded-lg overflow-x-auto text-sm my-3">
-                          {children}
-                        </code>
-                      ),
-                  }}
-                >
+                <ReactMarkdown components={PREDICTOR_MD_COMPONENTS}>
                   {predictions}
                 </ReactMarkdown>
 

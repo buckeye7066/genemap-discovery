@@ -21,6 +21,54 @@ import {
 } from "lucide-react";
 import { apiClient } from '@genemap/shared';
 
+const PRICING = {
+  team: {
+    name: "Team",
+    minSeats: 5,
+    maxSeats: 20,
+    monthly: 7.99,
+    annual: 79.99,
+    features: [
+      "Up to 20 users",
+      "Full premium features",
+      "Priority support",
+      "Admin dashboard",
+      "Usage analytics",
+      "Email support"
+    ]
+  },
+  department: {
+    name: "Department",
+    minSeats: 21,
+    maxSeats: 100,
+    monthly: 6.99,
+    annual: 69.99,
+    features: [
+      "21-100 users",
+      "All Team features",
+      "Advanced analytics",
+      "Custom onboarding",
+      "Dedicated account manager",
+      "Phone support"
+    ]
+  },
+  enterprise: {
+    name: "Enterprise",
+    minSeats: 100,
+    maxSeats: 1000,
+    monthly: 5.99,
+    annual: 59.99,
+    features: [
+      "100+ users",
+      "All Department features",
+      "Custom integration",
+      "SLA guarantees",
+      "Training sessions",
+      "24/7 priority support"
+    ]
+  }
+};
+
 export default function InstitutionalPricingPage() {
   const [selectedTier, setSelectedTier] = useState("team");
   const [billingCycle, setBillingCycle] = useState("annual");
@@ -29,55 +77,7 @@ export default function InstitutionalPricingPage() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState(null);
 
-  const pricing = {
-    team: {
-      name: "Team",
-      minSeats: 5,
-      maxSeats: 20,
-      monthly: 7.99,
-      annual: 79.99,
-      features: [
-        "Up to 20 users",
-        "Full premium features",
-        "Priority support",
-        "Admin dashboard",
-        "Usage analytics",
-        "Email support"
-      ]
-    },
-    department: {
-      name: "Department",
-      minSeats: 21,
-      maxSeats: 100,
-      monthly: 6.99,
-      annual: 69.99,
-      features: [
-        "21-100 users",
-        "All Team features",
-        "Advanced analytics",
-        "Custom onboarding",
-        "Dedicated account manager",
-        "Phone support"
-      ]
-    },
-    enterprise: {
-      name: "Enterprise",
-      minSeats: 100,
-      maxSeats: 1000,
-      monthly: 5.99,
-      annual: 59.99,
-      features: [
-        "100+ users",
-        "All Department features",
-        "Custom integration",
-        "SLA guarantees",
-        "Training sessions",
-        "24/7 priority support"
-      ]
-    }
-  };
-
-  const currentTier = pricing[selectedTier];
+  const currentTier = PRICING[selectedTier];
   const pricePerSeat = billingCycle === "annual" ? currentTier.annual : currentTier.monthly;
   const totalPrice = pricePerSeat * seats;
   const annualSavings = billingCycle === "annual" 
@@ -144,7 +144,7 @@ export default function InstitutionalPricingPage() {
 
         <div className="grid lg:grid-cols-3 gap-8 mb-12">
           {/* Tier Selection Cards */}
-          {Object.entries(pricing).map(([key, tier]) => (
+          {Object.entries(PRICING).map(([key, tier]) => (
             <Card
               key={key}
               className={`cursor-pointer transition-all duration-300 ${

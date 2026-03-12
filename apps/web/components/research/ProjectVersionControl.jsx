@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { apiClient } from "@genemap/shared";
+import { useAuth } from '../../lib/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -25,6 +25,7 @@ export default function ProjectVersionControl({ project, onRestore }) {
   const [versions, setVersions] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [expandedVersion, setExpandedVersion] = useState(null);
+  const { user } = useAuth();
 
   useEffect(() => {
     loadVersions();
@@ -69,7 +70,7 @@ export default function ProjectVersionControl({ project, onRestore }) {
       //   change_type: "metadata_updated",
       //   changes_description: `Restored from version ${version.version_number}`,
       //   snapshot_data: version.snapshot_data,
-      //   modified_by: (await apiClient.getMe()).email
+      //   modified_by: user?.email
       // });
 
       if (onRestore) onRestore();

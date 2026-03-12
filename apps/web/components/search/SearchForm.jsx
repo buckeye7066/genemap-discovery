@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { apiClient } from "@genemap/shared";
+import { useAuth } from '../../lib/AuthContext';
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
@@ -22,21 +22,11 @@ import {
 export default function SearchForm({ onSearch, isLoading, initialQuery = "" }) {
   const [query, setQuery] = useState(initialQuery);
   const [searchMode, setSearchMode] = useState("free_text");
-  const [user, setUser] = useState(null);
+  const { user } = useAuth();
   
   React.useEffect(() => {
     setQuery(initialQuery);
-    loadUser();
   }, [initialQuery]);
-
-  const loadUser = async () => {
-    try {
-      const currentUser = await apiClient.getMe();
-      setUser(currentUser);
-    } catch (err) {
-      console.log("Not logged in");
-    }
-  };
   
   const exampleQueries = {
     phenotypes: [
@@ -67,8 +57,7 @@ export default function SearchForm({ onSearch, isLoading, initialQuery = "" }) {
     }
   };
 
-  // Admin backdoor check
-  const isAdmin = user?.email === "buckeye7066@gmail.com";
+  const isAdmin = user?.role === "admin" || user?.role === "super_admin" || user?.entitlements?.isAdmin === true;
 
   return (
     <form onSubmit={(e) => handleSubmit(e, false)} className="space-y-6">

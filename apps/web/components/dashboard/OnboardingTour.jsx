@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { apiClient } from "@genemap/shared";
+import { useAuth } from '../../lib/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { X, Sparkles, MessageSquare, Palette, Search, BarChart3, ChevronRight, ChevronLeft } from "lucide-react";
@@ -64,11 +64,13 @@ const tourSteps = [
 export default function OnboardingTour({ onComplete, forceShow = false }) {
   const [currentStep, setCurrentStep] = useState(0);
   const [isVisible, setIsVisible] = useState(false);
-  const [user, setUser] = useState(null);
+  const { user } = useAuth();
 
   useEffect(() => {
-    checkOnboardingStatus();
-  }, []);
+    if (user && !user.onboarding_completed) {
+      setIsVisible(true);
+    }
+  }, [user]);
 
   // Allow parent to force show the tour
   useEffect(() => {
@@ -77,20 +79,6 @@ export default function OnboardingTour({ onComplete, forceShow = false }) {
       setCurrentStep(0);
     }
   }, [forceShow]);
-
-  const checkOnboardingStatus = async () => {
-    try {
-      const currentUser = await apiClient.getMe();
-      setUser(currentUser);
-      
-      // Show tour if user hasn't completed onboarding
-      if (!currentUser.onboarding_completed) {
-        setIsVisible(true);
-      }
-    } catch (err) {
-      console.log("Not logged in");
-    }
-  };
 
   const handleNext = () => {
     if (currentStep < tourSteps.length - 1) {

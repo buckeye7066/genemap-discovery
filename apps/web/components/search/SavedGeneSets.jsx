@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { apiClient } from "@genemap/shared";
+import { useAuth } from '../../lib/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -17,16 +17,16 @@ export default function SavedGeneSets({ onLoad, onClose }) {
   const [geneSets, setGeneSets] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const { user } = useAuth();
 
   useEffect(() => {
     loadGeneSets();
-  }, []);
+  }, [user?.email]);
 
   const loadGeneSets = async () => {
     try {
-      const user = await apiClient.getMe();
       // BACKEND_NEEDED: GeneSet entity needs API implementation
-      // const sets = await apiClient.getGeneSets({ created_by: user.email });
+      // const sets = await apiClient.getGeneSets({ created_by: user?.email });
       const sets = []; // Placeholder
       setGeneSets(sets);
     } catch (err) {

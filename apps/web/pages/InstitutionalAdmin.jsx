@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { apiClient } from "@genemap/shared";
+import { useAuth } from "../lib/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -37,7 +38,7 @@ import { createPageUrl } from "@/utils";
 import RenewalNotifications from "../components/institutional/RenewalNotifications";
 
 export default function InstitutionalAdminPage() {
-  const [user, setUser] = useState(null);
+  const { user } = useAuth();
   const [licenses, setLicenses] = useState([]);
   const [selectedLicense, setSelectedLicense] = useState(null);
   const [assignments, setAssignments] = useState([]);
@@ -66,14 +67,11 @@ export default function InstitutionalAdminPage() {
 
   const loadData = async () => {
     try {
-      const currentUser = await apiClient.getMe();
-      setUser(currentUser);
-
       // BACKEND_NEEDED: InstitutionalLicense entity needs API implementation
       // Load licenses where user is admin
       // const allLicenses = await base44.entities.InstitutionalLicense.list();
       // const userLicenses = allLicenses.filter(license => 
-      //   license.admin_users && license.admin_users.includes(currentUser.email)
+      //   license.admin_users && license.admin_users.includes(user?.email)
       // );
       // setLicenses(userLicenses);
       // if (userLicenses.length > 0) {

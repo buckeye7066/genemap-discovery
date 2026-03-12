@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { apiClient } from "@genemap/shared";
+import { useAuth } from "../lib/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 
 export default function AdminFunctionTester() {
-  const [user, setUser] = useState(null);
+  const { user } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
   const [isRunning, setIsRunning] = useState(false);
   const [results, setResults] = useState(null);
@@ -23,19 +23,10 @@ export default function AdminFunctionTester() {
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    loadUser();
-  }, []);
-
-  const loadUser = async () => {
-    try {
-      const currentUser = await apiClient.getMe();
-      setUser(currentUser);
-    } catch (err) {
-      console.error("Auth error:", err);
-    } finally {
+    if (user !== undefined) {
       setIsLoading(false);
     }
-  };
+  }, [user]);
 
   const runTests = async () => {
     setIsRunning(true);

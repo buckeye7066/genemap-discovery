@@ -11,7 +11,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Download, Palette, Info } from "lucide-react";
-import html2canvas from 'html2canvas';
+// html2canvas loaded dynamically on export
 import { Slider } from "@/components/ui/slider";
 import { Label } from "@/components/ui/label";
 import AskAIButtons from "../shared/AskAIButtons";
@@ -105,6 +105,7 @@ export default function ExpressionHeatmap({ genes, samples, expressionData, user
   const handleExport = async () => {
     if (!heatmapRef.current) return;
     
+    const html2canvas = (await import('html2canvas')).default;
     const canvas = await html2canvas(heatmapRef.current, {
       scale: 2,
       backgroundColor: '#ffffff'

@@ -1,5 +1,6 @@
-import React, { useState } from "react";
+import React, { useState, memo, lazy, Suspense } from "react";
 import { apiClient } from "@genemap/shared";
+import { useAuth } from '../../lib/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -34,13 +35,13 @@ import {
   AlertCircle // Added for variant analysis
 } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
-import GeneExpressionChart from "../visualizations/GeneExpressionChart";
-import ChromosomeView from "../visualizations/ChromosomeView";
-import PhenotypeNetwork from "../visualizations/PhenotypeNetwork";
-import ProteinDomains from "../visualizations/ProteinDomains";
-import ProteinStructure from "../visualizations/ProteinStructure";
-import ProteinInteractions from "../visualizations/ProteinInteractions";
-import GenomeBrowser from "../visualizations/GenomeBrowser";
+const GeneExpressionChart = lazy(() => import("../visualizations/GeneExpressionChart"));
+const ChromosomeView = lazy(() => import("../visualizations/ChromosomeView"));
+const PhenotypeNetwork = lazy(() => import("../visualizations/PhenotypeNetwork"));
+const ProteinDomains = lazy(() => import("../visualizations/ProteinDomains"));
+const ProteinStructure = lazy(() => import("../visualizations/ProteinStructure"));
+const ProteinInteractions = lazy(() => import("../visualizations/ProteinInteractions"));
+const GenomeBrowser = lazy(() => import("../visualizations/GenomeBrowser"));
 import RobertClinicalSupport from "../clinical/RobertClinicalSupport";
 import ClinicalTrialFinder from "../clinical/ClinicalTrialFinder"; // Added
 import ReactMarkdown from 'react-markdown';
@@ -50,9 +51,9 @@ import { Label } from "@/components/ui/label"; // Added
 import { Alert, AlertDescription } from "@/components/ui/alert"; // Added
 import FHIRExporter from "../medical/FHIRExporter";
 
-export default function GeneCard({ gene, rank, isPremium, isSelected = false, onSelect = null }) {
+function GeneCard({ gene, rank, isPremium, isSelected = false, onSelect = null }) {
   const [isExpanded, setIsExpanded] = useState(false);
-  const [user, setUser] = useState(null);
+  const { user } = useAuth();
   const [scoreInterpretation, setScoreInterpretation] = useState(null);
   const [isLoadingInterpretation, setIsLoadingInterpretation] = useState(false);
   const [comprehensiveSynthesis, setComprehensiveSynthesis] = useState(null);
@@ -65,13 +66,13 @@ export default function GeneCard({ gene, rank, isPremium, isSelected = false, on
   const [showClinicalTrials, setShowClinicalTrials] = useState(false); // Added
 
   React.useEffect(() => {
-    loadUserAndContext();
+    loadMedicalContext();
     
     // Track gene view activity
     if (gene && gene.symbol) {
       trackGeneView(gene.symbol);
     }
-  }, [gene?.symbol]);
+  }, [gene?.symbol, user?.email]);
 
   const trackGeneView = async (geneSymbol) => {
     try {
@@ -101,31 +102,25 @@ export default function GeneCard({ gene, rank, isPremium, isSelected = false, on
     }
   }, [isExpanded]);
 
-  const loadUserAndContext = async () => {
+  const loadMedicalContext = async () => {
+    if (!user?.email) return;
     try {
-      const currentUser = await apiClient.getMe();
-      setUser(currentUser);
+      // BACKEND_NEEDED: MedicalData entity needs API implementation
+      // const records = await apiClient.getMedicalData({ created_by: user.email }, 5);
+      const records = []; // Placeholder
       
-      try {
-        // BACKEND_NEEDED: MedicalData entity needs API implementation
-        // const records = await apiClient.getMedicalData({ created_by: currentUser.email }, 5);
-        const records = []; // Placeholder
-        
-        if (records && records.length > 0) {
-          const context = {
-            hasGeneticTests: records.some(r => r.file_type === 'genetic_test'),
-            hasBloodTests: records.some(r => r.file_type === 'blood_test'),
-            relevantGenes: [...new Set(records.flatMap(r => r.relevant_genes || []))],
-            identifiedPhenotypes: [...new Set(records.flatMap(r => r.phenotypes_identified || []))],
-            recordCount: records.length
-          };
-          setMedicalContext(context);
-        }
-      } catch (err) {
-        console.log("No medical data found");
+      if (records && records.length > 0) {
+        const context = {
+          hasGeneticTests: records.some(r => r.file_type === 'genetic_test'),
+          hasBloodTests: records.some(r => r.file_type === 'blood_test'),
+          relevantGenes: [...new Set(records.flatMap(r => r.relevant_genes || []))],
+          identifiedPhenotypes: [...new Set(records.flatMap(r => r.phenotypes_identified || []))],
+          recordCount: records.length
+        };
+        setMedicalContext(context);
       }
     } catch (err) {
-      console.log("Not logged in");
+      console.log("No medical data found");
     }
   };
 
@@ -1114,3 +1109,5 @@ Provide comprehensive, evidence-based analysis formatted with clear sections.`;
     </Card>
   );
 }
+
+export default memo(GeneCard);

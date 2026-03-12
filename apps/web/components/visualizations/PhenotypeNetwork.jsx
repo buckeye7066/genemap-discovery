@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from "recharts";
@@ -6,6 +6,27 @@ import { Network, Info } from "lucide-react";
 import AskAIButtons from "../shared/AskAIButtons";
 
 const COLORS = ['#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#06b6d4'];
+
+function PhenotypeTooltip({ active, payload }) {
+  if (active && payload && payload.length) {
+    return (
+      <div className="bg-white border border-slate-200 rounded-lg shadow-lg p-3">
+        <p className="font-medium text-slate-900">{payload[0].name}</p>
+        <p className="text-sm text-slate-600">
+          {payload[0].value} phenotype{payload[0].value !== 1 ? 's' : ''} ({payload[0].payload.percent}%)
+        </p>
+      </div>
+    );
+  }
+  return null;
+}
+
+function renderCustomLabel(entry) {
+  if (entry.percent > 10) {
+    return `${entry.name} (${entry.percent}%)`;
+  }
+  return '';
+}
 
 export default function PhenotypeNetwork({ phenotypes, userEducationLevel }) {
   if (!phenotypes || phenotypes.length === 0) {
@@ -33,39 +54,21 @@ export default function PhenotypeNetwork({ phenotypes, userEducationLevel }) {
     return 'Other';
   };
 
-  // Count by category
-  const categoryCount = {};
-  phenotypes.forEach(pheno => {
-    const category = categorizePheno(pheno.name);
-    categoryCount[category] = (categoryCount[category] || 0) + 1;
-  });
+  const { categoryCount, chartData } = useMemo(() => {
+    const counts = {};
+    phenotypes.forEach(pheno => {
+      const category = categorizePheno(pheno.name);
+      counts[category] = (counts[category] || 0) + 1;
+    });
 
-  const chartData = Object.entries(categoryCount).map(([name, value]) => ({
-    name,
-    value,
-    percent: ((value / phenotypes.length) * 100).toFixed(1)
-  }));
+    const data = Object.entries(counts).map(([name, value]) => ({
+      name,
+      value,
+      percent: ((value / phenotypes.length) * 100).toFixed(1)
+    }));
 
-  const CustomTooltip = ({ active, payload }) => {
-    if (active && payload && payload.length) {
-      return (
-        <div className="bg-white border border-slate-200 rounded-lg shadow-lg p-3">
-          <p className="font-medium text-slate-900">{payload[0].name}</p>
-          <p className="text-sm text-slate-600">
-            {payload[0].value} phenotype{payload[0].value !== 1 ? 's' : ''} ({payload[0].payload.percent}%)
-          </p>
-        </div>
-      );
-    }
-    return null;
-  };
-
-  const renderCustomLabel = (entry) => {
-    if (entry.percent > 10) {
-      return `${entry.name} (${entry.percent}%)`;
-    }
-    return '';
-  };
+    return { categoryCount: counts, chartData: data };
+  }, [phenotypes]);
 
   const getExplanation = () => {
     if (!userEducationLevel || userEducationLevel === 'high_school') {
@@ -107,7 +110,7 @@ export default function PhenotypeNetwork({ phenotypes, userEducationLevel }) {
                   <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                 ))}
               </Pie>
-              <Tooltip content={<CustomTooltip />} />
+              <Tooltip content={<PhenotypeTooltip />} />
             </PieChart>
           </ResponsiveContainer>
 

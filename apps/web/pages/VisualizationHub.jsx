@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, lazy, Suspense } from "react";
 import { apiClient } from "@genemap/shared";
+import { useAuth } from "../lib/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,20 +32,21 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import GeneExpressionChart from "../components/visualizations/GeneExpressionChart";
-import ProteinDomains from "../components/visualizations/ProteinDomains";
-import ProteinInteractions from "../components/visualizations/ProteinInteractions";
-import ChromosomeView from "../components/visualizations/ChromosomeView";
-import PhenotypeNetwork from "../components/visualizations/PhenotypeNetwork";
-import ManhattanPlot from "../components/visualizations/ManhattanPlot";
-import ExpressionHeatmap from "../components/visualizations/ExpressionHeatmap";
-import CircosPlot from "../components/visualizations/CircosPlot";
-import PathwayEnrichmentViz from "../components/visualizations/PathwayEnrichmentViz";
-import ComparativePathwayViz from "../components/visualizations/ComparativePathwayViz";
+
+const GeneExpressionChart = lazy(() => import("../components/visualizations/GeneExpressionChart"));
+const ProteinDomains = lazy(() => import("../components/visualizations/ProteinDomains"));
+const ProteinInteractions = lazy(() => import("../components/visualizations/ProteinInteractions"));
+const ChromosomeView = lazy(() => import("../components/visualizations/ChromosomeView"));
+const PhenotypeNetwork = lazy(() => import("../components/visualizations/PhenotypeNetwork"));
+const ManhattanPlot = lazy(() => import("../components/visualizations/ManhattanPlot"));
+const ExpressionHeatmap = lazy(() => import("../components/visualizations/ExpressionHeatmap"));
+const CircosPlot = lazy(() => import("../components/visualizations/CircosPlot"));
+const PathwayEnrichmentViz = lazy(() => import("../components/visualizations/PathwayEnrichmentViz"));
+const ComparativePathwayViz = lazy(() => import("../components/visualizations/ComparativePathwayViz"));
 import { PhenotypeSearchService } from "../components/search/PhenotypeSearchService";
 
 export default function VisualizationHub() {
-  const [user, setUser] = useState(null);
+  const { user } = useAuth();
   const [geneInput, setGeneInput] = useState("");
   const [selectedGenes, setSelectedGenes] = useState([]);
   const [geneData, setGeneData] = useState({});
@@ -71,18 +73,8 @@ export default function VisualizationHub() {
   const [configDescription, setConfigDescription] = useState("");
 
   useEffect(() => {
-    loadUser();
     loadSavedConfigs();
   }, []);
-
-  const loadUser = async () => {
-    try {
-      const currentUser = await apiClient.getMe();
-      setUser(currentUser);
-    } catch (err) {
-      console.log("Not logged in");
-    }
-  };
 
   const loadSavedConfigs = async () => {
     try {

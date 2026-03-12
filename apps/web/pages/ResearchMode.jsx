@@ -1,6 +1,5 @@
-import React, { useState, useEffect } from "react";
-import { apiClient } from "@genemap/shared";
-import { log } from "../components/shared/logger";
+import React, { useState, useEffect, lazy, Suspense } from "react";
+import { useAuth } from "../lib/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -19,42 +18,27 @@ import {
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import BulkVCFAnalysis from "../components/research/BulkVCFAnalysis";
-import ExternalDatabaseIntegration from "../components/research/ExternalDatabaseIntegration";
-import PathwayEnrichment from "../components/research/PathwayEnrichment";
-import HypothesisGenerator from "../components/research/HypothesisGenerator";
-import ProjectManager from "../components/research/ProjectManager"; // Added ProjectManager import
+const BulkVCFAnalysis = lazy(() => import("../components/research/BulkVCFAnalysis"));
+const ExternalDatabaseIntegration = lazy(() => import("../components/research/ExternalDatabaseIntegration"));
+const PathwayEnrichment = lazy(() => import("../components/research/PathwayEnrichment"));
+const HypothesisGenerator = lazy(() => import("../components/research/HypothesisGenerator"));
+const ProjectManager = lazy(() => import("../components/research/ProjectManager"));
 
 export default function ResearchMode() {
   const navigate = useNavigate();
-  const [user, setUser] = useState(null);
+  const { user } = useAuth();
   const [hasAccess, setHasAccess] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    checkAccess();
-  }, []);
-
-  const checkAccess = async () => {
-    try {
-      const currentUser = await apiClient.getMe();
-      setUser(currentUser);
-
-      // Check if user has research access
-      const isAdmin = currentUser?.super_admin === true || currentUser?.role === "admin";
-      const isResearcher = currentUser?.education_level === 'researcher' || 
-                          currentUser?.education_level === 'phd' ||
-                          currentUser?.education_level === 'medical_professional';
-      
-      // Grant access to admin or researchers/clinicians
-      setHasAccess(isAdmin || isResearcher);
-    } catch (err) {
-      log.error("Error checking access:", err);
-      setHasAccess(false);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+    if (!user) return;
+    const isAdmin = user?.super_admin === true || user?.role === "admin";
+    const isResearcher = user?.education_level === 'researcher' || 
+                        user?.education_level === 'phd' ||
+                        user?.education_level === 'medical_professional';
+    setHasAccess(isAdmin || isResearcher);
+    setIsLoading(false);
+  }, [user]);
 
   if (isLoading) {
     return (

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { apiClient } from "@genemap/shared";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { GitCompare, Loader2, TrendingUp, TrendingDown, Minus as MinusIcon, Info, Plus, Filter } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 
+const COMPARATIVE_COLOR_SCHEMES = {
+  default: { set1: '#3b82f6', set2: '#ef4444', overlap: '#8b5cf6' },
+  pastel: { set1: '#93c5fd', set2: '#fca5a5', overlap: '#c4b5fd' },
+  vibrant: { set1: '#0ea5e9', set2: '#dc2626', overlap: '#7c3aed' },
+  earth: { set1: '#84cc16', set2: '#ea580c', overlap: '#ca8a04' }
+};
+
 export default function ComparativePathwayViz({ geneSet1 = [], geneSet2 = [], labels = ["Set 1", "Set 2"] }) {
   const [comparisonData, setComparisonData] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -37,26 +44,7 @@ export default function ComparativePathwayViz({ geneSet1 = [], geneSet2 = [], la
   const isDragging = useRef(false);
   const lastPos = useRef({ x: 0, y: 0 });
 
-  const colorSchemes = {
-    default: { set1: '#3b82f6', set2: '#ef4444', overlap: '#8b5cf6' },
-    pastel: { set1: '#93c5fd', set2: '#fca5a5', overlap: '#c4b5fd' },
-    vibrant: { set1: '#0ea5e9', set2: '#dc2626', overlap: '#7c3aed' },
-    earth: { set1: '#84cc16', set2: '#ea580c', overlap: '#ca8a04' }
-  };
-
-  useEffect(() => {
-    if (geneSet1.length > 0 && geneSet2.length > 0) {
-      performComparison();
-    }
-  }, [geneSet1, geneSet2]);
-
-  useEffect(() => {
-    if (comparisonData) {
-      drawVisualization(comparisonData);
-    }
-  }, [viewMode, comparisonData, zoom, pan, hoveredSection, colorScheme]);
-
-  const performComparison = async () => {
+  const performComparison = useCallback(async () => {
     setIsLoading(true);
     try {
       const genes1 = geneSet1.map(g => g.symbol || g).join(', ');
@@ -180,7 +168,19 @@ export default function ComparativePathwayViz({ geneSet1 = [], geneSet2 = [], la
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [geneSet1, geneSet2, labels]);
+
+  useEffect(() => {
+    if (geneSet1.length > 0 && geneSet2.length > 0) {
+      performComparison();
+    }
+  }, [geneSet1, geneSet2, performComparison]);
+
+  useEffect(() => {
+    if (comparisonData) {
+      drawVisualization(comparisonData);
+    }
+  }, [viewMode, comparisonData, zoom, pan, hoveredSection, colorScheme]);
 
   const drawVisualization = (data) => {
     const canvas = canvasRef.current;
@@ -195,7 +195,7 @@ export default function ComparativePathwayViz({ geneSet1 = [], geneSet2 = [], la
     ctx.translate(pan.x, pan.y);
     ctx.scale(zoom, zoom);
 
-    const scheme = colorSchemes[colorScheme];
+    const scheme = COMPARATIVE_COLOR_SCHEMES[colorScheme];
 
     if (viewMode === "venn") {
       const centerX = width / (2 * zoom);
@@ -286,7 +286,7 @@ export default function ComparativePathwayViz({ geneSet1 = [], geneSet2 = [], la
       const bar2Width = (pathway.enrichmentSet2 / maxEnrichment) * (barWidth / 2);
 
       const isHovered = hoveredSection === idx;
-      const scheme = colorSchemes[colorScheme];
+      const scheme = COMPARATIVE_COLOR_SCHEMES[colorScheme];
 
       ctx.fillStyle = isHovered ? scheme.set1 : `${scheme.set1}B3`;
       ctx.fillRect(labelWidth, y, bar1Width, (cellHeight - 5) / 2);

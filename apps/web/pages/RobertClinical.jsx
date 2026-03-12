@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from "react";
-import { apiClient } from "@genemap/shared";
+import React, { useState, useEffect, useCallback } from "react";
+import { useAuth } from "../lib/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,74 +21,53 @@ import {
 } from "lucide-react";
 import RobertClinicalSupport from "../components/clinical/RobertClinicalSupport";
 
+const QUICK_GENES = ["BRCA1", "BRCA2", "TP53", "APOE", "CFTR", "CYP2D6", "CYP2C19"];
+const QUICK_DISEASES = [
+  "Rheumatoid Arthritis",
+  "Type 2 Diabetes",
+  "Alzheimer's Disease",
+  "Breast Cancer",
+  "Cystic Fibrosis"
+];
+
 export default function RobertClinicalPage() {
-  const [user, setUser] = useState(null);
+  const { user, isLoadingAuth } = useAuth();
   const [medicalRecords, setMedicalRecords] = useState([]);
   const [searchInput, setSearchInput] = useState("");
   const [analysisTargets, setAnalysisTargets] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [showBatchAnalysis, setShowBatchAnalysis] = useState(false);
   const [includeDrugAnalysis, setIncludeDrugAnalysis] = useState(true);
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  const isLoading = isLoadingAuth;
 
-  const loadData = async () => {
-    try {
-      const currentUser = await apiClient.getMe();
-      setUser(currentUser);
 
-      // BACKEND_NEEDED: MedicalData entity needs API implementation
-      // const records = await base44.entities.MedicalData.filter(
-      //   { created_by: currentUser.email },
-      //   '-created_date'
-      // );
-      // setMedicalRecords(records);
-      setMedicalRecords([]);
-    } catch (err) {
-      console.error("Error loading data:", err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleAddTarget = (type) => {
+  const handleAddTarget = useCallback((type) => {
     if (!searchInput.trim()) return;
     
     const newTarget = {
-      type, // 'gene' or 'disease'
+      type,
       value: searchInput.trim(),
-      id: Date.now() // unique ID
+      id: Date.now()
     };
 
-    setAnalysisTargets([...analysisTargets, newTarget]);
+    setAnalysisTargets(prev => [...prev, newTarget]);
     setSearchInput("");
-  };
+  }, [searchInput]);
 
-  const handleRemoveTarget = (id) => {
-    setAnalysisTargets(analysisTargets.filter(t => t.id !== id));
-  };
+  const handleRemoveTarget = useCallback((id) => {
+    setAnalysisTargets(prev => prev.filter(t => t.id !== id));
+  }, []);
 
-  const handleStartAnalysis = () => {
+  const handleStartAnalysis = useCallback(() => {
     if (analysisTargets.length > 0) {
       setShowBatchAnalysis(true);
     }
-  };
+  }, [analysisTargets.length]);
 
-  const handleClearAnalysis = () => {
+  const handleClearAnalysis = useCallback(() => {
     setShowBatchAnalysis(false);
     setAnalysisTargets([]);
-  };
-
-  const quickGenes = ["BRCA1", "BRCA2", "TP53", "APOE", "CFTR", "CYP2D6", "CYP2C19"];
-  const quickDiseases = [
-    "Rheumatoid Arthritis",
-    "Type 2 Diabetes",
-    "Alzheimer's Disease",
-    "Breast Cancer",
-    "Cystic Fibrosis"
-  ];
+  }, []);
 
   if (isLoading) {
     return (
@@ -336,7 +315,7 @@ export default function RobertClinicalPage() {
                   <div>
                     <p className="text-sm font-medium text-slate-700 mb-2">Quick Gene Selection:</p>
                     <div className="flex flex-wrap gap-2">
-                      {quickGenes.map((gene) => (
+                      {QUICK_GENES.map((gene) => (
                         <Button
                           key={gene}
                           variant="outline"
@@ -359,7 +338,7 @@ export default function RobertClinicalPage() {
                   <div>
                     <p className="text-sm font-medium text-slate-700 mb-2">Quick Disease Selection:</p>
                     <div className="flex flex-wrap gap-2">
-                      {quickDiseases.map((disease) => (
+                      {QUICK_DISEASES.map((disease) => (
                         <Button
                           key={disease}
                           variant="outline"
@@ -396,6 +375,7 @@ export default function RobertClinicalPage() {
           <RobertClinicalSupport
             targets={analysisTargets}
             userEducationLevel={user?.education_level}
+            currentUser={user}
             onClose={handleClearAnalysis}
             includeDrugAnalysis={includeDrugAnalysis}
           />

@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from "react";
-import { apiClient } from "@genemap/shared";
+import React, { useState, useEffect, useMemo } from "react";
+import { useAuth } from "../lib/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -48,10 +48,7 @@ export default function AdminAnalytics() {
   const loadAnalytics = async () => {
     setIsLoading(true);
     try {
-      const currentUser = await apiClient.getMe();
-      setUser(currentUser);
-
-      if (currentUser.role !== 'admin') {
+      if (user?.role !== 'admin') {
         setError('Admin access required');
         return;
       }
@@ -84,18 +81,16 @@ export default function AdminAnalytics() {
     }
   };
 
-  // Activity Type Distribution
-  const getActivityTypeDistribution = () => {
+  const activityTypeDistribution = useMemo(() => {
     const counts = {};
     activities.forEach(activity => {
       const type = activity.activity_type || 'unknown';
       counts[type] = (counts[type] || 0) + 1;
     });
     return Object.entries(counts).map(([name, value]) => ({ name, value }));
-  };
+  }, [activities]);
 
-  // Popular Genes
-  const getPopularGenes = () => {
+  const popularGenes = useMemo(() => {
     const geneCounts = {};
     activities.forEach(activity => {
       if (activity.gene_symbol) {
@@ -106,10 +101,9 @@ export default function AdminAnalytics() {
       .sort((a, b) => b[1] - a[1])
       .slice(0, 10)
       .map(([name, count]) => ({ name, count }));
-  };
+  }, [activities]);
 
-  // Popular Searches
-  const getPopularSearches = () => {
+  const popularSearches = useMemo(() => {
     const searchCounts = {};
     searches.forEach(search => {
       const query = search.phenotype_query || 'Unknown';
@@ -119,24 +113,18 @@ export default function AdminAnalytics() {
       .sort((a, b) => b[1] - a[1])
       .slice(0, 10)
       .map(([name, count]) => ({ name, count }));
-  };
+  }, [searches]);
 
-  // Activity Timeline (last 7 days)
-  const getActivityTimeline = () => {
+  const activityTimeline = useMemo(() => {
     const last7Days = [];
     for (let i = 6; i >= 0; i--) {
       const date = new Date();
       date.setDate(date.getDate() - i);
       last7Days.push(date.toISOString().split('T')[0]);
     }
-
-    const timeline = last7Days.map(date => {
-      const dayActivities = activities.filter(a => 
-        a.created_date?.startsWith(date)
-      ).length;
-      const daySearches = searches.filter(s => 
-        s.created_date?.startsWith(date)
-      ).length;
+    return last7Days.map(date => {
+      const dayActivities = activities.filter(a => a.created_date?.startsWith(date)).length;
+      const daySearches = searches.filter(s => s.created_date?.startsWith(date)).length;
       return {
         date: new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
         activities: dayActivities,
@@ -144,42 +132,37 @@ export default function AdminAnalytics() {
         total: dayActivities + daySearches
       };
     });
+  }, [activities, searches]);
 
-    return timeline;
-  };
-
-  // Medical Data Types
-  const getMedicalDataTypes = () => {
+  const medicalDataTypes = useMemo(() => {
     const typeCounts = {};
     medicalRecords.forEach(record => {
       const type = record.file_type || 'other';
       typeCounts[type] = (typeCounts[type] || 0) + 1;
     });
-    return Object.entries(typeCounts).map(([name, value]) => ({ 
-      name: name.replace('_', ' ').toUpperCase(), 
-      value 
+    return Object.entries(typeCounts).map(([name, value]) => ({
+      name: name.replace('_', ' ').toUpperCase(),
+      value
     }));
-  };
+  }, [medicalRecords]);
 
-  // AI Assistant Usage
-  const getAIUsageStats = () => {
+  const aiUsageStats = useMemo(() => {
     const robertCount = aiConversations.filter(c => c.assistant_type === 'robert').length;
     const anastasiaCount = aiConversations.filter(c => c.assistant_type === 'anastasia').length;
     return [
       { name: 'Robert (Clinical)', value: robertCount },
       { name: 'Anastasia (Counselor)', value: anastasiaCount }
     ];
-  };
+  }, [aiConversations]);
 
-  // Search Type Distribution
-  const getSearchTypeDistribution = () => {
+  const searchTypeDistribution = useMemo(() => {
     const premiumCount = searches.filter(s => s.search_type === 'premium').length;
     const freeCount = searches.filter(s => s.search_type === 'free').length;
     return [
       { name: 'Premium', value: premiumCount },
       { name: 'Free', value: freeCount }
     ];
-  };
+  }, [searches]);
 
   const COLORS = ['#3b82f6', '#8b5cf6', '#ec4899', '#10b981', '#f59e0b', '#ef4444', '#06b6d4', '#84cc16'];
 
@@ -307,7 +290,7 @@ export default function AdminAnalytics() {
                 </CardHeader>
                 <CardContent>
                   <ResponsiveContainer width="100%" height={300}>
-                    <LineChart data={getActivityTimeline()}>
+                    <LineChart data={activityTimeline}>
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="date" />
                       <YAxis />
@@ -332,7 +315,7 @@ export default function AdminAnalytics() {
                   <ResponsiveContainer width="100%" height={300}>
                     <PieChart>
                       <Pie
-                        data={getActivityTypeDistribution()}
+                        data={activityTypeDistribution}
                         cx="50%"
                         cy="50%"
                         labelLine={false}
@@ -341,7 +324,7 @@ export default function AdminAnalytics() {
                         fill="#8884d8"
                         dataKey="value"
                       >
-                        {getActivityTypeDistribution().map((entry, index) => (
+                        {activityTypeDistribution.map((entry, index) => (
                           <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                         ))}
                       </Pie>
@@ -363,7 +346,7 @@ export default function AdminAnalytics() {
                   <ResponsiveContainer width="100%" height={300}>
                     <PieChart>
                       <Pie
-                        data={getSearchTypeDistribution()}
+                        data={searchTypeDistribution}
                         cx="50%"
                         cy="50%"
                         labelLine={false}
@@ -391,7 +374,7 @@ export default function AdminAnalytics() {
                 </CardHeader>
                 <CardContent>
                   <ResponsiveContainer width="100%" height={300}>
-                    <BarChart data={getAIUsageStats()}>
+                    <BarChart data={aiUsageStats}>
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="name" />
                       <YAxis />
@@ -415,7 +398,7 @@ export default function AdminAnalytics() {
               </CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={500}>
-                  <BarChart data={getPopularGenes()} layout="vertical">
+                  <BarChart data={popularGenes} layout="vertical">
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis type="number" />
                     <YAxis dataKey="name" type="category" width={100} />
@@ -438,7 +421,7 @@ export default function AdminAnalytics() {
               </CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={500}>
-                  <BarChart data={getPopularSearches()} layout="vertical">
+                  <BarChart data={popularSearches} layout="vertical">
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis type="number" />
                     <YAxis dataKey="name" type="category" width={150} />
@@ -461,7 +444,7 @@ export default function AdminAnalytics() {
               </CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={getMedicalDataTypes()}>
+                  <BarChart data={medicalDataTypes}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="name" />
                     <YAxis />
@@ -489,10 +472,10 @@ export default function AdminAnalytics() {
                   <CardTitle className="text-lg">Most Viewed Gene</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  {getPopularGenes()[0] && (
+                  {popularGenes[0] && (
                     <>
-                      <p className="text-3xl font-bold text-purple-600">{getPopularGenes()[0].name}</p>
-                      <p className="text-sm text-slate-600 mt-2">{getPopularGenes()[0].count} views</p>
+                      <p className="text-3xl font-bold text-purple-600">{popularGenes[0].name}</p>
+                      <p className="text-sm text-slate-600 mt-2">{popularGenes[0].count} views</p>
                     </>
                   )}
                 </CardContent>

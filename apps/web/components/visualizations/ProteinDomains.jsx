@@ -284,6 +284,7 @@ Explain domains as "${educationContext}".`;
                 </div>
 
                 {/* Domains */}
+                <TooltipProvider>
                 {visibleDomains.map((domain, index) => {
                   const left = (domain.start / proteinLength) * 100;
                   const width = ((domain.end - domain.start) / proteinLength) * 100;
@@ -292,44 +293,43 @@ Explain domains as "${educationContext}".`;
                   const isSelected = selectedDomain?.name === domain.name;
 
                   return (
-                    <TooltipProvider key={index}>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <div
-                            className="absolute top-1/2 -translate-y-1/2 rounded-lg cursor-pointer transition-all duration-200 border-2 border-white"
-                            style={{
-                              left: `${left}%`,
-                              width: `${width}%`,
-                              height: isHovered || isSelected ? '90%' : '75%',
-                              backgroundColor: color,
-                              boxShadow: isHovered || isSelected ? '0 4px 12px rgba(0,0,0,0.2)' : '0 2px 4px rgba(0,0,0,0.1)',
-                              zIndex: isHovered || isSelected ? 20 : 10,
-                              opacity: isHovered || isSelected ? 1 : 0.85
-                            }}
-                            onMouseEnter={() => setHoveredDomain(domain)}
-                            onMouseLeave={() => setHoveredDomain(null)}
-                            onClick={() => setSelectedDomain(selectedDomain?.name === domain.name ? null : domain)}
-                          >
-                            {width > 8 && (
-                              <div className="absolute inset-0 flex items-center justify-center">
-                                <span className="text-white text-xs font-medium truncate px-1">
-                                  {domain.name}
-                                </span>
-                              </div>
-                            )}
-                          </div>
-                        </TooltipTrigger>
-                        <TooltipContent side="top" className="max-w-xs">
-                          <div className="space-y-1">
-                            <p className="font-semibold">{domain.name}</p>
-                            <p className="text-xs">Position: {domain.start}-{domain.end}</p>
-                            <p className="text-xs text-slate-500">{domain.function}</p>
-                          </div>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
+                    <Tooltip key={index}>
+                      <TooltipTrigger asChild>
+                        <div
+                          className="absolute top-1/2 -translate-y-1/2 rounded-lg cursor-pointer transition-all duration-200 border-2 border-white"
+                          style={{
+                            left: `${left}%`,
+                            width: `${width}%`,
+                            height: isHovered || isSelected ? '90%' : '75%',
+                            backgroundColor: color,
+                            boxShadow: isHovered || isSelected ? '0 4px 12px rgba(0,0,0,0.2)' : '0 2px 4px rgba(0,0,0,0.1)',
+                            zIndex: isHovered || isSelected ? 20 : 10,
+                            opacity: isHovered || isSelected ? 1 : 0.85
+                          }}
+                          onMouseEnter={() => setHoveredDomain(domain)}
+                          onMouseLeave={() => setHoveredDomain(null)}
+                          onClick={() => setSelectedDomain(selectedDomain?.name === domain.name ? null : domain)}
+                        >
+                          {width > 8 && (
+                            <div className="absolute inset-0 flex items-center justify-center">
+                              <span className="text-white text-xs font-medium truncate px-1">
+                                {domain.name}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-xs">
+                        <div className="space-y-1">
+                          <p className="font-semibold">{domain.name}</p>
+                          <p className="text-xs">Position: {domain.start}-{domain.end}</p>
+                          <p className="text-xs text-slate-500">{domain.function}</p>
+                        </div>
+                      </TooltipContent>
+                    </Tooltip>
                   );
                 })}
+                </TooltipProvider>
               </div>
             </div>
 

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { apiClient } from "@genemap/shared";
+import { useAuth } from "../lib/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,7 +11,7 @@ import { Shield, Crown, CheckCircle, AlertCircle, Loader2, LogOut } from "lucide
 
 export default function SuperAdminSetupPage() {
   const navigate = useNavigate();
-  const [currentUser, setCurrentUser] = useState(null);
+  const { user: currentUser } = useAuth();
   const [searchEmail, setSearchEmail] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -18,31 +19,17 @@ export default function SuperAdminSetupPage() {
   const [success, setSuccess] = useState(null);
 
   useEffect(() => {
-    loadUser();
-  }, []);
-
-  const loadUser = async () => {
-    try {
-      const isAuth = await apiClient.isAuthenticated();
-      if (!isAuth) {
-        navigate(createPageUrl("Home"));
-        return;
-      }
-
-      const user = await apiClient.getMe();
-      setCurrentUser(user);
-
-      // Redirect non-admins
-      if (!user.super_admin) {
-        navigate(createPageUrl("Home"));
-      }
-    } catch (err) {
-      console.error("Error loading user:", err);
+    if (currentUser === undefined) return;
+    if (!currentUser) {
       navigate(createPageUrl("Home"));
-    } finally {
-      setIsLoading(false);
+      return;
     }
-  };
+    if (!currentUser.super_admin) {
+      navigate(createPageUrl("Home"));
+      return;
+    }
+    setIsLoading(false);
+  }, [currentUser]);
 
   const handleLogout = () => {
     apiClient.logout();

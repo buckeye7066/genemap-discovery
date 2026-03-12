@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { apiClient } from "@genemap/shared";
+import { useAuth } from "../lib/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,7 +22,7 @@ import {
 import { format } from "date-fns";
 
 export default function AxiomNewsletterPage() {
-  const [currentUser, setCurrentUser] = useState(null);
+  const { user: currentUser } = useAuth();
   const [subscribedUsers, setSubscribedUsers] = useState([]);
   const [filteredUsers, setFilteredUsers] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -40,11 +41,7 @@ export default function AxiomNewsletterPage() {
 
   const loadData = async () => {
     try {
-      const user = await apiClient.getMe();
-      setCurrentUser(user);
-
-      // Check if user is administrator
-      if (!user.super_admin) {
+      if (!currentUser?.super_admin) {
         setError("Access denied. Administrator privileges required.");
         setIsLoading(false);
         return;

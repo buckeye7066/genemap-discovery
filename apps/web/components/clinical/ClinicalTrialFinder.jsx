@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useCallback } from "react";
 import { apiClient } from "@genemap/shared";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,47 @@ import {
 } from "lucide-react";
 import ReactMarkdown from 'react-markdown';
 
+const FINDER_MD_COMPONENTS = {
+  h2: ({ children }) => <h2 className="text-xl font-semibold text-purple-900 mt-4 mb-2">{children}</h2>,
+  h3: ({ children }) => <h3 className="text-lg font-semibold text-slate-900 mt-3 mb-2">{children}</h3>,
+  p: ({ children }) => <p className="text-slate-700 mb-3 leading-relaxed">{children}</p>,
+  ul: ({ children }) => <ul className="ml-4 mb-3 space-y-2 list-disc">{children}</ul>,
+  strong: ({ children }) => <strong className="font-semibold text-purple-900">{children}</strong>,
+};
+
+function getEducationContext(level) {
+  if (!level || level === 'high_school') {
+    return "patient with general education - use simple, clear language";
+  }
+  if (level === 'undergraduate') {
+    return "patient with some scientific background - use accessible medical terms";
+  }
+  if (level === 'graduate' || level === 'phd') {
+    return "patient with advanced education - use technical language appropriately";
+  }
+  if (level === 'medical_professional') {
+    return "healthcare professional - use clinical terminology";
+  }
+  return "patient seeking clinical trial information - be clear and supportive";
+}
+
+function getStatusColor(status) {
+  const lower = status?.toLowerCase() || '';
+  if (lower.includes('recruiting')) return 'bg-green-100 text-green-800';
+  if (lower.includes('active')) return 'bg-blue-100 text-blue-800';
+  if (lower.includes('completed')) return 'bg-slate-100 text-slate-800';
+  if (lower.includes('suspended') || lower.includes('terminated')) return 'bg-red-100 text-red-800';
+  return 'bg-slate-100 text-slate-800';
+}
+
+function getEligibilityColor(eligibility) {
+  const lower = eligibility?.toLowerCase() || '';
+  if (lower === 'yes') return 'bg-green-600 text-white';
+  if (lower === 'maybe') return 'bg-amber-600 text-white';
+  if (lower === 'no') return 'bg-red-600 text-white';
+  return 'bg-slate-600 text-white';
+}
+
 export default function ClinicalTrialFinder({ 
   geneticData = null, 
   medicalContext = null,
@@ -30,13 +71,12 @@ export default function ClinicalTrialFinder({
   const [trials, setTrials] = useState(null);
   const [robertAnalysis, setRobertAnalysis] = useState(null);
 
-  const handleSearch = async (autoQuery = null) => {
+  const handleSearch = useCallback(async (autoQuery = null) => {
     const query = autoQuery || searchQuery;
     if (!query.trim() && !geneticData && !medicalContext) return;
 
     setIsSearching(true);
     try {
-      // Build search context
       let searchContext = query.trim();
       if (geneticData) {
         searchContext = `Gene: ${geneticData.gene}, Variant: ${geneticData.variant}`;
@@ -141,47 +181,13 @@ Search comprehensively and provide actionable information.`;
     } finally {
       setIsSearching(false);
     }
-  };
+  }, [searchQuery, geneticData, medicalContext, userEducationLevel]);
 
-  const getEducationContext = (level) => {
-    if (!level || level === 'high_school') {
-      return "patient with general education - use simple, clear language";
-    }
-    if (level === 'undergraduate') {
-      return "patient with some scientific background - use accessible medical terms";
-    }
-    if (level === 'graduate' || level === 'phd') {
-      return "patient with advanced education - use technical language appropriately";
-    }
-    if (level === 'medical_professional') {
-      return "healthcare professional - use clinical terminology";
-    }
-    return "patient seeking clinical trial information - be clear and supportive";
-  };
-
-  const getStatusColor = (status) => {
-    const lower = status?.toLowerCase() || '';
-    if (lower.includes('recruiting')) return 'bg-green-100 text-green-800';
-    if (lower.includes('active')) return 'bg-blue-100 text-blue-800';
-    if (lower.includes('completed')) return 'bg-slate-100 text-slate-800';
-    if (lower.includes('suspended') || lower.includes('terminated')) return 'bg-red-100 text-red-800';
-    return 'bg-slate-100 text-slate-800';
-  };
-
-  const getEligibilityColor = (eligibility) => {
-    const lower = eligibility?.toLowerCase() || '';
-    if (lower === 'yes') return 'bg-green-600 text-white';
-    if (lower === 'maybe') return 'bg-amber-600 text-white';
-    if (lower === 'no') return 'bg-red-600 text-white';
-    return 'bg-slate-600 text-white';
-  };
-
-  // Auto-search if genetic or medical context provided
   React.useEffect(() => {
     if ((geneticData || medicalContext) && !trials) {
       handleSearch('auto');
     }
-  }, [geneticData, medicalContext]);
+  }, [geneticData, medicalContext, handleSearch]);
 
   return (
     <div className="space-y-6">
@@ -289,15 +295,7 @@ Search comprehensively and provide actionable information.`;
               </CardHeader>
               <CardContent>
                 <div className="prose prose-sm max-w-none">
-                  <ReactMarkdown
-                    components={{
-                      h2: ({ children }) => <h2 className="text-xl font-semibold text-purple-900 mt-4 mb-2">{children}</h2>,
-                      h3: ({ children }) => <h3 className="text-lg font-semibold text-slate-900 mt-3 mb-2">{children}</h3>,
-                      p: ({ children }) => <p className="text-slate-700 mb-3 leading-relaxed">{children}</p>,
-                      ul: ({ children }) => <ul className="ml-4 mb-3 space-y-2 list-disc">{children}</ul>,
-                      strong: ({ children }) => <strong className="font-semibold text-purple-900">{children}</strong>,
-                    }}
-                  >
+                  <ReactMarkdown components={FINDER_MD_COMPONENTS}>
                     {robertAnalysis}
                   </ReactMarkdown>
                 </div>
@@ -321,7 +319,7 @@ Search comprehensively and provide actionable information.`;
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
-              {trials.sort((a, b) => (a.relevance_rank || 999) - (b.relevance_rank || 999)).map((trial, idx) => (
+              {[...trials].sort((a, b) => (a.relevance_rank || 999) - (b.relevance_rank || 999)).map((trial, idx) => (
                 <Card key={idx} className="border-2 hover:shadow-md transition-shadow">
                   <CardContent className="pt-6">
                     <div className="space-y-3">

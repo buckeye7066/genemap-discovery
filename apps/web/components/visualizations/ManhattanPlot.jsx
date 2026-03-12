@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useMemo, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -15,29 +15,52 @@ import { ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, Tooltip, Responsive
 import { Download, ZoomIn, ZoomOut, RotateCcw, Info } from "lucide-react";
 import AskAIButtons from "../shared/AskAIButtons";
 
+const CHROMOSOME_COLORS = [
+  "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd",
+  "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf",
+  "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd",
+  "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf",
+  "#1f77b4", "#ff7f0e"
+];
+
+function ManhattanTooltipContent({ payload }) {
+  if (payload && payload.length > 0) {
+    const data = payload[0].payload;
+    return (
+      <div className="bg-white p-3 border border-slate-200 rounded shadow-lg">
+        <p className="font-semibold text-sm">{data.snp}</p>
+        <p className="text-xs text-slate-600">Chr: {data.chromosome}</p>
+        <p className="text-xs text-slate-600">Position: {data.position.toLocaleString()}</p>
+        <p className="text-xs text-slate-600">P-value: {data.pvalue.toExponential(2)}</p>
+        {data.gene && (
+          <p className="text-xs text-blue-600 font-medium cursor-pointer">
+            Nearest: {data.gene} (click to highlight)
+          </p>
+        )}
+      </div>
+    );
+  }
+  return null;
+}
+
 export default function ManhattanPlot({ gwasData, userEducationLevel, highlightedGene, onGeneClick, allGenes = [] }) {
   const [zoomLevel, setZoomLevel] = useState(1);
   const [selectedChromosome, setSelectedChromosome] = useState("all");
   const [pValueThreshold, setPValueThreshold] = useState(1e-5);
   const plotRef = useRef(null);
 
-  const chromosomeColors = [
-    "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd",
-    "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf",
-    "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd",
-    "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf",
-    "#1f77b4", "#ff7f0e"
-  ];
-
   const getChromosomeColor = (chr) => {
     const chrNum = chr.replace('chr', '');
     const index = chrNum === 'X' ? 22 : chrNum === 'Y' ? 23 : parseInt(chrNum) - 1;
-    return chromosomeColors[index] || "#000000";
+    return CHROMOSOME_COLORS[index] || "#000000";
   };
 
-  const filteredData = selectedChromosome === "all" 
-    ? gwasData.filter(d => d.pvalue <= pValueThreshold)
-    : gwasData.filter(d => d.chromosome === selectedChromosome && d.pvalue <= pValueThreshold);
+  const filteredData = useMemo(() =>
+    selectedChromosome === "all"
+      ? gwasData.filter(d => d.pvalue <= pValueThreshold)
+      : gwasData.filter(d => d.chromosome === selectedChromosome && d.pvalue <= pValueThreshold),
+    [gwasData, selectedChromosome, pValueThreshold]
+  );
 
   const significanceThreshold = 5e-8;
   const suggestiveThreshold = 1e-5;
@@ -73,15 +96,34 @@ export default function ManhattanPlot({ gwasData, userEducationLevel, highlighte
     URL.revokeObjectURL(url);
   };
 
-  const chromosomes = [...new Set(gwasData.map(d => d.chromosome))].sort((a, b) => {
-    const aNum = a.replace('chr', '');
-    const bNum = b.replace('chr', '');
-    if (aNum === 'X') return 1;
-    if (bNum === 'X') return -1;
-    if (aNum === 'Y') return 1;
-    if (bNum === 'Y') return -1;
-    return parseInt(aNum) - parseInt(bNum);
-  });
+  const chromosomes = useMemo(() =>
+    [...new Set(gwasData.map(d => d.chromosome))].sort((a, b) => {
+      const aNum = a.replace('chr', '');
+      const bNum = b.replace('chr', '');
+      if (aNum === 'X') return 1;
+      if (bNum === 'X') return -1;
+      if (aNum === 'Y') return 1;
+      if (bNum === 'Y') return -1;
+      return parseInt(aNum) - parseInt(bNum);
+    }),
+    [gwasData]
+  );
+
+  const renderDotShape = useCallback((props) => {
+    const { cx, cy, payload } = props;
+    const isHighlighted = payload.gene === highlightedGene;
+    return (
+      <circle
+        cx={cx}
+        cy={cy}
+        r={isHighlighted ? 6 : 4}
+        fill={isHighlighted ? "#fbbf24" : props.fill}
+        stroke={isHighlighted ? "#f59e0b" : "none"}
+        strokeWidth={isHighlighted ? 2 : 0}
+        className="cursor-pointer"
+      />
+    );
+  }, [highlightedGene]);
 
   const getExplanation = () => {
     if (!userEducationLevel || userEducationLevel === 'high_school') {
@@ -207,27 +249,7 @@ export default function ManhattanPlot({ gwasData, userEducationLevel, highlighte
                 name="-log10(p-value)"
                 label={{ value: '-log10(p-value)', angle: -90, position: 'insideLeft' }}
               />
-              <Tooltip 
-                content={({ payload }) => {
-                  if (payload && payload.length > 0) {
-                    const data = payload[0].payload;
-                    return (
-                      <div className="bg-white p-3 border border-slate-200 rounded shadow-lg">
-                        <p className="font-semibold text-sm">{data.snp}</p>
-                        <p className="text-xs text-slate-600">Chr: {data.chromosome}</p>
-                        <p className="text-xs text-slate-600">Position: {data.position.toLocaleString()}</p>
-                        <p className="text-xs text-slate-600">P-value: {data.pvalue.toExponential(2)}</p>
-                        {data.gene && (
-                          <p className="text-xs text-blue-600 font-medium cursor-pointer">
-                            Nearest: {data.gene} (click to highlight)
-                          </p>
-                        )}
-                      </div>
-                    );
-                  }
-                  return null;
-                }}
-              />
+              <Tooltip content={<ManhattanTooltipContent />} />
               <ReferenceLine 
                 y={-Math.log10(significanceThreshold)} 
                 stroke="red" 
@@ -251,21 +273,7 @@ export default function ManhattanPlot({ gwasData, userEducationLevel, highlighte
                       onGeneClick(data.gene);
                     }
                   }}
-                  shape={(props) => {
-                    const { cx, cy, payload } = props;
-                    const isHighlighted = payload.gene === highlightedGene;
-                    return (
-                      <circle
-                        cx={cx}
-                        cy={cy}
-                        r={isHighlighted ? 6 : 4}
-                        fill={isHighlighted ? "#fbbf24" : props.fill}
-                        stroke={isHighlighted ? "#f59e0b" : "none"}
-                        strokeWidth={isHighlighted ? 2 : 0}
-                        className="cursor-pointer"
-                      />
-                    );
-                  }}
+                  shape={renderDotShape}
                 />
               ))}
             </ScatterChart>

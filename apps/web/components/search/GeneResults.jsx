@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import DnaIcon from "../icons/DnaIcon";
@@ -20,6 +20,16 @@ export default function GeneResults({ results, selectedGenes = [], onGeneSelect 
     phenotype: "",
     minScore: 0
   });
+
+  const selectedSymbolSet = useMemo(
+    () => new Set(selectedGenes.map(g => g.symbol)),
+    [selectedGenes]
+  );
+
+  const handleGeneSelect = useCallback(
+    (gene) => { if (onGeneSelect) onGeneSelect(gene); },
+    [onGeneSelect]
+  );
 
   // Apply filters to gene results
   const filteredGenes = useMemo(() => {
@@ -156,8 +166,8 @@ export default function GeneResults({ results, selectedGenes = [], onGeneSelect 
               gene={gene}
               rank={index + 1}
               isPremium={isPremium}
-              isSelected={selectedGenes.some(g => g.symbol === gene.symbol)}
-              onSelect={onGeneSelect ? () => onGeneSelect(gene) : null}
+              isSelected={selectedSymbolSet.has(gene.symbol)}
+              onSelect={onGeneSelect ? handleGeneSelect : null}
             />
           ))}
         </div>

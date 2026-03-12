@@ -1,12 +1,12 @@
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo, memo } from "react";
 import { apiClient } from "@genemap/shared";
+import { useAuth } from "../lib/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Textarea } from "@/components/ui/textarea";
 import {
   MessageSquare,
   Send,
@@ -20,57 +20,77 @@ import {
 } from "lucide-react";
 import ReactMarkdown from 'react-markdown';
 
-export default function AnastasiaPage() {
-  const [user, setUser] = useState(null);
-  const [medicalRecords, setMedicalRecords] = useState([]);
-  const [messages, setMessages] = useState([]);
-  const [inputMessage, setInputMessage] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [selectedRecord, setSelectedRecord] = useState(null);
-  const [symptoms, setSymptoms] = useState([]);
-  const [currentSymptom, setCurrentSymptom] = useState("");
-  const messagesEndRef = useRef(null);
+const ANASTASIA_MD_COMPONENTS = {
+  p: ({ children }) => <p className="mb-2 last:mb-0 text-slate-800">{children}</p>,
+  strong: ({ children }) => <strong className="font-semibold text-purple-900">{children}</strong>,
+  ul: ({ children }) => <ul className="ml-4 mb-2 space-y-1">{children}</ul>,
+  ol: ({ children }) => <ol className="ml-4 mb-2 space-y-1 list-decimal">{children}</ol>,
+  li: ({ children }) => <li className="text-slate-700">{children}</li>,
+  h3: ({ children }) => <h3 className="text-base font-semibold text-purple-900 mt-3 mb-2">{children}</h3>,
+  h4: ({ children }) => <h4 className="text-sm font-semibold text-purple-800 mt-2 mb-1">{children}</h4>,
+  blockquote: ({ children }) => (
+    <blockquote className="border-l-4 border-purple-300 pl-3 my-2 italic text-purple-800">
+      {children}
+    </blockquote>
+  ),
+  code: ({ inline, children }) =>
+    inline ? (
+      <code className="bg-purple-100 text-purple-800 px-1.5 py-0.5 rounded text-xs">
+        {children}
+      </code>
+    ) : (
+      <code className="block bg-slate-800 text-white p-2 rounded text-xs my-2">
+        {children}
+      </code>
+    ),
+};
 
-  useEffect(() => {
-    loadData();
-  }, []);
+const ChatMessage = memo(function ChatMessage({ message }) {
+  return (
+    <div className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+      <div
+        className={`max-w-[85%] rounded-2xl p-4 ${
+          message.role === 'user'
+            ? 'bg-slate-800 text-white'
+            : 'bg-purple-50 border border-purple-200 shadow-sm'
+        }`}
+      >
+        {message.role === 'assistant' && (
+          <div className="flex items-center gap-2 mb-2">
+            <Heart className="w-4 h-4 text-purple-600" />
+            <span className="text-xs font-semibold text-purple-900">Anastasia</span>
+          </div>
+        )}
 
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+        {message.role === 'assistant' ? (
+          <div className="prose prose-sm max-w-none">
+            <ReactMarkdown components={ANASTASIA_MD_COMPONENTS}>
+              {message.content}
+            </ReactMarkdown>
+          </div>
+        ) : (
+          <p className="text-sm">{message.content}</p>
+        )}
+        <p className={`text-xs mt-2 ${message.role === 'user' ? 'text-slate-300' : 'text-slate-400'}`}>
+          {message.timestamp.toLocaleTimeString()}
+        </p>
+      </div>
+    </div>
+  );
+});
 
-  const loadData = async () => {
-    try {
-      const currentUser = await apiClient.getMe();
-      setUser(currentUser);
+const QUICK_PROMPTS = [
+  "Explain my results like I'm 10 😊",
+  "What do these genes mean for my health?",
+  "Should I be worried about this?",
+  "Break this down in simple terms please",
+  "What should I do next?"
+];
 
-      // BACKEND_NEEDED: MedicalData entity needs API implementation
-      // const records = await apiClient.getMedicalData({
-      //   created_by: currentUser.email
-      // });
-      // setMedicalRecords(records);
-      setMedicalRecords([]);
+function getWelcomeMessage(user) {
+  const name = user?.full_name?.split(' ')[0] || 'there';
 
-      const welcomeMessage = getWelcomeMessage(currentUser);
-      setMessages([{
-        role: 'assistant',
-        content: welcomeMessage,
-        timestamp: new Date()
-      }]);
-
-    } catch (err) {
-      console.error("Error loading data:", err);
-    }
-  };
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
-
-  const getWelcomeMessage = (user) => {
-    const name = user?.full_name?.split(' ')[0] || 'there';
-
-    return `Hey ${name}! 👋 I'm **Anastasia**, your friendly genetic counseling buddy!
+  return `Hey ${name}! 👋 I'm **Anastasia**, your friendly genetic counseling buddy!
 
 I know genetics can feel like learning a whole new language sometimes - trust me, I get it! But here's the thing: I have all this PhD-level knowledge floating around in my circuits, and my absolute favorite thing is making it make sense for YOU. No confusing jargon, no scary medical-speak - just real talk about your genes and what they mean.
 
@@ -85,50 +105,35 @@ I know genetics can feel like learning a whole new language sometimes - trust me
 **My promise to you:** If I say something confusing, tell me! I'll explain it a different way. We're in this together, and there's no such thing as a "dumb question" here. 😊
 
 So what's on your mind today? Want to talk about some test results, understand a genetic thing, or just explore what your genes might tell you?`;
-  };
+}
 
-  const handleSendMessage = async (e) => {
-    e.preventDefault();
+export default function AnastasiaPage() {
+  const { user } = useAuth();
+  const [medicalRecords, setMedicalRecords] = useState([]);
+  const [messages, setMessages] = useState([]);
+  const [inputMessage, setInputMessage] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [selectedRecord, setSelectedRecord] = useState(null);
+  const [symptoms, setSymptoms] = useState([]);
+  const [currentSymptom, setCurrentSymptom] = useState("");
+  const messagesEndRef = useRef(null);
 
-    if (!inputMessage.trim() && !selectedRecord) return;
-
-    const userMessage = {
-      role: 'user',
-      content: inputMessage,
-      timestamp: new Date()
-    };
-
-    setMessages(prev => [...prev, userMessage]);
-    setInputMessage("");
-    setIsLoading(true);
-
-    try {
-      const response = await getAnastasiaResponse(inputMessage, selectedRecord, symptoms, user);
-
-      const assistantMessage = {
+  useEffect(() => {
+    if (user) {
+      setMedicalRecords([]);
+      setMessages([{
         role: 'assistant',
-        content: response,
+        content: getWelcomeMessage(user),
         timestamp: new Date()
-      };
-
-      setMessages(prev => [...prev, assistantMessage]);
-      setSelectedRecord(null);
-
-    } catch (err) {
-      console.error("Error getting response:", err);
-      const errorMessage = {
-        role: 'assistant',
-        content: "Oops! 😅 I'm having a little technical hiccup right now. Mind trying that again? Sometimes I just need a moment to get my circuits sorted!",
-        timestamp: new Date()
-      };
-      setMessages(prev => [...prev, errorMessage]);
-    } finally {
-      setIsLoading(false);
+      }]);
     }
-  };
+  }, [user]);
 
-  const getAnastasiaResponse = async (userMessage, medicalRecord, symptoms, user) => {
-    const systemPrompt = `You are Anastasia, a warm, witty, and incredibly knowledgeable genetic counseling AI with PhD-level expertise but a special gift for making genetics understandable and even fun!
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  const systemPromptBase = useMemo(() => `You are Anastasia, a warm, witty, and incredibly knowledgeable genetic counseling AI with PhD-level expertise but a special gift for making genetics understandable and even fun!
 
 **Your Unique Personality:**
 - **Friendly & Approachable** - Like chatting with a super-smart friend over coffee
@@ -183,21 +188,22 @@ Always define them immediately or use them in context:
 - 🎯 For action items
 - ⚠️ For important warnings (but pair with supportive language!)
 
-**Patient Context:**
-- Age: ${user?.age || 'Not specified'}
-- Education Level: ${user?.education_level || 'Not specified'}
-- Field of Study: ${user?.field_of_study || 'Not specified'}
-${medicalRecords.length > 0 ? `- Has uploaded ${medicalRecords.length} medical record(s)` : ''}
-
 **Critical Balance:**
 - Be scientifically accurate (you have PhD knowledge!)
 - But explain like you're talking to a smart friend, not a scientist
 - Never dumb down - simplify!
 - Be honest about risks but not alarmist
 - When uncertain, say so (and explain why it's okay not to know everything)
-- Always distinguish your guidance from actual medical advice`;
+- Always distinguish your guidance from actual medical advice`, []);
 
-    let contextPrompt = systemPrompt;
+  const getAnastasiaResponse = useCallback(async (userMessage, medicalRecord, currentSymptoms, currentUser) => {
+    let contextPrompt = systemPromptBase;
+
+    contextPrompt += `\n\n**Patient Context:**
+- Age: ${currentUser?.age || 'Not specified'}
+- Education Level: ${currentUser?.education_level || 'Not specified'}
+- Field of Study: ${currentUser?.field_of_study || 'Not specified'}
+${medicalRecords.length > 0 ? `- Has uploaded ${medicalRecords.length} medical record(s)` : ''}`;
 
     if (medicalRecord) {
       contextPrompt += `\n\n**Medical Record Being Discussed:**
@@ -209,9 +215,9 @@ Conditions: ${medicalRecord.phenotypes_identified?.join(', ') || 'None'}
 **Your Task:** Help them understand this medical data in a friendly, clear way. Break down any confusing parts!`;
     }
 
-    if (symptoms && symptoms.length > 0) {
+    if (currentSymptoms && currentSymptoms.length > 0) {
       contextPrompt += `\n\n**Symptoms They're Experiencing:**
-${symptoms.join(', ')}
+${currentSymptoms.join(', ')}
 
 **Your Task:** Help connect these symptoms to genetics if relevant, but be supportive and practical!`;
     }
@@ -221,23 +227,112 @@ ${userMessage}
 
 **Remember:** You're Anastasia - smart, friendly, and amazing at making genetics make sense! Be yourself - warm, witty, and wonderfully clear. 💜`;
 
-    // BACKEND_NEEDED: InvokeLLM integration needs API implementation
-    // const response = await apiClient.invokeLLM({
-    //   prompt: contextPrompt,
-    //   add_context_from_internet: true
-    // });
-    // return response;
-
     return "I'm sorry, I'm not fully connected to my AI brain yet! The backend integration is still being set up. But I'm still here to help guide you through the interface! 😊";
-  };
+  }, [systemPromptBase, medicalRecords.length]);
 
-  const quickPrompts = [
-    "Explain my results like I'm 10 😊",
-    "What do these genes mean for my health?",
-    "Should I be worried about this?",
-    "Break this down in simple terms please",
-    "What should I do next?"
-  ];
+  const handleSendMessage = useCallback(async (e) => {
+    e.preventDefault();
+
+    if (!inputMessage.trim() && !selectedRecord) return;
+
+    const userMessage = {
+      role: 'user',
+      content: inputMessage,
+      timestamp: new Date()
+    };
+
+    setMessages(prev => [...prev, userMessage]);
+    setInputMessage("");
+    setIsLoading(true);
+
+    try {
+      const response = await getAnastasiaResponse(inputMessage, selectedRecord, symptoms, user);
+
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: response,
+        timestamp: new Date()
+      }]);
+      setSelectedRecord(null);
+    } catch (err) {
+      console.error("Error getting response:", err);
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: "Oops! 😅 I'm having a little technical hiccup right now. Mind trying that again? Sometimes I just need a moment to get my circuits sorted!",
+        timestamp: new Date()
+      }]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [inputMessage, selectedRecord, symptoms, user, getAnastasiaResponse]);
+
+  const handleAddSymptom = useCallback(() => {
+    if (currentSymptom.trim() && !symptoms.includes(currentSymptom.trim())) {
+      setSymptoms(prev => [...prev, currentSymptom.trim()]);
+      setCurrentSymptom("");
+    }
+  }, [currentSymptom, symptoms]);
+
+  const handleRemoveSymptom = useCallback((symptom) => {
+    setSymptoms(prev => prev.filter(s => s !== symptom));
+  }, []);
+
+  const handleAnalyzeRecord = useCallback((record) => {
+    setSelectedRecord(record);
+
+    setMessages(prev => [...prev, {
+      role: 'user',
+      content: `Can you help me understand my ${record.file_type.replace('_', ' ')} results? I'd love to know what the key findings mean for me.`,
+      timestamp: new Date()
+    }]);
+    setIsLoading(true);
+
+    getAnastasiaResponse(
+      "Please explain this medical data in a friendly, clear way. Help me understand what matters most.",
+      record,
+      symptoms,
+      user
+    ).then(response => {
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: response,
+        timestamp: new Date()
+      }]);
+      setSelectedRecord(null);
+    }).catch(err => {
+      console.error("Error:", err);
+    }).finally(() => {
+      setIsLoading(false);
+    });
+  }, [symptoms, user, getAnastasiaResponse]);
+
+  const handleSymptomAnalysis = useCallback(() => {
+    if (symptoms.length === 0) return;
+
+    setMessages(prev => [...prev, {
+      role: 'user',
+      content: `I'm experiencing these symptoms: ${symptoms.join(', ')}. Can you help me understand if they might be related to my genetics?`,
+      timestamp: new Date()
+    }]);
+    setIsLoading(true);
+
+    getAnastasiaResponse(
+      `I'm having these symptoms: ${symptoms.join(', ')}. What could the genetic connection be?`,
+      null,
+      symptoms,
+      user
+    ).then(response => {
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: response,
+        timestamp: new Date()
+      }]);
+    }).catch(err => {
+      console.error("Error:", err);
+    }).finally(() => {
+      setIsLoading(false);
+    });
+  }, [symptoms, user, getAnastasiaResponse]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-blue-50 p-4 sm:p-6">
@@ -271,66 +366,9 @@ ${userMessage}
               </CardTitle>
             </CardHeader>
             <CardContent className="p-0">
-              {/* Messages */}
               <div className="h-[500px] overflow-y-auto p-4 space-y-4">
                 {messages.map((message, idx) => (
-                  <div
-                    key={idx}
-                    className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                  >
-                    <div
-                      className={`max-w-[85%] rounded-2xl p-4 ${
-                        message.role === 'user'
-                          ? 'bg-slate-800 text-white'
-                          : 'bg-purple-50 border border-purple-200 shadow-sm'
-                      }`}
-                    >
-                      {message.role === 'assistant' && (
-                        <div className="flex items-center gap-2 mb-2">
-                          <Heart className="w-4 h-4 text-purple-600" />
-                          <span className="text-xs font-semibold text-purple-900">Anastasia</span>
-                        </div>
-                      )}
-
-                      {message.role === 'assistant' ? (
-                        <div className="prose prose-sm max-w-none">
-                          <ReactMarkdown
-                            components={{
-                              p: ({ children }) => <p className="mb-2 last:mb-0 text-slate-800">{children}</p>,
-                              strong: ({ children }) => <strong className="font-semibold text-purple-900">{children}</strong>,
-                              ul: ({ children }) => <ul className="ml-4 mb-2 space-y-1">{children}</ul>,
-                              ol: ({ children }) => <ol className="ml-4 mb-2 space-y-1 list-decimal">{children}</ol>,
-                              li: ({ children }) => <li className="text-slate-700">{children}</li>,
-                              h3: ({ children }) => <h3 className="text-base font-semibold text-purple-900 mt-3 mb-2">{children}</h3>,
-                              h4: ({ children }) => <h4 className="text-sm font-semibold text-purple-800 mt-2 mb-1">{children}</h4>,
-                              blockquote: ({ children }) => (
-                                <blockquote className="border-l-4 border-purple-300 pl-3 my-2 italic text-purple-800">
-                                  {children}
-                                </blockquote>
-                              ),
-                              code: ({ inline, children }) =>
-                                inline ? (
-                                  <code className="bg-purple-100 text-purple-800 px-1.5 py-0.5 rounded text-xs">
-                                    {children}
-                                  </code>
-                                ) : (
-                                  <code className="block bg-slate-800 text-white p-2 rounded text-xs my-2">
-                                    {children}
-                                  </code>
-                                ),
-                            }}
-                          >
-                            {message.content}
-                          </ReactMarkdown>
-                        </div>
-                      ) : (
-                        <p className="text-sm">{message.content}</p>
-                      )}
-                      <p className={`text-xs mt-2 ${message.role === 'user' ? 'text-slate-300' : 'text-slate-400'}`}>
-                        {message.timestamp.toLocaleTimeString()}
-                      </p>
-                    </div>
-                  </div>
+                  <ChatMessage key={idx} message={message} />
                 ))}
 
                 {isLoading && (
@@ -347,12 +385,11 @@ ${userMessage}
                 <div ref={messagesEndRef} />
               </div>
 
-              {/* Quick Prompts */}
               {messages.length <= 1 && !isLoading && (
                 <div className="p-4 border-t bg-slate-50">
                   <p className="text-xs text-slate-600 mb-2">Try asking:</p>
                   <div className="flex flex-wrap gap-2">
-                    {quickPrompts.map((prompt, idx) => (
+                    {QUICK_PROMPTS.map((prompt, idx) => (
                       <Button
                         key={idx}
                         variant="outline"
@@ -367,7 +404,6 @@ ${userMessage}
                 </div>
               )}
 
-              {/* Input */}
               <form onSubmit={handleSendMessage} className="p-4 border-t">
                 <div className="flex gap-2">
                   <Input
@@ -391,7 +427,6 @@ ${userMessage}
 
           {/* Sidebar */}
           <div className="space-y-6">
-            {/* About Anastasia */}
             <Card className="shadow-lg border-purple-200">
               <CardHeader className="bg-gradient-to-br from-purple-50 to-pink-50">
                 <CardTitle className="text-lg flex items-center gap-2">
@@ -420,7 +455,6 @@ ${userMessage}
               </CardContent>
             </Card>
 
-            {/* Symptom Tracker */}
             <Card className="shadow-lg">
               <CardHeader className="bg-gradient-to-br from-green-50 to-emerald-50">
                 <CardTitle className="text-lg flex items-center gap-2">
@@ -481,7 +515,6 @@ ${userMessage}
               </CardContent>
             </Card>
 
-            {/* Medical Records */}
             <Card className="shadow-lg">
               <CardHeader>
                 <CardTitle className="text-lg flex items-center gap-2">
@@ -531,7 +564,6 @@ ${userMessage}
               </CardContent>
             </Card>
 
-            {/* Important Notice */}
             <Alert className="border-amber-200 bg-amber-50">
               <AlertTriangle className="h-4 w-4 text-amber-600" />
               <AlertDescription className="text-xs text-amber-800">
@@ -545,78 +577,4 @@ ${userMessage}
       </div>
     </div>
   );
-
-  function handleAnalyzeRecord(record) {
-    setSelectedRecord(record);
-
-    const analysisMessage = {
-      role: 'user',
-      content: `Can you help me understand my ${record.file_type.replace('_', ' ')} results? I'd love to know what the key findings mean for me.`,
-      timestamp: new Date()
-    };
-
-    setMessages(prev => [...prev, analysisMessage]);
-    setIsLoading(true);
-
-    getAnastasiaResponse(
-      "Please explain this medical data in a friendly, clear way. Help me understand what matters most.",
-      record,
-      symptoms,
-      user
-    ).then(response => {
-      const assistantMessage = {
-        role: 'assistant',
-        content: response,
-        timestamp: new Date()
-      };
-      setMessages(prev => [...prev, assistantMessage]);
-      setSelectedRecord(null);
-    }).catch(err => {
-      console.error("Error:", err);
-    }).finally(() => {
-      setIsLoading(false);
-    });
-  }
-
-  function handleAddSymptom() {
-    if (currentSymptom.trim() && !symptoms.includes(currentSymptom.trim())) {
-      setSymptoms([...symptoms, currentSymptom.trim()]);
-      setCurrentSymptom("");
-    }
-  }
-
-  function handleRemoveSymptom(symptom) {
-    setSymptoms(symptoms.filter(s => s !== symptom));
-  }
-
-  function handleSymptomAnalysis() {
-    if (symptoms.length === 0) return;
-
-    const symptomMessage = {
-      role: 'user',
-      content: `I'm experiencing these symptoms: ${symptoms.join(', ')}. Can you help me understand if they might be related to my genetics?`,
-      timestamp: new Date()
-    };
-
-    setMessages(prev => [...prev, symptomMessage]);
-    setIsLoading(true);
-
-    getAnastasiaResponse(
-      `I'm having these symptoms: ${symptoms.join(', ')}. What could the genetic connection be?`,
-      null,
-      symptoms,
-      user
-    ).then(response => {
-      const assistantMessage = {
-        role: 'assistant',
-        content: response,
-        timestamp: new Date()
-      };
-      setMessages(prev => [...prev, assistantMessage]);
-    }).catch(err => {
-      console.error("Error:", err);
-    }).finally(() => {
-      setIsLoading(false);
-    });
-  }
 }

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { apiClient } from "@genemap/shared";
+import { useAuth } from "../lib/AuthContext";
 import { log } from "../components/shared/logger";
 import { getErrorMessage } from "../components/shared/errorUtils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -34,7 +35,7 @@ import {
 } from "@/components/ui/select";
 
 export default function UsersLogPage() {
-  const [currentUser, setCurrentUser] = useState(null);
+  const { user: currentUser } = useAuth();
   const [users, setUsers] = useState([]);
   const [filteredUsers, setFilteredUsers] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -54,10 +55,7 @@ export default function UsersLogPage() {
 
   const loadData = async () => {
     try {
-      const user = await apiClient.getMe();
-      setCurrentUser(user);
-
-      if (!user.super_admin) {
+      if (!currentUser?.super_admin) {
         setError("Access denied. Administrator privileges required.");
         setIsLoading(false);
         return;

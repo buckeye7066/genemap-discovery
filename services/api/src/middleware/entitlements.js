@@ -7,6 +7,10 @@ const FREE_TIER_LIMITS = {
   chat_messages_per_day: 10,
 };
 
+function isAdminUser(user) {
+  return user.role === 'admin' || user.role === 'super_admin';
+}
+
 export async function checkEducationEntitlement(request, reply) {
   const prisma = request.server.prisma;
   const userId = request.user?.userId;
@@ -28,6 +32,17 @@ export async function checkEducationEntitlement(request, reply) {
 
   if (!user) {
     throw new ForbiddenError('User not found');
+  }
+
+  if (isAdminUser(user)) {
+    request.entitlements = {
+      isPremium: true,
+      isInstitutional: false,
+      isAdmin: true,
+      tier: 'premium',
+      limits: null,
+    };
+    return;
   }
 
   const isPremium = user.subscriptions.length > 0;
@@ -54,7 +69,7 @@ export async function checkEducationEntitlement(request, reply) {
 }
 
 export async function enforceUsageLimit(request, reply) {
-  if (request.entitlements?.isPremium) return;
+  if (request.entitlements?.isPremium || request.entitlements?.isAdmin) return;
 
   const prisma = request.server.prisma;
   const userId = request.user.userId;
@@ -62,13 +77,6 @@ export async function enforceUsageLimit(request, reply) {
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-
-  const todaySessions = await prisma.learningSession.count({
-    where: {
-      userId,
-      createdAt: { gte: today },
-    },
-  });
 
   const routeUrl = request.url;
   let limitKey = 'explanations_per_day';

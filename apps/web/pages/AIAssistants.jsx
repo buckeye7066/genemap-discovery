@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from "react";
-import { apiClient } from "@genemap/shared";
+import React, { useState, useEffect, useRef, lazy, Suspense } from "react";
+import { useAuth } from "../lib/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,13 +21,13 @@ import {
   BookOpen,
   Network
 } from "lucide-react";
-import ReactMarkdown from 'react-markdown';
-import ResearchSuggester from "../components/ai/ResearchSuggester";
-import GeneticExplainer from "../components/ai/GeneticExplainer";
-import PathwayPredictor from "../components/ai/PathwayPredictor";
+const ReactMarkdown = lazy(() => import('react-markdown'));
+const ResearchSuggester = lazy(() => import("../components/ai/ResearchSuggester"));
+const GeneticExplainer = lazy(() => import("../components/ai/GeneticExplainer"));
+const PathwayPredictor = lazy(() => import("../components/ai/PathwayPredictor"));
 
 export default function AIAssistantsPage() {
-  const [user, setUser] = useState(null);
+  const { user } = useAuth();
   const [medicalRecords, setMedicalRecords] = useState([]);
   const [activeAssistant, setActiveAssistant] = useState("robert");
   const [messages, setMessages] = useState([]);
@@ -63,12 +63,9 @@ export default function AIAssistantsPage() {
 
   const loadData = async () => {
     try {
-      const currentUser = await apiClient.getMe();
-      setUser(currentUser);
-      
       // BACKEND_NEEDED: MedicalData entity needs API implementation
       // const records = await base44.entities.MedicalData.filter(
-      //   { created_by: currentUser.email },
+      //   { created_by: user?.email },
       //   '-created_date'
       // );
       // setMedicalRecords(records);

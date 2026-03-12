@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { apiClient } from "@genemap/shared";
+import { useAuth } from "../lib/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,7 +27,7 @@ import {
 } from "lucide-react";
 
 export default function ContactSupport() {
-  const [user, setUser] = useState(null);
+  const { user } = useAuth();
   const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");
   const [isIssue, setIsIssue] = useState(false);
@@ -42,22 +43,12 @@ export default function ContactSupport() {
   const [fontFamily, setFontFamily] = useState("default");
 
   useEffect(() => {
-    loadUser();
-  }, []);
-
-  const loadUser = async () => {
-    try {
-      const currentUser = await apiClient.getMe();
-      setUser(currentUser);
-      
-      // Load saved preferences
-      if (currentUser.message_theme_color) setThemeColor(currentUser.message_theme_color);
-      if (currentUser.message_font_size) setFontSize(currentUser.message_font_size);
-      if (currentUser.message_font_family) setFontFamily(currentUser.message_font_family);
-    } catch (err) {
-      console.log("Not logged in");
+    if (user) {
+      if (user.message_theme_color) setThemeColor(user.message_theme_color);
+      if (user.message_font_size) setFontSize(user.message_font_size);
+      if (user.message_font_family) setFontFamily(user.message_font_family);
     }
-  };
+  }, [user]);
 
   const saveCustomization = async () => {
     try {

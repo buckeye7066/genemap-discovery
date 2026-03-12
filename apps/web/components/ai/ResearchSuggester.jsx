@@ -7,6 +7,41 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { BookOpen, ExternalLink, Loader2, Sparkles, FileText, Beaker } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 
+const SUGGESTER_MD_COMPONENTS = {
+  h2: ({ children }) => (
+    <h2 className="text-xl font-bold text-slate-900 mt-6 mb-3 flex items-center gap-2">
+      {children}
+    </h2>
+  ),
+  h3: ({ children }) => (
+    <h3 className="text-lg font-semibold text-slate-800 mt-4 mb-2">
+      {children}
+    </h3>
+  ),
+  ul: ({ children }) => (
+    <ul className="space-y-3 my-4">{children}</ul>
+  ),
+  li: ({ children }) => (
+    <li className="bg-slate-50 p-3 rounded-lg border border-slate-200">
+      {children}
+    </li>
+  ),
+  strong: ({ children }) => (
+    <strong className="font-semibold text-slate-900">{children}</strong>
+  ),
+  a: ({ href, children }) => (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="text-purple-600 hover:text-purple-700 inline-flex items-center gap-1"
+    >
+      {children}
+      <ExternalLink className="w-3 h-3" />
+    </a>
+  ),
+};
+
 export default function ResearchSuggester({ genes = [], phenotypes = [] }) {
   const [suggestions, setSuggestions] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -162,42 +197,7 @@ For each trial (suggest 3-5 relevant trials):
 
             {suggestions && (
               <div className="mt-6 prose prose-sm max-w-none">
-                <ReactMarkdown
-                  components={{
-                    h2: ({ children }) => (
-                      <h2 className="text-xl font-bold text-slate-900 mt-6 mb-3 flex items-center gap-2">
-                        {children}
-                      </h2>
-                    ),
-                    h3: ({ children }) => (
-                      <h3 className="text-lg font-semibold text-slate-800 mt-4 mb-2">
-                        {children}
-                      </h3>
-                    ),
-                    ul: ({ children }) => (
-                      <ul className="space-y-3 my-4">{children}</ul>
-                    ),
-                    li: ({ children }) => (
-                      <li className="bg-slate-50 p-3 rounded-lg border border-slate-200">
-                        {children}
-                      </li>
-                    ),
-                    strong: ({ children }) => (
-                      <strong className="font-semibold text-slate-900">{children}</strong>
-                    ),
-                    a: ({ href, children }) => (
-                      <a
-                        href={href}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-purple-600 hover:text-purple-700 inline-flex items-center gap-1"
-                      >
-                        {children}
-                        <ExternalLink className="w-3 h-3" />
-                      </a>
-                    ),
-                  }}
-                >
+                <ReactMarkdown components={SUGGESTER_MD_COMPONENTS}>
                   {suggestions}
                 </ReactMarkdown>
               </div>

@@ -1,33 +1,21 @@
 import React, { useState, useEffect } from "react";
-import { apiClient } from "@genemap/shared";
+import { useAuth } from "../lib/AuthContext";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Heart, X, Crown } from "lucide-react";
 
 export default function MelissaBanner() {
+  const { user } = useAuth();
   const [show, setShow] = useState(false);
-  const [user, setUser] = useState(null);
 
   useEffect(() => {
-    checkUser();
-  }, []);
-
-  const checkUser = async () => {
-    try {
-      const currentUser = await apiClient.getMe();
-      setUser(currentUser);
-
-      // Check if user is Melissa and hasn't dismissed the banner
-      if (currentUser?.email === "justus_melissa@yahoo.com") {
-        const dismissed = localStorage.getItem("melissa_upgrade_banner_dismissed");
-        if (!dismissed) {
-          setShow(true);
-        }
+    if (user?.email === "justus_melissa@yahoo.com") {
+      const dismissed = localStorage.getItem("melissa_upgrade_banner_dismissed");
+      if (!dismissed) {
+        setShow(true);
       }
-    } catch (err) {
-      // User not logged in or error
     }
-  };
+  }, [user]);
 
   const handleDismiss = () => {
     localStorage.setItem("melissa_upgrade_banner_dismissed", "true");

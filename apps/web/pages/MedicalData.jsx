@@ -1,6 +1,7 @@
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, lazy, Suspense } from "react";
 import { apiClient } from "@genemap/shared";
+import { useAuth } from "../lib/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -44,13 +45,13 @@ import {
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import MedicalDataComparison from "../components/medical/MedicalDataComparison";
-import VCFParser from "../components/medical/VCFParser";
-import FHIRExporter from "../components/medical/FHIRExporter";
-import ClinicalTrialFinder from "../components/clinical/ClinicalTrialFinder"; // New import
+const MedicalDataComparison = lazy(() => import("../components/medical/MedicalDataComparison"));
+const VCFParser = lazy(() => import("../components/medical/VCFParser"));
+const FHIRExporter = lazy(() => import("../components/medical/FHIRExporter"));
+const ClinicalTrialFinder = lazy(() => import("../components/clinical/ClinicalTrialFinder"));
 
 export default function MedicalDataPage() {
-  const [user, setUser] = useState(null);
+  const { user } = useAuth();
   const [medicalRecords, setMedicalRecords] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
@@ -79,12 +80,9 @@ export default function MedicalDataPage() {
 
   const loadData = async () => {
     try {
-      const currentUser = await apiClient.getMe();
-      setUser(currentUser);
-
       // BACKEND_NEEDED: MedicalData entity needs API implementation
       // const records = await apiClient.getMedicalData({
-      //   created_by: currentUser.email
+      //   created_by: user?.email
       // });
       // setMedicalRecords(records);
       setMedicalRecords([]);
@@ -92,7 +90,7 @@ export default function MedicalDataPage() {
       // BACKEND_NEEDED: MedicalDataShare entity needs API implementation
       // try {
       //   const shares = await apiClient.getMedicalDataShares({
-      //     shared_with_email: currentUser.email,
+      //     shared_with_email: user?.email,
       //     status: 'active'
       //   });
       //   setSharedRecords(shares);

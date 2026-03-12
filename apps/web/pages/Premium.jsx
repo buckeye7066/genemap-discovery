@@ -37,6 +37,7 @@ export default function PremiumPage() {
   const [paymentCanceled, setPaymentCanceled] = useState(false);
   const [entitlements, setEntitlements] = useState(null);
 
+  const isAdmin = user?.entitlements?.isAdmin || user?.role === 'admin' || user?.role === 'super_admin';
   const hasActiveSubscription = user?.entitlements?.isPremium || false;
 
   useEffect(() => {
@@ -176,13 +177,17 @@ export default function PremiumPage() {
             <CardContent className="pt-6">
               <div className="flex items-start justify-between flex-wrap gap-4">
                 <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 bg-green-600 rounded-xl flex items-center justify-center">
-                    <Crown className="w-6 h-6 text-white" />
+                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${isAdmin ? 'bg-gradient-to-r from-purple-600 to-indigo-600' : 'bg-green-600'}`}>
+                    {isAdmin ? <Shield className="w-6 h-6 text-white" /> : <Crown className="w-6 h-6 text-white" />}
                   </div>
                   <div>
-                    <h3 className="font-semibold text-green-900 text-lg">Premium Active</h3>
+                    <h3 className="font-semibold text-green-900 text-lg">
+                      {isAdmin ? 'Admin — Full Access' : 'Premium Active'}
+                    </h3>
                     <p className="text-sm text-green-700 flex items-center gap-2">
-                      <Badge className="bg-green-600 text-white">Unlimited Access</Badge>
+                      <Badge className={isAdmin ? 'bg-purple-600 text-white' : 'bg-green-600 text-white'}>
+                        {isAdmin ? 'Admin Privileges' : 'Unlimited Access'}
+                      </Badge>
                     </p>
                     {user?.entitlements?.licenseInfo && (
                       <p className="text-xs text-green-600 mt-1">
@@ -191,7 +196,7 @@ export default function PremiumPage() {
                     )}
                   </div>
                 </div>
-                {!user?.entitlements?.licenseInfo && (
+                {!isAdmin && !user?.entitlements?.licenseInfo && (
                   <Button
                     onClick={handleManageSubscription}
                     disabled={isProcessing}

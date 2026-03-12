@@ -1,4 +1,5 @@
 import Fastify from 'fastify';
+import compress from '@fastify/compress';
 import cors from '@fastify/cors';
 import cookie from '@fastify/cookie';
 import rateLimit from '@fastify/rate-limit';
@@ -16,6 +17,8 @@ const fastify = Fastify({
 });
 
 fastify.decorate('prisma', prisma);
+
+await fastify.register(compress, { global: true });
 
 const allowedOrigins = (process.env.CORS_ORIGINS || 'http://localhost:5173').split(',');
 

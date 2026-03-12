@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { apiClient } from "@genemap/shared";
+import { useAuth } from "../lib/AuthContext";
 import { createPageUrl } from "@/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -20,34 +21,21 @@ export default function DemographicCollectionPage() {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    loadUser();
-  }, []);
+    if (!user) return;
 
-  const loadUser = async () => {
-    try {
-      const currentUser = await apiClient.getMe();
-      setUser(currentUser);
-
-      // If already collected, redirect to home
-      if (currentUser.demographics_collected) {
-        navigate(createPageUrl("Home"));
-        return;
-      }
-
-      // Pre-fill phone if exists
-      if (currentUser.phone_number) {
-        setPhoneNumber(currentUser.phone_number);
-      }
-      if (currentUser.mailing_list_opt_in) {
-        setMailingListOptIn(currentUser.mailing_list_opt_in);
-      }
-    } catch (err) {
-      console.error("Error loading user:", err);
-      setError("Failed to load user information");
-    } finally {
-      setIsLoading(false);
+    if (user.demographics_collected) {
+      navigate(createPageUrl("Home"));
+      return;
     }
-  };
+
+    if (user.phone_number) {
+      setPhoneNumber(user.phone_number);
+    }
+    if (user.mailing_list_opt_in) {
+      setMailingListOptIn(user.mailing_list_opt_in);
+    }
+    setIsLoading(false);
+  }, [user]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { apiClient } from "@genemap/shared";
+import { useAuth } from '../../lib/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -39,17 +39,14 @@ export default function ProjectCollaboration({ project, onUpdate }) {
   const [inviteRole, setInviteRole] = useState("viewer");
   const [isInviting, setIsInviting] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [user, setUser] = useState(null);
+  const { user } = useAuth();
 
   useEffect(() => {
-    loadData();
+    loadCollaborators();
   }, [project.id]);
 
-  const loadData = async () => {
+  const loadCollaborators = async () => {
     try {
-      const currentUser = await apiClient.getMe();
-      setUser(currentUser);
-
       // BACKEND_NEEDED: ProjectCollaborator entity needs API implementation
       // const collabs = await base44.entities.ProjectCollaborator.filter({
       //   project_id: project.id
@@ -109,7 +106,7 @@ export default function ProjectCollaboration({ project, onUpdate }) {
       setInviteEmail("");
       setInviteRole("viewer");
       setDialogOpen(false);
-      await loadData();
+      await loadCollaborators();
       if (onUpdate) onUpdate();
 
     } catch (err) {
@@ -130,7 +127,7 @@ export default function ProjectCollaboration({ project, onUpdate }) {
       // await base44.entities.ProjectCollaborator.update(collaboratorId, {
       //   status: "revoked"
       // });
-      await loadData();
+      await loadCollaborators();
     } catch (err) {
       console.error("Error revoking access:", err);
     }
