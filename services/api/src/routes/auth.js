@@ -106,7 +106,41 @@ export default async function authRoutes(fastify) {
     if (!isValid) {
       throw new UnauthorizedError('Invalid credentials');
     }
-    
+
+    // Check if user is banned
+    if (user.banned) {
+      throw new UnauthorizedError('Account has been suspended');
+    }
+
+    // Check pre-ban list
+    const preBanMatch = await prisma.preBannedUser.findFirst({
+      where: {
+        status: 'active',
+        OR: [
+          { email: { equals: user.email, mode: 'insensitive' } },
+          ...(user.phoneNumber ? [{ phoneNumber: user.phoneNumber }] : []),
+          ...(user.fullName ? [{ fullName: { equals: user.fullName, mode: 'insensitive' } }] : []),
+        ],
+      },
+    });
+
+    if (preBanMatch) {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          banned: true,
+          banReason: preBanMatch.reason || 'Pre-ban triggered',
+          bannedDate: new Date(),
+          bannedBy: preBanMatch.bannedBy,
+        },
+      });
+      await prisma.preBannedUser.update({
+        where: { id: preBanMatch.id },
+        data: { status: 'triggered', triggeredAt: new Date() },
+      });
+      throw new UnauthorizedError('Account has been suspended');
+    }
+
     const expectedRole = resolveRole(user.email);
     if (expectedRole === 'admin' && user.role !== 'admin' && user.role !== 'super_admin') {
       await prisma.user.update({
@@ -229,8 +263,49 @@ export default async function authRoutes(fastify) {
       id: user.id,
       email: user.email,
       role: user.role,
+      display_name: user.displayName || null,
+      full_name: user.fullName || null,
+      phone_number: user.phoneNumber || null,
       education_level: user.educationLevel || null,
+      demographics_collected: user.demographicsCollected,
+      banned: user.banned,
+      ban_reason: user.banReason || null,
       entitlements,
+    });
+  });
+
+  // PUT /auth/me — update user profile
+  fastify.put('/me', { preHandler: authenticate }, async (request, reply) => {
+    const { displayName, fullName, phoneNumber, educationLevel, demographicsCollected } = request.body || {};
+
+    const data = {};
+    if (displayName !== undefined) data.displayName = displayName;
+    if (fullName !== undefined) data.fullName = fullName;
+    if (phoneNumber !== undefined) data.phoneNumber = phoneNumber;
+    if (educationLevel !== undefined) data.educationLevel = educationLevel;
+    if (demographicsCollected !== undefined) data.demographicsCollected = demographicsCollected;
+
+    const user = await prisma.user.update({
+      where: { id: request.user.userId },
+      data,
+    });
+
+    await createAuditLog(prisma, {
+      userId: request.user.userId,
+      action: 'user.update_profile',
+      entityType: 'user',
+      entityId: request.user.userId,
+      metadata: { fields: Object.keys(data) },
+    });
+
+    reply.send({
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      display_name: user.displayName,
+      full_name: user.fullName,
+      education_level: user.educationLevel,
+      demographics_collected: user.demographicsCollected,
     });
   });
 }

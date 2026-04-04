@@ -22,8 +22,7 @@ import {
   Filter,
   Trash2
 } from "lucide-react";
-// BACKEND_NEEDED: deleteUser function needs API implementation
-// import { deleteUser } from "@/functions/deleteUser";
+// deleteUser is available via apiClient.deleteUser
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import {
@@ -61,63 +60,16 @@ export default function UsersLogPage() {
         return;
       }
 
-      // BACKEND_NEEDED: getAllUsers function needs API implementation
-      // BACKEND_NEEDED: UserActivity entity needs API implementation
-      // BACKEND_NEEDED: SearchHistory entity needs API implementation
-      // BACKEND_NEEDED: AIConversation entity needs API implementation
-      // BACKEND_NEEDED: Message entity needs API implementation
-      // Fetch all users and activity from multiple sources
-      // const [response, allActivities, allSearches, allConversations, allMessages] = await Promise.all([
-      //   base44.functions.invoke('getAllUsers'),
-      //   base44.entities.UserActivity.filter({}, '-created_date', 10000).catch(() => []),
-      //   base44.entities.SearchHistory.filter({}, '-created_date', 10000).catch(() => []),
-      //   base44.entities.AIConversation.filter({}, '-updated_date', 10000).catch(() => []),
-      //   base44.entities.Message.filter({}, '-created_date', 10000).catch(() => [])
-      // ]);
+      const response = await apiClient.getUsers();
+      const data = response.data || response;
 
-      // const data = response.data || response;
-      
-      // if (data.error) {
-      //   setError(data.error);
-      // } else {
-      //   // Map last activity to each user from multiple sources
-      //   const usersWithActivity = (data.users || []).map(user => {
-      //     const activityDates = [];
-          
-      //     // Check user's updated_date (indicates login/profile update)
-      //     if (user.updated_date) activityDates.push(new Date(user.updated_date));
-          
-      //     // Check UserActivity
-      //     const userActivities = allActivities.filter(a => a.created_by === user.email);
-      //     if (userActivities.length > 0) activityDates.push(new Date(userActivities[0].created_date));
-          
-      //     // Check SearchHistory
-      //     const userSearches = allSearches.filter(s => s.created_by === user.email);
-      //     if (userSearches.length > 0) activityDates.push(new Date(userSearches[0].created_date));
-          
-      //     // Check AIConversation (use updated_date for ongoing conversations)
-      //     const userConversations = allConversations.filter(c => c.created_by === user.email);
-      //     if (userConversations.length > 0) {
-      //       activityDates.push(new Date(userConversations[0].updated_date || userConversations[0].created_date));
-      //     }
-          
-      //     // Check Messages
-      //     const userMessages = allMessages.filter(m => m.created_by === user.email);
-      //     if (userMessages.length > 0) activityDates.push(new Date(userMessages[0].created_date));
-          
-      //     // Get the most recent activity date
-      //     const lastActivity = activityDates.length > 0 
-      //       ? new Date(Math.max(...activityDates)).toISOString()
-      //       : null;
-          
-      //     return { ...user, last_active: lastActivity };
-      //   });
-
-      //   setUsers(usersWithActivity);
-      //   setFilteredUsers(usersWithActivity);
-      // }
-      setUsers([]);
-      setFilteredUsers([]);
+      if (data.error) {
+        setError(data.error);
+      } else {
+        const usersList = data.users || [];
+        setUsers(usersList);
+        setFilteredUsers(usersList);
+      }
     } catch (err) {
       log.error("Error loading users:", err);
       setError(getErrorMessage(err) || "Failed to load users");
@@ -215,12 +167,10 @@ export default function UsersLogPage() {
 
     setDeletingUser(userEmail);
     try {
-      // BACKEND_NEEDED: deleteUser function needs API implementation
-      // await deleteUser({ email: userEmail });
-      setError("User deletion is not yet available");
-      // setError(null);
-      // await loadData();
-      // alert(`User ${userEmail} deleted successfully`);
+      await apiClient.deleteUser(userEmail);
+      setError(null);
+      await loadData();
+      alert(`User ${userEmail} deleted successfully`);
     } catch (err) {
       setError(`Failed to delete user: ${getErrorMessage(err)}`);
     } finally {

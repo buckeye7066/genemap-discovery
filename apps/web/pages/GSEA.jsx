@@ -95,27 +95,32 @@ ${geneSymbols}
   ]
 }`;
 
-      // BACKEND_NEEDED: Core.InvokeLLM integration needs API implementation
-      // const response = await base44.integrations.Core.InvokeLLM({
-      //   prompt,
-      //   add_context_from_internet: true,
-      //   response_json_schema: { ... }
-      // });
-      // setEnrichmentData(response);
-
-      setError('LLM integration not yet implemented');
+      const response = await apiClient.invokeLLM(prompt);
+      // Parse the response if it's a string containing JSON
+      let parsed = response;
+      if (typeof response === 'string') {
+        try {
+          // Try to extract JSON from the response
+          const jsonMatch = response.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            parsed = JSON.parse(jsonMatch[0]);
+          }
+        } catch {
+          // If parsing fails, use the raw response
+        }
+      }
+      setEnrichmentData(parsed);
       
       // Save to activity log
       try {
-        // BACKEND_NEEDED: UserActivity entity needs API implementation
-        // await base44.entities.UserActivity.create({
-        //   activity_type: "analysis",
-        //   search_query: `GSEA: ${genes.length} genes`,
-        //   metadata: {
-        //     geneCount: genes.length,
-        //     genes: genes.slice(0, 10)
-        //   }
-        // });
+        await apiClient.logActivity({
+          activity_type: "analysis",
+          search_query: `GSEA: ${genes.length} genes`,
+          metadata: {
+            geneCount: genes.length,
+            genes: genes.slice(0, 10)
+          }
+        });
       } catch (err) {
         console.log("Could not save activity:", err);
       }

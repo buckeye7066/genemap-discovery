@@ -60,16 +60,8 @@ For comparison_analysis:
 
 Return complete, valid FHIR Bundle with all resources.`;
 
-      // BACKEND_NEEDED: LLM integration needs API implementation
-      // const fhirBundle = await apiClient.invokeLLM({
-      //   prompt,
-      //   response_json_schema: { ... }
-      // });
-      const fhirBundle = {
-        resourceType: "Bundle",
-        type: "document",
-        entry: []
-      };
+      const { result: raw } = await apiClient.invokeLLM(prompt);
+      const fhirBundle = typeof raw === 'string' ? JSON.parse(raw.match(/\{[\s\S]*\}/)?.[0] || '{"resourceType":"Bundle","type":"document","entry":[]}') : raw;
 
       // Download the FHIR bundle
       const blob = new Blob([JSON.stringify(fhirBundle, null, 2)], { 

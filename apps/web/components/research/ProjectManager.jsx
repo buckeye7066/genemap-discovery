@@ -39,6 +39,145 @@ import ProjectCollaboration from "./ProjectCollaboration";
 import ProjectVersionControl from "./ProjectVersionControl";
 import FHIRExporter from "../medical/FHIRExporter";
 
+function ProjectAnnotations({ project }) {
+  const [annotations, setAnnotations] = useState([]);
+  const [newContent, setNewContent] = useState("");
+  const [targetGene, setTargetGene] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const { user } = useAuth();
+
+  useEffect(() => {
+    loadAnnotations();
+  }, [project.id]);
+
+  const loadAnnotations = async () => {
+    try {
+      const res = await apiClient.getProjectAnnotations(project.id);
+      setAnnotations(res.annotations || []);
+    } catch (err) {
+      console.error("Error loading annotations:", err);
+    }
+  };
+
+  const handleSubmit = async () => {
+    if (!newContent.trim()) return;
+    setIsSubmitting(true);
+    try {
+      await apiClient.createAnnotation(project.id, {
+        targetType: targetGene ? 'gene' : 'project',
+        targetId: targetGene || project.id,
+        content: newContent,
+      });
+      setNewContent("");
+      setTargetGene("");
+      await loadAnnotations();
+    } catch (err) {
+      console.error("Error creating annotation:", err);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleResolve = async (annotationId) => {
+    try {
+      await apiClient.updateAnnotation(project.id, annotationId, { resolved: true });
+      await loadAnnotations();
+    } catch (err) {
+      console.error("Error resolving annotation:", err);
+    }
+  };
+
+  return (
+    <Card className="shadow-lg">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Edit2 className="w-5 h-5 text-amber-600" />
+          Annotations & Notes
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {/* New annotation form */}
+        <div className="space-y-3 p-4 bg-slate-50 rounded-lg border border-slate-200">
+          <div className="flex gap-2">
+            <Input
+              placeholder="Gene symbol (optional, e.g. BRCA1)"
+              value={targetGene}
+              onChange={(e) => setTargetGene(e.target.value)}
+              className="max-w-[200px]"
+            />
+            <Badge variant="outline" className="text-xs whitespace-nowrap">
+              {targetGene ? `Gene: ${targetGene}` : 'Project-wide'}
+            </Badge>
+          </div>
+          <Textarea
+            placeholder="Add a note, observation, or question for your team..."
+            value={newContent}
+            onChange={(e) => setNewContent(e.target.value)}
+            className="h-20"
+          />
+          <Button
+            onClick={handleSubmit}
+            disabled={isSubmitting || !newContent.trim()}
+            className="bg-amber-600 hover:bg-amber-700 gap-2"
+          >
+            {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+            Add Annotation
+          </Button>
+        </div>
+
+        {/* Annotations list */}
+        {annotations.length === 0 ? (
+          <div className="text-center py-8">
+            <Edit2 className="w-12 h-12 mx-auto mb-3 text-slate-300" />
+            <p className="text-slate-500 text-sm">No annotations yet</p>
+            <p className="text-xs text-slate-400">Add notes on genes, variants, or observations for your team</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {annotations.map((annotation) => (
+              <div
+                key={annotation.id}
+                className={`p-3 border rounded-lg ${annotation.resolved ? 'bg-green-50 border-green-200' : 'bg-white border-slate-200'}`}
+              >
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Badge variant="outline" className="text-xs">
+                        {annotation.targetType === 'gene' ? `Gene: ${annotation.targetId}` : 'Project'}
+                      </Badge>
+                      <span className="text-xs text-slate-500">
+                        {annotation.user?.displayName || annotation.user?.email || 'Unknown'} •{' '}
+                        {new Date(annotation.createdAt).toLocaleDateString()}
+                      </span>
+                      {annotation.resolved && (
+                        <Badge className="bg-green-100 text-green-800 text-xs">
+                          <CheckCircle className="w-3 h-3 mr-1" />
+                          Resolved
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="text-sm text-slate-800">{annotation.content}</p>
+                  </div>
+                  {!annotation.resolved && annotation.userId === user?.id && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleResolve(annotation.id)}
+                      title="Mark as resolved"
+                    >
+                      <CheckCircle className="w-4 h-4 text-green-600" />
+                    </Button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function ProjectManager() {
   const [projects, setProjects] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -59,12 +198,7 @@ export default function ProjectManager() {
 
   const loadProjects = async () => {
     try {
-      // BACKEND_NEEDED: ResearchProject entity needs API implementation
-      // const userProjects = await base44.entities.ResearchProject.filter(
-      //   {},
-      //   '-updated_date'
-      // );
-      const userProjects = [];
+      const userProjects = await apiClient.getProjects();
       setProjects(userProjects);
     } catch (err) {
       console.error("Error loading projects:", err);
@@ -87,19 +221,7 @@ export default function ProjectManager() {
         current_version: 1
       };
 
-      // BACKEND_NEEDED: ResearchProject entity needs API implementation
-      // const created = await base44.entities.ResearchProject.create(projectData);
-      const created = { id: Date.now() };
-
-      // BACKEND_NEEDED: ProjectVersion entity needs API implementation
-      // await base44.entities.ProjectVersion.create({
-      //   project_id: created.id,
-      //   version_number: 1,
-      //   change_type: "created",
-      //   changes_description: "Project created",
-      //   snapshot_data: projectData,
-      //   modified_by: user?.email
-      // });
+      const created = await apiClient.createProject(projectData);
 
       setNewProject({ name: "", description: "", genes: "", phenotypes: "", tags: "" });
       setCreateDialogOpen(false);
@@ -127,21 +249,10 @@ export default function ProjectManager() {
 
       const newVersion = (project.current_version || 1) + 1;
       
-      // BACKEND_NEEDED: ResearchProject entity needs API implementation
-      // await base44.entities.ResearchProject.update(projectId, {
-      //   ...updates,
-      //   current_version: newVersion
-      // });
-
-      // BACKEND_NEEDED: ProjectVersion entity needs API implementation
-      // await base44.entities.ProjectVersion.create({
-      //   project_id: projectId,
-      //   version_number: newVersion,
-      //   change_type: changeType,
-      //   changes_description: `${changeType.replace('_', ' ')} by ${user?.email}`,
-      //   snapshot_data: { ...project, ...updates },
-      //   modified_by: user?.email
-      // });
+      await apiClient.updateProject(projectId, {
+        ...updates,
+        current_version: newVersion
+      });
 
       await loadProjects();
       
@@ -156,8 +267,7 @@ export default function ProjectManager() {
     }
 
     try {
-      // BACKEND_NEEDED: ResearchProject entity needs API implementation
-      // await base44.entities.ResearchProject.delete(projectId);
+      await apiClient.deleteProject(projectId);
       await loadProjects();
       setSelectedProject(null);
     } catch (err) {
@@ -345,8 +455,9 @@ export default function ProjectManager() {
 
       {selectedProject && (
         <Tabs defaultValue="collaboration" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="collaboration">Team</TabsTrigger>
+            <TabsTrigger value="annotations">Annotations</TabsTrigger>
             <TabsTrigger value="versions">Versions</TabsTrigger>
             <TabsTrigger value="share">Share Data</TabsTrigger>
           </TabsList>
@@ -358,8 +469,12 @@ export default function ProjectManager() {
             />
           </TabsContent>
 
+          <TabsContent value="annotations">
+            <ProjectAnnotations project={selectedProject} />
+          </TabsContent>
+
           <TabsContent value="versions">
-            <ProjectVersionControl 
+            <ProjectVersionControl
               project={selectedProject}
               onRestore={loadProjects}
             />

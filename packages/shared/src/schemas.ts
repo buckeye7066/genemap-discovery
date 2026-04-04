@@ -46,3 +46,12 @@ export const userSchema = z.object({
     }).nullable(),
   }).optional(),
 });
+
+// ─── Inferred Types from Schemas ────────────────────────────────────────────
+
+export type RegisterInput = z.infer<typeof registerSchema>;
+export type LoginInput = z.infer<typeof loginSchema>;
+export type CheckoutSessionInput = z.infer<typeof checkoutSessionSchema>;
+export type PortalSessionInput = z.infer<typeof portalSessionSchema>;
+export type InstitutionalCheckoutInput = z.infer<typeof institutionalCheckoutSchema>;
+export type UserFromSchema = z.infer<typeof userSchema>;

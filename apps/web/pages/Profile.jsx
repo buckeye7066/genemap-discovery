@@ -79,22 +79,32 @@ export default function ProfilePage() {
     setIsUploadingPicture(true);
     setError(null);
 
-    // BACKEND_NEEDED: File upload needs API implementation
-    setError("Profile picture upload is not yet available");
-    setIsUploadingPicture(false);
-
-    // try {
-    //   const { file_url } = await base44.integrations.Core.UploadFile({ file });
-    //   setProfilePicture(file_url);
-    //   
-    //   await apiClient.updateMe({ profile_picture: file_url });
-    //   setSuccess(true);
-    //   setTimeout(() => setSuccess(false), 3000);
-    // } catch (err) {
-    //   setError(err.message || "Failed to upload profile picture");
-    // } finally {
-    //   setIsUploadingPicture(false);
-    // }
+    try {
+      // Convert to base64 data URL for profile picture storage
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        try {
+          const dataUrl = event.target.result;
+          setProfilePicture(dataUrl);
+          await apiClient.updateProfile({ profile_picture: dataUrl });
+          setSuccess(true);
+          setTimeout(() => setSuccess(false), 3000);
+        } catch (err) {
+          setError(err.message || "Failed to upload profile picture");
+        } finally {
+          setIsUploadingPicture(false);
+        }
+      };
+      reader.onerror = () => {
+        setError("Failed to read image file");
+        setIsUploadingPicture(false);
+      };
+      reader.readAsDataURL(file);
+      return; // reader callback handles the rest
+    } catch (err) {
+      setError(err.message || "Failed to upload profile picture");
+      setIsUploadingPicture(false);
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -103,29 +113,25 @@ export default function ProfilePage() {
     setError(null);
     setSuccess(false);
 
-    // BACKEND_NEEDED: User profile update needs API implementation
-    setError("Profile updates are not yet available");
-    setIsSaving(false);
+    try {
+      await apiClient.updateProfile({
+        age,
+        education_level: educationLevel,
+        field_of_study: fieldOfStudy,
+        research_interests: researchInterests,
+        current_projects: currentProjects,
+        publications: publications,
+        linkedin_url: linkedinUrl,
+        orcid_id: orcidId,
+      });
 
-    // try {
-    //   await apiClient.updateMe({
-    //     age,
-    //     education_level: educationLevel,
-    //     field_of_study: fieldOfStudy,
-    //     research_interests: researchInterests,
-    //     current_projects: currentProjects,
-    //     publications: publications,
-    //     linkedin_url: linkedinUrl,
-    //     orcid_id: orcidId,
-    //   });
-    //
-    //   setSuccess(true);
-    //   setTimeout(() => setSuccess(false), 3000);
-    // } catch (err) {
-    //   setError(err.message || "Failed to update profile");
-    // } finally {
-    //   setIsSaving(false);
-    // }
+      setSuccess(true);
+      setTimeout(() => setSuccess(false), 3000);
+    } catch (err) {
+      setError(err.message || "Failed to update profile");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleLogout = () => {

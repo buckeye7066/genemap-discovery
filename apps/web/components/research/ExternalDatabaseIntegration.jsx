@@ -143,12 +143,7 @@ export default function ExternalDatabaseIntegration({ userEducationLevel }) {
 
 Be comprehensive but practical. Include specific search strategies and resource links.`;
 
-      // BACKEND_NEEDED: InvokeLLM integration needs API implementation
-      // const response = await base44.integrations.Core.InvokeLLM({
-      //   prompt,
-      //   add_context_from_internet: true
-      // });
-      const response = "Database integration feature requires backend integration";
+      const { result: response } = await apiClient.invokeLLM(prompt);
 
       setResults({
         database: db,

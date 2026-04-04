@@ -93,18 +93,14 @@ export default function Dashboard() {
 
       const userEmail = user.email;
 
-      // BACKEND_NEEDED: UserActivity entity needs API implementation
-      // BACKEND_NEEDED: SearchHistory entity needs API implementation
-      // BACKEND_NEEDED: ResearchProject entity needs API implementation
-      // BACKEND_NEEDED: MedicalData entity needs API implementation
-      // BACKEND_NEEDED: GeneSet entity needs API implementation
-      // BACKEND_NEEDED: AIConversation entity needs API implementation
-      const activities = [];
-      const searches = [];
-      const userProjects = [];
-      const records = [];
-      const sets = [];
-      const conversations = [];
+      const [activities, searches, userProjects, records, sets, conversations] = await Promise.all([
+        apiClient.getUserActivity().catch(() => []),
+        apiClient.getSearchHistory().catch(() => []),
+        apiClient.getProjects ? apiClient.getProjects().catch(() => []) : Promise.resolve([]),
+        apiClient.getMedicalData().catch(() => []),
+        apiClient.getGeneSets().catch(() => []),
+        apiClient.getConversations().catch(() => [])
+      ]);
 
       setRecentGenes(activities);
       setRecentSearches(searches);
@@ -147,13 +143,8 @@ export default function Dashboard() {
 
 Keep each insight under 50 words, practical, and personalized.`;
 
-      // BACKEND_NEEDED: InvokeLLM integration needs API implementation
-      // const response = await apiClient.invokeLLM({
-      //   prompt,
-      //   add_context_from_internet: false
-      // });
-      // setPersonalizedInsights(response);
-      setPersonalizedInsights(null);
+      const response = await apiClient.invokeLLM(prompt);
+      setPersonalizedInsights(response);
     } catch (err) {
       log.error("Error generating insights:", err);
     }

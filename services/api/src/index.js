@@ -8,6 +8,11 @@ import { errorHandler } from './middleware/errorHandler.js';
 import authRoutes from './routes/auth.js';
 import billingRoutes from './routes/billing.js';
 import educationRoutes from './routes/education.js';
+import llmRoutes from './routes/llm.js';
+import adminRoutes from './routes/admin.js';
+import entityRoutes from './routes/entities.js';
+import genomicsRoutes from './routes/genomics.js';
+import clinicalTrialRoutes from './routes/clinicalTrials.js';
 
 // Validate required env vars early
 if (!process.env.COOKIE_SECRET) {
@@ -71,6 +76,11 @@ await fastify.register(async (authScope) => {
 
 await fastify.register(billingRoutes, { prefix: '/billing' });
 await fastify.register(educationRoutes, { prefix: '/education' });
+await fastify.register(llmRoutes, { prefix: '/llm' });
+await fastify.register(adminRoutes, { prefix: '/admin' });
+await fastify.register(entityRoutes, { prefix: '/entities' });
+await fastify.register(genomicsRoutes, { prefix: '/genomics' });
+await fastify.register(clinicalTrialRoutes, { prefix: '/clinical-trials' });
 
 fastify.get('/health', async () => {
   return { status: 'ok', timestamp: new Date().toISOString() };

@@ -51,37 +51,8 @@ Return detailed domain architecture including:
 
 Explain domains as "${educationContext}".`;
 
-      // BACKEND_NEEDED: LLM integration with internet context needs API implementation
-      // const response = await apiClient.invokeLLM({
-      //   prompt,
-      //   add_context_from_internet: true,
-      //   response_json_schema: {
-      const response = { protein_length: 0, domains: [] }; // Placeholder
-      /*
-      response = await apiClient.invokeLLM({
-        prompt,
-        add_context_from_internet: true,
-        response_json_schema: {
-          type: "object",
-          properties: {
-            protein_length: { type: "number" },
-            domains: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  name: { type: "string" },
-                  start: { type: "number" },
-                  end: { type: "number" },
-                  function: { type: "string" },
-                  source: { type: "string" }
-                }
-              }
-            }
-          }
-        }
-      });
-      */
+      const { result: raw } = await apiClient.invokeLLM(prompt + '\n\nReturn JSON: {"protein_length": number, "domains": [{"name": "...", "start": number, "end": number, "function": "...", "source": "..."}]}');
+      const response = typeof raw === 'string' ? JSON.parse(raw.match(/\{[\s\S]*\}/)?.[0] || '{"protein_length":0,"domains":[]}') : raw;
 
       setDomainData(response);
     } catch (err) {

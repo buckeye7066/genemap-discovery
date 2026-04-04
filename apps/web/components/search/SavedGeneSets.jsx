@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { apiClient } from "@genemap/shared";
 import { useAuth } from '../../lib/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -25,9 +26,7 @@ export default function SavedGeneSets({ onLoad, onClose }) {
 
   const loadGeneSets = async () => {
     try {
-      // BACKEND_NEEDED: GeneSet entity needs API implementation
-      // const sets = await apiClient.getGeneSets({ created_by: user?.email });
-      const sets = []; // Placeholder
+      const sets = await apiClient.getGeneSets();
       setGeneSets(sets);
     } catch (err) {
       console.error("Error loading gene sets:", err);
@@ -42,8 +41,7 @@ export default function SavedGeneSets({ onLoad, onClose }) {
     }
 
     try {
-      // BACKEND_NEEDED: GeneSet entity needs API implementation
-      // await apiClient.deleteGeneSet(setId);
+      await apiClient.deleteGeneSet(setId);
       await loadGeneSets();
     } catch (err) {
       console.error("Error deleting gene set:", err);

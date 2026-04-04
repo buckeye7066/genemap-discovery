@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { apiClient } from "@genemap/shared";
 import { useAuth } from '../../lib/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -18,12 +19,8 @@ export default function RenewalNotifications() {
 
   const checkRenewals = async () => {
     try {
-      // BACKEND_NEEDED: InstitutionalLicense entity needs API implementation
-      // const allLicenses = await apiClient.getInstitutionalLicenses();
-      // const userLicenses = allLicenses.filter(license => 
-      //   license.admin_users && license.admin_users.includes(user.email)
-      // );
-      const userLicenses = [];
+      const response = await apiClient.getMyLicenses();
+      const userLicenses = response.licenses || [];
 
       setLicenses(userLicenses);
 

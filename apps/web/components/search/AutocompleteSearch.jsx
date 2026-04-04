@@ -40,13 +40,7 @@ export default function AutocompleteSearch({
 
       setIsLoadingSuggestions(true);
       try {
-        // BACKEND_NEEDED: LLM integration needs API implementation
-        // const response = await apiClient.invokeLLM({
-        //   prompt: `Given the search query "${value}", suggest 5-8 relevant:
-        const response = { suggestions: [] }; // Placeholder
-        /*
-        response = await apiClient.invokeLLM({
-          prompt: `Given the search query "${value}", suggest 5-8 relevant:
+        const suggestionPrompt = `Given the search query "${value}", suggest 5-8 relevant:
 - Gene symbols (if it looks like a gene name)
 - Disease names (if it looks like a disease)
 - Common phenotype terms related to the query
@@ -56,25 +50,9 @@ Format as JSON array with objects containing:
 - type: "gene", "disease", or "phenotype"
 - description: brief 1-line description
 
-Focus on the most common and relevant matches.`,
-          response_json_schema: {
-            type: "object",
-            properties: {
-              suggestions: {
-                type: "array",
-                items: {
-                  type: "object",
-                  properties: {
-                    text: { type: "string" },
-                    type: { type: "string" },
-                    description: { type: "string" }
-                  }
-                }
-              }
-            }
-          }
-        });
-        */
+Focus on the most common and relevant matches. Return JSON: {"suggestions": [...]}`;
+        const { result: raw } = await apiClient.invokeLLM(suggestionPrompt);
+        const response = typeof raw === 'string' ? JSON.parse(raw.match(/\{[\s\S]*\}/)?.[0] || '{"suggestions":[]}') : raw;
 
         if (response.suggestions) {
           setSuggestions(response.suggestions.slice(0, 8));

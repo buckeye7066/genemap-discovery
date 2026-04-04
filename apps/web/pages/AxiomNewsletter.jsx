@@ -47,20 +47,14 @@ export default function AxiomNewsletterPage() {
         return;
       }
 
-      // BACKEND_NEEDED: getAllUsers function needs API implementation
-      // Load all users who opted into mailing list via backend function
-      // const response = await base44.functions.invoke('getAllUsers');
-      // const data = response.data || response;
-      // if (data.error) {
-      //   throw new Error(data.error);
-      // }
-      // const users = (data.users || []).filter(u => u.mailing_list_opt_in);
-      // setSubscribedUsers(users);
-      // setFilteredUsers(users);
-      
-      setSubscribedUsers([]);
-      setFilteredUsers([]);
-      setError('getAllUsers function not yet implemented');
+      const response = await apiClient.getUsers();
+      const data = response.data || response;
+      if (data.error) {
+        throw new Error(data.error);
+      }
+      const users = (data.users || []).filter(u => u.mailing_list_opt_in);
+      setSubscribedUsers(users);
+      setFilteredUsers(users);
     } catch (err) {
       console.error("Error loading data:", err);
       setError("Failed to load newsletter subscribers");

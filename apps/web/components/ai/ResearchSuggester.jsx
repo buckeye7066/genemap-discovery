@@ -107,8 +107,7 @@ For each trial (suggest 3-5 relevant trials):
 - Provide actionable search terms and links
 - Highlight translational research connecting bench to bedside`;
 
-      // BACKEND_NEEDED: InvokeLLM needs API implementation
-      const response = "Research suggestions feature is currently unavailable. API implementation needed.";
+      const { result: response } = await apiClient.invokeLLM(prompt);
 
       setSuggestions(response);
     } catch (err) {

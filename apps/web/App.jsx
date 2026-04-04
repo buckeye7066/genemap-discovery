@@ -1,4 +1,5 @@
 import { Suspense, lazy } from 'react';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Toaster } from "@/components/ui/toaster"
 import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClientInstance } from '@/lib/query-client'
@@ -44,7 +45,9 @@ const AuthenticatedApp = () => {
       <Routes>
         <Route path="/" element={
           <LayoutWrapper currentPageName={mainPageKey}>
-            <MainPage />
+            <ErrorBoundary name={mainPageKey}>
+              <MainPage />
+            </ErrorBoundary>
           </LayoutWrapper>
         } />
         {Object.entries(Pages).map(([path, Page]) => (
@@ -53,7 +56,9 @@ const AuthenticatedApp = () => {
             path={`/${path.toLowerCase()}`}
             element={
               <LayoutWrapper currentPageName={path}>
-                <Page />
+                <ErrorBoundary name={path}>
+                  <Page />
+                </ErrorBoundary>
               </LayoutWrapper>
             }
           />

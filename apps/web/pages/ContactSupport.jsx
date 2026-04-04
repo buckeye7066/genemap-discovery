@@ -52,12 +52,11 @@ export default function ContactSupport() {
 
   const saveCustomization = async () => {
     try {
-      // BACKEND_NEEDED: User preferences update needs API implementation
-      // await base44.auth.updateMe({
-      //   message_theme_color: themeColor,
-      //   message_font_size: fontSize,
-      //   message_font_family: fontFamily
-      // });
+      await apiClient.updateProfile({
+        message_theme_color: themeColor,
+        message_font_size: fontSize,
+        message_font_family: fontFamily
+      });
       setSuccess(true);
       setTimeout(() => setSuccess(false), 2000);
     } catch (err) {
@@ -117,25 +116,19 @@ export default function ContactSupport() {
     setError(null);
 
     try {
-      // BACKEND_NEEDED: Core LLM integration needs API implementation
-      // const prompt = `You are helping a user write a message to Dr. John White about their genomics platform issue.
+      const prompt = `You are helping a user write a message to Dr. John White about their genomics platform issue.
 
-      // Subject: ${subject}
+Subject: ${subject}
 
-      // Write a clear, professional message describing the issue. Include:
-      // 1. What the user was trying to do
-      // 2. What went wrong or what they need help with
-      // 3. Any relevant context
+Write a clear, professional message describing the issue. Include:
+1. What the user was trying to do
+2. What went wrong or what they need help with
+3. Any relevant context
 
-      // Keep it concise (3-4 sentences) and professional but friendly.`;
+Keep it concise (3-4 sentences) and professional but friendly.`;
 
-      // const response = await base44.integrations.Core.InvokeLLM({
-      //   prompt,
-      //   add_context_from_internet: false
-      // });
-
-      // setMessage(response);
-      setError("AI assist not yet implemented. Please write it manually.");
+      const response = await apiClient.invokeLLM(prompt);
+      setMessage(response);
     } catch (err) {
       setError("Failed to generate message. Please write it manually.");
     } finally {
@@ -155,21 +148,18 @@ export default function ContactSupport() {
     setError(null);
 
     try {
-      // BACKEND_NEEDED: Message entity needs API implementation
-      // await base44.entities.Message.create({
-      //   subject,
-      //   message,
-      //   is_issue: isIssue,
-      //   status: "open"
-      // });
+      await apiClient.sendMessage({
+        subject,
+        body: message,
+        category: isIssue ? "issue" : "general"
+      });
 
-      // setSuccess(true);
-      // setSubject("");
-      // setMessage("");
-      // setIsIssue(false);
+      setSuccess(true);
+      setSubject("");
+      setMessage("");
+      setIsIssue(false);
 
-      // setTimeout(() => setSuccess(false), 5000);
-      setError("Message sending not yet implemented");
+      setTimeout(() => setSuccess(false), 5000);
     } catch (err) {
       setError(err.message || "Failed to send message");
     } finally {

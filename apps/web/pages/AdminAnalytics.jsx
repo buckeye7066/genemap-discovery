@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
+import { apiClient } from "@genemap/shared";
 import { useAuth } from "../lib/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -53,26 +54,13 @@ export default function AdminAnalytics() {
         return;
       }
 
-      // BACKEND_NEEDED: UserActivity entity needs API implementation
-      // BACKEND_NEEDED: SearchHistory entity needs API implementation
-      // BACKEND_NEEDED: MedicalData entity needs API implementation
-      // BACKEND_NEEDED: AIConversation entity needs API implementation
-      // Load all activity data using service role
-      // const [activityData, searchData, medicalData, aiData] = await Promise.all([
-      //   base44.entities.UserActivity.filter({}, '-created_date', 1000),
-      //   base44.entities.SearchHistory.filter({}, '-created_date', 1000),
-      //   base44.entities.MedicalData.filter({}, '-created_date', 1000),
-      //   base44.entities.AIConversation.filter({}, '-created_date', 1000).catch(() => [])
-      // ]);
+      const analytics = await apiClient.getAdminAnalytics();
+      const { stats = {}, recentActivity = {} } = analytics;
 
-      // setActivities(activityData || []);
-      // setSearches(searchData || []);
-      // setMedicalRecords(medicalData || []);
-      // setAiConversations(aiData || []);
-      setActivities([]);
-      setSearches([]);
-      setMedicalRecords([]);
-      setAiConversations([]);
+      setActivities(recentActivity.activities || stats.activities || []);
+      setSearches(recentActivity.searches || stats.searches || []);
+      setMedicalRecords(recentActivity.medicalRecords || stats.medicalRecords || []);
+      setAiConversations(recentActivity.aiConversations || stats.aiConversations || []);
     } catch (err) {
       console.error('Error loading analytics:', err);
       setError(err.message || 'Failed to load analytics');

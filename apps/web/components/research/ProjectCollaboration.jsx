@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { apiClient } from "@genemap/shared";
 import { useAuth } from '../../lib/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -47,11 +48,7 @@ export default function ProjectCollaboration({ project, onUpdate }) {
 
   const loadCollaborators = async () => {
     try {
-      // BACKEND_NEEDED: ProjectCollaborator entity needs API implementation
-      // const collabs = await base44.entities.ProjectCollaborator.filter({
-      //   project_id: project.id
-      // });
-      const collabs = [];
+      const collabs = (await apiClient.getProjects()).find(p => p.id === project.id)?.collaborators || [];
       setCollaborators(collabs);
     } catch (err) {
       console.error("Error loading collaborators:", err);
@@ -70,38 +67,17 @@ export default function ProjectCollaboration({ project, onUpdate }) {
         viewer: { can_edit: false, can_share: false, can_delete: false }
       };
 
-      // BACKEND_NEEDED: ProjectCollaborator entity needs API implementation
-      // await base44.entities.ProjectCollaborator.create({
-      //   project_id: project.id,
-      //   user_email: inviteEmail.trim(),
-      //   role: inviteRole,
-      //   invited_by: user.email,
-      //   status: "pending",
-      //   permissions: permissions[inviteRole]
-      // });
+      await apiClient.addCollaborator(project.id, {
+        user_email: inviteEmail.trim(),
+        role: inviteRole,
+        permissions: permissions[inviteRole]
+      });
 
-      // BACKEND_NEEDED: SendEmail integration needs API implementation
-      // await base44.integrations.Core.SendEmail({
-      //   to: inviteEmail.trim(),
-      //   subject: `Invitation to collaborate on "${project.name}"`,
-      //   body: `${user.full_name || user.email} has invited you to collaborate on the research project "${project.name}" on GeneMap.
-      //
-      // Role: ${inviteRole}
-      // Project: ${project.name}
-      // Description: ${project.description || 'No description'}
-      //
-      // Log in to GeneMap to accept this invitation and start collaborating!
-      //
-      // Best regards,
-      // GeneMap Team`
-      // });
-
-      // BACKEND_NEEDED: ResearchProject entity needs API implementation
-      // if (!project.is_collaborative) {
-      //   await base44.entities.ResearchProject.update(project.id, {
-      //     is_collaborative: true
-      //   });
-      // }
+      if (!project.is_collaborative) {
+        await apiClient.updateProject(project.id, {
+          is_collaborative: true
+        });
+      }
 
       setInviteEmail("");
       setInviteRole("viewer");
@@ -123,10 +99,7 @@ export default function ProjectCollaboration({ project, onUpdate }) {
     }
 
     try {
-      // BACKEND_NEEDED: ProjectCollaborator entity needs API implementation
-      // await base44.entities.ProjectCollaborator.update(collaboratorId, {
-      //   status: "revoked"
-      // });
+      await apiClient.removeCollaborator(project.id, collaboratorId);
       await loadCollaborators();
     } catch (err) {
       console.error("Error revoking access:", err);

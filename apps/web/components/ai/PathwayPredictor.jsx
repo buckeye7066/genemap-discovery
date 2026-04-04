@@ -155,8 +155,7 @@ Recommend experiments to validate predictions:
 
 Provide evidence-based predictions with clear confidence levels. Be honest about uncertainties.`;
 
-      // BACKEND_NEEDED: InvokeLLM needs API implementation
-      const response = "Pathway prediction feature is currently unavailable. API implementation needed.";
+      const { result: response } = await apiClient.invokeLLM(prompt);
 
       setPredictions(response);
     } catch (err) {
@@ -173,14 +172,11 @@ Provide evidence-based predictions with clear confidence levels. Be honest about
 
     setIsUploadingVcf(true);
     try {
-      // BACKEND_NEEDED: UploadFile needs API implementation
-      // const { file_url } = await apiClient.uploadFile({ file });
       setVcfFile(file);
-      // setVcfFileUrl(file_url);
-      setError("File upload feature is currently unavailable. API implementation needed.");
+      setError(null);
     } catch (err) {
-      console.error("Error uploading VCF:", err);
-      setError("Failed to upload VCF file. Please try again.");
+      console.error("Error reading VCF:", err);
+      setError("Failed to read VCF file. Please try again.");
     } finally {
       setIsUploadingVcf(false);
     }

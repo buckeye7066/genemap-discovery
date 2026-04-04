@@ -4,11 +4,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { 
-  Loader2, 
-  Stethoscope, 
-  MapPin, 
-  Calendar,
+import {
+  Loader2,
+  Stethoscope,
+  MapPin,
   CheckCircle,
   AlertCircle,
   ExternalLink,
@@ -25,9 +24,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-export default function ClinicalTrialMatcher({ 
-  genes = [], 
-  variants = [], 
+export default function ClinicalTrialMatcher({
+  genes = [],
+  variants = [],
   conditions = [],
   pathways = []
 }) {
@@ -37,7 +36,6 @@ export default function ClinicalTrialMatcher({
   const [filters, setFilters] = useState({
     status: "all",
     phase: "all",
-    distance: "all"
   });
 
   const findMatchingTrials = async () => {
@@ -50,84 +48,78 @@ export default function ClinicalTrialMatcher({
     setError(null);
 
     try {
-      const geneList = genes.map(g => typeof g === 'string' ? g : g.symbol).join(', ');
-      const variantList = variants.slice(0, 10).map(v => 
-        `${v.chromosome}:${v.position} ${v.ref}>${v.alt} (${v.gene || 'unknown'})`
-      ).join(', ');
+      const geneList = genes.map(g => typeof g === 'string' ? g : g.symbol);
+      const conditionList = conditions.length > 0 ? conditions : [];
 
-      const prompt = `You are an AI clinical research assistant specializing in matching patients with relevant clinical trials based on genetic profiles.
+      // Run parallel searches: one per gene and one per condition
+      const searchPromises = [];
 
-**Patient Genetic Profile:**
-${geneList ? `- Genes: ${geneList}` : ''}
-${variantList ? `- Variants: ${variantList}` : ''}
-${conditions.length > 0 ? `- Conditions: ${conditions.join(', ')}` : ''}
-${pathways.length > 0 ? `- Affected Pathways: ${pathways.join(', ')}` : ''}
+      // Search by each gene (top 5)
+      for (const gene of geneList.slice(0, 5)) {
+        searchPromises.push(
+          apiClient.searchClinicalTrials({
+            gene,
+            condition: conditionList[0] || undefined,
+            status: 'RECRUITING',
+            pageSize: 10,
+          }).catch(() => ({ studies: [] }))
+        );
+      }
 
-**Your Task:**
-Search ClinicalTrials.gov and your knowledge base to find 8-15 relevant clinical trials that match this genetic profile.
+      // Search by each condition (top 3) if no gene overlap
+      for (const cond of conditionList.slice(0, 3)) {
+        searchPromises.push(
+          apiClient.searchClinicalTrials({
+            condition: cond,
+            gene: geneList[0] || undefined,
+            status: 'RECRUITING',
+            pageSize: 10,
+          }).catch(() => ({ studies: [] }))
+        );
+      }
 
-For EACH trial, provide:
+      const results = await Promise.all(searchPromises);
 
-1. **Trial Information:**
-   - NCT ID (e.g., NCT12345678)
-   - Official title
-   - Brief summary (2-3 sentences)
-   - Phase (I, II, III, IV)
-   - Status (Recruiting, Active, Completed, etc.)
-   - Start date
+      // Merge and deduplicate by NCT ID
+      const seen = new Set();
+      const merged = [];
+      for (const result of results) {
+        for (const study of (result.studies || [])) {
+          if (study.nctId && !seen.has(study.nctId)) {
+            seen.add(study.nctId);
 
-2. **Genetic Relevance:**
-   - Which specific genes/variants make this trial relevant
-   - Targeted mutations or biomarkers
-   - Mechanism of action related to the genetic profile
-   - Match confidence (High/Medium/Low)
+            // Compute match info: which of the user's genes/conditions appear in the study
+            const matchedGenes = geneList.filter(g => {
+              const text = [
+                study.title,
+                study.briefTitle,
+                study.briefSummary,
+                ...(study.conditions || []),
+                ...(study.keywords || []),
+                ...(study.interventions || []).map(iv => iv.name),
+              ].filter(Boolean).join(' ').toLowerCase();
+              return text.includes(g.toLowerCase());
+            });
 
-3. **Eligibility Criteria:**
-   - Key inclusion criteria
-   - Key exclusion criteria
-   - Age requirements
-   - Required biomarker/mutation status
-   - Previous treatment requirements
+            const matchedConditions = conditionList.filter(c => {
+              const studyConds = (study.conditions || []).join(' ').toLowerCase();
+              return studyConds.includes(c.toLowerCase());
+            });
 
-4. **Logistics:**
-   - Primary location(s) - city, state, country
-   - Number of study sites
-   - Estimated enrollment
-   - Contact information (if available)
-   - Trial website URL
+            merged.push({
+              ...study,
+              matchedGenes,
+              matchedConditions,
+              matchScore: matchedGenes.length * 2 + matchedConditions.length,
+            });
+          }
+        }
+      }
 
-5. **Treatment Details:**
-   - Intervention type (Drug, Gene therapy, etc.)
-   - Drug/treatment names
-   - Treatment approach
-   - Expected duration
+      // Sort by match score descending
+      merged.sort((a, b) => b.matchScore - a.matchScore);
 
-6. **Why It Matches:**
-   - Explain specifically why this trial is relevant
-   - What makes the patient potentially eligible
-   - Key benefits of this trial for this profile
-
-**Search Strategy:**
-- Focus on trials targeting the specific genes/pathways mentioned
-- Include trials for conditions associated with these genes
-- Consider both targeted therapies and broader trials
-- Include early phase trials if mutations are rare
-- Prioritize actively recruiting trials
-- Include completed trials if results are informative
-
-**Important:**
-- Only include real, verifiable clinical trials
-- Provide actual NCT IDs when available
-- Be honest about match confidence
-- Note if certain trials are especially relevant
-- Indicate if patient should discuss with physician
-
-Return comprehensive trial matches with all details.`;
-
-      // BACKEND_NEEDED: InvokeLLM needs API implementation
-      const response = { trials: [] };
-
-      setTrials(response.trials || []);
+      setTrials(merged);
     } catch (err) {
       console.error("Error finding trials:", err);
       setError("Failed to find matching clinical trials. Please try again.");
@@ -143,13 +135,6 @@ Return comprehensive trial matches with all details.`;
     if (lower.includes('completed')) return 'bg-slate-100 text-slate-800';
     if (lower.includes('withdrawn') || lower.includes('terminated')) return 'bg-red-100 text-red-800';
     return 'bg-yellow-100 text-yellow-800';
-  };
-
-  const getConfidenceColor = (confidence) => {
-    const lower = confidence?.toLowerCase() || '';
-    if (lower.includes('high')) return 'bg-green-600 text-white';
-    if (lower.includes('medium')) return 'bg-yellow-600 text-white';
-    return 'bg-slate-600 text-white';
   };
 
   const filteredTrials = trials.filter(trial => {
@@ -171,8 +156,7 @@ Return comprehensive trial matches with all details.`;
             Clinical Trial Matcher
           </CardTitle>
           <Badge className="bg-blue-600 text-white">
-            <Sparkles className="w-3 h-3 mr-1" />
-            AI-Powered
+            ClinicalTrials.gov
           </Badge>
         </div>
       </CardHeader>
@@ -205,6 +189,16 @@ Return comprehensive trial matches with all details.`;
                   </div>
                 </div>
               )}
+              {conditions.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-slate-700 mb-1">Conditions:</p>
+                  <div className="flex flex-wrap gap-1">
+                    {conditions.map((c, idx) => (
+                      <Badge key={idx} variant="secondary" className="text-xs">{c}</Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
               {variants.length > 0 && (
                 <div>
                   <p className="text-xs font-semibold text-slate-700 mb-1">Variants:</p>
@@ -216,7 +210,9 @@ Return comprehensive trial matches with all details.`;
             <Alert className="mb-4 bg-amber-50 border-amber-200">
               <AlertCircle className="h-4 w-4 text-amber-600" />
               <AlertDescription className="text-amber-900 text-xs">
-                <strong>Medical Disclaimer:</strong> Trial matches are AI-generated suggestions. Always consult with your physician or genetic counselor before pursuing any clinical trial.
+                <strong>Medical Disclaimer:</strong> Trial matches are based on keyword matching against
+                ClinicalTrials.gov data. Always consult with your physician or genetic counselor before
+                pursuing any clinical trial.
               </AlertDescription>
             </Alert>
 
@@ -228,7 +224,7 @@ Return comprehensive trial matches with all details.`;
               {isLoading ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Searching Clinical Trials...
+                  Searching ClinicalTrials.gov...
                 </>
               ) : (
                 <>
@@ -266,10 +262,10 @@ Return comprehensive trial matches with all details.`;
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Phases</SelectItem>
-                      <SelectItem value="Phase 1">Phase I</SelectItem>
-                      <SelectItem value="Phase 2">Phase II</SelectItem>
-                      <SelectItem value="Phase 3">Phase III</SelectItem>
-                      <SelectItem value="Phase 4">Phase IV</SelectItem>
+                      <SelectItem value="PHASE1">Phase I</SelectItem>
+                      <SelectItem value="PHASE2">Phase II</SelectItem>
+                      <SelectItem value="PHASE3">Phase III</SelectItem>
+                      <SelectItem value="PHASE4">Phase IV</SelectItem>
                     </SelectContent>
                   </Select>
                   <Badge variant="outline" className="ml-auto">
@@ -280,14 +276,14 @@ Return comprehensive trial matches with all details.`;
                 {/* Trial Cards */}
                 <div className="space-y-4">
                   {filteredTrials.map((trial, idx) => (
-                    <Card key={idx} className="border-2 hover:shadow-lg transition-shadow">
+                    <Card key={trial.nctId || idx} className="border-2 hover:shadow-lg transition-shadow">
                       <CardContent className="pt-4">
                         {/* Header */}
                         <div className="flex items-start justify-between mb-3">
                           <div className="flex-1">
                             <div className="flex items-center gap-2 mb-2">
                               <Badge variant="outline" className="font-mono text-xs">
-                                {trial.nct_id}
+                                {trial.nctId}
                               </Badge>
                               <Badge className={getStatusColor(trial.status)}>
                                 {trial.status}
@@ -295,141 +291,112 @@ Return comprehensive trial matches with all details.`;
                               {trial.phase && (
                                 <Badge variant="outline">{trial.phase}</Badge>
                               )}
-                              {trial.genetic_relevance?.confidence && (
-                                <Badge className={getConfidenceColor(trial.genetic_relevance.confidence)}>
-                                  {trial.genetic_relevance.confidence} Match
-                                </Badge>
-                              )}
                             </div>
                             <h4 className="font-semibold text-slate-900 mb-2">
-                              {trial.title}
+                              {trial.briefTitle || trial.title}
                             </h4>
-                            <p className="text-sm text-slate-600 leading-relaxed mb-3">
-                              {trial.summary}
-                            </p>
+                            {trial.briefSummary && (
+                              <p className="text-sm text-slate-600 leading-relaxed mb-3 line-clamp-3">
+                                {trial.briefSummary}
+                              </p>
+                            )}
                           </div>
                         </div>
 
-                        {/* Why It Matches */}
-                        <Alert className="mb-3 bg-blue-50 border-blue-200">
-                          <Sparkles className="h-4 w-4 text-blue-600" />
-                          <AlertDescription className="text-blue-900 text-sm">
-                            <strong>Match Reason:</strong> {trial.match_explanation}
-                          </AlertDescription>
-                        </Alert>
-
-                        {/* Genetic Relevance */}
-                        {trial.genetic_relevance && (
+                        {/* Gene Match Info */}
+                        {(trial.matchedGenes?.length > 0 || trial.matchedConditions?.length > 0) && (
                           <div className="mb-3 p-3 bg-purple-50 rounded-lg border border-purple-200">
                             <p className="text-xs font-semibold text-purple-900 mb-2">
-                              🧬 Genetic Targeting:
+                              Match Details:
                             </p>
-                            {trial.genetic_relevance.matched_genes?.length > 0 && (
-                              <div className="flex flex-wrap gap-1 mb-2">
-                                {trial.genetic_relevance.matched_genes.map((gene, i) => (
+                            {trial.matchedGenes?.length > 0 && (
+                              <div className="flex flex-wrap gap-1 mb-1">
+                                <span className="text-xs text-purple-700 mr-1">Genes:</span>
+                                {trial.matchedGenes.map((gene, i) => (
                                   <Badge key={i} className="bg-purple-600 text-white text-xs">
                                     {gene}
                                   </Badge>
                                 ))}
                               </div>
                             )}
-                            {trial.genetic_relevance.mechanism && (
-                              <p className="text-xs text-purple-800">
-                                <strong>Mechanism:</strong> {trial.genetic_relevance.mechanism}
-                              </p>
-                            )}
-                          </div>
-                        )}
-
-                        {/* Treatment */}
-                        {trial.treatment && (
-                          <div className="mb-3 grid grid-cols-2 gap-3 text-xs">
-                            {trial.treatment.intervention_type && (
-                              <div>
-                                <p className="text-slate-500">Type</p>
-                                <p className="font-medium">{trial.treatment.intervention_type}</p>
-                              </div>
-                            )}
-                            {trial.treatment.drug_names?.length > 0 && (
-                              <div>
-                                <p className="text-slate-500">Drugs</p>
-                                <p className="font-medium">{trial.treatment.drug_names.join(', ')}</p>
+                            {trial.matchedConditions?.length > 0 && (
+                              <div className="flex flex-wrap gap-1">
+                                <span className="text-xs text-purple-700 mr-1">Conditions:</span>
+                                {trial.matchedConditions.map((cond, i) => (
+                                  <Badge key={i} variant="secondary" className="text-xs">
+                                    {cond}
+                                  </Badge>
+                                ))}
                               </div>
                             )}
                           </div>
                         )}
 
-                        {/* Logistics */}
-                        {trial.logistics && (
-                          <div className="mb-3 space-y-2">
-                            {trial.logistics.locations?.length > 0 && (
-                              <div className="flex items-start gap-2">
-                                <MapPin className="w-4 h-4 text-slate-500 mt-0.5" />
-                                <div className="flex-1">
-                                  <p className="text-xs text-slate-600">
-                                    {trial.logistics.locations.slice(0, 3).join(' • ')}
-                                    {trial.logistics.locations.length > 3 && 
-                                      ` • +${trial.logistics.locations.length - 3} more`}
-                                  </p>
-                                </div>
-                              </div>
-                            )}
-                            {trial.logistics.enrollment && (
-                              <div className="flex items-center gap-2">
-                                <Users className="w-4 h-4 text-slate-500" />
-                                <p className="text-xs text-slate-600">
-                                  Enrollment: {trial.logistics.enrollment} participants
-                                </p>
-                              </div>
-                            )}
-                          </div>
-                        )}
-
-                        {/* Eligibility Preview */}
-                        {trial.eligibility && (
-                          <div className="mb-3 p-3 bg-slate-50 rounded-lg">
-                            <p className="text-xs font-semibold text-slate-900 mb-2">
-                              Key Eligibility:
-                            </p>
-                            <div className="space-y-1">
-                              {trial.eligibility.inclusion?.slice(0, 2).map((item, i) => (
-                                <div key={i} className="flex items-start gap-2">
-                                  <CheckCircle className="w-3 h-3 text-green-600 mt-0.5" />
-                                  <p className="text-xs text-slate-700">{item}</p>
-                                </div>
+                        {/* Conditions */}
+                        {trial.conditions?.length > 0 && (
+                          <div className="mb-3">
+                            <div className="flex flex-wrap gap-1">
+                              {trial.conditions.slice(0, 4).map((c, i) => (
+                                <Badge key={i} variant="secondary" className="text-xs">{c}</Badge>
                               ))}
-                              {trial.eligibility.age_range && (
-                                <div className="flex items-start gap-2">
-                                  <Calendar className="w-3 h-3 text-blue-600 mt-0.5" />
-                                  <p className="text-xs text-slate-700">Age: {trial.eligibility.age_range}</p>
-                                </div>
+                              {trial.conditions.length > 4 && (
+                                <Badge variant="secondary" className="text-xs">+{trial.conditions.length - 4}</Badge>
                               )}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Interventions */}
+                        {trial.interventions?.length > 0 && (
+                          <div className="mb-3 text-xs text-slate-700">
+                            <span className="font-medium">Interventions: </span>
+                            {trial.interventions.slice(0, 3).map(iv => iv.name).filter(Boolean).join(', ')}
+                            {trial.interventions.length > 3 && ` +${trial.interventions.length - 3} more`}
+                          </div>
+                        )}
+
+                        {/* Location & Enrollment */}
+                        <div className="mb-3 space-y-2">
+                          {trial.locationSummary && (
+                            <div className="flex items-start gap-2">
+                              <MapPin className="w-4 h-4 text-slate-500 mt-0.5" />
+                              <p className="text-xs text-slate-600">{trial.locationSummary}</p>
+                            </div>
+                          )}
+                          {trial.enrollment && (
+                            <div className="flex items-center gap-2">
+                              <Users className="w-4 h-4 text-slate-500" />
+                              <p className="text-xs text-slate-600">
+                                Enrollment: {trial.enrollment} participants
+                              </p>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Eligibility preview */}
+                        {trial.eligibility?.minAge && (
+                          <div className="mb-3 p-3 bg-slate-50 rounded-lg">
+                            <p className="text-xs font-semibold text-slate-900 mb-1">Eligibility:</p>
+                            <div className="flex flex-wrap gap-3 text-xs text-slate-700">
+                              {trial.eligibility.minAge && <span>Min Age: {trial.eligibility.minAge}</span>}
+                              {trial.eligibility.maxAge && <span>Max Age: {trial.eligibility.maxAge}</span>}
+                              {trial.eligibility.sex && trial.eligibility.sex !== 'ALL' && <span>Sex: {trial.eligibility.sex}</span>}
+                              {trial.eligibility.healthyVolunteers && <span>Healthy Volunteers: {trial.eligibility.healthyVolunteers}</span>}
                             </div>
                           </div>
                         )}
 
                         {/* Actions */}
                         <div className="flex gap-2">
-                          {trial.logistics?.url && (
+                          {trial.nctId && (
                             <Button
                               variant="outline"
                               size="sm"
                               className="flex-1"
-                              onClick={() => window.open(trial.logistics.url, '_blank')}
+                              onClick={() => window.open(`https://clinicaltrials.gov/study/${trial.nctId}`, '_blank')}
                             >
                               <ExternalLink className="w-3 h-3 mr-1" />
                               View on ClinicalTrials.gov
-                            </Button>
-                          )}
-                          {trial.nct_id && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="flex-1"
-                              onClick={() => window.open(`https://clinicaltrials.gov/study/${trial.nct_id}`, '_blank')}
-                            >
-                              <Info className="w-3 h-3 mr-1" />
-                              Full Details
                             </Button>
                           )}
                         </div>

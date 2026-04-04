@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { apiClient } from "@genemap/shared";
 import { useAuth } from '../../lib/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -108,9 +109,7 @@ export default function OnboardingTour({ onComplete, forceShow = false }) {
 
   const markComplete = async () => {
     try {
-      // BACKEND_NEEDED: updateMe needs API implementation
-      // await apiClient.updateMe({ onboarding_completed: true });
-      console.log("Onboarding complete");
+      await apiClient.updateProfile({ demographicsCollected: true });
     } catch (err) {
       console.error("Failed to mark onboarding complete:", err);
     }

@@ -97,8 +97,7 @@ export default function RobertClinicalSupport({ gene, disease, targets, userEduc
   const loadMedicalData = async () => {
     setIsLoading(true);
     try {
-      // BACKEND_NEEDED: MedicalData entity needs API implementation
-      const records = [];
+      const records = await apiClient.getMedicalData('clinical_records');
 
       if (records && records.length > 0) {
         setMedicalData(records);
@@ -259,8 +258,7 @@ ${isBatchAnalysis ? '- Organize analysis by target, then provide cross-reference
 
 Provide a comprehensive but accessible clinical analysis formatted in clear sections with markdown.`;
 
-      // BACKEND_NEEDED: InvokeLLM needs API implementation
-      const response = "Clinical analysis feature is currently unavailable. API implementation needed.";
+      const { result: response } = await apiClient.invokeLLM(prompt);
 
       // Check for concerning findings or drug warnings
       const hasConcerningFindings = response.toLowerCase().includes('urgent') ||

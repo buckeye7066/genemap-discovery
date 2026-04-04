@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect } from "react";
+import { apiClient } from "@genemap/shared";
 import { useAuth } from '../../lib/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -140,25 +141,9 @@ ${getEducationGuidance(userEducationLevel || user?.education_level)}
 
 Format with clear sections, use tables for comparisons, highlight key findings.`;
 
-      // BACKEND_NEEDED: LLM integration needs API implementation
-      // const response = await apiClient.invokeLLM({
-      //   prompt,
-      //   add_context_from_internet: false,
-      //   response_json_schema: {
-      const response = { executive_summary: '', detailed_analysis: '' }; // Placeholder
-      /*
-      response = await apiClient.invokeLLM({
-        prompt,
-        add_context_from_internet: false,
-        response_json_schema: {
-          type: "object",
-          properties: {
-            executive_summary: { type: "string" },
-            detailed_analysis: { type: "string" }
-          }
-        }
-      });
-      */
+      const { result: raw } = await apiClient.invokeLLM(prompt);
+      const response = typeof raw === 'string' ? (() => { try { return JSON.parse(raw.match(/\{[\s\S]*\}/)?.[0] || '{}'); } catch { return { executive_summary: '', detailed_analysis: raw }; } })() : raw;
+      if (!response.detailed_analysis && typeof raw === 'string') { response.detailed_analysis = raw; }
 
       const hasCriticalFindings = response.detailed_analysis.toLowerCase().includes('urgent') ||
                                   response.detailed_analysis.toLowerCase().includes('critical') ||

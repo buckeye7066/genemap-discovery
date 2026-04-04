@@ -109,49 +109,8 @@ ${vcfText.substring(0, 50000)}
 
       setParseProgress(50);
 
-      // BACKEND_NEEDED: LLM integration needs API implementation
-      // const result = await apiClient.invokeLLM({
-      //   prompt,
-      //   response_json_schema: {
-      const result = { variants: [], summary: {} }; // Placeholder
-      /*
-      result = await apiClient.invokeLLM({
-        prompt,
-        response_json_schema: {
-          type: "object",
-          properties: {
-            variants: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  chromosome: { type: "string" },
-                  position: { type: "number" },
-                  rsid: { type: "string" },
-                  ref: { type: "string" },
-                  alt: { type: "string" },
-                  quality: { type: "number" },
-                  filter: { type: "string" },
-                  depth: { type: "number" },
-                  variant_type: { type: "string" },
-                  gene: { type: "string" },
-                  clinical_significance: { type: "string" },
-                  zygosity: { type: "string" }
-                }
-              }
-            },
-            summary: {
-              type: "object",
-              properties: {
-                total_variants: { type: "number" },
-                parsed_variants: { type: "number" },
-                variant_types: { type: "object" }
-              }
-            }
-          }
-        }
-      });
-      */
+      const { result: raw } = await apiClient.invokeLLM(prompt);
+      const result = typeof raw === 'string' ? JSON.parse(raw.match(/\{[\s\S]*\}/)?.[0] || '{"variants":[],"summary":{}}') : raw;
 
       setParseProgress(100);
       setVariants(result.variants || []);
@@ -234,68 +193,8 @@ Return enriched variant data with all available information.`;
 
       setEnrichProgress(40);
 
-      // BACKEND_NEEDED: LLM integration with internet context needs API implementation
-      // const enriched = await apiClient.invokeLLM({
-      //   prompt,
-      //   add_context_from_internet: true,
-      //   response_json_schema: {
-      const enriched = { enriched_variants: [] }; // Placeholder
-      /*
-      enriched = await apiClient.invokeLLM({
-        prompt,
-        add_context_from_internet: true,
-        response_json_schema: {
-          type: "object",
-          properties: {
-            enriched_variants: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  original_variant: { type: "object" },
-                  dbsnp: {
-                    type: "object",
-                    properties: {
-                      validated_rsid: { type: "string" },
-                      global_maf: { type: "number" },
-                      clinical_significance: { type: "string" },
-                      molecular_consequence: { type: "string" },
-                      protein_change: { type: "string" }
-                    }
-                  },
-                  gnomad: {
-                    type: "object",
-                    properties: {
-                      overall_af: { type: "number" },
-                      population_frequencies: { type: "object" },
-                      homozygote_count: { type: "number" },
-                      filter_status: { type: "string" }
-                    }
-                  },
-                  predictions: {
-                    type: "object",
-                    properties: {
-                      sift: { type: "string" },
-                      polyphen: { type: "string" },
-                      cadd: { type: "number" },
-                      revel: { type: "number" }
-                    }
-                  },
-                  interpretation: {
-                    type: "object",
-                    properties: {
-                      classification: { type: "string" },
-                      evidence_level: { type: "string" },
-                      recommendation: { type: "string" }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      });
-      */
+      const { result: enrichRaw } = await apiClient.invokeLLM(prompt);
+      const enriched = typeof enrichRaw === 'string' ? JSON.parse(enrichRaw.match(/\{[\s\S]*\}/)?.[0] || '{"enriched_variants":[]}') : enrichRaw;
 
       setEnrichProgress(100);
       setEnrichedVariants(enriched.enriched_variants || []);

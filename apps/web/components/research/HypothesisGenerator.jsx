@@ -134,12 +134,7 @@ ${selectedDataTypes.join(', ')}
 
 Generate creative, scientifically rigorous hypotheses that integrate multi-omic data.`;
 
-      // BACKEND_NEEDED: InvokeLLM integration needs API implementation
-      // const response = await base44.integrations.Core.InvokeLLM({
-      //   prompt,
-      //   add_context_from_internet: true
-      // });
-      const response = "Hypothesis generation feature requires backend integration";
+      const { result: response } = await apiClient.invokeLLM(prompt);
 
       setHypotheses({
         context: researchContext,
