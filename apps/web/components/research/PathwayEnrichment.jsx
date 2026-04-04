@@ -117,34 +117,10 @@ ${genes.join(', ')}
 
 Return comprehensive analysis with specific pathways and statistical measures.`;
 
-      // BACKEND_NEEDED: InvokeLLM integration needs API implementation
-      // const response = await base44.integrations.Core.InvokeLLM({
-      //   prompt,
-      //   add_context_from_internet: true,
-      //   response_json_schema: {
-      //     type: "object",
-      //     properties: {
-      //       analysis: { type: "string" },
-      //       enriched_pathways: {
-      //         type: "array",
-      //         items: {
-      //           type: "object",
-      //           properties: {
-      //             pathway: { type: "string" },
-      //             genes_in_pathway: { type: "number" },
-      //             total_genes: { type: "number" },
-      //             pvalue: { type: "number" },
-      //             fdr: { type: "number" }
-      //           }
-      //         }
-      //       }
-      //     }
-      //   }
-      // });
-      const response = {
-        analysis: "Pathway enrichment analysis feature requires backend integration",
-        enriched_pathways: []
-      };
+      const { result: raw } = await apiClient.invokeLLM(prompt);
+      const response = typeof raw === 'string' ? (() => { try { return JSON.parse(raw.match(/\{[\s\S]*\}/)?.[0] || '{}'); } catch { return { analysis: raw, enriched_pathways: [] }; } })() : raw;
+      if (!response.analysis && typeof raw === 'string') { response.analysis = raw; }
+      if (!response.enriched_pathways) { response.enriched_pathways = []; }
 
       setResults({
         genes: genes,

@@ -118,6 +118,8 @@ export default function AnastasiaPage() {
   const [currentSymptom, setCurrentSymptom] = useState("");
   const messagesEndRef = useRef(null);
 
+  const [userContext, setUserContext] = useState({ geneSets: [], recentSearches: [], projects: [] });
+
   useEffect(() => {
     if (user) {
       setMedicalRecords([]);
@@ -126,6 +128,21 @@ export default function AnastasiaPage() {
         content: getWelcomeMessage(user),
         timestamp: new Date()
       }]);
+
+      // Load user context for enriched conversations
+      Promise.all([
+        apiClient.getGeneSets().catch(() => ({ sets: [] })),
+        apiClient.getSearchHistory().catch(() => ({ entries: [] })),
+        apiClient.getProjects().catch(() => ({ projects: [] })),
+        apiClient.getMedicalData().catch(() => ({ records: [] })),
+      ]).then(([geneSetsRes, searchRes, projectsRes, medicalRes]) => {
+        setUserContext({
+          geneSets: (geneSetsRes.sets || geneSetsRes || []).slice(0, 10),
+          recentSearches: (searchRes.entries || searchRes || []).slice(0, 10),
+          projects: (projectsRes.projects || projectsRes || []).slice(0, 5),
+        });
+        setMedicalRecords((medicalRes.records || medicalRes || []).slice(0, 20));
+      });
     }
   }, [user]);
 
@@ -205,6 +222,24 @@ Always define them immediately or use them in context:
 - Field of Study: ${currentUser?.field_of_study || 'Not specified'}
 ${medicalRecords.length > 0 ? `- Has uploaded ${medicalRecords.length} medical record(s)` : ''}`;
 
+    // Enrich with user's genomic context
+    if (userContext.geneSets.length > 0) {
+      const geneSetSummary = userContext.geneSets.map(gs => `"${gs.name}" (${(gs.genes || []).slice(0, 5).join(', ')}${(gs.genes || []).length > 5 ? '...' : ''})`).join('; ');
+      contextPrompt += `\n- Saved Gene Sets: ${geneSetSummary}`;
+    }
+
+    if (userContext.recentSearches.length > 0) {
+      const searchTerms = [...new Set(userContext.recentSearches.map(s => s.query))].slice(0, 8).join(', ');
+      contextPrompt += `\n- Recent Searches: ${searchTerms}`;
+    }
+
+    if (userContext.projects.length > 0) {
+      const projectSummary = userContext.projects.map(p => `"${p.title}" (${p.status})`).join('; ');
+      contextPrompt += `\n- Active Research Projects: ${projectSummary}`;
+    }
+
+    contextPrompt += `\n\n**Note:** Use this context to give more personalized and relevant responses. If the user asks about a gene they've been researching, reference their work. If they have medical records, you can offer to analyze them.`;
+
     if (medicalRecord) {
       contextPrompt += `\n\n**Medical Record Being Discussed:**
 Type: ${medicalRecord.file_type}
@@ -227,7 +262,15 @@ ${userMessage}
 
 **Remember:** You're Anastasia - smart, friendly, and amazing at making genetics make sense! Be yourself - warm, witty, and wonderfully clear. 💜`;
 
-    return "I'm sorry, I'm not fully connected to my AI brain yet! The backend integration is still being set up. But I'm still here to help guide you through the interface! 😊";
+    try {
+      const response = await apiClient.invokeLLM(contextPrompt, {
+        add_context_from_internet: true
+      });
+      return response?.result || response || "I'm having trouble processing that right now. Could you try rephrasing?";
+    } catch (err) {
+      console.error("Anastasia LLM error:", err);
+      return "Oops! I'm having a little technical hiccup right now. Mind trying that again? 😊";
+    }
   }, [systemPromptBase, medicalRecords.length]);
 
   const handleSendMessage = useCallback(async (e) => {

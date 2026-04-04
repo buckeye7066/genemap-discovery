@@ -224,19 +224,9 @@ ${audienceLevel === 'expert' ? `
 
 Make the explanation warm, clear, and empowering. Avoid unnecessary medical jargon unless appropriate for the audience.`;
 
-      const response = await apiClient.getExplanation({
-        topic: prompt,
-        level: audienceLevel === 'child' ? 'elementary'
-             : audienceLevel === 'teen' ? 'high_school'
-             : audienceLevel === 'general' ? 'high_school'
-             : audienceLevel === 'undergrad' ? 'undergraduate'
-             : audienceLevel === 'professional' ? 'graduate'
-             : audienceLevel === 'expert' ? 'postgraduate'
-             : 'undergraduate',
-        context: inputContext,
-      });
+      const { result } = await apiClient.invokeLLM(prompt);
 
-      setExplanation(response.explanation || 'No explanation returned.');
+      setExplanation(result || 'No explanation returned.');
     } catch (err) {
       console.error("Error generating explanation:", err);
       setError("Failed to generate explanation. Please try again.");
@@ -292,14 +282,11 @@ Make the explanation warm, clear, and empowering. Avoid unnecessary medical jarg
 
     setIsUploadingVcf(true);
     try {
-      // BACKEND_NEEDED: UploadFile needs API implementation
-      // const { file_url } = await apiClient.uploadFile({ file });
       setVcfFile(file);
-      // setVcfFileUrl(file_url);
-      setError("File upload feature is currently unavailable. API implementation needed.");
+      setError(null);
     } catch (err) {
-      console.error("Error uploading VCF:", err);
-      setError("Failed to upload VCF file. Please try again.");
+      console.error("Error reading VCF:", err);
+      setError("Failed to read VCF file. Please try again.");
     } finally {
       setIsUploadingVcf(false);
     }

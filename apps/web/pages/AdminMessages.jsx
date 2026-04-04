@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { apiClient } from "@genemap/shared";
 import { useAuth } from "../lib/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -41,10 +42,8 @@ export default function AdminMessages() {
         return;
       }
 
-      // BACKEND_NEEDED: Message entity needs API implementation
-      // const allMessages = await base44.entities.Message.filter({}, '-created_date', 500);
-      // setMessages(allMessages || []);
-      setMessages([]);
+      const allMessages = await apiClient.getAdminMessages();
+      setMessages(allMessages || []);
     } catch (err) {
       console.error('Error loading messages:', err);
       setError(err.message || 'Failed to load messages');
@@ -63,21 +62,14 @@ export default function AdminMessages() {
     setError(null);
 
     try {
-      // BACKEND_NEEDED: Message entity needs API implementation
-      // await base44.entities.Message.update(message.id, {
-      //   response,
-      //   response_by: user.email,
-      //   response_date: new Date().toISOString(),
-      //   status: 'responded'
-      // });
+      await apiClient.replyToMessage(message.id, response);
 
-      // setSuccess('Response sent successfully!');
-      // setResponse("");
-      // setSelectedMessage(null);
-      // await loadData();
+      setSuccess('Response sent successfully!');
+      setResponse("");
+      setSelectedMessage(null);
+      await loadData();
 
-      // setTimeout(() => setSuccess(null), 3000);
-      setError('Response functionality not yet implemented');
+      setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
       setError(err.message || 'Failed to send response');
     } finally {
@@ -87,12 +79,8 @@ export default function AdminMessages() {
 
   const handleMarkClosed = async (message) => {
     try {
-      // BACKEND_NEEDED: Message entity needs API implementation
-      // await base44.entities.Message.update(message.id, {
-      //   status: 'closed'
-      // });
-      // await loadData();
-      setError('Close message functionality not yet implemented');
+      await apiClient.closeMessage(message.id);
+      await loadData();
     } catch (err) {
       setError('Failed to close message');
     }

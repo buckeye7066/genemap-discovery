@@ -50,6 +50,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label"; // Added
 import { Alert, AlertDescription } from "@/components/ui/alert"; // Added
 import FHIRExporter from "../medical/FHIRExporter";
+import { exportGeneReport, exportJSON, copyShareableLink } from "../../lib/exportUtils";
+import { Download, Share, Copy, Printer } from "lucide-react";
 
 function GeneCard({ gene, rank, isPremium, isSelected = false, onSelect = null }) {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -76,15 +78,14 @@ function GeneCard({ gene, rank, isPremium, isSelected = false, onSelect = null }
 
   const trackGeneView = async (geneSymbol) => {
     try {
-      // BACKEND_NEEDED: UserActivity entity needs API implementation
-      // await apiClient.createUserActivity({
-      //   activity_type: "gene_view",
-      //   gene_symbol: geneSymbol,
-      //   metadata: {
-      //     confidence_score: gene.score,
-      //     phenotypes: gene.phenotypes?.map(p => p.name) || []
-      //   }
-      // });
+      await apiClient.logActivity({
+        activity_type: "gene_view",
+        gene_symbol: geneSymbol,
+        metadata: {
+          confidence_score: gene.score,
+          phenotypes: gene.phenotypes?.map(p => p.name) || []
+        }
+      });
     } catch (err) {
       // Silently fail - activity tracking shouldn't break the app
       console.log("Could not track activity:", err);
@@ -105,9 +106,7 @@ function GeneCard({ gene, rank, isPremium, isSelected = false, onSelect = null }
   const loadMedicalContext = async () => {
     if (!user?.email) return;
     try {
-      // BACKEND_NEEDED: MedicalData entity needs API implementation
-      // const records = await apiClient.getMedicalData({ created_by: user.email }, 5);
-      const records = []; // Placeholder
+      const records = await apiClient.getMedicalData('clinical_records');
       
       if (records && records.length > 0) {
         const context = {
@@ -226,12 +225,7 @@ Provide a cohesive, personalized synthesis that includes:
 
 Synthesize all the information into a cohesive, personalized narrative. Don't just repeat what's already said - add deeper insights and personal relevance.`;
 
-    // BACKEND_NEEDED: LLM integration needs API implementation
-    // const response = await apiClient.invokeLLM({
-    //   prompt,
-    //   add_context_from_internet: false
-    // });
-    const response = "Comprehensive synthesis of gene information"; // Placeholder
+    const { result: response } = await apiClient.invokeLLM(prompt);
 
     return response;
   };
@@ -260,12 +254,7 @@ Adjust your language complexity and focus based on the user's background. Be hon
 
 Keep your response concise (3-4 short paragraphs) and use clear formatting.`;
 
-    // BACKEND_NEEDED: LLM integration needs API implementation
-    // const response = await apiClient.invokeLLM({
-    //   prompt,
-    //   add_context_from_internet: false
-    // });
-    const response = `The ${Math.round(score * 100)}% confidence score indicates moderate to high association.`; // Placeholder
+    const { result: response } = await apiClient.invokeLLM(prompt);
 
     return response;
   };
@@ -374,12 +363,7 @@ ${getEducationGuidance(user?.education_level)}
 
 Provide comprehensive, evidence-based analysis formatted with clear sections.`;
 
-      // BACKEND_NEEDED: LLM integration with internet context needs API implementation
-      // const response = await apiClient.invokeLLM({
-      //   prompt,
-      //   add_context_from_internet: true
-      // });
-      const response = `Analysis of ${gene.symbol} variant`; // Placeholder
+      const { result: response } = await apiClient.invokeLLM(prompt);
 
       // Parse for high-risk indicators
       const hasHighRisk = response.toLowerCase().includes('pathogenic') || 
@@ -498,6 +482,30 @@ Provide comprehensive, evidence-based analysis formatted with clear sections.`;
               <ConfidenceIcon className="w-3 h-3" />
               {Math.round(gene.score * 100)}% confidence
             </Badge>
+            <Button
+              variant="ghost"
+              size="sm"
+              title="Export report"
+              onClick={(e) => { e.stopPropagation(); exportGeneReport(gene); }}
+            >
+              <Printer className="w-4 h-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              title="Download JSON"
+              onClick={(e) => { e.stopPropagation(); exportJSON(gene, `gene-${gene.symbol}`); }}
+            >
+              <Download className="w-4 h-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              title="Copy summary"
+              onClick={async (e) => { e.stopPropagation(); await copyShareableLink(gene, 'gene'); }}
+            >
+              <Copy className="w-4 h-4" />
+            </Button>
             <Collapsible open={isExpanded} onOpenChange={setIsExpanded}>
               <CollapsibleTrigger asChild>
                 <Button variant="ghost" size="sm">

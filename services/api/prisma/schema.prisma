@@ -8,21 +8,40 @@ datasource db {
 }
 
 model User {
-  id              String   @id @default(uuid())
-  email           String   @unique
-  passwordHash    String   @map("password_hash")
-  role            String   @default("user")
-  educationLevel  String?  @map("education_level")
-  displayName     String?  @map("display_name")
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
-  
-  sessions          Session[]
-  subscriptions     Subscription[]
-  auditLogs         AuditLog[]
-  learningSessions  LearningSession[]
-  learningProgress  LearningProgress[]
-  
+  id                    String    @id @default(uuid())
+  email                 String    @unique
+  passwordHash          String    @map("password_hash")
+  role                  String    @default("user")
+  educationLevel        String?   @map("education_level")
+  displayName           String?   @map("display_name")
+  fullName              String?   @map("full_name")
+  phoneNumber           String?   @map("phone_number")
+  banned                Boolean   @default(false)
+  banReason             String?   @map("ban_reason")
+  bannedDate            DateTime? @map("banned_date")
+  bannedBy              String?   @map("banned_by")
+  demographicsCollected Boolean   @default(false) @map("demographics_collected")
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
+
+  sessions             Session[]
+  subscriptions        Subscription[]
+  auditLogs            AuditLog[]
+  learningSessions     LearningSession[]
+  learningProgress     LearningProgress[]
+  searchHistory        SearchHistory[]
+  userActivities       UserActivity[]
+  medicalData          MedicalData[]
+  aiConversations      AIConversation[]
+  geneSets             GeneSet[]
+  researchProjects     ResearchProject[]
+  collaborations       ProjectCollaborator[]
+  sentMessages         Message[]           @relation("sender")
+  receivedMessages     Message[]           @relation("receiver")
+  annotations          ProjectAnnotation[]
+  consentRecords       ConsentRecord[]
+  deletionRequests     DataDeletionRequest[]
+
   @@map("users")
 }
 
@@ -166,4 +185,217 @@ model LearningProgress {
   @@unique([userId, topicId])
   @@index([userId])
   @@map("learning_progress")
+}
+
+model SearchHistory {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  query     String
+  queryType String   @map("query_type")
+  results   Json?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("search_history")
+}
+
+model UserActivity {
+  id           String   @id @default(uuid())
+  userId       String   @map("user_id")
+  activityType String   @map("activity_type")
+  entityType   String?  @map("entity_type")
+  entityId     String?  @map("entity_id")
+  metadata     Json?
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("user_activities")
+}
+
+model MedicalData {
+  id          String   @id @default(uuid())
+  userId      String   @map("user_id")
+  dataType    String   @map("data_type")
+  title       String?
+  content     Json
+  fileUrl     String?  @map("file_url")
+  metadata    Json?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, dataType])
+  @@map("medical_data")
+}
+
+model AIConversation {
+  id            String   @id @default(uuid())
+  userId        String   @map("user_id")
+  assistantType String   @map("assistant_type")
+  title         String?
+  messages      Json
+  metadata      Json?
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, assistantType])
+  @@map("ai_conversations")
+}
+
+model GeneSet {
+  id          String   @id @default(uuid())
+  userId      String   @map("user_id")
+  name        String
+  description String?
+  genes       String[]
+  metadata    Json?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("gene_sets")
+}
+
+model ResearchProject {
+  id          String   @id @default(uuid())
+  userId      String   @map("user_id")
+  title       String
+  description String?
+  status      String   @default("active")
+  genes       String[]
+  metadata    Json?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  user          User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  versions      ProjectVersion[]
+  collaborators ProjectCollaborator[]
+  annotations   ProjectAnnotation[]
+
+  @@index([userId])
+  @@map("research_projects")
+}
+
+model ProjectVersion {
+  id        String   @id @default(uuid())
+  projectId String   @map("project_id")
+  version   Int
+  changes   Json
+  notes     String?
+  createdBy String   @map("created_by")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  project ResearchProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@map("project_versions")
+}
+
+model ProjectCollaborator {
+  id        String   @id @default(uuid())
+  projectId String   @map("project_id")
+  userId    String   @map("user_id")
+  role      String   @default("viewer")
+  addedBy   String   @map("added_by")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  project ResearchProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, userId])
+  @@map("project_collaborators")
+}
+
+model Message {
+  id         String    @id @default(uuid())
+  senderId   String    @map("sender_id")
+  receiverId String?   @map("receiver_id")
+  subject    String
+  body       String
+  category   String    @default("general")
+  status     String    @default("open")
+  parentId   String?   @map("parent_id")
+  metadata   Json?
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+
+  sender   User  @relation("sender", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver User? @relation("receiver", fields: [receiverId], references: [id], onDelete: SetNull)
+
+  @@index([senderId])
+  @@index([receiverId, status])
+  @@map("messages")
+}
+
+model PreBannedUser {
+  id          String   @id @default(uuid())
+  email       String?
+  phoneNumber String?  @map("phone_number")
+  fullName    String?  @map("full_name")
+  reason      String?
+  status      String   @default("active")
+  bannedBy    String   @map("banned_by")
+  triggeredAt DateTime? @map("triggered_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("pre_banned_users")
+}
+
+model ProjectAnnotation {
+  id          String   @id @default(uuid())
+  projectId   String   @map("project_id")
+  userId      String   @map("user_id")
+  targetType  String   @map("target_type")
+  targetId    String   @map("target_id")
+  content     String
+  parentId    String?  @map("parent_id")
+  resolved    Boolean  @default(false)
+  metadata    Json?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  project ResearchProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, targetType, targetId])
+  @@map("project_annotations")
+}
+
+model ConsentRecord {
+  id          String   @id @default(uuid())
+  userId      String   @map("user_id")
+  consentType String   @map("consent_type")
+  version     String
+  granted     Boolean
+  ipAddress   String?  @map("ip_address")
+  metadata    Json?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, consentType])
+  @@map("consent_records")
+}
+
+model DataDeletionRequest {
+  id           String    @id @default(uuid())
+  userId       String    @map("user_id")
+  status       String    @default("pending")
+  requestedAt  DateTime  @default(now()) @map("requested_at")
+  completedAt  DateTime? @map("completed_at")
+  deletedTypes String[]  @map("deleted_types")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("data_deletion_requests")
 }

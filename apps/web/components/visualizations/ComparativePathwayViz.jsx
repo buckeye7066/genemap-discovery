@@ -98,69 +98,18 @@ export default function ComparativePathwayViz({ geneSet1 = [], geneSet2 = [], la
   }
 }`;
 
-      // BACKEND_NEEDED: LLM integration with internet context needs API implementation
-      // const response = await apiClient.invokeLLM({
-      //   prompt,
-      //   add_context_from_internet: true,
-      //   response_json_schema: {
-      const response = { uniqueToSet1: [], uniqueToSet2: [], shared: [], summary: {}, geneOverlap: {} }; // Placeholder
-      /*
-      response = await apiClient.invokeLLM({
-        prompt,
-        add_context_from_internet: true,
-        response_json_schema: {
-          type: "object",
-          properties: {
-            uniqueToSet1: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  pathway: { type: "string" },
-                  enrichmentScore: { type: "number" },
-                  pValue: { type: "number" },
-                  genes: { type: "array", items: { type: "string" } },
-                  biologicalSignificance: { type: "string" }
-                }
-              }
-            },
-            uniqueToSet2: { type: "array" },
-            shared: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  pathway: { type: "string" },
-                  enrichmentSet1: { type: "number" },
-                  enrichmentSet2: { type: "number" },
-                  difference: { type: "number" },
-                  differentialSignificance: { type: "string" },
-                  genes: { type: "array", items: { type: "string" } }
-                }
-              }
-            },
-            summary: {
-              type: "object",
-              properties: {
-                biologicalDivergence: { type: "string" },
-                keyDifferences: { type: "array", items: { type: "string" } },
-                sharedFunctions: { type: "array", items: { type: "string" } },
-                clinicalImplications: { type: "string" }
-              }
-            },
-            geneOverlap: {
-              type: "object",
-              properties: {
-                sharedGenes: { type: "array", items: { type: "string" } },
-                uniqueToSet1: { type: "array", items: { type: "string" } },
-                uniqueToSet2: { type: "array", items: { type: "string" } },
-                overlapPercentage: { type: "number" }
-              }
-            }
-          }
-        }
-      });
-      */
+      const rawResponse = await apiClient.invokeLLM(
+        prompt + '\n\nIMPORTANT: Respond with ONLY valid JSON, no markdown or explanation.',
+        { temperature: 0.3 }
+      );
+      const text = typeof rawResponse === 'string' ? rawResponse : rawResponse.result || JSON.stringify(rawResponse);
+      let response;
+      try {
+        const jsonMatch = text.match(/\{[\s\S]*\}/);
+        response = jsonMatch ? JSON.parse(jsonMatch[0]) : { uniqueToSet1: [], uniqueToSet2: [], shared: [], summary: {}, geneOverlap: {} };
+      } catch {
+        response = { uniqueToSet1: [], uniqueToSet2: [], shared: [], summary: { clinicalImplications: text }, geneOverlap: {} };
+      }
 
       setComparisonData(response);
     } catch (err) {

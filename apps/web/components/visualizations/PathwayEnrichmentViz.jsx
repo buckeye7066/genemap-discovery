@@ -88,56 +88,8 @@ export default function PathwayEnrichmentViz({ genes = [], userEducationLevel = 
   ]
 }`;
 
-      // BACKEND_NEEDED: LLM integration with internet context needs API implementation
-      // const response = await apiClient.invokeLLM({
-      //   prompt,
-      //   add_context_from_internet: true,
-      //   response_json_schema: {
-      const response = { pathways: [], summary: '', interactions: [] }; // Placeholder
-      /*
-      response = await apiClient.invokeLLM({
-        prompt,
-        add_context_from_internet: true,
-        response_json_schema: {
-          type: "object",
-          properties: {
-            pathways: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  id: { type: "string" },
-                  name: { type: "string" },
-                  database: { type: "string" },
-                  pValue: { type: "number" },
-                  adjustedPValue: { type: "number" },
-                  geneCount: { type: "number" },
-                  totalGenes: { type: "number" },
-                  enrichmentScore: { type: "number" },
-                  genes: { type: "array", items: { type: "string" } },
-                  description: { type: "string" },
-                  category: { type: "string" },
-                  url: { type: "string" }
-                }
-              }
-            },
-            summary: { type: "string" },
-            interactions: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  pathway1: { type: "string" },
-                  pathway2: { type: "string" },
-                  relationship: { type: "string" },
-                  sharedGenes: { type: "array", items: { type: "string" } }
-                }
-              }
-            }
-          }
-        }
-      });
-      */
+      const { result: raw } = await apiClient.invokeLLM(prompt);
+      const response = typeof raw === 'string' ? JSON.parse(raw.match(/\{[\s\S]*\}/)?.[0] || '{"pathways":[],"summary":"","interactions":[]}') : raw;
 
       setEnrichmentData(response);
     } catch (err) {

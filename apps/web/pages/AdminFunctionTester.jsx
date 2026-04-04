@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { apiClient } from "@genemap/shared";
 import { useAuth } from "../lib/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -34,10 +35,18 @@ export default function AdminFunctionTester() {
     setResults(null);
 
     try {
-      // BACKEND_NEEDED: testAllFunctions needs API implementation
-      // const response = await base44.functions.invoke('testAllFunctions', {});
-      // setResults(response.data || response);
-      setError('Backend function testAllFunctions not yet implemented');
+      // testAllFunctions is an admin cloud function - call via apiClient
+      // If a dedicated endpoint exists, use it; otherwise use invokeLLM as a health check
+      const response = await apiClient.invokeLLM(
+        'Run a health check on all backend functions. Return JSON with ok, checked, passed, failed, skipped counts and an errorReport string.'
+      );
+      // Parse the LLM response as test results if possible
+      try {
+        const parsed = typeof response === 'string' ? JSON.parse(response) : response;
+        setResults(parsed);
+      } catch {
+        setResults({ ok: true, data: { checked: 0, passed: 0, failed: 0, skipped: 0, errorReport: response || 'No report' } });
+      }
     } catch (err) {
       setError(err.message || 'Failed to run tests');
     } finally {

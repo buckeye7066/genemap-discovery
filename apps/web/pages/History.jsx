@@ -34,14 +34,8 @@ export default function HistoryPage() {
 
   const loadData = async () => {
     try {
-      // BACKEND_NEEDED: SearchHistory entity needs API implementation
-      // const history = await base44.entities.SearchHistory.filter(
-      //   { created_by: user?.email },
-      //   '-created_date',
-      //   50
-      // );
-      // setSearchHistory(history);
-      setSearchHistory([]);
+      const history = await apiClient.getSearchHistory();
+      setSearchHistory(history || []);
     } catch (err) {
       console.error("Error loading history:", err);
       setError("Unable to load search history");
@@ -78,8 +72,7 @@ export default function HistoryPage() {
     setError(null);
 
     try {
-      // BACKEND_NEEDED: SearchHistory entity needs API implementation
-      // await base44.entities.SearchHistory.delete(searchId);
+      await apiClient.deleteSearchHistory(searchId);
       setSearchHistory(prev => prev.filter(s => s.id !== searchId));
       setSuccessMessage("Search deleted successfully");
       setTimeout(() => setSuccessMessage(null), 3000);
@@ -100,11 +93,7 @@ export default function HistoryPage() {
     setError(null);
 
     try {
-      // BACKEND_NEEDED: SearchHistory entity needs API implementation
-      // Delete all searches
-      // await Promise.all(
-      //   searchHistory.map(search => base44.entities.SearchHistory.delete(search.id))
-      // );
+      await apiClient.deleteSearchHistory();
       setSearchHistory([]);
       setSuccessMessage("All search history cleared successfully");
       setTimeout(() => setSuccessMessage(null), 3000);

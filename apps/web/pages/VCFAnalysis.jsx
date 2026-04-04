@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { apiClient } from "@genemap/shared";
+import { exportVCFReport } from "../lib/exportUtils";
 import { Link } from "react-router-dom";
 import { useAuth } from "../lib/AuthContext";
 import { createPageUrl } from "@/utils";
@@ -24,7 +25,8 @@ import {
   Sparkles,
   BarChart3,
   AlertCircle,
-  CheckCircle
+  CheckCircle,
+  FileText
 } from "lucide-react";
 import VCFParser from "../components/medical/VCFParser";
 
@@ -55,10 +57,9 @@ export default function VCFAnalysisPage() {
 
     setIsUploading(true);
     try {
-      // BACKEND_NEEDED: UploadFile integration needs API implementation
-      // const result = await apiClient.uploadFile({ file });
-      // setUploadedFileUrl(result.file_url);
-      alert("File upload is not yet implemented");
+      // Create a local blob URL for client-side VCF parsing
+      const fileUrl = URL.createObjectURL(file);
+      setUploadedFileUrl(fileUrl);
     } catch (err) {
       log.error("Upload error:", err);
       alert("Failed to upload file. Please try again.");
@@ -105,13 +106,12 @@ export default function VCFAnalysisPage() {
         const batchResults = await Promise.all(
           batch.map(async (symbol) => {
             try {
-              // BACKEND_NEEDED: InvokeLLM integration needs API implementation
-              // const summary = await apiClient.invokeLLM({
-              //   prompt: `Provide a brief summary for gene ${symbol} that was found in a VCF analysis...`,
-              //   add_context_from_internet: true
-              // });
-              // return { symbol, summary };
-              return { symbol, summary: `Gene ${symbol} identified in VCF analysis.` };
+              const response = await apiClient.invokeLLM(
+                `Provide a brief 2-3 sentence summary for gene ${symbol} that was found in a VCF analysis. Include its function, associated diseases, and clinical relevance.`,
+                { add_context_from_internet: true }
+              );
+              const summary = response?.result || `Gene ${symbol} identified in VCF analysis.`;
+              return { symbol, summary };
             } catch (err) {
               return { symbol, summary: `Gene ${symbol} identified in VCF analysis.` };
             }
@@ -408,6 +408,18 @@ export default function VCFAnalysisPage() {
                   >
                     <Download className="w-4 h-4" />
                     Export Results (JSON)
+                  </Button>
+                  <Button
+                    onClick={() => exportVCFReport(enrichedVariants.length ? enrichedVariants : variants, {
+                      pathogenicCount: enrichedVariants.filter(v => v.classification === 'Pathogenic').length,
+                      benignCount: enrichedVariants.filter(v => v.classification === 'Benign').length,
+                      vusCount: enrichedVariants.filter(v => v.classification === 'VUS' || v.classification === 'Uncertain significance').length,
+                    })}
+                    variant="outline"
+                    className="w-full gap-2"
+                  >
+                    <FileText className="w-4 h-4" />
+                    Print Report (PDF)
                   </Button>
                   <Link to={createPageUrl("VisualizationHub")}>
                     <Button variant="outline" className="w-full gap-2">

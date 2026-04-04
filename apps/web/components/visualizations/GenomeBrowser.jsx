@@ -36,43 +36,14 @@ export default function GenomeBrowser({ genes = [], onGeneClick }) {
     
     setIsLoadingNearby(true);
     try {
-      // BACKEND_NEEDED: LLM integration needs API implementation
-      // const response = await apiClient.invokeLLM({
-      //   prompt: `List 8-12 real genes that are located near ${mainGene.symbol}...
-      const response = { genes: [] }; // Placeholder
-      /*
-      response = await apiClient.invokeLLM({
-        prompt: `List 8-12 real genes that are located near ${mainGene.symbol} on chromosome ${chromosome}. 
+      const nearbyPrompt = `List 8-12 real genes that are located near ${mainGene.symbol} on chromosome ${chromosome}.
 Include genes within ~1-5 Mb of position ${geneStart}.
 
-Return as JSON array with:
-- symbol: gene symbol
-- start: approximate genomic start position (number)
-- end: approximate genomic end position (number)
-- name: full gene name
-- strand: "+" or "-"
+Return as JSON with format: {"genes": [{"symbol": "...", "start": number, "end": number, "name": "...", "strand": "+/-"}, ...]}
 
-Make positions realistic for chromosome ${chromosome}. Focus on well-known genes.`,
-        response_json_schema: {
-          type: "object",
-          properties: {
-            genes: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  symbol: { type: "string" },
-                  start: { type: "number" },
-                  end: { type: "number" },
-                  name: { type: "string" },
-                  strand: { type: "string" }
-                }
-              }
-            }
-          }
-        }
-      });
-      */
+Make positions realistic for chromosome ${chromosome}. Focus on well-known genes.`;
+      const { result: raw } = await apiClient.invokeLLM(nearbyPrompt);
+      const response = typeof raw === 'string' ? JSON.parse(raw.match(/\{[\s\S]*\}/)?.[0] || '{"genes":[]}') : raw;
 
       if (response.genes) {
         setNearbyGenes(response.genes);

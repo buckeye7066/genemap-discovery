@@ -93,35 +93,17 @@ If it's a disease:
 Provide a comprehensive analysis for gene discovery.
 `;
 
-    // BACKEND_NEEDED: LLM integration needs API implementation
-    // const analysis = await apiClient.invokeLLM({
-    //   prompt,
-    //   response_json_schema: {
-    const analysis = {}; // Placeholder
-    /*
-    analysis = await apiClient.invokeLLM({
-      prompt,
-      response_json_schema: {
-        type: "object",
-        properties: {
-          queryType: { 
-            type: "string",
-            enum: ["disease", "phenotype", "hpo_term"]
-          },
-          isDisease: { type: "boolean" },
-          diseaseName: { type: "string" },
-          isHPOTerm: { type: "boolean" },
-          mainFeatures: { type: "array", items: { type: "string" } },
-          hpoTerms: { type: "array", items: { type: "string" } },
-          synonyms: { type: "array", items: { type: "string" } },
-          category: { type: "string" },
-          inheritancePattern: { type: "string" }
-        }
-      }
+    const response = await apiClient.invokeLLM(prompt + '\n\nReturn your response as JSON with keys: queryType, isDisease, diseaseName, isHPOTerm, mainFeatures (array), hpoTerms (array), synonyms (array), category, inheritancePattern.', {
+      add_context_from_internet: true
     });
-    */
 
-    return analysis;
+    try {
+      const raw = response?.result || response;
+      const parsed = typeof raw === 'string' ? JSON.parse(raw.match(/\{[\s\S]*\}/)?.[0] || '{}') : raw;
+      return parsed;
+    } catch {
+      return {};
+    }
   }
 
   static async findCandidateGenes(phenotypeAnalysis, isPremium) {
@@ -175,43 +157,18 @@ Return 3-8 most relevant candidate genes ranked by evidence strength.
 `;
     }
 
-    // BACKEND_NEEDED: LLM integration with internet context needs API implementation
-    // const geneResults = await apiClient.invokeLLM({
-    //   prompt,
-    //   add_context_from_internet: true,
-    //   response_json_schema: {
-    const geneResults = { candidateGenes: [] }; // Placeholder
-    /*
-    geneResults = await apiClient.invokeLLM({
-      prompt,
-      add_context_from_internet: true,
-      response_json_schema: {
-        type: "object",
-        properties: {
-          candidateGenes: {
-            type: "array",
-            items: {
-              type: "object",
-              properties: {
-                symbol: { type: "string" },
-                name: { type: "string" },
-                entrezId: { type: "string" },
-                ensemblId: { type: "string" },
-                chromosome: { type: "string" },
-                start: { type: "number" },
-                end: { type: "number" },
-                score: { type: "number" },
-                associationType: { type: "string" },
-                explanation: { type: "string" }
-              }
-            }
-          }
-        }
-      }
+    const response = await apiClient.invokeLLM(prompt + '\n\nReturn your response as JSON with key "candidateGenes" containing an array of objects with: symbol, name, entrezId, ensemblId, chromosome, start, end, score, associationType, explanation.', {
+      add_context_from_internet: true
     });
-    */
 
-    return geneResults.candidateGenes || [];
+    try {
+      const raw = response?.result || response;
+      const parsed = typeof raw === 'string' ? JSON.parse(raw.match(/\{[\s\S]*\}|\[[\s\S]*\]/)?.[0] || '{}') : raw;
+      const geneResults = Array.isArray(parsed) ? { candidateGenes: parsed } : parsed;
+      return geneResults.candidateGenes || [];
+    } catch {
+      return [];
+    }
   }
 
   static async enrichGeneData(candidateGenes, isPremium, userPreferences) {
@@ -279,35 +236,17 @@ Include HPO terms where applicable.
 Focus on well-established gene-phenotype associations from OMIM, ClinVar, UniProt, and medical literature.
 `;
 
-    // BACKEND_NEEDED: LLM integration with internet context needs API implementation
-    // const phenotypeData = await apiClient.invokeLLM({
-    //   prompt,
-    //   add_context_from_internet: true,
-    //   response_json_schema: {
-    const phenotypeData = { phenotypes: [] }; // Placeholder
-    /*
-    phenotypeData = await apiClient.invokeLLM({
-      prompt,
-      add_context_from_internet: true,
-      response_json_schema: {
-        type: "object",
-        properties: {
-          phenotypes: {
-            type: "array",
-            items: {
-              type: "object",
-              properties: {
-                name: { type: "string" },
-                hpoId: { type: "string" }
-              }
-            }
-          }
-        }
-      }
+    const response = await apiClient.invokeLLM(prompt + '\n\nReturn as JSON with key "phenotypes" containing array of {name, hpoId}.', {
+      add_context_from_internet: true
     });
-    */
 
-    return phenotypeData.phenotypes || [];
+    try {
+      const raw = response?.result || response;
+      const parsed = typeof raw === 'string' ? JSON.parse(raw.match(/\{[\s\S]*\}/)?.[0] || '{}') : raw;
+      return parsed.phenotypes || [];
+    } catch {
+      return [];
+    }
   }
 
   static async generateGeneSummary(gene, phenotypes, userPreferences) {
@@ -332,14 +271,10 @@ Keep it factual and source-aware. Reference data from UniProt, HPA, or GTEx if r
 Match the complexity and terminology to the reader's background.
 `;
 
-    // BACKEND_NEEDED: LLM integration with internet context needs API implementation
-    // const summary = await apiClient.invokeLLM({
-    //   prompt,
-    //   add_context_from_internet: true
-    // });
-    const summary = `${geneSymbol} is associated with the searched phenotype.`; // Placeholder
-
-    return summary;
+    const response = await apiClient.invokeLLM(prompt, {
+      add_context_from_internet: true
+    });
+    return response?.result || response || `${gene.symbol} is associated with the searched phenotype.`;
   }
 
   static async generateKeyTakeaways(gene, phenotypes, userPreferences) {
@@ -364,29 +299,18 @@ Each takeaway should be:
 Return ONLY an array of strings, no additional formatting.
 `;
 
-    // BACKEND_NEEDED: LLM integration with internet context needs API implementation
-    // const result = await apiClient.invokeLLM({
-    //   prompt,
-    //   add_context_from_internet: true,
-    //   response_json_schema: {
-    const result = { takeaways: [] }; // Placeholder
-    /*
-    result = await apiClient.invokeLLM({
-      prompt,
-      add_context_from_internet: true,
-      response_json_schema: {
-        type: "object",
-        properties: {
-          takeaways: {
-            type: "array",
-            items: { type: "string" }
-          }
-        }
-      }
+    const response = await apiClient.invokeLLM(prompt + '\n\nReturn as JSON with key "takeaways" containing array of strings.', {
+      add_context_from_internet: true
     });
-    */
 
-    return result.takeaways || [];
+    try {
+      const raw = response?.result || response;
+      const parsed = typeof raw === 'string' ? JSON.parse(raw.match(/\{[\s\S]*\}|\[[\s\S]*\]/)?.[0] || '{}') : raw;
+      if (Array.isArray(parsed)) return parsed;
+      return parsed.takeaways || [];
+    } catch {
+      return [];
+    }
   }
 
   static async generateFurtherReading(gene, userPreferences) {
@@ -410,39 +334,20 @@ Format resources as:
 Adjust complexity of search terms based on user background.
 `;
 
-    // BACKEND_NEEDED: LLM integration needs API implementation
-    // const result = await apiClient.invokeLLM({
-    //   prompt,
-    //   add_context_from_internet: false,
-    //   response_json_schema: {
-    const result = { resources: [], pubmedSearchTerms: [] }; // Placeholder
-    /*
-    result = await apiClient.invokeLLM({
-      prompt,
-      add_context_from_internet: false,
-      response_json_schema: {
-        type: "object",
-        properties: {
-          resources: {
-            type: "array",
-            items: {
-              type: "object",
-              properties: {
-                name: { type: "string" },
-                url: { type: "string" }
-              }
-            }
-          },
-          pubmedSearchTerms: {
-            type: "array",
-            items: { type: "string" }
-          }
-        }
-      }
+    const response = await apiClient.invokeLLM(prompt + '\n\nReturn as JSON with keys: "resources" (array of {name, url}) and "pubmedSearchTerms" (array of strings).', {
+      add_context_from_internet: false
     });
-    */
 
-    return result;
+    try {
+      const raw = response?.result || response;
+      const parsed = typeof raw === 'string' ? JSON.parse(raw.match(/\{[\s\S]*\}/)?.[0] || '{}') : raw;
+      return {
+        resources: parsed.resources || [],
+        pubmedSearchTerms: parsed.pubmedSearchTerms || []
+      };
+    } catch {
+      return { resources: [], pubmedSearchTerms: [] };
+    }
   }
 
   static async getGeneExpressionData(geneSymbol) {
@@ -457,29 +362,17 @@ Use tissue names like: brain, heart, liver, kidney, muscle, lung, etc.
 `;
 
     try {
-      // BACKEND_NEEDED: LLM integration with internet context needs API implementation
-      // const result = await apiClient.invokeLLM({
-      //   prompt,
-      //   add_context_from_internet: true,
-      //   response_json_schema: {
-      //     type: "object",
-      //     properties: {
-      //       expression: {
-      //         type: "array",
-      //         items: {
-      //           type: "object",
-      //           properties: {
-      //             tissue: { type: "string" },
-      //             expression: { type: "number" }
-      //           }
-      //         }
-      //       }
-      //     }
-      //   }
-      // });
-      const result = { expression: [] }; // Placeholder
+      const response = await apiClient.invokeLLM(prompt + '\n\nReturn as JSON with key "expression" containing array of {tissue, expression}.', {
+        add_context_from_internet: true
+      });
 
-      return result.expression || [];
+      try {
+        const raw = response?.result || response;
+        const parsed = typeof raw === 'string' ? JSON.parse(raw.match(/\{[\s\S]*\}/)?.[0] || '{}') : raw;
+        return parsed.expression || [];
+      } catch {
+        return [];
+      }
     } catch (error) {
       log.error(`Error fetching expression data for ${geneSymbol}:`, error);
       return [];
@@ -504,61 +397,17 @@ IMPORTANT: Tailor all explanations for ${explanationStyle}.
 Adjust technical depth, terminology, and focus based on the reader's background.
 `;
 
-    // BACKEND_NEEDED: LLM integration with internet context needs API implementation
-    // const premiumData = await apiClient.invokeLLM({
-    //   prompt,
-    //   add_context_from_internet: true,
-    //   response_json_schema: {
-    const premiumData = { prevalence: {}, geneHistory: {}, mutations: [], treatments: [] }; // Placeholder
-    /*
-    premiumData = await apiClient.invokeLLM({
-      prompt,
-      add_context_from_internet: true,
-      response_json_schema: {
-        type: "object",
-        properties: {
-          prevalence: { 
-            type: "object",
-            properties: {
-              estimate: { type: "string" },
-              population: { type: "string" },
-              source: { type: "string" }
-            }
-          },
-          geneHistory: {
-            type: "object", 
-            properties: {
-              family: { type: "string" },
-              evolution: { type: "string" },
-              discovery: { type: "string" }
-            }
-          },
-          mutations: {
-            type: "array",
-            items: {
-              type: "object",
-              properties: {
-                type: { type: "string" },
-                significance: { type: "string" },
-                disease: { type: "string" }
-              }
-            }
-          },
-          treatments: {
-            type: "array",
-            items: {
-              type: "object", 
-              properties: {
-                name: { type: "string" },
-                type: { type: "string" },
-                status: { type: "string" }
-              }
-            }
-          }
-        }
-      }
+    const response = await apiClient.invokeLLM(prompt + '\n\nReturn as JSON with keys: prevalence ({estimate, population, source}), geneHistory ({family, evolution, discovery}), mutations (array of {type, significance, disease}), treatments (array of {name, type, status}).', {
+      add_context_from_internet: true
     });
-    */
+
+    let premiumData;
+    try {
+      const raw = response?.result || response;
+      premiumData = typeof raw === 'string' ? JSON.parse(raw.match(/\{[\s\S]*\}/)?.[0] || '{}') : raw;
+    } catch {
+      premiumData = { prevalence: {}, geneHistory: {}, mutations: [], treatments: [] };
+    }
 
     return {
       prevalenceData: premiumData.prevalence,
@@ -619,12 +468,10 @@ Provide a comprehensive analysis tailored for ${educationContext}.
 Use clear, engaging language appropriate for the user's background. Format with markdown for readability.
 `;
 
-    // BACKEND_NEEDED: LLM integration with internet context needs API implementation
-    // const analysis = await apiClient.invokeLLM({
-    //   prompt,
-    //   add_context_from_internet: true
-    // });
-    const analysis = "Analysis of gene set comparison";
+    const analysisResponse = await apiClient.invokeLLM(prompt, {
+      add_context_from_internet: true
+    });
+    const analysis = analysisResponse?.result || analysisResponse || "Analysis of gene set comparison";
 
     // Get functional relationships for overlapping genes
     let functionalRelationships = [];
@@ -661,31 +508,17 @@ Return up to 5 most significant relationships.
 `;
 
     try {
-      // BACKEND_NEEDED: LLM integration with internet context needs API implementation
-      // const result = await apiClient.invokeLLM({
-      //   prompt,
-      //   add_context_from_internet: true,
-      //   response_json_schema: {
-      //     type: "object",
-      //     properties: {
-      //       relationships: {
-      //         type: "array",
-      //         items: {
-      //           type: "object",
-      //           properties: {
-      //             gene1: { type: "string" },
-      //             gene2: { type: "string" },
-      //             relationship: { type: "string" },
-      //             evidence: { type: "string" }
-      //           }
-      //         }
-      //       }
-      //     }
-      //   }
-      // });
-      const result = { relationships: [] }; // Placeholder
+      const response = await apiClient.invokeLLM(prompt + '\n\nReturn as JSON with key "relationships" containing array of {gene1, gene2, relationship, evidence}.', {
+        add_context_from_internet: true
+      });
 
-      return result.relationships || [];
+      try {
+        const raw = response?.result || response;
+        const parsed = typeof raw === 'string' ? JSON.parse(raw.match(/\{[\s\S]*\}/)?.[0] || '{}') : raw;
+        return parsed.relationships || [];
+      } catch {
+        return [];
+      }
     } catch (error) {
       log.error("Error getting functional relationships:", error);
       return [];

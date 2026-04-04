@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { apiClient } from "@genemap/shared";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Loader2, Download, Sparkles } from "lucide-react";
@@ -13,35 +14,30 @@ export default function GenerateAppIcon() {
   }, []);
 
   const generateIcon = async () => {
-    // BACKEND_NEEDED: Image generation needs API implementation
     setIsGenerating(true);
-    setTimeout(() => {
+    try {
+      const result = await apiClient.llmImage(
+        `Modern app icon inspired by Leonardo da Vinci's Vitruvian Man for a genomics application.
+        Design features:
+        - Minimalist silhouette of human figure in anatomical proportions
+        - Geometric circle and square framework (Da Vinci's proportional planes)
+        - DNA double helix pattern integrated into the design
+        - Gradient color scheme: deep blue (#2563eb) to indigo (#4f46e5)
+        - Clean, professional, scientific aesthetic
+        - White/light blue figure on gradient background
+        - Subtle golden ratio geometric lines
+        - High contrast for app icon clarity
+        - Perfect for 512x512px app icon
+        - No text, pure icon design
+        Style: Renaissance meets modern genomics, clean lines, professional medical/scientific feel, Leonardo da Vinci anatomical study meets DNA research`,
+        { size: '1024x1024', quality: 'hd' }
+      );
+      setIconUrl(result.url);
+    } catch (error) {
+      console.error("Failed to generate icon:", error);
+    } finally {
       setIsGenerating(false);
-    }, 1000);
-
-    // setIsGenerating(true);
-    // try {
-    //   const result = await base44.integrations.Core.GenerateImage({
-    //     prompt: `Modern app icon inspired by Leonardo da Vinci's Vitruvian Man for a genomics application.
-    //     Design features:
-    //     - Minimalist silhouette of human figure in anatomical proportions
-    //     - Geometric circle and square framework (Da Vinci's proportional planes)
-    //     - DNA double helix pattern integrated into the design
-    //     - Gradient color scheme: deep blue (#2563eb) to indigo (#4f46e5)
-    //     - Clean, professional, scientific aesthetic
-    //     - White/light blue figure on gradient background
-    //     - Subtle golden ratio geometric lines
-    //     - High contrast for app icon clarity
-    //     - Perfect for 512x512px app icon
-    //     - No text, pure icon design
-    //     Style: Renaissance meets modern genomics, clean lines, professional medical/scientific feel, Leonardo da Vinci anatomical study meets DNA research`
-    //   });
-    //   setIconUrl(result.url);
-    // } catch (error) {
-    //   console.error("Failed to generate icon:", error);
-    // } finally {
-    //   setIsGenerating(false);
-    // }
+    }
   };
 
   return (

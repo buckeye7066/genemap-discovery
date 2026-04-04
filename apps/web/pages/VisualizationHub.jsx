@@ -1,4 +1,5 @@
 import React, { useState, useEffect, lazy, Suspense } from "react";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { apiClient } from "@genemap/shared";
 import { useAuth } from "../lib/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -78,10 +79,9 @@ export default function VisualizationHub() {
 
   const loadSavedConfigs = async () => {
     try {
-      // BACKEND_NEEDED: VisualizationConfig entity needs API implementation
-      // const configs = await apiClient.getVisualizationConfigs();
-      // setSavedConfigs(configs || []);
-      setSavedConfigs([]);
+      // Visualization configs stored locally until backend entity is available
+      const stored = localStorage.getItem('genemap_viz_configs');
+      setSavedConfigs(stored ? JSON.parse(stored) : []);
     } catch (err) {
       console.log("No saved configs found or error fetching configs:", err);
       setSavedConfigs([]);
@@ -98,43 +98,26 @@ export default function VisualizationHub() {
     setError(null);
 
     try {
-      // BACKEND_NEEDED: InvokeLLM integration needs API implementation
-      // const result = await apiClient.invokeLLM({
-      //   prompt,
-      //   add_context_from_internet: true,
-      //   response_json_schema: {
-      //     type: "object",
-      //     properties: {
-      //       symbol: { type: "string" },
-      //       name: { type: "string" },
-      //       chromosome: { type: "string" },
-      //       start: { type: "number" },
-      //       end: { type: "number" },
-      //       phenotypes: {
-      //         type: "array",
-      //         items: {
-      //           type: "object",
-      //           properties: {
-      //             name: { type: "string" },
-      //             hpoId: { type: "string" }
-      //           }
-      //         }
-      //       },
-      //       expressionData: {
-      //         type: "array",
-      //         items: {
-      //           type: "object",
-      //           properties: {
-      //             tissue: { type: "string" },
-      //             expression: { type: "number" }
-      //           }
-      //         }
-      //       }
-      //     }
-      //   }
-      // });
+      const prompt = `For the gene ${gene}, provide comprehensive data as JSON with these fields:
+- symbol (string): the official gene symbol
+- name (string): full gene name
+- chromosome (string): e.g. "chr17"
+- start (number): approximate genomic start position (GRCh38)
+- end (number): approximate genomic end position (GRCh38)
+- phenotypes (array of {name, hpoId}): associated phenotypes with HPO IDs
+- expressionData (array of {tissue, expression}): tissue expression levels in TPM for top 8-10 tissues`;
 
-      const result = null; // Placeholder until API is implemented
+      const response = await apiClient.invokeLLM(prompt, {
+        add_context_from_internet: true
+      });
+
+      let result;
+      try {
+        const raw = response?.result || response;
+        result = typeof raw === 'string' ? JSON.parse(raw.match(/\{[\s\S]*\}/)?.[0] || '{}') : raw;
+      } catch {
+        result = null;
+      }
 
       if (result && result.symbol) {
         const geneInfo = {
@@ -194,22 +177,22 @@ export default function VisualizationHub() {
     }
 
     try {
-      // BACKEND_NEEDED: VisualizationConfig entity needs API implementation
-      // await apiClient.createVisualizationConfig({
-      //   name: configName,
-      //   description: configDescription,
-      //   genes: selectedGenes.map(g => g.symbol),
-      //   active_visualizations: activeVisualizations,
-      //   settings: {
-      //     overlay_mode: overlayMode
-      //   }
-      // });
+      const newConfig = {
+        id: Date.now().toString(),
+        name: configName,
+        description: configDescription,
+        genes: selectedGenes.map(g => g.symbol),
+        active_visualizations: activeVisualizations,
+        settings: { overlay_mode: overlayMode }
+      };
+      const existing = JSON.parse(localStorage.getItem('genemap_viz_configs') || '[]');
+      existing.push(newConfig);
+      localStorage.setItem('genemap_viz_configs', JSON.stringify(existing));
 
-      // setConfigName("");
-      // setConfigDescription("");
-      // setSaveDialogOpen(false);
-      // await loadSavedConfigs();
-      setError("Configuration saving is not yet implemented");
+      setConfigName("");
+      setConfigDescription("");
+      setSaveDialogOpen(false);
+      await loadSavedConfigs();
       
     } catch (err) {
       console.error("Error saving configuration:", err);

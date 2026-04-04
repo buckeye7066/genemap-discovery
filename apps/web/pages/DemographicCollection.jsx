@@ -49,16 +49,13 @@ export default function DemographicCollectionPage() {
     setError(null);
 
     try {
-      // BACKEND_NEEDED: User profile update API needs implementation
-      // await apiClient.updateMe({
-      //   phone_number: phoneNumber,
-      //   mailing_list_opt_in: mailingListOptIn,
-      //   demographics_collected: true
-      // });
+      await apiClient.updateProfile({
+        phoneNumber: phoneNumber,
+        mailingListOptIn: mailingListOptIn,
+        demographicsCollected: true
+      });
 
-      // For now, just navigate (will need proper implementation)
-      setError('User profile update API not yet implemented');
-      // navigate(createPageUrl("Home"));
+      navigate(createPageUrl("Home"));
     } catch (err) {
       console.error("Error saving demographics:", err);
       setError("Failed to save information. Please try again.");

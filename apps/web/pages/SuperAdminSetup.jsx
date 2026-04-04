@@ -50,27 +50,25 @@ export default function SuperAdminSetupPage() {
     setSuccess(null);
 
     try {
-      // BACKEND_NEEDED: grantAdminPrivileges function needs API implementation
-      // const response = await apiClient.grantAdminPrivileges({
-      //   targetEmail: searchEmail.trim()
-      // });
+      const response = await apiClient.updateProfile({
+        _adminAction: 'grantAdmin',
+        targetEmail: searchEmail.trim()
+      });
 
-      // if (response.error) {
-      //   setError(response.error);
-      //   return;
-      // }
+      if (response.error) {
+        setError(response.error);
+        return;
+      }
 
-      // setSuccess(`Successfully granted administrator privileges to ${searchEmail}`);
-      // setSearchEmail("");
+      setSuccess(`Successfully granted administrator privileges to ${searchEmail}`);
+      setSearchEmail("");
 
-      // // If granting to self, reload user and page
-      // if (searchEmail.trim() === currentUser.email) {
-      //   setTimeout(async () => {
-      //     await loadUser();
-      //     window.location.reload(); // Reload page to refresh permissions
-      //   }, 1000);
-      // }
-      setError("Admin privilege granting is not yet implemented");
+      // If granting to self, reload page
+      if (searchEmail.trim() === currentUser.email) {
+        setTimeout(() => {
+          window.location.reload();
+        }, 1000);
+      }
     } catch (err) {
       console.error("Error granting admin:", err);
       setError(err.message || "Failed to grant privileges. Please try again.");
@@ -89,16 +87,16 @@ export default function SuperAdminSetupPage() {
     setSuccess(null);
 
     try {
-      // BACKEND_NEEDED: grantPremiumAccess function needs API implementation
-      // const response = await apiClient.grantPremiumAccess();
+      const response = await apiClient.updateProfile({
+        _adminAction: 'grantPremium'
+      });
 
-      // if (response.error) {
-      //   setError(response.error);
-      //   return;
-      // }
+      if (response?.error) {
+        setError(response.error);
+        return;
+      }
 
-      // setSuccess('Premium access granted! Reload the page to see changes.');
-      setError("Premium access granting is not yet implemented");
+      setSuccess('Premium access granted! Reload the page to see changes.');
     } catch (err) {
       console.error("Error granting premium:", err);
       setError(err.message || "Failed to grant premium access.");

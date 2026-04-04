@@ -53,42 +53,8 @@ Tailor explanation for ${educationContext}.
 
 Source: STRING DB, BioGRID, IntAct, or literature evidence.`;
 
-      // BACKEND_NEEDED: LLM integration with internet context needs API implementation
-      // const response = await apiClient.invokeLLM({
-      //   prompt,
-      //   add_context_from_internet: true,
-      //   response_json_schema: {
-      const response = { total_interactions: 0, interactions: [], pathways: [], summary: '' }; // Placeholder
-      /*
-      response = await apiClient.invokeLLM({
-        prompt,
-        add_context_from_internet: true,
-        response_json_schema: {
-          type: "object",
-          properties: {
-            total_interactions: { type: "number" },
-            interactions: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  partner: { type: "string" },
-                  type: { type: "string" },
-                  confidence: { anyOf: [{ type: "string" }, { type: "number" }] },
-                  significance: { type: "string" }
-                },
-                required: ["partner", "type", "confidence", "significance"]
-              }
-            },
-            pathways: {
-              type: "array",
-              items: { type: "string" }
-            },
-            summary: { type: "string" }
-          }
-        }
-      });
-      */
+      const { result: raw } = await apiClient.invokeLLM(prompt + '\n\nReturn JSON: {"total_interactions": number, "interactions": [{"partner": "...", "type": "...", "confidence": "high/medium/low", "significance": "..."}], "pathways": ["..."], "summary": "..."}');
+      const response = typeof raw === 'string' ? JSON.parse(raw.match(/\{[\s\S]*\}/)?.[0] || '{"total_interactions":0,"interactions":[],"pathways":[],"summary":""}') : raw;
 
       setInteractionData(response);
     } catch (err) {

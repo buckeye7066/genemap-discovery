@@ -80,14 +80,13 @@ export default function SearchPage() {
       }
 
       try {
-        // BACKEND_NEEDED: SearchHistory entity needs API implementation
-        // await base44.entities.SearchHistory.create({
-        //   phenotype_query: query,
-        //   hpo_term: results.hpoTerms?.[0] || null,
-        //   candidate_genes: results.candidateGenes.map(g => g.symbol),
-        //   search_type: isPremium ? "premium" : "free",
-        //   results_count: results.candidateGenes.length
-        // });
+        await apiClient.saveSearchHistory({
+          phenotype_query: query,
+          hpo_term: results.hpoTerms?.[0] || null,
+          candidate_genes: results.candidateGenes.map(g => g.symbol),
+          search_type: isPremium ? "premium" : "free",
+          results_count: results.candidateGenes.length
+        });
       } catch (historyError) {
         log.debug("Could not save search history:", historyError);
       }
@@ -142,14 +141,14 @@ export default function SearchPage() {
         return;
       }
 
-      // BACKEND_NEEDED: GeneSet entity needs API implementation
-      // await base44.entities.GeneSet.create({
-      //   name,
-      //   description,
-      //   genes: genesToSave,
-      //   phenotype_context: searchQuery || null,
-      //   tags: tags || []
-      // });
+      await apiClient.saveMedicalData({
+        _entityType: 'GeneSet',
+        name,
+        description,
+        genes: genesToSave,
+        phenotype_context: searchQuery || null,
+        tags: tags || []
+      });
 
       // Invalidate and refetch gene sets cache with user context
       await queryClient.invalidateQueries({ queryKey: ['geneSets', user?.email] });

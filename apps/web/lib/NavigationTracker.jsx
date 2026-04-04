@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useAuth } from './AuthContext';
+import { apiClient } from '@genemap/shared';
 import { pagesConfig } from '@/pages.config';
 
 export default function NavigationTracker() {
@@ -39,10 +40,13 @@ export default function NavigationTracker() {
         }
 
         if (isAuthenticated && pageName) {
-            // BACKEND_NEEDED: App logs need API implementation
-            // base44.appLogs.logUserInApp(pageName).catch(() => {
-            //     // Silently fail - logging shouldn't break the app
-            // });
+            apiClient.logActivity({
+                activityType: 'page_view',
+                entityType: 'page',
+                entityId: pageName,
+            }).catch(() => {
+                // Silently fail - logging shouldn't break the app
+            });
         }
     }, [location, isAuthenticated, Pages, mainPageKey]);
 

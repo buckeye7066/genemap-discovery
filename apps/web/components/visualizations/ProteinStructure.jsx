@@ -32,35 +32,8 @@ Tailor explanation for ${educationContext}.
 
 If no PDB structure exists, provide information about predicted structure or structure of homologs.`;
 
-      // BACKEND_NEEDED: LLM integration with internet context needs API implementation
-      // const response = await apiClient.invokeLLM({
-      //   prompt,
-      //   add_context_from_internet: true,
-      //   response_json_schema: {
-      const response = { has_structure: false, pdb_ids: [], structure_type: '', description: '', structural_features: [], function_relationship: '' }; // Placeholder
-      /*
-      response = await apiClient.invokeLLM({
-        prompt,
-        add_context_from_internet: true,
-        response_json_schema: {
-          type: "object",
-          properties: {
-            has_structure: { type: "boolean" },
-            pdb_ids: {
-              type: "array",
-              items: { type: "string" }
-            },
-            structure_type: { type: "string" },
-            description: { type: "string" },
-            structural_features: {
-              type: "array",
-              items: { type: "string" }
-            },
-            function_relationship: { type: "string" }
-          }
-        }
-      });
-      */
+      const { result: raw } = await apiClient.invokeLLM(prompt + '\n\nReturn JSON: {"has_structure": boolean, "pdb_ids": ["..."], "structure_type": "...", "description": "...", "structural_features": ["..."], "function_relationship": "..."}');
+      const response = typeof raw === 'string' ? JSON.parse(raw.match(/\{[\s\S]*\}/)?.[0] || '{"has_structure":false,"pdb_ids":[],"structure_type":"","description":"","structural_features":[],"function_relationship":""}') : raw;
 
       setStructureInfo(response);
     } catch (err) {

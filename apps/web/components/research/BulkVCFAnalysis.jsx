@@ -34,12 +34,10 @@ export default function BulkVCFAnalysis({ userEducationLevel }) {
     setProgress(0);
 
     try {
-      // BACKEND_NEEDED: UploadFile integration needs API implementation
-      // Upload files
+      // TODO: UploadFile needs API implementation - using file names for now
       setProgress(20);
       const uploadedFiles = [];
       for (let i = 0; i < files.length; i++) {
-        // const { file_url } = await base44.integrations.Core.UploadFile({ file: files[i] });
         uploadedFiles.push({
           name: files[i].name,
           url: "pending-upload"
@@ -126,12 +124,7 @@ Provide a comprehensive research-grade analysis adapted for ${educationContext}.
 
 Provide practical, actionable research guidance.`;
 
-      // BACKEND_NEEDED: InvokeLLM integration needs API implementation
-      // const analysis = await base44.integrations.Core.InvokeLLM({
-      //   prompt,
-      //   add_context_from_internet: true
-      // });
-      const analysis = "Bulk VCF analysis feature requires backend integration";
+      const { result: analysis } = await apiClient.invokeLLM(prompt);
 
       setProgress(100);
       setResults({

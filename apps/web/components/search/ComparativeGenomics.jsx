@@ -89,75 +89,8 @@ Provide a detailed comparative analysis covering:
 
 Tailor complexity to user's education level. Be comprehensive but clear.`;
 
-      // BACKEND_NEEDED: LLM integration with internet context needs API implementation
-      // const response = await apiClient.invokeLLM({
-      //   prompt,
-      //   add_context_from_internet: true,
-      //   response_json_schema: {
-      const response = {}; // Placeholder
-      /*
-      response = await apiClient.invokeLLM({
-        prompt,
-        add_context_from_internet: true,
-        response_json_schema: {
-          type: "object",
-          properties: {
-            overview_comparison: { type: "string" },
-            phenotype_analysis: {
-              type: "object",
-              properties: {
-                unique_phenotypes: {
-                  type: "object",
-                  additionalProperties: { type: "array", items: { type: "string" } }
-                },
-                shared_phenotypes: { type: "array", items: { type: "string" } },
-                disease_associations: { type: "string" }
-              }
-            },
-            domain_comparison: {
-              type: "object",
-              properties: {
-                gene_domains: {
-                  type: "object",
-                  additionalProperties: { type: "array", items: { type: "string" } }
-                },
-                shared_domains: { type: "array", items: { type: "string" } },
-                functional_implications: { type: "string" }
-              }
-            },
-            structure_comparison: { type: "string" },
-            interaction_comparison: {
-              type: "object",
-              properties: {
-                unique_partners: {
-                  type: "object",
-                  additionalProperties: { type: "array", items: { type: "string" } }
-                },
-                shared_partners: { type: "array", items: { type: "string" } },
-                pathway_differences: { type: "string" }
-              }
-            },
-            expression_comparison: {
-              type: "object",
-              properties: {
-                tissue_specificity: { type: "string" },
-                expression_patterns: { type: "string" }
-              }
-            },
-            functional_divergence: {
-              type: "object",
-              properties: {
-                relationship: { type: "string" },
-                similarity_score: { type: "string" },
-                key_distinctions: { type: "array", items: { type: "string" } },
-                clinical_implications: { type: "string" }
-              }
-            },
-            summary: { type: "string" }
-          }
-        }
-      });
-      */
+      const { result: raw } = await apiClient.invokeLLM(prompt);
+      const response = typeof raw === 'string' ? JSON.parse(raw.match(/\{[\s\S]*\}/)?.[0] || '{}') : raw;
 
       setComparisonData(response);
     } catch (err) {
