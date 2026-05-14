@@ -115,3 +115,33 @@ export async function enforceUsageLimit(request, reply) {
     remaining: limit - typeCount,
   };
 }
+
+/**
+ * Persist a usage record so that subsequent enforceUsageLimit calls see the
+ * incremented count. Called by route handlers AFTER a successful upstream LLM
+ * call so that failures do not consume the user's daily allowance.
+ *
+ * Premium / admin users still get a record (it is useful audit data) but the
+ * limit check is short-circuited for them upstream.
+ */
+export async function recordUsage(prisma, userId, sessionType, content = {}) {
+  if (!prisma || !userId || !sessionType) return null;
+  try {
+    return await prisma.learningSession.create({
+      data: {
+        userId,
+        topic: content.topic || sessionType,
+        level: content.level || 'standard',
+        type: sessionType,
+        // Content payload is non-sensitive metadata only — never the prompt.
+        content,
+      },
+    });
+  } catch (err) {
+    // Best-effort persistence — never break a successful user-facing call due
+    // to a usage-tracking write failure. Surface it via stderr for observability.
+    // eslint-disable-next-line no-console
+    console.error('[entitlements] recordUsage failed:', err?.message || err);
+    return null;
+  }
+}

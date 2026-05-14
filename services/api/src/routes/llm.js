@@ -1,5 +1,5 @@
 import { authenticate } from '../middleware/auth.js';
-import { checkEducationEntitlement, enforceUsageLimit } from '../middleware/entitlements.js';
+import { checkEducationEntitlement, enforceUsageLimit, recordUsage } from '../middleware/entitlements.js';
 import { generateExplanation, generateChatResponse, generateImage } from '../services/llm.js';
 import { createAuditLog } from '../utils/audit.js';
 import { ValidationError } from '../utils/errors.js';
@@ -70,6 +70,14 @@ export default async function llmRoutes(fastify) {
       'llm.invoke',
     );
 
+    // Persist usage AFTER the upstream call succeeded so that failures do not
+    // count against the user's daily allowance, but every successful call DOES
+    // count. enforceUsageLimit reads from the same LearningSession table.
+    await recordUsage(prisma, request.user.userId, 'explanation', {
+      maxTokens,
+      provider: options.provider || null,
+    });
+
     await createAuditLog(prisma, {
       userId: request.user.userId,
       action: 'llm_invoke',
@@ -97,6 +105,12 @@ export default async function llmRoutes(fastify) {
       'llm.chat',
     );
 
+    await recordUsage(prisma, request.user.userId, 'chat', {
+      messageCount: messages.length,
+      maxTokens,
+      provider: options.provider || null,
+    });
+
     await createAuditLog(prisma, {
       userId: request.user.userId,
       action: 'llm_chat',
@@ -118,6 +132,10 @@ export default async function llmRoutes(fastify) {
       LLM_TIMEOUT_MS,
       'llm.image',
     );
+
+    await recordUsage(prisma, request.user.userId, 'image', {
+      size: options.size || '1024x1024',
+    });
 
     await createAuditLog(prisma, {
       userId: request.user.userId,

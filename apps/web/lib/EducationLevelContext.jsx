@@ -1,7 +1,7 @@
 import React, { createContext, useState, useContext, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from './AuthContext';
 
-const EducationLevelContext = createContext();
+const EducationLevelContext = createContext(null);
 
 export const EDUCATION_LEVELS = {
   elementary: {

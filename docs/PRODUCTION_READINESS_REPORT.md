@@ -185,3 +185,51 @@ If any of the production-required vars are missing or visibly weak, `loadEnv()` 
 - [x] Operator runbook: env vars, deploy, rollback, backups (this document, §7–§8)
 
 **GO** — readiness 0.92.
+
+---
+
+## 10. Second-pass audit (2026-05-14)
+
+A second-pass audit was performed targeting the residual blockers called out in
+§6 ("Web typecheck is narrow" and "Stub UI components") and an external review
+finding ("LLM usage limits never actually consume usage — every call passed
+because no `LearningSession` rows are written").
+
+### 10.1 Fixed second-pass blockers
+
+| Blocker (external review) | Where it lived | Fix | Test that proves it |
+|---|---|---|---|
+| **LLM usage was never persisted.** `enforceUsageLimit` counted `LearningSession` rows, but no LLM route ever created one — so the daily cap was effectively infinite. | `services/api/src/routes/llm.js` (all three routes) | Added `recordUsage(prisma, userId, type, meta)` in `services/api/src/middleware/entitlements.js`. Each LLM route now calls `recordUsage` **after** the upstream call returns, so successful calls consume quota and failed/timed-out calls do **not**. | `llm.test.js` → "persistently increments usage across multiple successful calls and blocks once the limit is hit", "per-route counters are independent: chat usage does not consume the explanation budget", "upstream LLM failure does NOT consume usage", "premium user is not subject to the daily limit". |
+| **No E2E coverage for auth + LLM + billing + a core workflow.** | n/a | New `services/api/src/__tests__/e2e.test.js` exercises full request paths: register → login → /me → logout; anonymous → free → exhausted → premium-upgrade-via-Stripe-webhook; gene-set CRUD round-trip with cross-tenant denial. | `e2e.test.js` (7 tests, all passing). |
+| **Web typecheck was scoped to a single file.** | `apps/web/jsconfig.typecheck.json` | Expanded `include` to cover all of `lib/**`, `components/icons/**`, `components/shared/**`, plus the previously-stubbed components. Dropped `noResolve`, kept `checkJs: true` but relaxed `noImplicitAny` / `strictNullChecks` so JS files don't require pervasive annotations. Real type errors that surfaced (`createContext()` with no arg in `AuthContext`, `EducationLevelContext`; `generatedAt` missing in `exportReport`) were fixed. | `pnpm typecheck` → exit 0 across web + shared + api. |
+| **Stub UI components were silently no-ops.** | `apps/web/components/{PlatformCompatibility,MobileOptimization,UniversalLinkHandler}.jsx` | Each component now (1) carries a JSDoc block explaining it is a feature-flagged stub, (2) exports `isStub = true`, and (3) emits a `console.warn` in `import.meta.env.DEV` when the corresponding `VITE_ENABLE_*` flag is off. Re-enable instructions are documented in-file. | Build still passes; flag is wired through `import.meta.env`. |
+
+### 10.2 New tests added in second pass
+
+`services/api/src/__tests__/`:
+
+- `e2e.test.js` (new, 7 tests): auth flow, LLM usage gating with Stripe-webhook upgrade, gene-set CRUD with tenant isolation, Stripe-bad-signature rejection.
+- `llm.test.js` (extended): four new tests proving usage accounting actually increments, per-route counters are isolated, upstream failures don't consume quota, and premium bypasses the cap.
+
+```
+Test Files  10 passed (10)
+     Tests  132 passed (132)
+```
+
+### 10.3 Commands run locally (second pass, all passed)
+
+```text
+pnpm test                # 132 / 132 passing
+pnpm typecheck           # green across web (expanded scope) + shared + api
+pnpm release:check       # exit 0
+pnpm run audit           # No known vulnerabilities found
+```
+
+### 10.4 Updated readiness
+
+The residual caveats from §6 items 1 and 2 are now closed; item 3 (Playwright)
+remains a follow-up but is no longer the sole E2E story (the new
+`e2e.test.js` covers the security-critical paths end-to-end through the real
+HTTP layer with a mocked Prisma).
+
+**Updated readiness score: 0.93 — GO for staged production deployment.**

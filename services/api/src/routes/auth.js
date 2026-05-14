@@ -317,7 +317,7 @@ export default async function authRoutes(fastify) {
     
     const isAdmin = user.role === 'admin' || user.role === 'super_admin';
     const isPremium = Boolean(
-      isAdmin || user.subscriptions.length > 0 ||
+      isAdmin || (user.subscriptions?.length ?? 0) > 0 ||
       (licenseAssignment && licenseAssignment.license?.status === 'active')
     );
     

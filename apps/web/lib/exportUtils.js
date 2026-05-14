@@ -32,7 +32,7 @@ export function exportCSV(rows, headers, filename) {
 /**
  * Export an analysis report as a printable HTML page (opens print dialog for PDF)
  */
-export function exportReport({ title, subtitle, sections, generatedAt }) {
+export function exportReport({ title, subtitle, sections, generatedAt = new Date().toISOString() }) {
   const html = `<!DOCTYPE html>
 <html>
 <head>
