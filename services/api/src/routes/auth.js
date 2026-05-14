@@ -1,6 +1,7 @@
 import { z } from 'zod';
-import { hashPassword, verifyPassword, generateAccessToken, generateRefreshToken, hashRefreshToken } from '../utils/auth.js';
+import { hashPassword, verifyPassword, generateAccessToken, generateRefreshToken, hashRefreshToken, verifyRefreshToken, verifyRefreshTokenHash } from '../utils/auth.js';
 import { authenticate } from '../middleware/auth.js';
+import { ensureCsrfCookie } from '../middleware/csrf.js';
 import { ValidationError, UnauthorizedError } from '../utils/errors.js';
 import { createAuditLog } from '../utils/audit.js';
 
@@ -221,6 +222,74 @@ export default async function authRoutes(fastify) {
       .send({ success: true });
   });
   
+  // POST /auth/refresh — rotate the refresh token + issue a new access token.
+  // Requires a valid refresh cookie that matches a non-expired session row.
+  fastify.post('/refresh', async (request, reply) => {
+    const refreshToken = request.cookies?.refreshToken;
+    if (!refreshToken) {
+      throw new UnauthorizedError('No refresh token');
+    }
+
+    const payload = verifyRefreshToken(refreshToken);
+    if (!payload?.userId) {
+      throw new UnauthorizedError('Invalid refresh token');
+    }
+
+    // Find an unexpired session for this user where the stored bcrypt hash
+    // matches the presented refresh token.
+    const sessions = await prisma.session.findMany({
+      where: { userId: payload.userId, expiresAt: { gt: new Date() } },
+    });
+    let matched = null;
+    for (const s of sessions) {
+      // eslint-disable-next-line no-await-in-loop
+      if (await verifyRefreshTokenHash(refreshToken, s.refreshTokenHash)) {
+        matched = s;
+        break;
+      }
+    }
+    if (!matched) {
+      // Possible token theft — clear cookies as a defensive measure.
+      reply.clearCookie('accessToken', { path: '/' }).clearCookie('refreshToken', { path: '/' });
+      throw new UnauthorizedError('Refresh token not recognised');
+    }
+
+    const user = await prisma.user.findUnique({ where: { id: payload.userId } });
+    if (!user || user.banned) {
+      throw new UnauthorizedError('Account not available');
+    }
+
+    // Rotate: invalidate the matched session and create a new one.
+    const newAccess = generateAccessToken({ userId: user.id, email: user.email, role: user.role });
+    const newRefresh = generateRefreshToken({ userId: user.id });
+    const newHash = await hashRefreshToken(newRefresh);
+    const newExpires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+    await prisma.session.delete({ where: { id: matched.id } }).catch(() => null);
+    await prisma.session.create({
+      data: { userId: user.id, refreshTokenHash: newHash, expiresAt: newExpires },
+    });
+
+    ensureCsrfCookie(request, reply);
+
+    reply
+      .setCookie('accessToken', newAccess, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 15 * 60,
+        path: '/',
+      })
+      .setCookie('refreshToken', newRefresh, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 7 * 24 * 60 * 60,
+        path: '/',
+      })
+      .send({ ok: true });
+  });
+
   fastify.get('/me', { preHandler: authenticate }, async (request, reply) => {
     const [user, licenseAssignment] = await Promise.all([
       prisma.user.findUnique({
@@ -247,8 +316,10 @@ export default async function authRoutes(fastify) {
     }
     
     const isAdmin = user.role === 'admin' || user.role === 'super_admin';
-    const isPremium = isAdmin || user.subscriptions.length > 0 || 
-                      (licenseAssignment && licenseAssignment.license.status === 'active');
+    const isPremium = Boolean(
+      isAdmin || user.subscriptions.length > 0 ||
+      (licenseAssignment && licenseAssignment.license?.status === 'active')
+    );
     
     const entitlements = {
       isPremium,
@@ -258,7 +329,10 @@ export default async function authRoutes(fastify) {
         licenseType: licenseAssignment.license.licenseType,
       } : null,
     };
-    
+
+    // Refresh the CSRF cookie alongside identity so SPA always has a token.
+    ensureCsrfCookie(request, reply);
+
     reply.send({
       id: user.id,
       email: user.email,

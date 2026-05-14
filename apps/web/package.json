@@ -8,7 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "lint": "eslint .",
-    "typecheck": "tsc -p ./jsconfig.json"
+    "typecheck": "tsc -p ./jsconfig.typecheck.json"
   },
   "dependencies": {
     "@genemap/shared": "workspace:*",

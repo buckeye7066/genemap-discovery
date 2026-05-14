@@ -1,32 +1,33 @@
-import Anthropic from '@anthropic-ai/sdk';
+// Lazy-load Anthropic SDK — same rationale as ./openai.js.
 
 let client = null;
 
-function getClient() {
+async function getClient() {
   if (!client) {
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
       throw new Error('ANTHROPIC_API_KEY is not set in environment variables');
     }
+    const { default: Anthropic } = await import('@anthropic-ai/sdk');
     client = new Anthropic({ apiKey });
   }
   return client;
 }
 
 export async function generateText(prompt, { model = 'claude-sonnet-4-20250514', maxTokens = 2000, temperature = 0.7 } = {}) {
-  const anthropic = getClient();
+  const anthropic = await getClient();
   const response = await anthropic.messages.create({
     model,
     max_tokens: maxTokens,
     temperature,
     messages: [{ role: 'user', content: prompt }],
   });
-  const textBlock = response.content.find(block => block.type === 'text');
+  const textBlock = response.content.find((block) => block.type === 'text');
   return textBlock?.text || '';
 }
 
 export async function generateChatResponse(messages, { model = 'claude-sonnet-4-20250514', maxTokens = 2000, temperature = 0.7 } = {}) {
-  const anthropic = getClient();
+  const anthropic = await getClient();
 
   let systemPrompt = '';
   const chatMessages = [];
@@ -51,6 +52,6 @@ export async function generateChatResponse(messages, { model = 'claude-sonnet-4-
   }
 
   const response = await anthropic.messages.create(params);
-  const textBlock = response.content.find(block => block.type === 'text');
+  const textBlock = response.content.find((block) => block.type === 'text');
   return textBlock?.text || '';
 }

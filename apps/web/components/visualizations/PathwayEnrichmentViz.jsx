@@ -277,6 +277,11 @@ export default function PathwayEnrichmentViz({ genes = [], userEducationLevel = 
     URL.revokeObjectURL(url);
   };
 
+  // Hooks must be called before any early return — pulling useMemo above the
+  // empty-genes guard preserves Rules of Hooks.
+  const filteredPathways = useMemo(() => getFilteredPathways(), [enrichmentData, filters]);
+  const hoveredData = hoveredPathway !== null ? filteredPathways[hoveredPathway] : null;
+
   if (genes.length === 0) {
     return (
       <Alert>
@@ -287,9 +292,6 @@ export default function PathwayEnrichmentViz({ genes = [], userEducationLevel = 
       </Alert>
     );
   }
-
-  const filteredPathways = useMemo(() => getFilteredPathways(), [enrichmentData, filters]);
-  const hoveredData = hoveredPathway !== null ? filteredPathways[hoveredPathway] : null;
 
   return (
     <Card className="shadow-lg">

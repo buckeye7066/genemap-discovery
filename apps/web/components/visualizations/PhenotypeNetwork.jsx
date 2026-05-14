@@ -29,11 +29,8 @@ function renderCustomLabel(entry) {
 }
 
 export default function PhenotypeNetwork({ phenotypes, userEducationLevel }) {
-  if (!phenotypes || phenotypes.length === 0) {
-    return null;
-  }
-
-  // Group phenotypes by category (simplified)
+  // Group phenotypes by category (simplified). Defined unconditionally so the
+  // useMemo below can run on every render (Rules of Hooks).
   const categorizePheno = (phenoName) => {
     const name = phenoName.toLowerCase();
     if (name.includes('cognitive') || name.includes('intellectual') || name.includes('developmental delay')) {
@@ -55,6 +52,9 @@ export default function PhenotypeNetwork({ phenotypes, userEducationLevel }) {
   };
 
   const { categoryCount, chartData } = useMemo(() => {
+    if (!phenotypes || phenotypes.length === 0) {
+      return { categoryCount: {}, chartData: [] };
+    }
     const counts = {};
     phenotypes.forEach(pheno => {
       const category = categorizePheno(pheno.name);
@@ -69,6 +69,10 @@ export default function PhenotypeNetwork({ phenotypes, userEducationLevel }) {
 
     return { categoryCount: counts, chartData: data };
   }, [phenotypes]);
+
+  if (!phenotypes || phenotypes.length === 0) {
+    return null;
+  }
 
   const getExplanation = () => {
     if (!userEducationLevel || userEducationLevel === 'high_school') {

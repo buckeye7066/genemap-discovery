@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 import { buildTestApp, createPrismaMock, authCookie } from './setup.js';
 import { hashPassword } from '../utils/auth.js';
 
@@ -7,7 +7,7 @@ let prisma;
 
 beforeAll(async () => {
   prisma = createPrismaMock();
-  app = await buildTestApp(prisma);
+  app = await buildTestApp(prisma, { csrf: false });
 });
 
 afterAll(async () => {

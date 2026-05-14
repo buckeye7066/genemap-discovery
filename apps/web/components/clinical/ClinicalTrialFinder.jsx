@@ -99,7 +99,6 @@ export default function ClinicalTrialFinder({
     if ((geneticData || medicalContext) && !results) {
       handleSearch();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const studies = results?.studies || [];

@@ -228,21 +228,19 @@ export default async function billingRoutes(fastify) {
       return reply.status(400).send({ error: 'Webhook signature verification failed' });
     }
     
+    // Idempotency: only mark the event as processed AFTER the handler
+    // succeeds. Recording before processing meant a transient downstream
+    // failure (e.g. Stripe API call inside checkout.session.completed)
+    // would leave the event "seen but never applied" — Stripe's retry
+    // would then short-circuit and the subscription would never activate.
     const existingEvent = await prisma.stripeEvent.findUnique({
       where: { stripeEventId: event.id },
     });
-    
+
     if (existingEvent) {
       return reply.send({ received: true, duplicate: true });
     }
-    
-    await prisma.stripeEvent.create({
-      data: {
-        stripeEventId: event.id,
-        type: event.type,
-      },
-    });
-    
+
     try {
       switch (event.type) {
         case 'checkout.session.completed': {
@@ -370,10 +368,26 @@ export default async function billingRoutes(fastify) {
         }
       }
     } catch (error) {
-      console.error('Error processing webhook:', error);
+      // Do NOT record stripeEvent on failure — Stripe will retry, and the
+      // next attempt should re-execute the handler from scratch.
+      console.error('Error processing webhook:', error.message);
       return reply.status(500).send({ error: 'Webhook processing failed' });
     }
-    
+
+    // Mark processed only after success so retries are safe.
+    try {
+      await prisma.stripeEvent.create({
+        data: { stripeEventId: event.id, type: event.type },
+      });
+    } catch (e) {
+      // Race: a concurrent retry beat us to the insert. The handler ran
+      // successfully on both sides which, given idempotent updateMany /
+      // unique-key checks above, is acceptable.
+      if (e.code !== 'P2002') {
+        console.error('Failed to record stripe event after success:', e.message);
+      }
+    }
+
     reply.send({ received: true });
   });
 }
