@@ -1,4 +1,5 @@
 import bcrypt from 'bcrypt';
+import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -23,7 +24,10 @@ export function generateAccessToken(payload) {
 }
 
 export function generateRefreshToken(payload) {
-  return jwt.sign(payload, JWT_REFRESH_SECRET, { expiresIn: REFRESH_TOKEN_EXPIRY });
+  // Always include a random `jti` so two refresh tokens minted in the
+  // same second are not byte-identical (rotation needs distinct tokens).
+  const withJti = { ...payload, jti: crypto.randomBytes(16).toString('hex') };
+  return jwt.sign(withJti, JWT_REFRESH_SECRET, { expiresIn: REFRESH_TOKEN_EXPIRY });
 }
 
 export function verifyAccessToken(token) {

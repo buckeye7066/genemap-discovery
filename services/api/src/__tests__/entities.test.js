@@ -11,7 +11,10 @@ const cookieB = authCookie(USER_B);
 
 beforeAll(async () => {
   prisma = createPrismaMock();
-  app = await buildTestApp(prisma);
+  // CSRF is enforced by default; disabled here so the existing entity tests
+  // exercise route logic without re-implementing the double-submit cookie
+  // pattern (CSRF itself is covered by csrf.test.js).
+  app = await buildTestApp(prisma, { csrf: false });
 });
 
 afterAll(async () => {

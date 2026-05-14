@@ -111,6 +111,22 @@ Source: STRING DB, BioGRID, IntAct, or literature evidence.`;
     );
   };
 
+  // Hoisted above the early returns to satisfy Rules of Hooks. Returns an
+  // empty array when interactionData is missing so the early-return paths
+  // below still work.
+  const filteredInteractions = useMemo(() => {
+    if (!interactionData || !Array.isArray(interactionData.interactions)) return [];
+    const displayed = showAll
+      ? interactionData.interactions
+      : interactionData.interactions.slice(0, 10);
+
+    return displayed.filter(interaction => {
+      const confidenceMatch = confidenceFilter.includes(getConfidenceLevel(interaction.confidence));
+      const typeMatch = typeFilter.some(t => interaction.type && interaction.type.toLowerCase().includes(t));
+      return confidenceMatch && typeMatch;
+    });
+  }, [interactionData, showAll, confidenceFilter, typeFilter]);
+
   if (isLoading) {
     return (
       <Card className="bg-gradient-to-br from-emerald-50 to-teal-50 border-emerald-200">
@@ -141,18 +157,6 @@ Source: STRING DB, BioGRID, IntAct, or literature evidence.`;
       </Card>
     );
   }
-
-  const filteredInteractions = useMemo(() => {
-    const displayed = showAll
-      ? interactionData.interactions
-      : interactionData.interactions.slice(0, 10);
-
-    return displayed.filter(interaction => {
-      const confidenceMatch = confidenceFilter.includes(getConfidenceLevel(interaction.confidence));
-      const typeMatch = typeFilter.some(t => interaction.type && interaction.type.toLowerCase().includes(t));
-      return confidenceMatch && typeMatch;
-    });
-  }, [interactionData.interactions, showAll, confidenceFilter, typeFilter]);
 
   return (
     <Card className="shadow-md hover:shadow-lg transition-shadow">

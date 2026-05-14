@@ -148,7 +148,14 @@ export function createPrismaMock() {
     consentRecord: createModel('consentRecord'),
     dataDeletionRequest: createModel('dataDeletionRequest'),
     learningSession: createModel('learningSession'),
+    stripeEvent: createModel('stripeEvent'),
+    projectAnnotation: createModel('projectAnnotation'),
+    $queryRaw: vi.fn(async () => [{ '?column?': 1 }]),
     $disconnect: vi.fn(),
+    $transaction: vi.fn(async (callback) => {
+      if (typeof callback === 'function') return callback(prisma);
+      return Promise.all(callback);
+    }),
 
     // Expose internals for test assertions
     _store: store,
@@ -158,6 +165,18 @@ export function createPrismaMock() {
       }
     },
   };
+
+  // Pre-initialise stores so tests can do prisma._store.user.push(...)
+  // immediately after _reset() without first hitting a model method.
+  const PRE_INIT = [
+    'user', 'session', 'auditLog', 'searchHistory', 'userActivity',
+    'medicalData', 'aIConversation', 'geneSet', 'researchProject',
+    'projectVersion', 'projectCollaborator', 'message', 'subscription',
+    'preBannedUser', 'institutionalLicense', 'licenseAssignment',
+    'licenseUsageLog', 'consentRecord', 'dataDeletionRequest',
+    'learningSession', 'stripeEvent', 'projectAnnotation',
+  ];
+  for (const k of PRE_INIT) getStore(k);
 
   return prisma;
 }
@@ -229,38 +248,58 @@ function matchWhere(record, where) {
 import Fastify from 'fastify';
 import cookie from '@fastify/cookie';
 import { errorHandler } from '../middleware/errorHandler.js';
+import { requireCsrf } from '../middleware/csrf.js';
 import authRoutes from '../routes/auth.js';
 import adminRoutes from '../routes/admin.js';
 import entityRoutes from '../routes/entities.js';
+// NOTE: billing routes and llm routes are NOT imported at the top level.
+// They pull in the `stripe` SDK / LLM service modules eagerly, which would
+// freeze those modules before individual test files have a chance to
+// vi.mock(...) them.
 
 /**
  * Builds a Fastify instance wired up with the mock Prisma client and all
  * routes needed for testing.  Call `app.close()` in afterAll / afterEach.
  */
-export async function buildTestApp(prismaMock) {
+export async function buildTestApp(prismaMock, opts = {}) {
   const app = Fastify({ logger: false });
 
   app.decorate('prisma', prismaMock);
 
   await app.register(cookie, { secret: process.env.COOKIE_SECRET });
 
-  // Custom JSON parser matching the main app
+  // Custom JSON parser matching the main app — also captures rawBody for
+  // Stripe-webhook signature verification.
   app.addContentTypeParser('application/json', { parseAs: 'string' }, function (req, body, done) {
     req.rawBody = body;
     try {
-      const json = JSON.parse(body);
+      const json = body.length > 0 ? JSON.parse(body) : {};
       done(null, json);
     } catch (err) {
       done(err);
     }
   });
 
-  // Auth routes scoped just like the real app
+  // Set error handler BEFORE route registration so all encapsulated
+  // plugin scopes inherit it (matches the production index.js order).
+  app.setErrorHandler(errorHandler);
+
+  // CSRF middleware on by default (matches production); some tests opt out.
+  if (opts.csrf !== false) {
+    app.addHook('preHandler', requireCsrf);
+  }
+
   await app.register(authRoutes, { prefix: '/auth' });
   await app.register(adminRoutes, { prefix: '/admin' });
   await app.register(entityRoutes, { prefix: '/entities' });
-
-  app.setErrorHandler(errorHandler);
+  if (opts.includeLlm) {
+    const { default: llmRoutes } = await import('../routes/llm.js');
+    await app.register(llmRoutes, { prefix: '/llm' });
+  }
+  if (opts.includeBilling) {
+    const { default: billingRoutes } = await import('../routes/billing.js');
+    await app.register(billingRoutes, { prefix: '/billing' });
+  }
 
   await app.ready();
   return app;

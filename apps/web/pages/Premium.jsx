@@ -24,7 +24,7 @@ import {
   Image,
   HelpCircle,
   MessageSquare,
-  Infinity,
+  Infinity as InfinityIcon,
   GraduationCap,
 } from "lucide-react";
 
@@ -314,15 +314,15 @@ export default function PremiumPage() {
                 <span className="text-sm font-medium">Everything in Free, plus:</span>
               </div>
               <div className="flex items-center gap-2">
-                <Infinity className="w-4 h-4 text-blue-600 flex-shrink-0" />
+                <InfinityIcon className="w-4 h-4 text-blue-600 flex-shrink-0" />
                 <span className="text-sm"><strong>Unlimited</strong> AI explanations</span>
               </div>
               <div className="flex items-center gap-2">
-                <Infinity className="w-4 h-4 text-blue-600 flex-shrink-0" />
+                <InfinityIcon className="w-4 h-4 text-blue-600 flex-shrink-0" />
                 <span className="text-sm"><strong>Unlimited</strong> AI illustrations</span>
               </div>
               <div className="flex items-center gap-2">
-                <Infinity className="w-4 h-4 text-blue-600 flex-shrink-0" />
+                <InfinityIcon className="w-4 h-4 text-blue-600 flex-shrink-0" />
                 <span className="text-sm"><strong>Unlimited</strong> quizzes & tutoring</span>
               </div>
               <div className="flex items-center gap-2">

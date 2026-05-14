@@ -74,6 +74,7 @@ export default function InstitutionalPricingPage() {
   const [billingCycle, setBillingCycle] = useState("annual");
   const [seats, setSeats] = useState(10);
   const [organizationName, setOrganizationName] = useState("");
+  const [contactEmail, setContactEmail] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState(null);
 
@@ -103,11 +104,11 @@ export default function InstitutionalPricingPage() {
       const cancelUrl = `${window.location.origin}${window.location.pathname}?canceled=true`;
       
       const response = await apiClient.createInstitutionalCheckout({
-        organizationName: formData.organizationName,
-        contactEmail: formData.contactEmail,
-        licenseType: selectedPlan,
+        organizationName,
+        contactEmail,
+        licenseType: selectedTier,
         billing: billingCycle,
-        seats: parseInt(formData.seats),
+        seats: parseInt(seats),
         successUrl,
         cancelUrl,
       });
@@ -240,6 +241,21 @@ export default function InstitutionalPricingPage() {
                 placeholder="Acme Research Institute"
                 value={organizationName}
                 onChange={(e) => setOrganizationName(e.target.value)}
+                className="mt-2 text-lg py-6"
+              />
+            </div>
+
+            {/* Contact Email — required by /billing/institutional-checkout */}
+            <div>
+              <Label htmlFor="org-contact-email" className="text-base font-medium">
+                Billing Contact Email
+              </Label>
+              <Input
+                id="org-contact-email"
+                type="email"
+                placeholder="finance@yourorg.com"
+                value={contactEmail}
+                onChange={(e) => setContactEmail(e.target.value)}
                 className="mt-2 text-lg py-6"
               />
             </div>

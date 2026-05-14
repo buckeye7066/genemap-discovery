@@ -4,7 +4,9 @@ import cors from '@fastify/cors';
 import cookie from '@fastify/cookie';
 import rateLimit from '@fastify/rate-limit';
 import { PrismaClient } from '@prisma/client';
+import { loadEnv } from './config/env.js';
 import { errorHandler } from './middleware/errorHandler.js';
+import { requireCsrf } from './middleware/csrf.js';
 import authRoutes from './routes/auth.js';
 import billingRoutes from './routes/billing.js';
 import educationRoutes from './routes/education.js';
@@ -14,28 +16,28 @@ import entityRoutes from './routes/entities.js';
 import genomicsRoutes from './routes/genomics.js';
 import clinicalTrialRoutes from './routes/clinicalTrials.js';
 
-// Validate required env vars early
-if (!process.env.COOKIE_SECRET) {
-  throw new Error('COOKIE_SECRET must be set in environment variables');
-}
+// Load + validate env BEFORE constructing anything that depends on it.
+// loadEnv() throws in production if required secrets are missing.
+const env = loadEnv();
 
 const prisma = new PrismaClient({
-  log: process.env.NODE_ENV === 'development' ? ['query', 'warn', 'error'] : ['error'],
+  log: env.isDevelopment ? ['query', 'warn', 'error'] : ['error'],
 });
 
 const fastify = Fastify({
   logger: {
-    level: process.env.LOG_LEVEL || (process.env.NODE_ENV === 'production' ? 'warn' : 'info'),
+    level: env.LOG_LEVEL || (env.isProduction ? 'warn' : 'info'),
+    redact: ['req.headers.authorization', 'req.headers.cookie', 'req.headers["x-csrf-token"]'],
   },
   bodyLimit: 1048576,
 });
 
 fastify.decorate('prisma', prisma);
+fastify.decorate('env', env);
 
 await fastify.register(compress, { global: true });
 
-const allowedOrigins = (process.env.CORS_ORIGINS || 'http://localhost:5173').split(',').map(o => o.trim());
-
+const allowedOrigins = env.corsAllowList();
 await fastify.register(cors, {
   origin: (origin, cb) => {
     if (!origin || allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
@@ -48,7 +50,7 @@ await fastify.register(cors, {
 });
 
 await fastify.register(cookie, {
-  secret: process.env.COOKIE_SECRET,
+  secret: env.COOKIE_SECRET,
 });
 
 await fastify.register(rateLimit, {
@@ -56,15 +58,21 @@ await fastify.register(rateLimit, {
   timeWindow: '15 minutes',
 });
 
+// Global CSRF guard for state-changing requests on cookie-authenticated paths.
+fastify.addHook('preHandler', requireCsrf);
+
 fastify.addContentTypeParser('application/json', { parseAs: 'string' }, function (req, body, done) {
   req.rawBody = body;
   try {
-    const json = JSON.parse(body);
+    const json = body.length > 0 ? JSON.parse(body) : {};
     done(null, json);
   } catch (err) {
     done(err);
   }
 });
+
+// Register the error handler BEFORE plugins so child scopes inherit it.
+fastify.setErrorHandler(errorHandler);
 
 await fastify.register(async (authScope) => {
   await authScope.register(rateLimit, {
@@ -82,18 +90,33 @@ await fastify.register(entityRoutes, { prefix: '/entities' });
 await fastify.register(genomicsRoutes, { prefix: '/genomics' });
 await fastify.register(clinicalTrialRoutes, { prefix: '/clinical-trials' });
 
-fastify.get('/health', async () => {
-  return { status: 'ok', timestamp: new Date().toISOString() };
+// Liveness — process is up. Cheap, never touches the DB.
+fastify.get('/healthz', async () => ({ status: 'ok', uptime: process.uptime() }));
+
+// Readiness — process is up AND can reach its hard dependencies.
+// Used by orchestrators (Railway, k8s) to gate traffic. Returns 503 when
+// the database is unreachable so traffic is not routed to a broken instance.
+fastify.get('/readyz', async (request, reply) => {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+  } catch (err) {
+    reply.status(503);
+    return { status: 'not_ready', reason: 'database unreachable' };
+  }
+  return {
+    status: 'ready',
+    medicalEncryption: env.hasMedicalEncryption(),
+    timestamp: new Date().toISOString(),
+  };
 });
 
-fastify.setErrorHandler(errorHandler);
+// Legacy `/health` retained for backward compatibility.
+fastify.get('/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }));
 
 const start = async () => {
   try {
-    const port = process.env.PORT || 3000;
-    const host = process.env.HOST || '0.0.0.0';
-    await fastify.listen({ port, host });
-    fastify.log.info(`Server listening on ${host}:${port}`);
+    await fastify.listen({ port: env.PORT, host: env.HOST });
+    fastify.log.info({ port: env.PORT, host: env.HOST, env: env.NODE_ENV }, 'API listening');
   } catch (err) {
     fastify.log.error(err);
     process.exit(1);

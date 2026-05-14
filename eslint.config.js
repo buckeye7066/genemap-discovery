@@ -5,6 +5,32 @@ import pluginReactHooks from "eslint-plugin-react-hooks";
 
 export default [
   {
+    ignores: [
+      "**/node_modules/**",
+      "**/dist/**",
+      "**/build/**",
+      "**/.next/**",
+      "apps/desktop/**",
+      "functions/**",
+    ],
+  },
+  // Backend (API) — Node ESM
+  {
+    files: ["services/api/src/**/*.js"],
+    languageOptions: {
+      globals: { ...globals.node },
+      ecmaVersion: 2023,
+      sourceType: "module",
+    },
+    rules: {
+      ...pluginJs.configs.recommended.rules,
+      // Tests use globally-injected vi from vitest setup; allow unused
+      // catch params (common in defensive try/catch with no use of err).
+      "no-unused-vars": ["warn", { args: "none", caughtErrors: "none", varsIgnorePattern: "^_" }],
+      "no-empty": ["error", { allowEmptyCatch: true }],
+    },
+  },
+  {
     files: [
       "apps/web/components/**/*.{js,mjs,cjs,jsx}",
       "apps/web/pages/**/*.{js,mjs,cjs,jsx}",

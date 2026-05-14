@@ -11,7 +11,7 @@ const userCookie = authCookie(REGULAR);
 
 beforeAll(async () => {
   prisma = createPrismaMock();
-  app = await buildTestApp(prisma);
+  app = await buildTestApp(prisma, { csrf: false });
 });
 
 afterAll(async () => {

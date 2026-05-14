@@ -10,80 +10,102 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  # Test-only env so the API/test setup files do not throw at import time.
+  # Production secrets are NEVER set in CI.
+  JWT_SECRET: ci-jwt-secret-at-least-32-characters-long
+  JWT_REFRESH_SECRET: ci-jwt-refresh-secret-at-least-32-chars-long
+  COOKIE_SECRET: ci-cookie-secret-at-least-32-chars-long
+  CORS_ORIGINS: 'http://localhost:5173'
+  NODE_ENV: test
+  LOG_LEVEL: silent
+
 jobs:
   lint-and-typecheck:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: pnpm/action-setup@v4
         with:
-          version: 8
-
+          version: 9
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'pnpm'
-
-      - name: Install dependencies
+      - name: Install (frozen lockfile)
         run: pnpm install --frozen-lockfile
-
-      - name: Lint
+      - name: Lint (web + api)
         run: pnpm lint
-
-      - name: Type check
+      - name: Typecheck
         run: pnpm typecheck
 
   test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: pnpm/action-setup@v4
         with:
-          version: 8
-
+          version: 9
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'pnpm'
-
-      - name: Install dependencies
+      - name: Install (frozen lockfile)
         run: pnpm install --frozen-lockfile
+      - name: Generate Prisma client
+        run: pnpm db:generate
+      - name: Build shared package
+        run: pnpm --filter @genemap/shared build
+      - name: API tests (vitest)
+        run: pnpm test:api
+      - name: Shared tests (vitest)
+        run: pnpm test:shared
 
-      - name: Run tests
-        run: pnpm test
-
-  build:
+  build-web:
     runs-on: ubuntu-latest
     needs: [lint-and-typecheck, test]
     steps:
       - uses: actions/checkout@v4
-
       - uses: pnpm/action-setup@v4
         with:
-          version: 8
-
+          version: 9
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'pnpm'
-
-      - name: Install dependencies
+      - name: Install (frozen lockfile)
         run: pnpm install --frozen-lockfile
-
+      # The shared package must build hard — a failing types/runtime contract
+      # silently breaking the API/web wire-up is exactly the kind of release
+      # gap a `continue-on-error` mask used to hide.
       - name: Build shared package
         run: pnpm --filter @genemap/shared build
-        continue-on-error: true
-
-      - name: Build Web
+      - name: Build web bundle
         run: pnpm build:web
         env:
           VITE_API_URL: http://localhost:3000
-
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: web-dist
           path: apps/web/dist
           retention-days: 7
+
+  security-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+      - name: Install (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+      # `--prod` filters dev-only advisories that don't ship to production.
+      # Set to `--audit-level=high` so moderate transitive advisories are
+      # logged but do not block release; raise to `moderate` later.
+      - name: Dependency audit
+        run: pnpm audit --prod --audit-level=high
