@@ -5,7 +5,7 @@ import { ensureCsrfCookie } from '../middleware/csrf.js';
 import { ValidationError, UnauthorizedError } from '../utils/errors.js';
 import { createAuditLog } from '../utils/audit.js';
 
-c// Admin emails are supplied via the ADMIN_EMAILS environment variable.  In
+// Admin emails are supplied via the ADMIN_EMAILS environment variable.  In
 // development this may be empty; in production the environment validation
 // requires it to be explicitly set.  We do NOT fall back to any hard‑coded
 // email address here; doing so would silently grant admin privileges to an
