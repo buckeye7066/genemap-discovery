@@ -5,10 +5,16 @@ import { ensureCsrfCookie } from '../middleware/csrf.js';
 import { ValidationError, UnauthorizedError } from '../utils/errors.js';
 import { createAuditLog } from '../utils/audit.js';
 
-const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || 'buckeye7066@gmail.com')
+c// Admin emails are supplied via the ADMIN_EMAILS environment variable.  In
+// development this may be empty; in production the environment validation
+// requires it to be explicitly set.  We do NOT fall back to any hard‑coded
+// email address here; doing so would silently grant admin privileges to an
+// unintended account.  See services/api/src/config/env.js for details.
+const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || '')
   .split(',')
-  .map(e => e.trim().toLowerCase())
+  .map((e) => e.trim().toLowerCase())
   .filter(Boolean);
+
 
 function resolveRole(email) {
   return ADMIN_EMAILS.includes(email.toLowerCase()) ? 'admin' : 'user';
