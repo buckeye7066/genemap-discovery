@@ -5,10 +5,11 @@
   "main": "main.js",
   "scripts": {
     "dev": "electron .",
-    "build": "electron-builder",
-    "build:win": "electron-builder --win",
-    "build:mac": "electron-builder --mac",
-    "build:linux": "electron-builder --linux"
+    "build:icons": "node scripts/generate-icons.mjs",
+    "build": "node scripts/generate-icons.mjs && electron-builder",
+    "build:win": "node scripts/generate-icons.mjs && electron-builder --win",
+    "build:mac": "node scripts/generate-icons.mjs && electron-builder --mac",
+    "build:linux": "node scripts/generate-icons.mjs && electron-builder --linux"
   },
   "build": {
     "appId": "com.genemap.discovery",
@@ -19,7 +20,8 @@
     "files": [
       "main.js",
       "preload.js",
-      "package.json"
+      "package.json",
+      "icons/**"
     ],
     "extraResources": [
       {
