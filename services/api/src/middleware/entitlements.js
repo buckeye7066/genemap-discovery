@@ -23,7 +23,15 @@ export async function checkEducationEntitlement(request, reply) {
     where: { id: userId },
     include: {
       subscriptions: {
-        where: { status: { in: ['active', 'trialing'] } },
+        // A subscription confers premium only while it is both active/trialing
+        // AND unexpired. currentPeriodEnd === null means "no expiry tracked"
+        // (legacy rows); treat those as still valid so this change can't revoke
+        // anyone retroactively. This is also what makes admin-granted free
+        // weeks/months expire on their own — no scheduler required.
+        where: {
+          status: { in: ['active', 'trialing'] },
+          OR: [{ currentPeriodEnd: null }, { currentPeriodEnd: { gt: new Date() } }],
+        },
         orderBy: { createdAt: 'desc' },
         take: 1,
       },

@@ -279,6 +279,15 @@ export class ApiClient {
   grantPremium(userId: string): Promise<{ success: boolean }> {
     return this.request('/admin/grant-premium', { method: 'POST', body: JSON.stringify({ userId }) });
   }
+  grantFreePeriod(
+    userId: string,
+    period: 'week' | 'month'
+  ): Promise<{ success: boolean; period: string; currentPeriodEnd: string }> {
+    return this.request('/admin/grant-free-period', {
+      method: 'POST',
+      body: JSON.stringify({ userId, period }),
+    });
+  }
   grantAdmin(userId: string): Promise<{ success: boolean }> {
     return this.request('/admin/grant-admin', { method: 'POST', body: JSON.stringify({ userId }) });
   }

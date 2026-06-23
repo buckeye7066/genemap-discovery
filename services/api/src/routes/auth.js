@@ -260,7 +260,14 @@ export default async function authRoutes(fastify) {
         where: { id: request.user.userId },
         include: {
           subscriptions: {
-            where: { status: { in: ['active', 'trialing'] } },
+            // Keep this in lock-step with checkEducationEntitlement: premium
+            // requires an active/trialing AND unexpired subscription so the UI
+            // never shows "Premium" after an admin-granted comp lapses.
+            // currentPeriodEnd === null is treated as no-expiry (legacy rows).
+            where: {
+              status: { in: ['active', 'trialing'] },
+              OR: [{ currentPeriodEnd: null }, { currentPeriodEnd: { gt: new Date() } }],
+            },
             orderBy: { createdAt: 'desc' },
             take: 1,
           },

@@ -6,6 +6,24 @@ function normalizeEmail(email) {
   return String(email || '').trim().toLowerCase();
 }
 
+// Complimentary access windows an admin can grant. Kept as whole days so the
+// expiry is unambiguous regardless of the hour the grant is issued.
+const FREE_PERIOD_DAYS = { week: 7, month: 30 };
+
+/**
+ * Compute the new expiry for a complimentary access window.
+ *
+ * Never shortens an existing window: if the user already has access that runs
+ * past what this grant would give, we keep the later date. Otherwise we extend
+ * from whichever is later — "now" or the current end — so repeated grants stack
+ * cleanly instead of overlapping.
+ */
+function computeFreePeriodEnd(currentEnd, days) {
+  const now = Date.now();
+  const base = currentEnd && currentEnd.getTime() > now ? currentEnd.getTime() : now;
+  return new Date(base + days * 24 * 60 * 60 * 1000);
+}
+
 export default async function adminRoutes(fastify) {
   const prisma = fastify.prisma;
 
@@ -244,6 +262,62 @@ export default async function adminRoutes(fastify) {
     );
 
     return { success: true };
+  });
+
+  // Comp a user a free week or month of premium. Unlike grant-premium (a
+  // year-long fixed grant) this is a short, self-expiring window: it extends an
+  // existing admin-granted comp rather than spawning a new subscription row each
+  // time, and it never touches a Stripe-owned subscription (those are driven by
+  // webhooks). Expiry is enforced by checkEducationEntitlement honoring
+  // currentPeriodEnd.
+  fastify.post('/grant-free-period', async (request) => {
+    const { userId, period } = request.body || {};
+    if (!userId) throw new ValidationError('userId is required');
+
+    const days = FREE_PERIOD_DAYS[period];
+    if (!days) throw new ValidationError('period must be "week" or "month"');
+
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new NotFoundError('User not found');
+
+    // Reuse an active admin-granted comp so grants stack on one row. Real Stripe
+    // subscriptions (planType month/year/team_*) are deliberately left alone.
+    const existingComp = await prisma.subscription.findFirst({
+      where: { userId, status: 'active', planType: 'admin_granted' },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const newEnd = computeFreePeriodEnd(existingComp?.currentPeriodEnd ?? null, days);
+
+    if (existingComp) {
+      await prisma.subscription.update({
+        where: { id: existingComp.id },
+        data: { currentPeriodEnd: newEnd },
+      });
+    } else {
+      await prisma.subscription.create({
+        data: {
+          userId,
+          status: 'active',
+          planType: 'admin_granted',
+          currentPeriodEnd: newEnd,
+        },
+      });
+    }
+
+    await createAuditLog(
+      prisma,
+      {
+        userId: request.user.userId,
+        action: 'grant_free_period',
+        entityType: 'user',
+        entityId: userId,
+        metadata: { period, days, currentPeriodEnd: newEnd.toISOString() },
+      },
+      { required: true }
+    );
+
+    return { success: true, period, currentPeriodEnd: newEnd.toISOString() };
   });
 
   // Granting admin privileges is reserved for super_admin. Without this

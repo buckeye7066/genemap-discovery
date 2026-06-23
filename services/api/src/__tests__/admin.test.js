@@ -343,6 +343,119 @@ describe('POST /admin/grant-premium', () => {
   });
 });
 
+// ─── POST /admin/grant-free-period ──────────────────────────────────────────
+
+describe('POST /admin/grant-free-period', () => {
+  const DAY = 24 * 60 * 60 * 1000;
+
+  beforeEach(() => {
+    prisma._store.user.push({ id: 'comp-target', email: 'comp@test.com', role: 'user' });
+  });
+
+  it('creates a self-expiring admin_granted subscription for a free week', async () => {
+    const before = Date.now();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/admin/grant-free-period',
+      headers: { cookie: adminCookie },
+      payload: { userId: 'comp-target', period: 'week' },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.period).toBe('week');
+
+    const end = new Date(body.currentPeriodEnd).getTime();
+    // ~7 days out, with a little slack for execution time.
+    expect(end).toBeGreaterThan(before + 7 * DAY - 5000);
+    expect(end).toBeLessThan(before + 7 * DAY + 5000);
+
+    const sub = prisma._store.subscription.find((s) => s.userId === 'comp-target');
+    expect(sub).toMatchObject({ status: 'active', planType: 'admin_granted' });
+  });
+
+  it('grants 30 days for a free month', async () => {
+    const before = Date.now();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/admin/grant-free-period',
+      headers: { cookie: adminCookie },
+      payload: { userId: 'comp-target', period: 'month' },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const end = new Date(res.json().currentPeriodEnd).getTime();
+    expect(end).toBeGreaterThan(before + 30 * DAY - 5000);
+    expect(end).toBeLessThan(before + 30 * DAY + 5000);
+  });
+
+  it('stacks onto an existing comp instead of creating a second row', async () => {
+    const existingEnd = new Date(Date.now() + 10 * DAY);
+    prisma._store.subscription.push({
+      id: 'existing-comp',
+      userId: 'comp-target',
+      status: 'active',
+      planType: 'admin_granted',
+      currentPeriodEnd: existingEnd,
+      createdAt: new Date(),
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/admin/grant-free-period',
+      headers: { cookie: adminCookie },
+      payload: { userId: 'comp-target', period: 'week' },
+    });
+
+    expect(res.statusCode).toBe(200);
+    // One row, extended from the existing (later) end — never shortened.
+    const comps = prisma._store.subscription.filter((s) => s.userId === 'comp-target');
+    expect(comps).toHaveLength(1);
+    const end = new Date(res.json().currentPeriodEnd).getTime();
+    expect(end).toBeGreaterThan(existingEnd.getTime() + 7 * DAY - 5000);
+  });
+
+  it('rejects an invalid period', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/admin/grant-free-period',
+      headers: { cookie: adminCookie },
+      payload: { userId: 'comp-target', period: 'decade' },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('rejects missing userId', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/admin/grant-free-period',
+      headers: { cookie: adminCookie },
+      payload: { period: 'week' },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('404s when the target user does not exist', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/admin/grant-free-period',
+      headers: { cookie: adminCookie },
+      payload: { userId: 'ghost', period: 'week' },
+    });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('denies a regular user (403)', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/admin/grant-free-period',
+      headers: { cookie: userCookie },
+      payload: { userId: 'comp-target', period: 'week' },
+    });
+    expect(res.statusCode).toBe(403);
+  });
+});
+
 // ─── POST /admin/grant-admin ────────────────────────────────────────────────
 
 describe('POST /admin/grant-admin', () => {
