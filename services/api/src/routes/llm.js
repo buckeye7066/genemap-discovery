@@ -10,7 +10,23 @@ const ABSOLUTE_MAX_TOKENS = 4096;
 const DEFAULT_MAX_TOKENS = 1500;
 const PREMIUM_MAX_TOKENS = 4096;
 
+// Bound the *input* too. Token clamping only limits output; without these an
+// unbounded prompt or a 10k-message array reaches the provider, burning cost
+// (and possibly OOMing the request) before the API rejects it.
+const MAX_PROMPT_CHARS = 24_000; // ~6k tokens of input
+const MAX_CHAT_MESSAGES = 50;
+const MAX_MESSAGE_CHARS = 24_000;
+
 const LLM_TIMEOUT_MS = Number(process.env.LLM_TIMEOUT_MS || 30_000);
+
+function validatePrompt(prompt) {
+  if (!prompt || typeof prompt !== 'string') {
+    throw new ValidationError('prompt (string) is required');
+  }
+  if (prompt.length > MAX_PROMPT_CHARS) {
+    throw new ValidationError(`prompt must be ${MAX_PROMPT_CHARS} characters or fewer`);
+  }
+}
 
 function clampTokens(requested, isPremium) {
   const ceiling = isPremium ? PREMIUM_MAX_TOKENS : Math.min(DEFAULT_MAX_TOKENS, ABSOLUTE_MAX_TOKENS);
@@ -34,9 +50,7 @@ export default async function llmRoutes(fastify) {
 
   fastify.post('/invoke', { preHandler: guarded }, async (request) => {
     const { prompt, options = {} } = request.body || {};
-    if (!prompt || typeof prompt !== 'string') {
-      throw new ValidationError('prompt (string) is required');
-    }
+    validatePrompt(prompt);
 
     const isPremium = Boolean(request.entitlements?.isPremium);
     const maxTokens = clampTokens(options.maxTokens, isPremium);
@@ -68,6 +82,12 @@ export default async function llmRoutes(fastify) {
     const { messages, options = {} } = request.body || {};
     if (!Array.isArray(messages) || messages.length === 0) {
       throw new ValidationError('messages (non-empty array) is required');
+    }
+    if (messages.length > MAX_CHAT_MESSAGES) {
+      throw new ValidationError(`messages must contain ${MAX_CHAT_MESSAGES} turns or fewer`);
+    }
+    if (messages.some((m) => typeof m?.content === 'string' && m.content.length > MAX_MESSAGE_CHARS)) {
+      throw new ValidationError(`each message must be ${MAX_MESSAGE_CHARS} characters or fewer`);
     }
 
     // Strip any client-supplied system messages. The /llm/chat surface is
@@ -107,9 +127,7 @@ export default async function llmRoutes(fastify) {
 
   fastify.post('/image', { preHandler: guarded }, async (request) => {
     const { prompt, options = {} } = request.body || {};
-    if (!prompt || typeof prompt !== 'string') {
-      throw new ValidationError('prompt (string) is required');
-    }
+    validatePrompt(prompt);
 
     const result = await generateImage(prompt, {
       size: options.size || '1024x1024',
@@ -132,4 +150,14 @@ export default async function llmRoutes(fastify) {
   });
 }
 
-export const __test = { clampTokens, clampTemperature, ABSOLUTE_MAX_TOKENS, DEFAULT_MAX_TOKENS, PREMIUM_MAX_TOKENS };
+export const __test = {
+  clampTokens,
+  clampTemperature,
+  validatePrompt,
+  ABSOLUTE_MAX_TOKENS,
+  DEFAULT_MAX_TOKENS,
+  PREMIUM_MAX_TOKENS,
+  MAX_PROMPT_CHARS,
+  MAX_CHAT_MESSAGES,
+  MAX_MESSAGE_CHARS,
+};

@@ -26,47 +26,65 @@ import {
 import { Badge } from "@/components/ui/badge";
 import MobileOptimization from "./components/MobileOptimization";
 import { useEducationLevel, EDUCATION_LEVELS } from "./lib/EducationLevelContext";
+import { useAuth } from "./lib/AuthContext";
 
-const educationNav = [
+// Navigation is organized around user *intent* (Learn → Discover → Research →
+// My Data → Account) rather than by internal feature area. Each group maps to a
+// question a user is trying to answer, which keeps the sidebar scannable for
+// first-time and non-technical users. The Admin group is role-gated (see below)
+// and never rendered for ordinary accounts.
+
+// "What do I want to learn?"
+const learnNav = [
   { title: "Learn Genetics", url: createPageUrl("LearnGenetics"), icon: BookOpen },
+  { title: "Topic Explorer", url: createPageUrl("TopicExplorer"), icon: Sparkles },
   { title: "Learning Path", url: createPageUrl("LearningPath"), icon: GraduationCap },
   { title: "Take a Quiz", url: createPageUrl("QuizMode"), icon: HelpCircle },
 ];
 
-const researchNav = [
+// "I want to find genes / ask questions."
+const discoverNav = [
   { title: "Home", url: createPageUrl("Home"), icon: Home },
-  { title: "Dashboard", url: createPageUrl("Dashboard"), icon: LayoutDashboard },
   { title: "Gene Search", url: createPageUrl("Search"), icon: Search },
-  { title: "GSEA", url: createPageUrl("GSEA"), icon: Sparkles },
   { title: "AI Assistants", url: createPageUrl("AIAssistants"), icon: MessageSquare },
+  { title: "Study Tutor", url: createPageUrl("Anastasia"), icon: Heart },
+];
+
+// "I want to analyze data / run research workflows."
+const researchNav = [
+  { title: "Dashboard", url: createPageUrl("Dashboard"), icon: LayoutDashboard },
+  { title: "GSEA", url: createPageUrl("GSEA"), icon: Sparkles },
   { title: "VCF Analysis", url: createPageUrl("VCFAnalysis"), icon: FileText },
   { title: "Visualization Hub", url: createPageUrl("VisualizationHub"), icon: BarChart3 },
   { title: "Research Mode", url: createPageUrl("ResearchMode"), icon: Microscope },
+  { title: "Clinical Support", url: createPageUrl("RobertClinical"), icon: Shield },
 ];
 
-const personalNav = [
-  { title: "Robert Clinical", url: createPageUrl("RobertClinical"), icon: Shield },
-  { title: "Anastasia", url: createPageUrl("Anastasia"), icon: Heart },
-  { title: "Medical Data", url: createPageUrl("MedicalData"), icon: FileText },
+// "Where is my saved / sensitive data?"
+const myDataNav = [
+  { title: "Medical Data", url: createPageUrl("MedicalData"), icon: Heart },
   { title: "Search History", url: createPageUrl("History"), icon: History },
-  { title: "Contact Support", url: createPageUrl("ContactSupport"), icon: Mail },
-];
-
-const adminNav = [
-  { title: "License Manager", url: createPageUrl("InstitutionalAdmin"), icon: Building2, badge: "Teams" },
-  { title: "Banned Users", url: createPageUrl("BannedUsers"), icon: ShieldOff },
-  { title: "Function Tester", url: createPageUrl("AdminFunctionTester"), icon: Server },
-  { title: "Function Reviewer", url: createPageUrl("FunctionReviewer"), icon: Code2 },
-  { title: "Admin Setup", url: createPageUrl("SuperAdminSetup"), icon: Crown },
-  { title: "Newsletter Subs", url: createPageUrl("AxiomNewsletter"), icon: Mail },
-  { title: "Users Log", url: createPageUrl("UsersLog"), icon: Users },
-  { title: "Analytics", url: createPageUrl("AdminAnalytics"), icon: BarChart3 },
-  { title: "User Messages", url: createPageUrl("AdminMessages"), icon: MessageSquare },
 ];
 
 const accountNav = [
   { title: "Profile", url: createPageUrl("Profile"), icon: User },
   { title: "Premium", url: createPageUrl("Premium"), icon: Crown },
+  { title: "Contact Support", url: createPageUrl("ContactSupport"), icon: Mail },
+];
+
+// Admin-only. `superAdminOnly` items are additionally hidden from plain admins.
+// NOTE: hiding nav is UX sugar only — the backend (requireRole / requireSuperAdmin)
+// is the real authorization boundary. See services/api/src/routes/admin.js.
+const adminNav = [
+  { title: "License Manager", url: createPageUrl("InstitutionalAdmin"), icon: Building2, badge: "Teams" },
+  { title: "Analytics", url: createPageUrl("AdminAnalytics"), icon: BarChart3 },
+  { title: "Users Log", url: createPageUrl("UsersLog"), icon: Users },
+  { title: "User Messages", url: createPageUrl("AdminMessages"), icon: MessageSquare },
+  { title: "Banned Users", url: createPageUrl("BannedUsers"), icon: ShieldOff },
+  { title: "Newsletter Subs", url: createPageUrl("AxiomNewsletter"), icon: Mail },
+  { title: "Function Tester", url: createPageUrl("AdminFunctionTester"), icon: Server },
+  { title: "Function Reviewer", url: createPageUrl("FunctionReviewer"), icon: Code2 },
+  { title: "Admin Setup", url: createPageUrl("SuperAdminSetup"), icon: Crown, superAdminOnly: true },
 ];
 
 const ACCENT_COLORS = {
@@ -117,6 +135,14 @@ const NavGroup = memo(function NavGroup({ label, items, pathname, accent = 'slat
 export default function Layout({ children, currentPageName }) {
   const location = useLocation();
   const { level, levelConfig } = useEducationLevel();
+  const { user } = useAuth();
+
+  // Role-gate the Admin group. Backend routes are the real boundary; this just
+  // keeps the sidebar uncluttered for the ~99% of users who are not admins.
+  const role = user?.role;
+  const isAdmin = role === "admin" || role === "super_admin" || user?.entitlements?.isAdmin === true;
+  const isSuperAdmin = role === "super_admin";
+  const visibleAdminNav = adminNav.filter((item) => !item.superAdminOnly || isSuperAdmin);
 
   // Add PWA meta tags and initialize cross-platform fixes
   useEffect(() => {
@@ -196,11 +222,14 @@ export default function Layout({ children, currentPageName }) {
           </SidebarHeader>
           
           <SidebarContent className="p-2 scrollbar-thin">
-            <NavGroup label="Education" items={educationNav} pathname={location.pathname} accent="blue" />
-            <NavGroup label="Research Tools" items={researchNav} pathname={location.pathname} accent="slate" />
-            <NavGroup label="Personal" items={personalNav} pathname={location.pathname} accent="slate" />
-            <NavGroup label="Admin" items={adminNav} pathname={location.pathname} accent="purple" />
+            <NavGroup label="Learn" items={learnNav} pathname={location.pathname} accent="blue" />
+            <NavGroup label="Discover" items={discoverNav} pathname={location.pathname} accent="slate" />
+            <NavGroup label="Research" items={researchNav} pathname={location.pathname} accent="slate" />
+            <NavGroup label="My Data" items={myDataNav} pathname={location.pathname} accent="slate" />
             <NavGroup label="Account" items={accountNav} pathname={location.pathname} accent="slate" />
+            {isAdmin && (
+              <NavGroup label="Admin" items={visibleAdminNav} pathname={location.pathname} accent="purple" />
+            )}
           </SidebarContent>
 
           <SidebarFooter className="border-t border-slate-100 p-3">

@@ -44,9 +44,27 @@ export default function HistoryPage() {
     }
   };
 
+  // Backend SearchHistory records expose { id, query, queryType, results,
+  // createdAt }. The premium/free distinction and the discovered-gene details
+  // live inside the `results` JSON written by the Search page. These helpers
+  // normalize a raw record into the shape this page renders, tolerating both
+  // the current contract and any legacy rows.
+  const normalizeEntry = (s) => {
+    const results = s.results || {};
+    return {
+      id: s.id,
+      query: s.query ?? s.phenotype_query ?? "(unknown search)",
+      queryType: s.queryType ?? s.search_type ?? "free",
+      createdAt: s.createdAt ?? s.created_date ?? null,
+      hpoTerm: results.hpoTerm ?? s.hpo_term ?? null,
+      candidateGenes: results.candidateGenes ?? s.candidate_genes ?? [],
+      count: results.count ?? s.results_count ?? (results.candidateGenes?.length ?? 0),
+    };
+  };
+
   const getSearchTypeIcon = (type) => {
-    return type === "premium" ? 
-      <Crown className="w-4 h-4 text-amber-600" /> : 
+    return type === "premium" ?
+      <Crown className="w-4 h-4 text-amber-600" /> :
       <Search className="w-4 h-4 text-blue-600" />;
   };
 
@@ -182,7 +200,7 @@ export default function HistoryPage() {
                   <TrendingUp className="w-6 h-6 text-green-600" />
                 </div>
                 <div className="text-2xl font-bold text-slate-900">
-                  {searchHistory.reduce((sum, search) => sum + (search.results_count || 0), 0)}
+                  {searchHistory.reduce((sum, search) => sum + (normalizeEntry(search).count || 0), 0)}
                 </div>
                 <p className="text-sm text-slate-600">Genes Discovered</p>
               </CardContent>
@@ -194,7 +212,7 @@ export default function HistoryPage() {
                   <Crown className="w-6 h-6 text-amber-600" />
                 </div>
                 <div className="text-2xl font-bold text-slate-900">
-                  {searchHistory.filter(s => s.search_type === "premium").length}
+                  {searchHistory.filter(s => normalizeEntry(s).queryType === "premium").length}
                 </div>
                 <p className="text-sm text-slate-600">Premium Searches</p>
               </CardContent>
@@ -204,51 +222,55 @@ export default function HistoryPage() {
 
         {searchHistory.length > 0 ? (
           <div className="space-y-4">
-            {searchHistory.map((search) => (
+            {searchHistory.map((raw) => {
+              const search = normalizeEntry(raw);
+              return (
               <Card key={search.id} className="hover:shadow-md transition-shadow duration-200">
                 <CardContent className="py-4">
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
                       <div className="flex items-center gap-3 mb-2">
-                        {getSearchTypeIcon(search.search_type)}
+                        {getSearchTypeIcon(search.queryType)}
                         <h3 className="font-semibold text-slate-900">
-                          "{search.phenotype_query}"
+                          "{search.query}"
                         </h3>
-                        {getSearchTypeBadge(search.search_type)}
+                        {getSearchTypeBadge(search.queryType)}
                       </div>
-                      
+
                       <div className="flex items-center gap-4 text-sm text-slate-600">
-                        <div className="flex items-center gap-1">
-                          <Calendar className="w-4 h-4" />
-                          {format(new Date(search.created_date), "MMM d, yyyy 'at' h:mm a")}
-                        </div>
-                        
-                        {search.results_count && (
+                        {search.createdAt && (
                           <div className="flex items-center gap-1">
-                            <TrendingUp className="w-4 h-4" />
-                            {search.results_count} genes found
+                            <Calendar className="w-4 h-4" />
+                            {format(new Date(search.createdAt), "MMM d, yyyy 'at' h:mm a")}
                           </div>
                         )}
 
-                        {search.hpo_term && (
+                        {search.count > 0 && (
+                          <div className="flex items-center gap-1">
+                            <TrendingUp className="w-4 h-4" />
+                            {search.count} genes found
+                          </div>
+                        )}
+
+                        {search.hpoTerm && (
                           <Badge variant="outline" className="text-xs">
-                            HPO: {search.hpo_term}
+                            HPO: {search.hpoTerm}
                           </Badge>
                         )}
                       </div>
 
-                      {search.candidate_genes && search.candidate_genes.length > 0 && (
+                      {search.candidateGenes && search.candidateGenes.length > 0 && (
                         <div className="mt-3">
                           <div className="flex flex-wrap gap-2">
                             <span className="text-sm text-slate-500">Genes:</span>
-                            {search.candidate_genes.slice(0, 5).map((gene, idx) => (
+                            {search.candidateGenes.slice(0, 5).map((gene, idx) => (
                               <Badge key={idx} variant="secondary" className="text-xs">
                                 {gene}
                               </Badge>
                             ))}
-                            {search.candidate_genes.length > 5 && (
+                            {search.candidateGenes.length > 5 && (
                               <Badge variant="outline" className="text-xs">
-                                +{search.candidate_genes.length - 5} more
+                                +{search.candidateGenes.length - 5} more
                               </Badge>
                             )}
                           </div>
@@ -262,11 +284,11 @@ export default function HistoryPage() {
                         size="sm"
                         asChild
                       >
-                        <Link to={createPageUrl(`Search?query=${encodeURIComponent(search.phenotype_query)}`)}>
+                        <Link to={createPageUrl(`Search?query=${encodeURIComponent(search.query)}`)}>
                           Search Again
                         </Link>
                       </Button>
-                      
+
                       <Button
                         variant="outline"
                         size="sm"
@@ -284,7 +306,8 @@ export default function HistoryPage() {
                   </div>
                 </CardContent>
               </Card>
-            ))}
+              );
+            })}
           </div>
         ) : (
           <Card className="border-2 border-dashed border-slate-200 bg-slate-50/50">

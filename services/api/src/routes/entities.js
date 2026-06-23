@@ -8,6 +8,11 @@ function normalizeEmail(email) {
   return String(email || '').trim().toLowerCase();
 }
 
+// Roles assignable to a project collaborator. 'owner' is intentionally excluded
+// — ownership belongs to the project creator and is never granted via the
+// collaborators endpoint.
+const COLLABORATOR_ROLES = ['editor', 'viewer'];
+
 /**
  * Centralised access guard for any project-scoped resource (versions,
  * annotations, collaborators). Owners always have access; collaborators
@@ -437,16 +442,35 @@ export default async function entityRoutes(fastify) {
     const { userEmail, role } = request.body || {};
     if (!userEmail) throw new ValidationError('userEmail is required');
 
+    // The `role` column is a free-form string in the DB, so an unchecked value
+    // here could grant a privilege the access checks never anticipate (e.g.
+    // role: "owner"/"admin"). Constrain it to the known collaborator roles.
+    // 'owner' is reserved for the project creator and cannot be assigned.
+    const collaboratorRole = role || 'viewer';
+    if (!COLLABORATOR_ROLES.includes(collaboratorRole)) {
+      throw new ValidationError(
+        `role must be one of: ${COLLABORATOR_ROLES.join(', ')}`
+      );
+    }
+
     await requireProjectAccess(prisma, id, request.user.userId, ['owner']);
 
     const targetUser = await prisma.user.findUnique({ where: { email: normalizeEmail(userEmail) } });
     if (!targetUser) throw new NotFoundError('User not found');
 
-    const collab = await prisma.projectCollaborator.create({
-      data: {
+    if (targetUser.id === request.user.userId) {
+      throw new ValidationError('You already own this project');
+    }
+
+    // Idempotent + race-safe: a unique (projectId, userId) constraint exists,
+    // so upsert avoids both duplicate rows and a P2002 crash on double-submit.
+    const collab = await prisma.projectCollaborator.upsert({
+      where: { projectId_userId: { projectId: id, userId: targetUser.id } },
+      update: { role: collaboratorRole },
+      create: {
         projectId: id,
         userId: targetUser.id,
-        role: role || 'viewer',
+        role: collaboratorRole,
         addedBy: request.user.userId,
       },
     });
@@ -520,6 +544,8 @@ export default async function entityRoutes(fastify) {
     const { userEmail, department } = request.body || {};
     if (!userEmail) throw new ValidationError('userEmail is required');
 
+    const normalizedEmail = normalizeEmail(userEmail);
+
     const license = await prisma.institutionalLicense.findUnique({ where: { id } });
     if (!license) throw new NotFoundError('License not found');
     if (!license.adminUsers.includes(request.user.userId)) throw new ForbiddenError();
@@ -530,6 +556,18 @@ export default async function entityRoutes(fastify) {
     // avoids the TOCTOU race where two parallel POSTs both observe an
     // empty seat and both succeed.
     const assignment = await prisma.$transaction(async (tx) => {
+      // Reject a second active seat for the same person on the same license.
+      // Without this, re-assigning an already-seated user double-counts a seat
+      // and lets one person consume the whole pool. (There is no DB-level
+      // partial-unique constraint for status='active', so we enforce it here
+      // inside the transaction.)
+      const existing = await tx.licenseAssignment.findFirst({
+        where: { licenseId: id, userEmail: normalizedEmail, status: 'active' },
+      });
+      if (existing) {
+        throw new ValidationError('This user already has an active seat on this license');
+      }
+
       const updated = await tx.institutionalLicense.updateMany({
         where: { id, assignedSeats: { lt: license.maxSeats } },
         data: { assignedSeats: { increment: 1 } },
@@ -540,7 +578,7 @@ export default async function entityRoutes(fastify) {
       return tx.licenseAssignment.create({
         data: {
           licenseId: id,
-          userEmail: normalizeEmail(userEmail),
+          userEmail: normalizedEmail,
           assignedBy: request.user.userId,
           status: 'active',
           department: department || null,
@@ -576,8 +614,10 @@ export default async function entityRoutes(fastify) {
       if (deleted.count !== 1) {
         throw new NotFoundError('Assignment not found');
       }
-      await tx.institutionalLicense.update({
-        where: { id },
+      // Never let the seat counter underflow below zero, even if the data ever
+      // drifts (e.g. a manually deleted assignment row).
+      await tx.institutionalLicense.updateMany({
+        where: { id, assignedSeats: { gt: 0 } },
         data: { assignedSeats: { decrement: 1 } },
       });
       return { success: true };

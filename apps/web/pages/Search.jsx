@@ -80,12 +80,17 @@ export default function SearchPage() {
       }
 
       try {
+        // Backend (POST /entities/search-history) expects { query, queryType,
+        // results }. The extra display fields (HPO term, candidate genes, count)
+        // have no dedicated columns, so they live in the free-form `results` JSON.
         await apiClient.saveSearchHistory({
-          phenotype_query: query,
-          hpo_term: results.hpoTerms?.[0] || null,
-          candidate_genes: results.candidateGenes.map(g => g.symbol),
-          search_type: isPremium ? "premium" : "free",
-          results_count: results.candidateGenes.length
+          query,
+          queryType: isPremium ? "premium" : "free",
+          results: {
+            hpoTerm: results.hpoTerms?.[0] || null,
+            candidateGenes: results.candidateGenes.map(g => g.symbol),
+            count: results.candidateGenes.length,
+          },
         });
       } catch (historyError) {
         log.debug("Could not save search history:", historyError);
@@ -141,13 +146,19 @@ export default function SearchPage() {
         return;
       }
 
-      await apiClient.saveMedicalData({
-        _entityType: 'GeneSet',
+      // A gene set is NOT medical data. saveMedicalData() requires
+      // dataType+content and is gated behind a HIPAA consent record, so the
+      // previous call here failed (400 / 403) and never persisted a set.
+      // saveGeneSet() targets POST /entities/gene-sets, whose contract is
+      // { name, description, genes, metadata }.
+      await apiClient.saveGeneSet({
         name,
         description,
         genes: genesToSave,
-        phenotype_context: searchQuery || null,
-        tags: tags || []
+        metadata: {
+          phenotypeContext: searchQuery || null,
+          tags: tags || [],
+        },
       });
 
       // Invalidate and refetch gene sets cache with user context
