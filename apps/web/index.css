@@ -174,4 +174,25 @@ body {
   body {
     @apply bg-background text-foreground;
   }
+
+  /* Accessibility: respect the OS "reduce motion" setting. Spinners and
+     transitions across the app use Tailwind animate and transition utilities;
+     this neutralizes them for users who opt out of motion (WCAG 2.3.3). */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+
+  /* Always show a visible focus ring for keyboard navigation, even where a
+     component clears the default outline. */
+  :focus-visible {
+    outline: 2px solid hsl(217 91% 60%);
+    outline-offset: 2px;
+  }
 }

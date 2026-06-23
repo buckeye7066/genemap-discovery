@@ -19,6 +19,7 @@ import {
 import { format } from "date-fns";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
+import { normalizeSearchHistoryEntry } from "../lib/searchHistory";
 
 export default function HistoryPage() {
   const { user } = useAuth();
@@ -45,22 +46,10 @@ export default function HistoryPage() {
   };
 
   // Backend SearchHistory records expose { id, query, queryType, results,
-  // createdAt }. The premium/free distinction and the discovered-gene details
-  // live inside the `results` JSON written by the Search page. These helpers
-  // normalize a raw record into the shape this page renders, tolerating both
-  // the current contract and any legacy rows.
-  const normalizeEntry = (s) => {
-    const results = s.results || {};
-    return {
-      id: s.id,
-      query: s.query ?? s.phenotype_query ?? "(unknown search)",
-      queryType: s.queryType ?? s.search_type ?? "free",
-      createdAt: s.createdAt ?? s.created_date ?? null,
-      hpoTerm: results.hpoTerm ?? s.hpo_term ?? null,
-      candidateGenes: results.candidateGenes ?? s.candidate_genes ?? [],
-      count: results.count ?? s.results_count ?? (results.candidateGenes?.length ?? 0),
-    };
-  };
+  // createdAt }; the premium/free distinction and discovered-gene details live
+  // in the `results` JSON. normalizeSearchHistoryEntry (lib/searchHistory.js,
+  // unit-tested) maps a raw record to this page's shape, tolerating legacy rows.
+  const normalizeEntry = normalizeSearchHistoryEntry;
 
   const getSearchTypeIcon = (type) => {
     return type === "premium" ?
@@ -294,12 +283,14 @@ export default function HistoryPage() {
                         size="sm"
                         onClick={() => handleDeleteSearch(search.id)}
                         disabled={deletingId === search.id}
+                        aria-label={`Delete search "${search.query}"`}
+                        title="Delete this search"
                         className="text-red-600 hover:bg-red-50 hover:text-red-700 border-red-200"
                       >
                         {deletingId === search.id ? (
-                          <div className="w-4 h-4 border-2 border-red-600 border-t-transparent rounded-full animate-spin" />
+                          <div className="w-4 h-4 border-2 border-red-600 border-t-transparent rounded-full animate-spin" aria-hidden="true" />
                         ) : (
-                          <X className="w-4 h-4" />
+                          <X className="w-4 h-4" aria-hidden="true" />
                         )}
                       </Button>
                     </div>

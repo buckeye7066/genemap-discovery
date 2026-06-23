@@ -37,8 +37,17 @@ Verification commands are run from the repo root with pnpm 9.
 | B-005 | services/api utils/encryption.js | Fail-closed in production (throws if key missing/malformed); legacy plaintext auto-detected on read. |
 | B-006 | services/api middleware/csrf.js | HMAC double-submit token bound to userId; webhook + auth exempt. |
 
-## Known-remaining (documented, not fixed this session) — see SECURITY/DATABASE reports
-- Many entities/admin bodies still validated by ad-hoc `if` checks rather than shared Zod schemas (genes/messages/metadata size unbounded). **M**
-- DB lacks `@@unique([licenseId,userEmail])`, `Session.expiresAt` index, `DataDeletionRequest.status` index — enforced at app layer; DB constraints recommended (no DATABASE_URL available to validate a migration this session). **M/L**
-- No automatic expired-session pruning job. **L**
+## Second pass — completed (was previously "known-remaining")
+| ID | Area | Fix | Verify | Result |
+|----|------|-----|--------|--------|
+| B-112 | entities.js write routes | Reusable `assertString`/`assertStringArray`/`assertJsonSize` bounds + boolean/enum checks on search-history, activity, medical-data, conversations, gene-sets, projects, messages, annotations, consent. | `entities-authz.test.js` (+4) | PASS |
+| B-113 | prisma schema + migration | `sessions_expires_at_idx`, `data_deletion_requests_status_requested_at_idx`, partial-unique `license_assignments_active_user_unique`. | `prisma validate` / `format` | PASS (apply via `migrate deploy`) |
+| B-114 | apps/web (no test runner) | Wired Vitest+jsdom+RTL; extracted `lib/searchHistory.js`+`lib/roles.js`; 11 web tests incl. History render. | `pnpm --filter @genemap/web test` | PASS (11) |
+| B-115 | apps/web a11y | Global `prefers-reduced-motion` + `:focus-visible` ring; aria-labels on icon-only buttons. | web build | PASS |
+| B-116 | dependency vulns | 59 → 5 (1 critical/22 high → 0/0) via overrides + electron 39 / react-router 7.18 / vite 6.4.3 bumps. | `pnpm audit` | PASS |
+
+## Genuinely remaining (blockers / future PR)
+- `electron-builder` packaging not executed (no signing/runner); electron bumped + icons fixed but a desktop smoke test is needed. **L**
+- Full WCAG 2.1 AA sweep (reduced-motion/focus/key aria-labels done; not a complete per-page contrast/aria audit). **L**
+- Playwright E2E; consolidating inline bounds into shared `packages/shared` Zod schemas; a scheduled expired-session prune job. **L**
 - LLM services have no provider-level retry/backoff (genomics does). **L**

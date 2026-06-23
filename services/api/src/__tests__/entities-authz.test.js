@@ -156,3 +156,44 @@ describe('Institutional license seat safety', () => {
     expect(res.statusCode).toBe(403);
   });
 });
+
+describe('Entities input bounds', () => {
+  it('rejects a gene set with an oversized genes array', async () => {
+    const genes = Array.from({ length: 5001 }, (_, i) => `G${i}`);
+    const res = await app.inject({
+      method: 'POST', url: '/entities/gene-sets',
+      headers: { cookie: ownerCookie() }, payload: { name: 'big', genes },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body).error).toMatch(/items or fewer/i);
+  });
+
+  it('rejects non-string entries in a genes array', async () => {
+    const res = await app.inject({
+      method: 'POST', url: '/entities/gene-sets',
+      headers: { cookie: ownerCookie() }, payload: { name: 'bad', genes: ['BRCA1', 42] },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body).error).toMatch(/only strings/i);
+  });
+
+  it('rejects an over-long message body', async () => {
+    const res = await app.inject({
+      method: 'POST', url: '/entities/messages',
+      headers: { cookie: ownerCookie() },
+      payload: { subject: 'hi', body: 'x'.repeat(20001) },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body).error).toMatch(/characters or fewer/i);
+  });
+
+  it('accepts a normal gene set (guards do not reject valid payloads)', async () => {
+    const res = await app.inject({
+      method: 'POST', url: '/entities/gene-sets',
+      headers: { cookie: ownerCookie() },
+      payload: { name: 'My set', description: 'notes', genes: ['BRCA1', 'TP53'], metadata: { tags: ['x'] } },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body).set.genes).toEqual(['BRCA1', 'TP53']);
+  });
+});

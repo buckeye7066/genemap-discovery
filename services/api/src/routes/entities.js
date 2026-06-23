@@ -13,6 +13,40 @@ function normalizeEmail(email) {
 // collaborators endpoint.
 const COLLABORATOR_ROLES = ['editor', 'viewer'];
 
+// ─── Lightweight input bounds ────────────────────────────────────────────────
+// Output of these routes is trusted; the *input* was not previously bounded, so
+// a client could send a multi-megabyte string, a 100k-element `genes` array, or
+// a giant `metadata` blob and consume memory / DB space unchecked. These guards
+// bound the DoS vectors without changing any valid payload's behavior.
+const LIMIT = {
+  name: 300, // names, titles, types, short labels
+  text: 20_000, // free text (queries, annotation bodies, message bodies)
+  array: 5_000, // gene lists, etc.
+  json: 256 * 1024, // serialized size of a metadata / content / results blob
+};
+
+function assertString(val, field, max = LIMIT.text) {
+  if (val == null) return;
+  if (typeof val !== 'string') throw new ValidationError(`${field} must be a string`);
+  if (val.length > max) throw new ValidationError(`${field} must be ${max} characters or fewer`);
+}
+function assertStringArray(val, field, max = LIMIT.array) {
+  if (val == null) return;
+  if (!Array.isArray(val)) throw new ValidationError(`${field} must be an array`);
+  if (val.length > max) throw new ValidationError(`${field} must contain ${max} items or fewer`);
+  if (val.some((i) => typeof i !== 'string')) throw new ValidationError(`${field} must contain only strings`);
+}
+function assertJsonSize(val, field, max = LIMIT.json) {
+  if (val == null) return;
+  let serialized;
+  try {
+    serialized = JSON.stringify(val);
+  } catch {
+    throw new ValidationError(`${field} must be JSON-serializable`);
+  }
+  if (serialized.length > max) throw new ValidationError(`${field} is too large`);
+}
+
 /**
  * Centralised access guard for any project-scoped resource (versions,
  * annotations, collaborators). Owners always have access; collaborators
@@ -107,6 +141,9 @@ export default async function entityRoutes(fastify) {
   fastify.post('/search-history', async (request) => {
     const { query, queryType, results } = request.body || {};
     if (!query) throw new ValidationError('query is required');
+    assertString(query, 'query', LIMIT.text);
+    assertString(queryType, 'queryType', LIMIT.name);
+    assertJsonSize(results, 'results');
 
     const entry = await prisma.searchHistory.create({
       data: {
@@ -145,6 +182,10 @@ export default async function entityRoutes(fastify) {
   fastify.post('/activity', async (request) => {
     const { activityType, entityType, entityId, metadata } = request.body || {};
     if (!activityType) throw new ValidationError('activityType is required');
+    assertString(activityType, 'activityType', LIMIT.name);
+    assertString(entityType, 'entityType', LIMIT.name);
+    assertString(entityId, 'entityId', LIMIT.name);
+    assertJsonSize(metadata, 'metadata');
 
     const entry = await prisma.userActivity.create({
       data: {
@@ -182,6 +223,10 @@ export default async function entityRoutes(fastify) {
   fastify.post('/medical-data', { preHandler: logMedicalAccess('medical_data.write') }, async (request) => {
     const { dataType, title, content, metadata } = request.body || {};
     if (!dataType || !content) throw new ValidationError('dataType and content are required');
+    assertString(dataType, 'dataType', LIMIT.name);
+    assertString(title, 'title', LIMIT.name);
+    assertJsonSize(content, 'content');
+    assertJsonSize(metadata, 'metadata');
 
     // HIPAA / consent enforcement happens BEFORE the write; any storage of
     // genetic / medical data without an active consent record is a hard
@@ -253,6 +298,10 @@ export default async function entityRoutes(fastify) {
   fastify.post('/conversations', async (request) => {
     const { assistantType, title, messages, metadata } = request.body || {};
     if (!assistantType || !messages) throw new ValidationError('assistantType and messages are required');
+    assertString(assistantType, 'assistantType', LIMIT.name);
+    assertString(title, 'title', LIMIT.name);
+    assertJsonSize(messages, 'messages');
+    assertJsonSize(metadata, 'metadata');
 
     const conversation = await prisma.aIConversation.create({
       data: {
@@ -269,6 +318,9 @@ export default async function entityRoutes(fastify) {
   fastify.put('/conversations/:id', async (request) => {
     const { id } = request.params;
     const { title, messages, metadata } = request.body || {};
+    assertString(title, 'title', LIMIT.name);
+    assertJsonSize(messages, 'messages');
+    assertJsonSize(metadata, 'metadata');
 
     const existing = await prisma.aIConversation.findUnique({ where: { id } });
     if (!existing) throw new NotFoundError('Conversation not found');
@@ -297,6 +349,10 @@ export default async function entityRoutes(fastify) {
   fastify.post('/gene-sets', async (request) => {
     const { name, description, genes, metadata } = request.body || {};
     if (!name || !genes) throw new ValidationError('name and genes are required');
+    assertString(name, 'name', LIMIT.name);
+    assertString(description, 'description', LIMIT.text);
+    assertStringArray(genes, 'genes');
+    assertJsonSize(metadata, 'metadata');
 
     const set = await prisma.geneSet.create({
       data: {
@@ -313,6 +369,10 @@ export default async function entityRoutes(fastify) {
   fastify.put('/gene-sets/:id', async (request) => {
     const { id } = request.params;
     const { name, description, genes, metadata } = request.body || {};
+    assertString(name, 'name', LIMIT.name);
+    assertString(description, 'description', LIMIT.text);
+    assertStringArray(genes, 'genes');
+    assertJsonSize(metadata, 'metadata');
 
     const existing = await prisma.geneSet.findUnique({ where: { id } });
     if (!existing) throw new NotFoundError('Gene set not found');
@@ -358,6 +418,10 @@ export default async function entityRoutes(fastify) {
   fastify.post('/projects', async (request) => {
     const { title, description, genes, metadata } = request.body || {};
     if (!title) throw new ValidationError('title is required');
+    assertString(title, 'title', LIMIT.name);
+    assertString(description, 'description', LIMIT.text);
+    assertStringArray(genes, 'genes');
+    assertJsonSize(metadata, 'metadata');
 
     const project = await prisma.researchProject.create({
       data: {
@@ -385,6 +449,11 @@ export default async function entityRoutes(fastify) {
   fastify.put('/projects/:id', async (request) => {
     const { id } = request.params;
     const { title, description, status, genes, metadata } = request.body || {};
+    assertString(title, 'title', LIMIT.name);
+    assertString(description, 'description', LIMIT.text);
+    assertString(status, 'status', LIMIT.name);
+    assertStringArray(genes, 'genes');
+    assertJsonSize(metadata, 'metadata');
 
     // Owners only can mutate the project itself.
     await requireProjectAccess(prisma, id, request.user.userId, ['owner']);
@@ -511,6 +580,9 @@ export default async function entityRoutes(fastify) {
   fastify.post('/messages', async (request) => {
     const { subject, body, category } = request.body || {};
     if (!subject || !body) throw new ValidationError('subject and body are required');
+    assertString(subject, 'subject', LIMIT.name);
+    assertString(body, 'body', LIMIT.text);
+    assertString(category, 'category', LIMIT.name);
 
     const message = await prisma.message.create({
       data: {
@@ -632,6 +704,10 @@ export default async function entityRoutes(fastify) {
     if (!consentType || !version || granted === undefined) {
       throw new ValidationError('consentType, version, and granted are required');
     }
+    assertString(consentType, 'consentType', LIMIT.name);
+    assertString(version, 'version', LIMIT.name);
+    if (typeof granted !== 'boolean') throw new ValidationError('granted must be a boolean');
+    assertJsonSize(request.body.metadata, 'metadata');
 
     const record = await prisma.consentRecord.create({
       data: {
@@ -735,6 +811,10 @@ export default async function entityRoutes(fastify) {
     if (!targetType || !targetId || !content) {
       throw new ValidationError('targetType, targetId, and content are required');
     }
+    assertString(targetType, 'targetType', LIMIT.name);
+    assertString(targetId, 'targetId', LIMIT.name);
+    assertString(content, 'content', LIMIT.text);
+    assertString(parentId, 'parentId', LIMIT.name);
 
     await requireProjectAccess(prisma, id, request.user.userId, ['owner', 'editor']);
 
@@ -754,6 +834,10 @@ export default async function entityRoutes(fastify) {
   fastify.put('/projects/:projectId/annotations/:annotationId', async (request) => {
     const { projectId, annotationId } = request.params;
     const { content, resolved } = request.body || {};
+    assertString(content, 'content', LIMIT.text);
+    if (resolved !== undefined && typeof resolved !== 'boolean') {
+      throw new ValidationError('resolved must be a boolean');
+    }
 
     await requireProjectAccess(prisma, projectId, request.user.userId, ['owner', 'editor']);
 

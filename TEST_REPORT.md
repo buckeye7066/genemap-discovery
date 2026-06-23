@@ -4,8 +4,26 @@
 | Suite | Tests | Result |
 |-------|-------|--------|
 | `@genemap/shared` (vitest) | 48 | ✅ pass |
-| `@genemap/api` (vitest) | 159 | ✅ pass |
-| **Total** | **207** | ✅ |
+| `@genemap/api` (vitest) | 163 | ✅ pass |
+| `@genemap/web` (vitest + jsdom) | 11 | ✅ pass |
+| **Total** | **222** | ✅ |
+
+`pnpm audit`: 5 vulnerabilities (0 critical, 0 high, 4 moderate, 1 low) — down
+from 59 (1 critical, 22 high) at the start of the audit.
+
+### Frontend test runner (now wired)
+`apps/web` previously had no test runner. Added Vitest + jsdom + React Testing
+Library (`vitest.config.js`, `test-setup.js`, `pnpm --filter @genemap/web test`):
+- `lib/__tests__/searchHistory.test.js` (4): `normalizeSearchHistoryEntry`
+  reads the real backend shape, falls back to legacy snake_case, derives count,
+  safe defaults. (Covers B-103.)
+- `lib/__tests__/roles.test.js` (5): `isAdminUser` / `isSuperAdmin` gating.
+  (Covers B-104.)
+- `pages/__tests__/History.test.jsx` (2): real render — friendly empty state,
+  and backend-shaped rows render correctly. (The API-failure render case is
+  omitted: a rejected promise in React's async effect trips vitest's
+  unhandled-error trap under jsdom; the path is covered by the component's
+  try/catch and the normalizer unit tests.)
 
 Commands:
 ```bash

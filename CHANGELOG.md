@@ -37,9 +37,34 @@
 `pnpm lint` (0 errors) · `pnpm typecheck` · `pnpm test` (**207 passed**) ·
 `pnpm --filter @genemap/shared build` · `pnpm build:web` — all green.
 
-### Not done (documented in reports)
-- Full Zod adoption across all entities/admin bodies.
-- DB-level constraints/indexes (no `DATABASE_URL` in session; app-enforced).
-- Frontend component/E2E tests.
-- Full WCAG 2.1 AA pass.
-- `electron-builder` packaging not executed (no runner); config verified statically.
+### Second pass — completion (same branch)
+- **Input bounds** added across entities write routes (search-history, activity,
+  medical-data, conversations, gene-sets, projects, messages, annotations,
+  consent): string/array/JSON-size guards + boolean/enum checks. Closes the
+  unbounded-body DoS vector. (+4 API tests.)
+- **DB migration shipped**: `20260623190000_session_deletion_indexes_seat_unique`
+  adds `sessions_expires_at_idx`, `data_deletion_requests_status_requested_at_idx`,
+  and a **partial unique index** enforcing one active seat per (license,user).
+  Schema updated to match (the two named indexes); partial-unique documented as
+  migration-only (Prisma can't express it).
+- **Frontend test runner wired** (Vitest + jsdom + Testing Library): extracted
+  `lib/searchHistory.js` + `lib/roles.js` (used by History/Layout) and added 11
+  web tests, including a real History render test (empty + populated states).
+- **Accessibility**: global `prefers-reduced-motion` neutralization + a
+  keyboard `:focus-visible` ring (index.css); aria-labels on icon-only buttons.
+- **Dependency vulns**: 59 → **5** (1 critical + 22 high → **0 critical, 0 high**;
+  remaining 5 are moderate/low). Bumped vitest≥3.2.6, vite 6.4.3, react-router(-dom)
+  7.18, electron 39.8.x, flatted/xmldom/tmp/form-data/esbuild via overrides.
+
+### Final validation (second pass)
+`pnpm lint` (0 errors) · `pnpm typecheck` · `pnpm test` (**222 passed** — 163 API
++ 48 shared + 11 web) · shared build · `pnpm build:web` · icon generation —
+all green. `pnpm audit`: 0 critical / 0 high.
+
+### Still not done (genuine blockers / out of scope)
+- `electron-builder` packaging not executed (no signing/runner here); icon
+  blocker fixed + electron bumped, but a desktop smoke test needs a real run.
+- Full WCAG 2.1 AA audit (did reduced-motion, focus-visible, key aria-labels —
+  not a complete contrast/aria sweep of every page).
+- E2E (Playwright) flows; deeper Zod *schemas* in `packages/shared` shared with
+  the client (bounds are enforced server-side inline instead).

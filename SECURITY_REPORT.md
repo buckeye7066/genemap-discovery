@@ -40,15 +40,21 @@ verified each control against the live code and closed the remaining gaps.
   into error messages today). Recommend a boundary catch around `decrypt`.
 
 ## Input validation
-- Zod is used for auth + billing bodies. Many entities/admin routes still use
-  ad-hoc `if (!x) throw` checks. **This audit added**:
+- Zod is used for auth + billing bodies. **This audit added**:
   - collaborator `role` enum + self-add guard (B-105),
   - LLM prompt/message bounds (B-109),
-  - genomic query length bound (B-107).
-- **Remaining (M):** `genes`/`messages`/`metadata` arrays and `category`/
-  `consentType`/`dataType` strings are still unbounded/unconstrained. Recommend
-  promoting `packages/shared/src/schemas.ts` to the single source of truth and
-  importing it in both client and `entities.js`/`admin.js`.
+  - genomic query length bound (B-107),
+  - **entities write-route bounds (second pass)**: reusable `assertString` /
+    `assertStringArray` / `assertJsonSize` guards now bound every untrusted field
+    on search-history, activity, medical-data, conversations, gene-sets,
+    projects, messages, annotations, and consent — string length (≤300 / ≤20k),
+    array length (≤5,000, string-only), serialized JSON size (≤256 KB), plus
+    boolean checks on `granted` / `resolved`. Closes the unbounded-body /
+    memory-exhaustion vector. (Verified by 4 new tests in `entities-authz.test.js`.)
+- **Remaining (L):** bounds are enforced inline server-side rather than via
+  shared `packages/shared/src/schemas.ts` Zod schemas imported by both client and
+  backend. Functionally complete; consolidation into one SoT is a refactor, not a
+  gap.
 
 ## CSRF
 - HMAC double-submit token bound to userId (`csrf.js`); applied globally via
@@ -65,7 +71,12 @@ verified each control against the live code and closed the remaining gaps.
 - Icons now generated (B-110) so signed installer builds don't fail.
 
 ## Top remaining risks (security)
-1. **M** — Unbounded/loosely-typed entities bodies (size-DoS, junk metadata). Add shared Zod.
-2. **M** — No DB-level unique on active license seats (app-enforced only).
-3. **L** — Sessions not pruned server-side; a leaked refresh token is valid until expiry/rotation.
+1. **L** — Entities bodies are bounded inline, not via a shared Zod SoT (refactor, not a gap).
+2. **L** — DB-level partial-unique on active license seats now shipped as a
+   migration, but only applied by `migrate deploy` (the dev `db push` path relies
+   on the app-level guard, which is also present).
+3. **L** — No server-side session-pruning *job* yet (the supporting `expires_at`
+   index is now in place); a leaked refresh token is valid until expiry/rotation.
 4. **L** — Medical content not explicitly redacted from unexpected error paths.
+5. **L** — Electron bumped to 39.8.x (clears 4 advisories) but the desktop
+   runtime/packaging was not smoke-tested in this environment.

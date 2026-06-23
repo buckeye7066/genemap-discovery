@@ -27,6 +27,7 @@ import { Badge } from "@/components/ui/badge";
 import MobileOptimization from "./components/MobileOptimization";
 import { useEducationLevel, EDUCATION_LEVELS } from "./lib/EducationLevelContext";
 import { useAuth } from "./lib/AuthContext";
+import { isAdminUser, isSuperAdmin } from "./lib/roles";
 
 // Navigation is organized around user *intent* (Learn → Discover → Research →
 // My Data → Account) rather than by internal feature area. Each group maps to a
@@ -139,10 +140,9 @@ export default function Layout({ children, currentPageName }) {
 
   // Role-gate the Admin group. Backend routes are the real boundary; this just
   // keeps the sidebar uncluttered for the ~99% of users who are not admins.
-  const role = user?.role;
-  const isAdmin = role === "admin" || role === "super_admin" || user?.entitlements?.isAdmin === true;
-  const isSuperAdmin = role === "super_admin";
-  const visibleAdminNav = adminNav.filter((item) => !item.superAdminOnly || isSuperAdmin);
+  // (isAdminUser/isSuperAdmin live in lib/roles.js and are unit-tested.)
+  const isAdmin = isAdminUser(user);
+  const visibleAdminNav = adminNav.filter((item) => !item.superAdminOnly || isSuperAdmin(user));
 
   // Add PWA meta tags and initialize cross-platform fixes
   useEffect(() => {

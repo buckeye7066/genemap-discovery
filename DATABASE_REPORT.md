@@ -38,15 +38,26 @@ Cascade deletes are well-modeled: deleting a User cleans up sessions,
 subscriptions, history, gene sets, projects (and their versions/annotations/
 collaborators), conversations, medical data, consent, and deletion requests.
 
-## Why DB constraints were deferred
-Adding a unique constraint or index requires `db:push`/`migrate` against a real
-database to (a) confirm no existing rows violate it and (b) generate the
-migration SQL. With no `DATABASE_URL` here, shipping an unvalidated migration
-would risk a failed deploy. The application-layer transaction guarantees
-correctness today; the migration is the durability hardening for the next PR
-that has DB access. Suggested commands:
+## Migration shipped (second pass)
+`prisma/migrations/20260623190000_session_deletion_indexes_seat_unique/migration.sql`
+(idempotent `CREATE INDEX IF NOT EXISTS`):
+- `sessions_expires_at_idx` — session-expiry sweeps.
+- `data_deletion_requests_status_requested_at_idx` — pending-request batches.
+- `license_assignments_active_user_unique` — **partial** unique index
+  (`WHERE status = 'active'`) enforcing one active seat per (license, user).
+
+`schema.prisma` was updated to declare the two named indexes (so `db push` and
+`migrate` agree). The partial unique index is **migration-only** — Prisma's
+schema language can't express a `WHERE` clause — so the dev `db push` path will
+not create it; the same invariant is enforced in `routes/entities.js`, so both
+paths stay correct. Schema validated with `prisma validate` / `prisma format`
+(the lone "error" is the absent `DATABASE_URL` env in `getConfig`, not a schema
+fault). Apply in prod with:
 ```bash
-# with DATABASE_URL set:
-pnpm --filter @genemap/api db:migrate -- --name license_seat_unique_and_session_index
-pnpm --filter @genemap/api db:migrate:deploy
+pnpm --filter @genemap/api db:migrate:deploy   # with DATABASE_URL set
 ```
+
+## Still recommended (not done)
+- A scheduled job to actually prune expired sessions (the index now supports it).
+- `citext` migration for `users.email` to retire app-layer normalization.
+- Make `ProjectVersion.createdBy` a real FK or document it as intentionally loose.
