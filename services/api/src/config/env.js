@@ -49,6 +49,16 @@ const baseSchema = z.object({
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
   STRIPE_PRICE_MONTHLY: z.string().optional(),
   STRIPE_PRICE_YEARLY: z.string().optional(),
+  // Institutional plans must be configured in production. Without these,
+  // /billing/institutional-checkout would silently checkout against a
+  // placeholder price ID and create a license linked to a non-existent
+  // Stripe product.
+  STRIPE_PRICE_TEAM_MONTHLY: z.string().optional(),
+  STRIPE_PRICE_TEAM_YEARLY: z.string().optional(),
+  STRIPE_PRICE_DEPT_MONTHLY: z.string().optional(),
+  STRIPE_PRICE_DEPT_YEARLY: z.string().optional(),
+  STRIPE_PRICE_ENT_MONTHLY: z.string().optional(),
+  STRIPE_PRICE_ENT_YEARLY: z.string().optional(),
 
   // LLM providers
   OPENAI_API_KEY: z.string().optional(),
@@ -74,6 +84,12 @@ const PRODUCTION_REQUIRED = [
   'STRIPE_WEBHOOK_SECRET',
   'STRIPE_PRICE_MONTHLY',
   'STRIPE_PRICE_YEARLY',
+  'STRIPE_PRICE_TEAM_MONTHLY',
+  'STRIPE_PRICE_TEAM_YEARLY',
+  'STRIPE_PRICE_DEPT_MONTHLY',
+  'STRIPE_PRICE_DEPT_YEARLY',
+  'STRIPE_PRICE_ENT_MONTHLY',
+  'STRIPE_PRICE_ENT_YEARLY',
 ];
 
 // At least one LLM provider key must be configured in production if any

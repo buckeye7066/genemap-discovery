@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { buildTestApp, createPrismaMock, authCookie } from './setup.js';
+import { issueCsrfToken } from '../middleware/csrf.js';
 
 let app;
 let prisma;
@@ -47,22 +48,38 @@ describe('CSRF middleware', () => {
 
   it('rejects when cookie and header CSRF tokens differ', async () => {
     const session = authCookie({ userId: 'u1', email: 'u@x.com', role: 'user' });
-    const cookie = `${session}; csrfToken=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa`;
+    const a = issueCsrfToken('u1');
+    const b = issueCsrfToken('u1');
+    const cookie = `${session}; csrfToken=${a}`;
     const res = await app.inject({
       method: 'PUT',
       url: '/auth/me',
-      headers: { cookie, 'x-csrf-token': 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' },
+      headers: { cookie, 'x-csrf-token': b },
       payload: { displayName: 'Bad' },
     });
     expect(res.statusCode).toBe(403);
   });
 
-  it('accepts when cookie and header CSRF tokens match', async () => {
+  it('rejects an unsigned CSRF token even when cookie/header match', async () => {
+    const session = authCookie({ userId: 'u1', email: 'u@x.com', role: 'user' });
+    const csrf = 'cccccccccccccccccccccccccccccccccccccc';
+    const cookie = `${session}; csrfToken=${csrf}`;
+    const res = await app.inject({
+      method: 'PUT',
+      url: '/auth/me',
+      headers: { cookie, 'x-csrf-token': csrf },
+      payload: { displayName: 'Bad' },
+    });
+    expect(res.statusCode).toBe(403);
+    expect(JSON.parse(res.body).error).toMatch(/csrf/i);
+  });
+
+  it('accepts when cookie and header carry a matching HMAC-bound token', async () => {
     prisma._store.user.push({
       id: 'u1', email: 'u@x.com', role: 'user', displayName: 'Old',
       banned: false, demographicsCollected: false,
     });
-    const csrf = 'cccccccccccccccccccccccccccccccccccccc';
+    const csrf = issueCsrfToken('u1');
     const session = authCookie({ userId: 'u1', email: 'u@x.com', role: 'user' });
     const cookie = `${session}; csrfToken=${csrf}`;
     const res = await app.inject({

@@ -4,6 +4,86 @@ import { createAuditLog } from '../utils/audit.js';
 import { encrypt, decrypt } from '../utils/encryption.js';
 import { ValidationError, NotFoundError, ForbiddenError } from '../utils/errors.js';
 
+function normalizeEmail(email) {
+  return String(email || '').trim().toLowerCase();
+}
+
+/**
+ * Centralised access guard for any project-scoped resource (versions,
+ * annotations, collaborators). Owners always have access; collaborators
+ * are checked against the requested role set. Throws NotFound for
+ * non-existent projects and Forbidden for unauthorised users — never the
+ * other way around (we don't want to leak project existence via 403 vs 404
+ * to a user who can't see them).
+ */
+async function requireProjectAccess(prisma, projectId, userId, roles = ['owner', 'editor', 'viewer']) {
+  const project = await prisma.researchProject.findUnique({
+    where: { id: projectId },
+    include: { collaborators: true },
+  });
+
+  if (!project) throw new NotFoundError('Project not found');
+
+  if (project.userId === userId) return { project, role: 'owner' };
+
+  // If the test mock did not populate `include`, fall back to the
+  // collaborator table directly. Production Prisma always returns the
+  // relation when include is set, so the second query is dead code at
+  // runtime but keeps the helper portable.
+  const collaborators = Array.isArray(project.collaborators)
+    ? project.collaborators
+    : await prisma.projectCollaborator.findMany({ where: { projectId } });
+
+  const collab = collaborators.find((c) => c.userId === userId);
+  if (!collab || !roles.includes(collab.role)) {
+    throw new ForbiddenError('Project access denied');
+  }
+
+  return { project, role: collab.role };
+}
+
+/**
+ * Throws ForbiddenError unless the requester has previously granted a
+ * matching consent record. Does not check that the consent has been revoked
+ * — clients should call /entities/consent again to overwrite.
+ */
+async function requireConsent(prisma, userId, consentType, minVersion) {
+  const consent = await prisma.consentRecord.findFirst({
+    where: { userId, consentType, version: minVersion, granted: true },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  if (!consent) {
+    throw new ForbiddenError(`Consent required: ${consentType} v${minVersion}`);
+  }
+}
+
+/**
+ * Process a pending DataDeletionRequest by deleting the user's medical
+ * data, AI conversations, and search history in a single transaction so
+ * that any partial failure rolls back. Audit logs intentionally remain so
+ * we can still answer "who requested deletion and when" for compliance.
+ */
+async function processDeletionRequest(prisma, requestId) {
+  return prisma.$transaction(async (tx) => {
+    const req = await tx.dataDeletionRequest.findUnique({ where: { id: requestId } });
+    if (!req || req.status !== 'pending') return null;
+
+    await tx.medicalData.deleteMany({ where: { userId: req.userId } });
+    await tx.aIConversation.deleteMany({ where: { userId: req.userId } });
+    await tx.searchHistory.deleteMany({ where: { userId: req.userId } });
+
+    return tx.dataDeletionRequest.update({
+      where: { id: requestId },
+      data: {
+        status: 'completed',
+        completedAt: new Date(),
+        deletedTypes: ['medicalData', 'aiConversations', 'searchHistory'],
+      },
+    });
+  });
+}
+
 export default async function entityRoutes(fastify) {
   const prisma = fastify.prisma;
 
@@ -43,9 +123,7 @@ export default async function entityRoutes(fastify) {
   });
 
   fastify.delete('/search-history', async (request) => {
-    await prisma.searchHistory.deleteMany({
-      where: { userId: request.user.userId },
-    });
+    await prisma.searchHistory.deleteMany({ where: { userId: request.user.userId } });
     return { success: true };
   });
 
@@ -76,7 +154,9 @@ export default async function entityRoutes(fastify) {
   });
 
   // ─── Medical Data ───────────────────────────────────────────
-  fastify.get('/medical-data', { preHandler: logMedicalAccess('read') }, async (request) => {
+  // Reads are not consent-gated (the user is reading their own data) but
+  // every read is audit-logged via logMedicalAccess.
+  fastify.get('/medical-data', { preHandler: logMedicalAccess('medical_data.read') }, async (request) => {
     const { dataType } = request.query;
     const where = { userId: request.user.userId };
     if (dataType) where.dataType = dataType;
@@ -86,7 +166,6 @@ export default async function entityRoutes(fastify) {
       orderBy: { createdAt: 'desc' },
     });
 
-    // Decrypt content field for each record
     const decryptedRecords = records.map((record) => ({
       ...record,
       content: decrypt(record.content),
@@ -95,11 +174,15 @@ export default async function entityRoutes(fastify) {
     return { records: decryptedRecords };
   });
 
-  fastify.post('/medical-data', { preHandler: logMedicalAccess('write') }, async (request) => {
+  fastify.post('/medical-data', { preHandler: logMedicalAccess('medical_data.write') }, async (request) => {
     const { dataType, title, content, metadata } = request.body || {};
     if (!dataType || !content) throw new ValidationError('dataType and content are required');
 
-    // Encrypt content before storing
+    // HIPAA / consent enforcement happens BEFORE the write; any storage of
+    // genetic / medical data without an active consent record is a hard
+    // failure regardless of authentication state.
+    await requireConsent(prisma, request.user.userId, 'medical_data_storage', '1.0');
+
     const encryptedContent = encrypt(content);
 
     const record = await prisma.medicalData.create({
@@ -111,14 +194,40 @@ export default async function entityRoutes(fastify) {
         metadata: metadata || null,
       },
     });
+
+    await createAuditLog(
+      prisma,
+      {
+        userId: request.user.userId,
+        action: 'medical_data.write',
+        entityType: 'medical_data',
+        entityId: record.id,
+        metadata: { dataType },
+      },
+      { required: true }
+    );
+
     return { record: { ...record, content } };
   });
 
-  fastify.delete('/medical-data/:id', { preHandler: logMedicalAccess('delete') }, async (request) => {
+  fastify.delete('/medical-data/:id', { preHandler: logMedicalAccess('medical_data.delete') }, async (request) => {
     const { id } = request.params;
-    await prisma.medicalData.deleteMany({
+    const result = await prisma.medicalData.deleteMany({
       where: { id, userId: request.user.userId },
     });
+
+    await createAuditLog(
+      prisma,
+      {
+        userId: request.user.userId,
+        action: 'medical_data.delete',
+        entityType: 'medical_data',
+        entityId: id,
+        metadata: { deletedCount: result.count },
+      },
+      { required: true }
+    );
+
     return { success: true };
   });
 
@@ -255,7 +364,6 @@ export default async function entityRoutes(fastify) {
       },
     });
 
-    // Create initial version
     await prisma.projectVersion.create({
       data: {
         projectId: project.id,
@@ -273,9 +381,8 @@ export default async function entityRoutes(fastify) {
     const { id } = request.params;
     const { title, description, status, genes, metadata } = request.body || {};
 
-    const existing = await prisma.researchProject.findUnique({ where: { id } });
-    if (!existing) throw new NotFoundError('Project not found');
-    if (existing.userId !== request.user.userId) throw new ForbiddenError();
+    // Owners only can mutate the project itself.
+    await requireProjectAccess(prisma, id, request.user.userId, ['owner']);
 
     const project = await prisma.researchProject.update({
       where: { id },
@@ -288,7 +395,6 @@ export default async function entityRoutes(fastify) {
       },
     });
 
-    // Create version for the update
     const lastVersion = await prisma.projectVersion.findFirst({
       where: { projectId: id },
       orderBy: { version: 'desc' },
@@ -308,15 +414,16 @@ export default async function entityRoutes(fastify) {
   });
 
   fastify.delete('/projects/:id', async (request) => {
-    const existing = await prisma.researchProject.findUnique({ where: { id: request.params.id } });
-    if (!existing) throw new NotFoundError('Project not found');
-    if (existing.userId !== request.user.userId) throw new ForbiddenError();
-
+    await requireProjectAccess(prisma, request.params.id, request.user.userId, ['owner']);
     await prisma.researchProject.delete({ where: { id: request.params.id } });
     return { success: true };
   });
 
   fastify.get('/projects/:id/versions', async (request) => {
+    // FIX: previous implementation returned versions to ANY caller with the
+    // project ID. Now we explicitly require collaborator-or-owner access.
+    await requireProjectAccess(prisma, request.params.id, request.user.userId);
+
     const versions = await prisma.projectVersion.findMany({
       where: { projectId: request.params.id },
       orderBy: { version: 'desc' },
@@ -330,11 +437,9 @@ export default async function entityRoutes(fastify) {
     const { userEmail, role } = request.body || {};
     if (!userEmail) throw new ValidationError('userEmail is required');
 
-    const project = await prisma.researchProject.findUnique({ where: { id } });
-    if (!project) throw new NotFoundError('Project not found');
-    if (project.userId !== request.user.userId) throw new ForbiddenError();
+    await requireProjectAccess(prisma, id, request.user.userId, ['owner']);
 
-    const targetUser = await prisma.user.findUnique({ where: { email: userEmail } });
+    const targetUser = await prisma.user.findUnique({ where: { email: normalizeEmail(userEmail) } });
     if (!targetUser) throw new NotFoundError('User not found');
 
     const collab = await prisma.projectCollaborator.create({
@@ -350,10 +455,17 @@ export default async function entityRoutes(fastify) {
 
   fastify.delete('/projects/:projectId/collaborators/:collabId', async (request) => {
     const { projectId, collabId } = request.params;
-    const project = await prisma.researchProject.findUnique({ where: { id: projectId } });
-    if (!project || project.userId !== request.user.userId) throw new ForbiddenError();
+    await requireProjectAccess(prisma, projectId, request.user.userId, ['owner']);
 
-    await prisma.projectCollaborator.delete({ where: { id: collabId } });
+    // FIX: previous implementation deleted by collabId alone, so an owner
+    // of project A could delete a collaborator row from project B by
+    // guessing the collabId. Bind the delete to projectId.
+    const deleted = await prisma.projectCollaborator.deleteMany({
+      where: { id: collabId, projectId },
+    });
+    if (deleted.count !== 1) {
+      throw new NotFoundError('Collaborator not found');
+    }
     return { success: true };
   });
 
@@ -388,9 +500,13 @@ export default async function entityRoutes(fastify) {
   });
 
   // ─── Institutional License Management ──────────────────────
+  // Critical fix: license.adminUsers stores USER IDs (set by the Stripe
+  // webhook). Match them against request.user.userId, not request.user.email
+  // — the previous code stored userId but checked email, so the purchaser
+  // could not administer their own license.
   fastify.get('/licenses', async (request) => {
     const licenses = await prisma.institutionalLicense.findMany({
-      where: { adminUsers: { has: request.user.email } },
+      where: { adminUsers: { has: request.user.userId } },
       include: {
         assignments: true,
         usageLogs: { take: 50, orderBy: { createdAt: 'desc' } },
@@ -406,32 +522,38 @@ export default async function entityRoutes(fastify) {
 
     const license = await prisma.institutionalLicense.findUnique({ where: { id } });
     if (!license) throw new NotFoundError('License not found');
-    if (!license.adminUsers.includes(request.user.email)) throw new ForbiddenError();
-    if (license.assignedSeats >= license.maxSeats) {
-      throw new ValidationError('No available seats');
-    }
+    if (!license.adminUsers.includes(request.user.userId)) throw new ForbiddenError();
 
-    const assignment = await prisma.licenseAssignment.create({
-      data: {
-        licenseId: id,
-        userEmail,
-        assignedBy: request.user.userId,
-        status: 'active',
-        department: department || null,
-      },
-    });
-
-    await prisma.institutionalLicense.update({
-      where: { id },
-      data: { assignedSeats: { increment: 1 } },
+    // Atomic seat reservation: increment assignedSeats only if it remains
+    // strictly less than maxSeats. updateMany returns 0 affected rows when
+    // the predicate fails, which we treat as "no available seats". This
+    // avoids the TOCTOU race where two parallel POSTs both observe an
+    // empty seat and both succeed.
+    const assignment = await prisma.$transaction(async (tx) => {
+      const updated = await tx.institutionalLicense.updateMany({
+        where: { id, assignedSeats: { lt: license.maxSeats } },
+        data: { assignedSeats: { increment: 1 } },
+      });
+      if (updated.count !== 1) {
+        throw new ValidationError('No available seats');
+      }
+      return tx.licenseAssignment.create({
+        data: {
+          licenseId: id,
+          userEmail: normalizeEmail(userEmail),
+          assignedBy: request.user.userId,
+          status: 'active',
+          department: department || null,
+        },
+      });
     });
 
     await prisma.licenseUsageLog.create({
       data: {
         licenseId: id,
-        userEmail,
+        userEmail: normalizeEmail(userEmail),
         action: 'seat_assigned',
-        metadata: { assignedBy: request.user.email, department },
+        metadata: { assignedBy: request.user.userId, department: department || null },
       },
     });
 
@@ -442,18 +564,26 @@ export default async function entityRoutes(fastify) {
     const { id, assignmentId } = request.params;
 
     const license = await prisma.institutionalLicense.findUnique({ where: { id } });
-    if (!license || !license.adminUsers.includes(request.user.email)) throw new ForbiddenError();
+    if (!license || !license.adminUsers.includes(request.user.userId)) throw new ForbiddenError();
 
-    const assignment = await prisma.licenseAssignment.findUnique({ where: { id: assignmentId } });
-    if (!assignment) throw new NotFoundError('Assignment not found');
-
-    await prisma.licenseAssignment.delete({ where: { id: assignmentId } });
-    await prisma.institutionalLicense.update({
-      where: { id },
-      data: { assignedSeats: { decrement: 1 } },
+    // Bind the delete to the parent license so an admin of one license
+    // can never delete an assignment row from another license by guessing
+    // the assignmentId.
+    const result = await prisma.$transaction(async (tx) => {
+      const deleted = await tx.licenseAssignment.deleteMany({
+        where: { id: assignmentId, licenseId: id },
+      });
+      if (deleted.count !== 1) {
+        throw new NotFoundError('Assignment not found');
+      }
+      await tx.institutionalLicense.update({
+        where: { id },
+        data: { assignedSeats: { decrement: 1 } },
+      });
+      return { success: true };
     });
 
-    return { success: true };
+    return result;
   });
 
   // ─── Consent Records (HIPAA Compliance) ────────────────────
@@ -474,13 +604,17 @@ export default async function entityRoutes(fastify) {
       },
     });
 
-    await createAuditLog(prisma, {
-      userId: request.user.userId,
-      action: 'consent_recorded',
-      entityType: 'consent_record',
-      entityId: record.id,
-      metadata: { consentType, version, granted },
-    });
+    await createAuditLog(
+      prisma,
+      {
+        userId: request.user.userId,
+        action: 'consent_recorded',
+        entityType: 'consent_record',
+        entityId: record.id,
+        metadata: { consentType, version, granted },
+      },
+      { required: true }
+    );
 
     return { record };
   });
@@ -505,13 +639,25 @@ export default async function entityRoutes(fastify) {
       },
     });
 
-    await createAuditLog(prisma, {
-      userId: request.user.userId,
-      action: 'data_deletion_requested',
-      entityType: 'data_deletion_request',
-      entityId: deletionRequest.id,
-      metadata: { deletedTypes: deletedTypes || [] },
-    });
+    await createAuditLog(
+      prisma,
+      {
+        userId: request.user.userId,
+        action: 'data_deletion_requested',
+        entityType: 'data_deletion_request',
+        entityId: deletionRequest.id,
+        metadata: { deletedTypes: deletedTypes || [] },
+      },
+      { required: true }
+    );
+
+    // Self-service deletion runs immediately for the requester. Admin
+    // override / cool-off windows can later wrap this in a queue.
+    try {
+      await processDeletionRequest(prisma, deletionRequest.id);
+    } catch (err) {
+      console.error('[entities] processDeletionRequest failed:', err.message);
+    }
 
     return { request: deletionRequest };
   });
@@ -529,15 +675,15 @@ export default async function entityRoutes(fastify) {
     const { id } = request.params;
     const { targetType, targetId } = request.query;
 
+    await requireProjectAccess(prisma, id, request.user.userId);
+
     const where = { projectId: id };
     if (targetType) where.targetType = targetType;
     if (targetId) where.targetId = targetId;
 
     const annotations = await prisma.projectAnnotation.findMany({
       where,
-      include: {
-        user: { select: { email: true, displayName: true } },
-      },
+      include: { user: { select: { email: true, displayName: true } } },
       orderBy: { createdAt: 'asc' },
     });
     return { annotations };
@@ -549,6 +695,8 @@ export default async function entityRoutes(fastify) {
     if (!targetType || !targetId || !content) {
       throw new ValidationError('targetType, targetId, and content are required');
     }
+
+    await requireProjectAccess(prisma, id, request.user.userId, ['owner', 'editor']);
 
     const annotation = await prisma.projectAnnotation.create({
       data: {
@@ -567,8 +715,10 @@ export default async function entityRoutes(fastify) {
     const { projectId, annotationId } = request.params;
     const { content, resolved } = request.body || {};
 
+    await requireProjectAccess(prisma, projectId, request.user.userId, ['owner', 'editor']);
+
     const existing = await prisma.projectAnnotation.findUnique({ where: { id: annotationId } });
-    if (!existing) throw new NotFoundError('Annotation not found');
+    if (!existing || existing.projectId !== projectId) throw new NotFoundError('Annotation not found');
     if (existing.userId !== request.user.userId) throw new ForbiddenError();
 
     const annotation = await prisma.projectAnnotation.update({
@@ -582,9 +732,11 @@ export default async function entityRoutes(fastify) {
   });
 
   fastify.delete('/projects/:projectId/annotations/:annotationId', async (request) => {
-    const { annotationId } = request.params;
+    const { projectId, annotationId } = request.params;
+    await requireProjectAccess(prisma, projectId, request.user.userId, ['owner', 'editor']);
+
     const existing = await prisma.projectAnnotation.findUnique({ where: { id: annotationId } });
-    if (!existing) throw new NotFoundError('Annotation not found');
+    if (!existing || existing.projectId !== projectId) throw new NotFoundError('Annotation not found');
     if (existing.userId !== request.user.userId) throw new ForbiddenError();
 
     await prisma.projectAnnotation.delete({ where: { id: annotationId } });

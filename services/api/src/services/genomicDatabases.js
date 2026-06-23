@@ -1,25 +1,47 @@
-// ─── In-Memory Cache with TTL ────────────────────────────────────────────────
+// ─── In-Memory Cache with TTL + LRU bound ────────────────────────────────────
+//
+// Without a size cap an attacker (or a buggy client) can trigger unbounded
+// memory growth by sending many distinct queries. A simple Map insertion
+// order is preserved by spec, so promoting an entry on `get` and evicting
+// the oldest entry on overflow gives us LRU semantics in O(1).
 
 const DEFAULT_TTL = 10 * 60 * 1000; // 10 minutes
+const DEFAULT_MAX = 500;
 
-class TTLCache {
-  constructor(ttl = DEFAULT_TTL) {
+export class TTLCache {
+  constructor({ ttl = DEFAULT_TTL, max = DEFAULT_MAX } = {}) {
     this.ttl = ttl;
+    this.max = max;
     this.store = new Map();
   }
 
   get(key) {
     const entry = this.store.get(key);
     if (!entry) return undefined;
+
     if (Date.now() > entry.expiry) {
       this.store.delete(key);
       return undefined;
     }
+
+    // Move to most-recently-used position.
+    this.store.delete(key);
+    this.store.set(key, entry);
     return entry.value;
   }
 
   set(key, value) {
+    if (this.store.has(key)) {
+      this.store.delete(key);
+    } else if (this.store.size >= this.max) {
+      const oldestKey = this.store.keys().next().value;
+      if (oldestKey !== undefined) this.store.delete(oldestKey);
+    }
     this.store.set(key, { value, expiry: Date.now() + this.ttl });
+  }
+
+  size() {
+    return this.store.size;
   }
 }
 

@@ -1,23 +1,30 @@
 import { z } from 'zod';
-import { hashPassword, verifyPassword, generateAccessToken, generateRefreshToken, hashRefreshToken, verifyRefreshToken, verifyRefreshTokenHash } from '../utils/auth.js';
+import {
+  hashPassword,
+  verifyPassword,
+  generateAccessToken,
+  generateRefreshToken,
+  hashRefreshToken,
+  verifyRefreshToken,
+  verifyRefreshTokenHash,
+} from '../utils/auth.js';
 import { authenticate } from '../middleware/auth.js';
 import { ensureCsrfCookie } from '../middleware/csrf.js';
 import { ValidationError, UnauthorizedError } from '../utils/errors.js';
 import { createAuditLog } from '../utils/audit.js';
+import { getAuthCookieOptions, getClearCookieOptions } from '../utils/cookies.js';
 
-// Admin emails are supplied via the ADMIN_EMAILS environment variable.  In
-// development this may be empty; in production the environment validation
-// requires it to be explicitly set.  We do NOT fall back to any hard‑coded
-// email address here; doing so would silently grant admin privileges to an
-// unintended account.  See services/api/src/config/env.js for details.
-const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || '')
-  .split(',')
-  .map((e) => e.trim().toLowerCase())
-  .filter(Boolean);
-
-
-function resolveRole(email) {
-  return ADMIN_EMAILS.includes(email.toLowerCase()) ? 'admin' : 'user';
+/**
+ * Lower-case + trim the email before any DB lookup or write so the same
+ * physical address can never produce two distinct users.
+ *
+ * NOTE: this runs on the application layer because the `users.email` column
+ * is a plain `text UNIQUE`. A future migration should switch the column to
+ * `citext` (and drop the application-side normalisation) — see
+ * services/api/prisma/migrations/2_email_citext_*.sql when that ships.
+ */
+function normalizeEmail(email) {
+  return String(email).trim().toLowerCase();
 }
 
 const registerSchema = z.object({
@@ -32,63 +39,54 @@ const loginSchema = z.object({
 
 export default async function authRoutes(fastify) {
   const prisma = fastify.prisma;
-  
+
   fastify.post('/register', async (request, reply) => {
-    const { email, password } = registerSchema.parse(request.body);
-    
-    const existingUser = await prisma.user.findUnique({
-      where: { email },
-    });
-    
+    const parsed = registerSchema.parse(request.body);
+    const email = normalizeEmail(parsed.email);
+
+    const existingUser = await prisma.user.findUnique({ where: { email } });
     if (existingUser) {
       throw new ValidationError('Email already registered');
     }
-    
-    const passwordHash = await hashPassword(password);
+
+    const passwordHash = await hashPassword(parsed.password);
+
+    // SECURITY: never assign admin/super_admin during public self-registration.
+    // ADMIN_EMAILS is only used during the initial bootstrap script
+    // (scripts/grant-admin.js); a fresh signup is always 'user'.
     const user = await prisma.user.create({
       data: {
         email,
         passwordHash,
-        role: resolveRole(email),
+        role: 'user',
       },
     });
-    
+
     await createAuditLog(prisma, {
       userId: user.id,
       action: 'user.register',
       entityType: 'user',
       entityId: user.id,
     });
-    
+
     const accessToken = generateAccessToken({ userId: user.id, email: user.email, role: user.role });
     const refreshToken = generateRefreshToken({ userId: user.id });
-    
+
     const refreshTokenHash = await hashRefreshToken(refreshToken);
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-    
+
     await prisma.session.create({
-      data: {
-        userId: user.id,
-        refreshTokenHash,
-        expiresAt,
-      },
+      data: { userId: user.id, refreshTokenHash, expiresAt },
     });
-    
+
+    // Issue CSRF cookie on register so the SPA can immediately make
+    // state-changing calls (logout, profile update) without a /auth/me
+    // round-trip.
+    ensureCsrfCookie(request, reply);
+
     reply
-      .setCookie('accessToken', accessToken, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        maxAge: 15 * 60,
-        path: '/',
-      })
-      .setCookie('refreshToken', refreshToken, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        maxAge: 7 * 24 * 60 * 60,
-        path: '/',
-      })
+      .setCookie('accessToken', accessToken, getAuthCookieOptions({ maxAge: 15 * 60 }))
+      .setCookie('refreshToken', refreshToken, getAuthCookieOptions({ maxAge: 7 * 24 * 60 * 60 }))
       .send({
         user: {
           id: user.id,
@@ -97,29 +95,25 @@ export default async function authRoutes(fastify) {
         },
       });
   });
-  
+
   fastify.post('/login', async (request, reply) => {
-    const { email, password } = loginSchema.parse(request.body);
-    
-    const user = await prisma.user.findUnique({
-      where: { email },
-    });
-    
+    const parsed = loginSchema.parse(request.body);
+    const email = normalizeEmail(parsed.email);
+
+    const user = await prisma.user.findUnique({ where: { email } });
     if (!user) {
       throw new UnauthorizedError('Invalid credentials');
     }
-    
-    const isValid = await verifyPassword(password, user.passwordHash);
+
+    const isValid = await verifyPassword(parsed.password, user.passwordHash);
     if (!isValid) {
       throw new UnauthorizedError('Invalid credentials');
     }
 
-    // Check if user is banned
     if (user.banned) {
       throw new UnauthorizedError('Account has been suspended');
     }
 
-    // Check pre-ban list
     const preBanMatch = await prisma.preBannedUser.findFirst({
       where: {
         status: 'active',
@@ -148,51 +142,30 @@ export default async function authRoutes(fastify) {
       throw new UnauthorizedError('Account has been suspended');
     }
 
-    const expectedRole = resolveRole(user.email);
-    if (expectedRole === 'admin' && user.role !== 'admin' && user.role !== 'super_admin') {
-      await prisma.user.update({
-        where: { id: user.id },
-        data: { role: 'admin' },
-      });
-      user.role = 'admin';
-    }
-    
     await createAuditLog(prisma, {
       userId: user.id,
       action: 'user.login',
       entityType: 'user',
       entityId: user.id,
     });
-    
+
     const accessToken = generateAccessToken({ userId: user.id, email: user.email, role: user.role });
     const refreshToken = generateRefreshToken({ userId: user.id });
-    
+
     const refreshTokenHash = await hashRefreshToken(refreshToken);
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-    
+
     await prisma.session.create({
-      data: {
-        userId: user.id,
-        refreshTokenHash,
-        expiresAt,
-      },
+      data: { userId: user.id, refreshTokenHash, expiresAt },
     });
-    
+
+    // Same rationale as /register: ensure the SPA always has a CSRF token
+    // BEFORE its first authenticated state-changing call.
+    ensureCsrfCookie(request, reply);
+
     reply
-      .setCookie('accessToken', accessToken, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        maxAge: 15 * 60,
-        path: '/',
-      })
-      .setCookie('refreshToken', refreshToken, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        maxAge: 7 * 24 * 60 * 60,
-        path: '/',
-      })
+      .setCookie('accessToken', accessToken, getAuthCookieOptions({ maxAge: 15 * 60 }))
+      .setCookie('refreshToken', refreshToken, getAuthCookieOptions({ maxAge: 7 * 24 * 60 * 60 }))
       .send({
         user: {
           id: user.id,
@@ -201,10 +174,10 @@ export default async function authRoutes(fastify) {
         },
       });
   });
-  
+
   fastify.post('/logout', { preHandler: authenticate }, async (request, reply) => {
     const refreshToken = request.cookies.refreshToken;
-    
+
     const logoutOps = [
       createAuditLog(prisma, {
         userId: request.user.userId,
@@ -221,15 +194,14 @@ export default async function authRoutes(fastify) {
       );
     }
     await Promise.all(logoutOps);
-    
+
     reply
-      .clearCookie('accessToken', { path: '/' })
-      .clearCookie('refreshToken', { path: '/' })
+      .clearCookie('accessToken', getClearCookieOptions())
+      .clearCookie('refreshToken', getClearCookieOptions())
       .send({ success: true });
   });
-  
+
   // POST /auth/refresh — rotate the refresh token + issue a new access token.
-  // Requires a valid refresh cookie that matches a non-expired session row.
   fastify.post('/refresh', async (request, reply) => {
     const refreshToken = request.cookies?.refreshToken;
     if (!refreshToken) {
@@ -241,8 +213,6 @@ export default async function authRoutes(fastify) {
       throw new UnauthorizedError('Invalid refresh token');
     }
 
-    // Find an unexpired session for this user where the stored bcrypt hash
-    // matches the presented refresh token.
     const sessions = await prisma.session.findMany({
       where: { userId: payload.userId, expiresAt: { gt: new Date() } },
     });
@@ -255,8 +225,9 @@ export default async function authRoutes(fastify) {
       }
     }
     if (!matched) {
-      // Possible token theft — clear cookies as a defensive measure.
-      reply.clearCookie('accessToken', { path: '/' }).clearCookie('refreshToken', { path: '/' });
+      reply
+        .clearCookie('accessToken', getClearCookieOptions())
+        .clearCookie('refreshToken', getClearCookieOptions());
       throw new UnauthorizedError('Refresh token not recognised');
     }
 
@@ -265,7 +236,6 @@ export default async function authRoutes(fastify) {
       throw new UnauthorizedError('Account not available');
     }
 
-    // Rotate: invalidate the matched session and create a new one.
     const newAccess = generateAccessToken({ userId: user.id, email: user.email, role: user.role });
     const newRefresh = generateRefreshToken({ userId: user.id });
     const newHash = await hashRefreshToken(newRefresh);
@@ -279,20 +249,8 @@ export default async function authRoutes(fastify) {
     ensureCsrfCookie(request, reply);
 
     reply
-      .setCookie('accessToken', newAccess, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        maxAge: 15 * 60,
-        path: '/',
-      })
-      .setCookie('refreshToken', newRefresh, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        maxAge: 7 * 24 * 60 * 60,
-        path: '/',
-      })
+      .setCookie('accessToken', newAccess, getAuthCookieOptions({ maxAge: 15 * 60 }))
+      .setCookie('refreshToken', newRefresh, getAuthCookieOptions({ maxAge: 7 * 24 * 60 * 60 }))
       .send({ ok: true });
   });
 
@@ -316,27 +274,29 @@ export default async function authRoutes(fastify) {
         include: { license: true },
       }),
     ]);
-    
+
     if (!user) {
       throw new UnauthorizedError('User not found');
     }
-    
+
     const isAdmin = user.role === 'admin' || user.role === 'super_admin';
     const isPremium = Boolean(
-      isAdmin || (user.subscriptions?.length ?? 0) > 0 ||
-      (licenseAssignment && licenseAssignment.license?.status === 'active')
+      isAdmin ||
+        (user.subscriptions?.length ?? 0) > 0 ||
+        (licenseAssignment && licenseAssignment.license?.status === 'active')
     );
-    
+
     const entitlements = {
       isPremium,
       isAdmin,
-      licenseInfo: licenseAssignment ? {
-        organizationName: licenseAssignment.license.organizationName,
-        licenseType: licenseAssignment.license.licenseType,
-      } : null,
+      licenseInfo: licenseAssignment
+        ? {
+            organizationName: licenseAssignment.license.organizationName,
+            licenseType: licenseAssignment.license.licenseType,
+          }
+        : null,
     };
 
-    // Refresh the CSRF cookie alongside identity so SPA always has a token.
     ensureCsrfCookie(request, reply);
 
     reply.send({
@@ -354,9 +314,9 @@ export default async function authRoutes(fastify) {
     });
   });
 
-  // PUT /auth/me — update user profile
   fastify.put('/me', { preHandler: authenticate }, async (request, reply) => {
-    const { displayName, fullName, phoneNumber, educationLevel, demographicsCollected } = request.body || {};
+    const { displayName, fullName, phoneNumber, educationLevel, demographicsCollected } =
+      request.body || {};
 
     const data = {};
     if (displayName !== undefined) data.displayName = displayName;

@@ -6,14 +6,10 @@ import { ValidationError } from '../utils/errors.js';
 
 // Hard ceiling on tokens per call. Premium users can request up to this
 // limit; free-tier users are additionally bounded by enforceUsageLimit.
-// Caps cost amplification from a malicious or buggy client passing
-// `options.maxTokens = 200000`.
 const ABSOLUTE_MAX_TOKENS = 4096;
 const DEFAULT_MAX_TOKENS = 1500;
 const PREMIUM_MAX_TOKENS = 4096;
 
-// LLM upstream call timeout (ms). Anything beyond this is dropped to
-// avoid unbounded request hold time.
 const LLM_TIMEOUT_MS = Number(process.env.LLM_TIMEOUT_MS || 30_000);
 
 function clampTokens(requested, isPremium) {
@@ -29,29 +25,11 @@ function clampTemperature(requested) {
   return Math.max(0, Math.min(2, requested));
 }
 
-function withTimeout(promise, ms, label = 'LLM call') {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
-    promise.then(
-      (val) => {
-        clearTimeout(timer);
-        resolve(val);
-      },
-      (err) => {
-        clearTimeout(timer);
-        reject(err);
-      },
-    );
-  });
-}
-
 export default async function llmRoutes(fastify) {
   const prisma = fastify.prisma;
 
   // Every /llm/* route requires authentication, an active entitlement
   // (free or premium), and consumes the per-user daily usage budget.
-  // Educational disclaimer: outputs are not medical advice; UI surfaces
-  // this disclaimer at render time.
   const guarded = [authenticate, checkEducationEntitlement, enforceUsageLimit];
 
   fastify.post('/invoke', { preHandler: guarded }, async (request) => {
@@ -64,15 +42,13 @@ export default async function llmRoutes(fastify) {
     const maxTokens = clampTokens(options.maxTokens, isPremium);
     const temperature = clampTemperature(options.temperature);
 
-    const result = await withTimeout(
-      generateExplanation(prompt, { provider: options.provider, maxTokens, temperature }),
-      LLM_TIMEOUT_MS,
-      'llm.invoke',
-    );
+    const result = await generateExplanation(prompt, {
+      provider: options.provider,
+      maxTokens,
+      temperature,
+      timeoutMs: LLM_TIMEOUT_MS,
+    });
 
-    // Persist usage AFTER the upstream call succeeded so that failures do not
-    // count against the user's daily allowance, but every successful call DOES
-    // count. enforceUsageLimit reads from the same LearningSession table.
     await recordUsage(prisma, request.user.userId, 'explanation', {
       maxTokens,
       provider: options.provider || null,
@@ -82,7 +58,6 @@ export default async function llmRoutes(fastify) {
       userId: request.user.userId,
       action: 'llm_invoke',
       entityType: 'llm',
-      // Never log the prompt itself — only metadata.
       metadata: { promptLength: prompt.length, maxTokens, provider: options.provider || null },
     });
 
@@ -95,18 +70,27 @@ export default async function llmRoutes(fastify) {
       throw new ValidationError('messages (non-empty array) is required');
     }
 
+    // Strip any client-supplied system messages. The /llm/chat surface is
+    // intentionally a thin proxy, but allowing role:'system' here would let
+    // the SPA bypass the safety prompts in /education/chat.
+    const sanitized = messages.filter((m) => m && (m.role === 'user' || m.role === 'assistant'));
+    if (sanitized.length === 0) {
+      throw new ValidationError('messages must contain at least one user/assistant turn');
+    }
+
     const isPremium = Boolean(request.entitlements?.isPremium);
     const maxTokens = clampTokens(options.maxTokens, isPremium);
     const temperature = clampTemperature(options.temperature);
 
-    const result = await withTimeout(
-      generateChatResponse(messages, { provider: options.provider, maxTokens, temperature }),
-      LLM_TIMEOUT_MS,
-      'llm.chat',
-    );
+    const result = await generateChatResponse(sanitized, {
+      provider: options.provider,
+      maxTokens,
+      temperature,
+      timeoutMs: LLM_TIMEOUT_MS,
+    });
 
     await recordUsage(prisma, request.user.userId, 'chat', {
-      messageCount: messages.length,
+      messageCount: sanitized.length,
       maxTokens,
       provider: options.provider || null,
     });
@@ -115,7 +99,7 @@ export default async function llmRoutes(fastify) {
       userId: request.user.userId,
       action: 'llm_chat',
       entityType: 'llm',
-      metadata: { messageCount: messages.length, maxTokens, provider: options.provider || null },
+      metadata: { messageCount: sanitized.length, maxTokens, provider: options.provider || null },
     });
 
     return { result, disclaimer: 'For educational purposes only. Not medical advice.' };
@@ -127,11 +111,11 @@ export default async function llmRoutes(fastify) {
       throw new ValidationError('prompt (string) is required');
     }
 
-    const result = await withTimeout(
-      generateImage(prompt, { size: options.size || '1024x1024', quality: options.quality || 'standard' }),
-      LLM_TIMEOUT_MS,
-      'llm.image',
-    );
+    const result = await generateImage(prompt, {
+      size: options.size || '1024x1024',
+      quality: options.quality || 'standard',
+      timeoutMs: LLM_TIMEOUT_MS,
+    });
 
     await recordUsage(prisma, request.user.userId, 'image', {
       size: options.size || '1024x1024',
@@ -148,5 +132,4 @@ export default async function llmRoutes(fastify) {
   });
 }
 
-// Exported for tests that want to assert clamping behaviour.
 export const __test = { clampTokens, clampTemperature, ABSOLUTE_MAX_TOKENS, DEFAULT_MAX_TOKENS, PREMIUM_MAX_TOKENS };

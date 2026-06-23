@@ -95,11 +95,14 @@ const quizSchema = z.object({
   questionCount: z.number().min(1).max(20).optional(),
 });
 
+// Reject client-supplied system prompts. Allowing role: 'system' from the
+// browser lets a user override the educational guard rails (level, persona,
+// safety instructions). Only the server adds the system message.
 const chatSchema = z.object({
   messages: z.array(z.object({
-    role: z.enum(['system', 'user', 'assistant']),
-    content: z.string(),
-  })),
+    role: z.enum(['user', 'assistant']),
+    content: z.string().min(1).max(8000),
+  })).min(1).max(50),
   level: z.string().min(1),
 });
 

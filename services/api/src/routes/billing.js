@@ -1,28 +1,55 @@
 import Stripe from 'stripe';
 import { z } from 'zod';
 import { authenticate } from '../middleware/auth.js';
-import { ValidationError } from '../utils/errors.js';
+import { ValidationError, ForbiddenError } from '../utils/errors.js';
 import { createAuditLog } from '../utils/audit.js';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || 'sk_test_mock');
 
-const STRIPE_PRICE_IDS = {
-  monthly: process.env.STRIPE_PRICE_MONTHLY || 'price_monthly',
-  yearly: process.env.STRIPE_PRICE_YEARLY || 'price_yearly',
-  team_monthly: process.env.STRIPE_PRICE_TEAM_MONTHLY || 'price_team_monthly',
-  team_yearly: process.env.STRIPE_PRICE_TEAM_YEARLY || 'price_team_yearly',
-  department_monthly: process.env.STRIPE_PRICE_DEPT_MONTHLY || 'price_dept_monthly',
-  department_yearly: process.env.STRIPE_PRICE_DEPT_YEARLY || 'price_dept_yearly',
-  enterprise_monthly: process.env.STRIPE_PRICE_ENT_MONTHLY || 'price_ent_monthly',
-  enterprise_yearly: process.env.STRIPE_PRICE_ENT_YEARLY || 'price_ent_yearly',
-};
+/**
+ * Build the price-id lookup table from server env. The previous implementation
+ * accepted `priceId` directly off the request body; that lets a paying user
+ * trick the API into checking out at any Stripe price they discover. We now
+ * resolve a fixed set of plan keys to server-controlled price IDs.
+ */
+function priceIdsFromEnv() {
+  return {
+    monthly: process.env.STRIPE_PRICE_MONTHLY,
+    yearly: process.env.STRIPE_PRICE_YEARLY,
+    team_monthly: process.env.STRIPE_PRICE_TEAM_MONTHLY,
+    team_yearly: process.env.STRIPE_PRICE_TEAM_YEARLY,
+    department_monthly: process.env.STRIPE_PRICE_DEPT_MONTHLY,
+    department_yearly: process.env.STRIPE_PRICE_DEPT_YEARLY,
+    enterprise_monthly: process.env.STRIPE_PRICE_ENT_MONTHLY,
+    enterprise_yearly: process.env.STRIPE_PRICE_ENT_YEARLY,
+  };
+}
+
+/**
+ * Resolve a price ID for the requested plan key. In production, missing
+ * env vars are fatal — env.js asserts them on boot, but we re-check here
+ * to give a clearer error if someone calls a plan that has never been
+ * configured (e.g. team_monthly when only individual plans exist).
+ */
+function priceIdForKey(key) {
+  const ids = priceIdsFromEnv();
+  const id = ids[key];
+  if (!id) {
+    throw new ValidationError(`Plan '${key}' is not configured for this deployment`);
+  }
+  // Guard against committed placeholder values from before this fix landed.
+  if (/^price_(monthly|yearly|team_|dept_|ent_)/.test(id)) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new ValidationError(`Plan '${key}' is using a placeholder Stripe price ID`);
+    }
+  }
+  return id;
+}
 
 const checkoutSchema = z.object({
-  priceId: z.string().optional(),
-  plan: z.enum(['monthly', 'yearly']).optional(),
+  plan: z.enum(['monthly', 'yearly']).default('monthly'),
   successUrl: z.string().url(),
   cancelUrl: z.string().url(),
-  _selfTest: z.boolean().optional(),
 });
 
 const institutionalCheckoutSchema = z.object({
@@ -33,148 +60,151 @@ const institutionalCheckoutSchema = z.object({
   seats: z.number().int().min(5),
   successUrl: z.string().url(),
   cancelUrl: z.string().url(),
-  _selfTest: z.boolean().optional(),
 });
 
 const portalSchema = z.object({
   returnUrl: z.string().url(),
-  _selfTest: z.boolean().optional(),
 });
+
+/**
+ * Reject Stripe redirect URLs that point outside our trusted origins.
+ * Otherwise an attacker could prefill `successUrl` with a domain they own,
+ * receive the `?session_id=` and harvest checkout tokens or phish the user.
+ */
+function assertAllowedRedirect(url, env) {
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new ValidationError('Invalid redirect URL');
+  }
+  const allowed = env.corsAllowList();
+  if (allowed.length === 0) {
+    throw new ValidationError('No allowed redirect origins configured');
+  }
+  if (allowed.includes('*')) return;
+  if (!allowed.includes(parsed.origin)) {
+    throw new ForbiddenError('Redirect URL origin is not allowed');
+  }
+}
+
+// Self-test mode is reserved for `NODE_ENV=test` integration runs that
+// cannot reach the live Stripe API. Production / development bodies that
+// include `_selfTest` are ignored entirely — see the parsed schemas above
+// which deliberately do not include the field.
+function selfTestEnabled() {
+  return process.env.NODE_ENV === 'test';
+}
 
 export default async function billingRoutes(fastify) {
   const prisma = fastify.prisma;
-  
+  const env = fastify.env;
+
   fastify.post('/checkout-session', { preHandler: authenticate }, async (request, reply) => {
     const body = checkoutSchema.parse(request.body);
-    
-    if (body._selfTest) {
+    assertAllowedRedirect(body.successUrl, env);
+    assertAllowedRedirect(body.cancelUrl, env);
+
+    if (selfTestEnabled() && request.body?._selfTest === true) {
       return reply.send({
         url: `${body.successUrl}?session_id=mock_session_${Date.now()}`,
         sessionId: `mock_session_${Date.now()}`,
       });
     }
-    
-    const user = await prisma.user.findUnique({
-      where: { id: request.user.userId },
-    });
-    
+
+    const user = await prisma.user.findUnique({ where: { id: request.user.userId } });
     if (!user) {
       throw new ValidationError('User not found');
     }
-    
-    const priceId = body.priceId || STRIPE_PRICE_IDS[body.plan] || STRIPE_PRICE_IDS.monthly;
-    
+
+    const priceId = priceIdForKey(body.plan);
+
     let customerId = null;
     const existingSub = await prisma.subscription.findFirst({
       where: { userId: user.id },
       orderBy: { createdAt: 'desc' },
     });
-    
     if (existingSub?.stripeCustomerId) {
       customerId = existingSub.stripeCustomerId;
     }
-    
+
     const sessionParams = {
       mode: 'subscription',
       customer: customerId || undefined,
       customer_email: customerId ? undefined : user.email,
-      line_items: [
-        {
-          price: priceId,
-          quantity: 1,
-        },
-      ],
+      line_items: [{ price: priceId, quantity: 1 }],
       success_url: body.successUrl,
       cancel_url: body.cancelUrl,
-      metadata: {
-        userId: user.id,
-      },
+      metadata: { userId: user.id },
     };
-    
+
     const session = await stripe.checkout.sessions.create(sessionParams);
-    
+
     await createAuditLog(prisma, {
       userId: user.id,
       action: 'billing.checkout_created',
       entityType: 'subscription',
-      metadata: { sessionId: session.id },
+      metadata: { sessionId: session.id, plan: body.plan },
     });
-    
-    reply.send({
-      url: session.url,
-      sessionId: session.id,
-    });
+
+    reply.send({ url: session.url, sessionId: session.id });
   });
-  
+
   fastify.post('/portal-session', { preHandler: authenticate }, async (request, reply) => {
     const body = portalSchema.parse(request.body);
-    
-    if (body._selfTest) {
-      return reply.send({
-        url: body.returnUrl,
-      });
+    assertAllowedRedirect(body.returnUrl, env);
+
+    if (selfTestEnabled() && request.body?._selfTest === true) {
+      return reply.send({ url: body.returnUrl });
     }
-    
+
     const subscription = await prisma.subscription.findFirst({
       where: { userId: request.user.userId },
       orderBy: { createdAt: 'desc' },
     });
-    
+
     if (!subscription?.stripeCustomerId) {
       throw new ValidationError('No active subscription found');
     }
-    
+
     const session = await stripe.billingPortal.sessions.create({
       customer: subscription.stripeCustomerId,
       return_url: body.returnUrl,
     });
-    
+
     await createAuditLog(prisma, {
       userId: request.user.userId,
       action: 'billing.portal_accessed',
       entityType: 'subscription',
     });
-    
-    reply.send({
-      url: session.url,
-    });
+
+    reply.send({ url: session.url });
   });
-  
+
   fastify.post('/institutional-checkout', { preHandler: authenticate }, async (request, reply) => {
     const body = institutionalCheckoutSchema.parse(request.body);
-    
-    if (body._selfTest) {
+    assertAllowedRedirect(body.successUrl, env);
+    assertAllowedRedirect(body.cancelUrl, env);
+
+    if (selfTestEnabled() && request.body?._selfTest === true) {
       return reply.send({
         url: `${body.successUrl}?session_id=mock_institutional_${Date.now()}`,
         sessionId: `mock_institutional_${Date.now()}`,
       });
     }
-    
-    const user = await prisma.user.findUnique({
-      where: { id: request.user.userId },
-    });
-    
+
+    const user = await prisma.user.findUnique({ where: { id: request.user.userId } });
     if (!user) {
       throw new ValidationError('User not found');
     }
-    
-    const priceMap = {
-      team: body.billing === 'monthly' ? STRIPE_PRICE_IDS.team_monthly : STRIPE_PRICE_IDS.team_yearly,
-      department: body.billing === 'monthly' ? STRIPE_PRICE_IDS.department_monthly : STRIPE_PRICE_IDS.department_yearly,
-      enterprise: body.billing === 'monthly' ? STRIPE_PRICE_IDS.enterprise_monthly : STRIPE_PRICE_IDS.enterprise_yearly,
-    };
-    
-    const priceId = priceMap[body.licenseType];
-    
+
+    const priceKey = `${body.licenseType}_${body.billing}`; // e.g. team_monthly
+    const priceId = priceIdForKey(priceKey);
+
     const sessionParams = {
       mode: 'subscription',
       customer_email: body.contactEmail,
-      line_items: [
-        {
-          price: priceId,
-          quantity: body.seats,
-        },
-      ],
+      line_items: [{ price: priceId, quantity: body.seats }],
       success_url: body.successUrl,
       cancel_url: body.cancelUrl,
       metadata: {
@@ -182,13 +212,13 @@ export default async function billingRoutes(fastify) {
         organizationName: body.organizationName,
         contactEmail: body.contactEmail,
         licenseType: body.licenseType,
-        seats: body.seats.toString(),
+        seats: String(body.seats),
         isInstitutional: 'true',
       },
     };
-    
+
     const session = await stripe.checkout.sessions.create(sessionParams);
-    
+
     await createAuditLog(prisma, {
       userId: user.id,
       action: 'billing.institutional_checkout_created',
@@ -199,44 +229,34 @@ export default async function billingRoutes(fastify) {
         licenseType: body.licenseType,
       },
     });
-    
-    reply.send({
-      url: session.url,
-      sessionId: session.id,
-    });
+
+    reply.send({ url: session.url, sessionId: session.id });
   });
-  
+
   fastify.post('/webhook', async (request, reply) => {
     const sig = request.headers['stripe-signature'];
     const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
-    
+
     if (!sig) {
       return reply.status(400).send({ error: 'Missing stripe-signature header' });
     }
-    
+
     if (!webhookSecret) {
       console.error('STRIPE_WEBHOOK_SECRET not configured');
       return reply.status(500).send({ error: 'Webhook not configured' });
     }
-    
+
     let event;
-    
     try {
       event = stripe.webhooks.constructEvent(request.rawBody, sig, webhookSecret);
     } catch (err) {
       console.error('Webhook signature verification failed:', err.message);
       return reply.status(400).send({ error: 'Webhook signature verification failed' });
     }
-    
-    // Idempotency: only mark the event as processed AFTER the handler
-    // succeeds. Recording before processing meant a transient downstream
-    // failure (e.g. Stripe API call inside checkout.session.completed)
-    // would leave the event "seen but never applied" — Stripe's retry
-    // would then short-circuit and the subscription would never activate.
+
     const existingEvent = await prisma.stripeEvent.findUnique({
       where: { stripeEventId: event.id },
     });
-
     if (existingEvent) {
       return reply.send({ received: true, duplicate: true });
     }
@@ -245,24 +265,26 @@ export default async function billingRoutes(fastify) {
       switch (event.type) {
         case 'checkout.session.completed': {
           const session = event.data.object;
-          
+
           if (session.metadata?.isInstitutional === 'true') {
             const subscriptionId = session.subscription;
             const customerId = session.customer;
-            
+
             const pricing = {
-              monthly: session.metadata.licenseType === 'team' ? 7.99 :
-                       session.metadata.licenseType === 'department' ? 6.99 : 5.99,
-              yearly: session.metadata.licenseType === 'team' ? 79.99 :
-                      session.metadata.licenseType === 'department' ? 69.99 : 59.99,
+              monthly:
+                session.metadata.licenseType === 'team' ? 7.99 :
+                session.metadata.licenseType === 'department' ? 6.99 : 5.99,
+              yearly:
+                session.metadata.licenseType === 'team' ? 79.99 :
+                session.metadata.licenseType === 'department' ? 69.99 : 59.99,
             };
-            
+
             const license = await prisma.institutionalLicense.create({
               data: {
                 organizationName: session.metadata.organizationName,
                 contactEmail: session.metadata.contactEmail,
                 licenseType: session.metadata.licenseType,
-                maxSeats: parseInt(session.metadata.seats),
+                maxSeats: parseInt(session.metadata.seats, 10),
                 status: 'active',
                 startDate: new Date(),
                 endDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
@@ -271,10 +293,13 @@ export default async function billingRoutes(fastify) {
                 stripeCustomerId: customerId,
                 stripeSubscriptionId: subscriptionId,
                 pricing,
+                // Store the purchaser's USER ID. License management routes
+                // (entities.js /licenses, /licenses/:id/assign) match
+                // adminUsers against request.user.userId — keep them in sync.
                 adminUsers: [session.metadata.userId],
               },
             });
-            
+
             await createAuditLog(prisma, {
               userId: session.metadata.userId,
               action: 'license.created',
@@ -284,12 +309,12 @@ export default async function billingRoutes(fastify) {
           } else {
             const userId = session.metadata?.userId;
             if (!userId) break;
-            
+
             const subscriptionId = session.subscription;
             const customerId = session.customer;
-            
-            let subscription = await stripe.subscriptions.retrieve(subscriptionId);
-            
+
+            const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+
             await prisma.subscription.create({
               data: {
                 userId,
@@ -300,7 +325,7 @@ export default async function billingRoutes(fastify) {
                 currentPeriodEnd: new Date(subscription.current_period_end * 1000),
               },
             });
-            
+
             await createAuditLog(prisma, {
               userId,
               action: 'subscription.created',
@@ -310,10 +335,9 @@ export default async function billingRoutes(fastify) {
           }
           break;
         }
-        
+
         case 'customer.subscription.updated': {
           const subscription = event.data.object;
-          
           await prisma.subscription.updateMany({
             where: { stripeSubscriptionId: subscription.id },
             data: {
@@ -323,10 +347,9 @@ export default async function billingRoutes(fastify) {
           });
           break;
         }
-        
+
         case 'customer.subscription.deleted': {
           const subscription = event.data.object;
-          
           await Promise.all([
             prisma.subscription.updateMany({
               where: { stripeSubscriptionId: subscription.id },
@@ -339,11 +362,10 @@ export default async function billingRoutes(fastify) {
           ]);
           break;
         }
-        
+
         case 'invoice.payment_succeeded': {
           const invoice = event.data.object;
           const subscriptionId = invoice.subscription;
-          
           await prisma.subscription.updateMany({
             where: { stripeSubscriptionId: subscriptionId },
             data: {
@@ -353,36 +375,27 @@ export default async function billingRoutes(fastify) {
           });
           break;
         }
-        
+
         case 'invoice.payment_failed': {
           const invoice = event.data.object;
           const subscriptionId = invoice.subscription;
-          
           await prisma.subscription.updateMany({
             where: { stripeSubscriptionId: subscriptionId },
-            data: {
-              status: 'past_due',
-            },
+            data: { status: 'past_due' },
           });
           break;
         }
       }
     } catch (error) {
-      // Do NOT record stripeEvent on failure — Stripe will retry, and the
-      // next attempt should re-execute the handler from scratch.
       console.error('Error processing webhook:', error.message);
       return reply.status(500).send({ error: 'Webhook processing failed' });
     }
 
-    // Mark processed only after success so retries are safe.
     try {
       await prisma.stripeEvent.create({
         data: { stripeEventId: event.id, type: event.type },
       });
     } catch (e) {
-      // Race: a concurrent retry beat us to the insert. The handler ran
-      // successfully on both sides which, given idempotent updateMany /
-      // unique-key checks above, is acceptable.
       if (e.code !== 'P2002') {
         console.error('Failed to record stripe event after success:', e.message);
       }

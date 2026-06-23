@@ -310,7 +310,39 @@ export async function buildTestApp(prismaMock, opts = {}) {
  */
 import { generateAccessToken } from '../utils/auth.js';
 
-export function authCookie(userPayload) {
+/**
+ * Push a stub user record into the mock prisma store so the new DB-hydrating
+ * `authenticate()` middleware can find it. Idempotent.
+ */
+export function seedAuthUser(prisma, userPayload) {
+  if (!prisma) return;
+  const existing = prisma._store.user.find((u) => u.id === userPayload.userId);
+  if (existing) return;
+  prisma._store.user.push({
+    id: userPayload.userId,
+    email: userPayload.email,
+    role: userPayload.role,
+    passwordHash: '$2b$10$mockHashForAuthTests',
+    banned: false,
+    banReason: null,
+    bannedDate: null,
+    bannedBy: null,
+    displayName: null,
+    fullName: null,
+    phoneNumber: null,
+    educationLevel: null,
+    demographicsCollected: false,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
+}
+
+export function authCookie(userPayload, prisma) {
+  // When a prisma instance is provided, also seed the user record so the
+  // DB-hydrating authenticate() middleware can resolve it. Tests that pre-
+  // date this contract still get a token; they are expected to seed the
+  // user themselves (most do) or call seedAuthUser explicitly.
+  if (prisma) seedAuthUser(prisma, userPayload);
   const token = generateAccessToken(userPayload);
   return `accessToken=${token}`;
 }

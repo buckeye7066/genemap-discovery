@@ -1,16 +1,28 @@
 // ─── Core User Types ────────────────────────────────────────────────────────
 
+export type UserRole = 'user' | 'admin' | 'super_admin';
+
+export interface UserEntitlements {
+  isPremium: boolean;
+  isAdmin: boolean;
+  licenseInfo: {
+    organizationName: string;
+    licenseType: string;
+  } | null;
+}
+
 export interface User {
   id: string;
   email: string;
-  role: string;
-  entitlements?: {
-    isPremium: boolean;
-    licenseInfo: {
-      organizationName: string;
-      licenseType: string;
-    } | null;
-  };
+  role: UserRole;
+  display_name?: string | null;
+  full_name?: string | null;
+  phone_number?: string | null;
+  education_level?: string | null;
+  demographics_collected?: boolean;
+  banned?: boolean;
+  ban_reason?: string | null;
+  entitlements?: UserEntitlements;
 }
 
 // ─── Auth Request/Response Types ────────────────────────────────────────────
@@ -33,16 +45,13 @@ export interface AuthResponse {
 // ─── Billing Types ──────────────────────────────────────────────────────────
 
 export interface CheckoutSessionRequest {
-  priceId?: string;
   plan?: 'monthly' | 'yearly';
   successUrl: string;
   cancelUrl: string;
-  _selfTest?: boolean;
 }
 
 export interface PortalSessionRequest {
   returnUrl: string;
-  _selfTest?: boolean;
 }
 
 export interface InstitutionalCheckoutRequest {
@@ -53,7 +62,6 @@ export interface InstitutionalCheckoutRequest {
   seats: number;
   successUrl: string;
   cancelUrl: string;
-  _selfTest?: boolean;
 }
 
 export interface CheckoutSessionResponse {
@@ -69,23 +77,38 @@ export interface PortalSessionResponse {
 
 export interface Topic {
   id: string;
-  name: string;
+  title: string;
   description?: string;
 }
 
+export interface TopicCategory {
+  category: string;
+  topics: Topic[];
+}
+
+export type EducationLevel =
+  | 'elementary'
+  | 'middle_school'
+  | 'high_school'
+  | 'undergraduate'
+  | 'graduate'
+  | 'postgraduate';
+
 export interface ExplanationRequest {
   topic: string;
-  level?: string;
+  level: EducationLevel | string;
+  context?: string;
 }
 
 export interface ImageGenerationRequest {
-  prompt: string;
-  style?: string;
+  topic: string;
+  level: EducationLevel | string;
 }
 
 export interface QuizRequest {
   topic: string;
-  count?: number;
+  level: EducationLevel | string;
+  questionCount?: number;
 }
 
 export interface ChatMessage {
@@ -93,32 +116,46 @@ export interface ChatMessage {
   content: string;
 }
 
+// User-facing chat messages may only be user/assistant; system prompts are
+// supplied server-side. Callers should send only this restricted role set.
+export interface UserChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
 export interface ChatRequest {
-  messages: ChatMessage[];
-  assistantType?: string;
+  messages: UserChatMessage[];
+  level: EducationLevel | string;
 }
 
 export interface LearningProgress {
   topicId: string;
-  progress: number;
-  completedAt?: string;
+  bestScore?: number;
+  totalQuestions?: number;
+  attempts?: number;
+  score?: number;
 }
 
 // ─── LLM Types ──────────────────────────────────────────────────────────────
 
 export interface LLMOptions {
+  provider?: 'openai' | 'anthropic';
   model?: string;
   temperature?: number;
   maxTokens?: number;
-  [key: string]: unknown;
+  size?: string;
+  quality?: string;
 }
 
+// API actually returns { result, disclaimer } for /llm/* — fix the contract.
 export interface LLMResponse {
-  text: string;
-  usage?: {
-    promptTokens: number;
-    completionTokens: number;
-  };
+  result: string;
+  disclaimer: string;
+}
+
+export interface LLMImageResponse {
+  result: { url?: string; revisedPrompt?: string };
+  disclaimer: string;
 }
 
 // ─── Search History ─────────────────────────────────────────────────────────
@@ -126,17 +163,20 @@ export interface LLMResponse {
 export interface SearchHistoryEntry {
   id?: string;
   query: string;
-  timestamp?: string;
-  resultCount?: number;
+  queryType?: string;
+  results?: unknown;
+  createdAt?: string;
 }
 
 // ─── User Activity ──────────────────────────────────────────────────────────
 
 export interface ActivityEntry {
   id?: string;
-  action: string;
-  details?: Record<string, unknown>;
-  timestamp?: string;
+  activityType: string;
+  entityType?: string | null;
+  entityId?: string | null;
+  metadata?: Record<string, unknown> | null;
+  createdAt?: string;
 }
 
 // ─── Medical Data ───────────────────────────────────────────────────────────
@@ -144,7 +184,9 @@ export interface ActivityEntry {
 export interface MedicalData {
   id?: string;
   dataType: string;
+  title?: string | null;
   content: unknown;
+  metadata?: Record<string, unknown> | null;
   createdAt?: string;
 }
 
@@ -155,6 +197,7 @@ export interface Conversation {
   assistantType: string;
   title?: string;
   messages: ChatMessage[];
+  metadata?: Record<string, unknown> | null;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -166,6 +209,7 @@ export interface GeneSet {
   name: string;
   description?: string;
   genes: string[];
+  metadata?: Record<string, unknown> | null;
   createdAt?: string;
 }
 
@@ -176,6 +220,8 @@ export interface Project {
   title: string;
   description?: string;
   status?: string;
+  genes?: string[];
+  metadata?: Record<string, unknown> | null;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -184,12 +230,15 @@ export interface ProjectVersion {
   id: string;
   projectId: string;
   version: number;
+  changes: unknown;
+  notes?: string | null;
+  createdBy: string;
   createdAt: string;
 }
 
 export interface Collaborator {
   id?: string;
-  email: string;
+  userEmail: string;
   role?: string;
 }
 
@@ -197,8 +246,9 @@ export interface Collaborator {
 
 export interface Message {
   id?: string;
-  subject?: string;
+  subject: string;
   body: string;
+  category?: string;
   status?: string;
   createdAt?: string;
 }
@@ -209,20 +259,22 @@ export interface License {
   id: string;
   organizationName: string;
   licenseType: string;
-  seats: number;
-  usedSeats: number;
+  maxSeats: number;
+  assignedSeats: number;
+  status: string;
 }
 
 export interface LicenseSeatAssignment {
   id?: string;
-  email: string;
-  assignedAt?: string;
+  userEmail: string;
+  department?: string | null;
+  status?: string;
 }
 
 // ─── Genomics Types ─────────────────────────────────────────────────────────
 
 export interface GeneInfo {
-  symbol: string;
+  symbol?: string;
   name?: string;
   chromosome?: string;
   description?: string;
@@ -230,14 +282,14 @@ export interface GeneInfo {
 }
 
 export interface Variant {
-  id: string;
+  id?: string;
   gene?: string;
   significance?: string;
   [key: string]: unknown;
 }
 
 export interface ClinVarResult {
-  id: string;
+  id?: string;
   gene?: string;
   condition?: string;
   significance?: string;
@@ -245,8 +297,8 @@ export interface ClinVarResult {
 }
 
 export interface PhenotypeResult {
-  id: string;
-  name: string;
+  id?: string;
+  name?: string;
   genes?: string[];
   [key: string]: unknown;
 }
@@ -275,12 +327,12 @@ export interface ConsentRecord {
   consentType: string;
   version: string;
   granted: boolean;
-  timestamp?: string;
+  metadata?: Record<string, unknown> | null;
+  createdAt?: string;
 }
 
 export interface DataDeletionRequest {
   deletedTypes?: string[];
-  [key: string]: unknown;
 }
 
 export interface DeletionRequestStatus {
@@ -293,32 +345,47 @@ export interface DeletionRequestStatus {
 
 export interface Annotation {
   id?: string;
-  projectId: string;
+  projectId?: string;
+  targetType: string;
+  targetId: string;
   content: string;
-  type?: string;
+  parentId?: string | null;
+  resolved?: boolean;
   createdAt?: string;
   updatedAt?: string;
 }
 
 // ─── Admin Types ────────────────────────────────────────────────────────────
 
-export interface AdminAnalytics {
+export interface AdminAnalyticsStats {
   totalUsers: number;
-  premiumUsers: number;
-  [key: string]: unknown;
+  activeSubscriptions: number;
+  totalSearches: number;
+  totalConversations: number;
+  totalMedicalRecords: number;
+  totalGeneSets: number;
+}
+
+export interface AdminAnalytics {
+  stats: AdminAnalyticsStats;
+  recentActivity: unknown[];
 }
 
 export interface BannedUser {
   id: string;
   email: string;
-  reason?: string;
-  bannedAt?: string;
+  displayName?: string | null;
+  fullName?: string | null;
+  banReason?: string | null;
+  bannedDate?: string | null;
+  bannedBy?: string | null;
 }
 
 export interface PreBanRequest {
   email?: string;
-  identifier?: string;
-  reason: string;
+  phoneNumber?: string;
+  fullName?: string;
+  reason?: string;
 }
 
 export interface UnbanOptions {
@@ -330,4 +397,13 @@ export interface UnbanOptions {
 
 export interface ApiRequestOptions extends RequestInit {
   headers?: Record<string, string>;
+}
+
+// ─── Envelope helpers (used internally by ApiClient) ────────────────────────
+
+export interface UsersListResponse {
+  users: BannedUser[] | User[];
+  total?: number;
+  page?: number;
+  limit?: number;
 }

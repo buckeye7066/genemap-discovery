@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
-import { buildTestApp, createPrismaMock, authCookie } from './setup.js';
+import { buildTestApp, createPrismaMock, authCookie, seedAuthUser } from './setup.js';
 
 let app;
 let prisma;
@@ -20,6 +20,11 @@ afterAll(async () => {
 
 beforeEach(() => {
   prisma._reset();
+  // The new DB-hydrating authenticate middleware needs the cookie's user
+  // to exist. Seed both standard test principals on every test so the
+  // existing assertions on user counts still hold while routing works.
+  seedAuthUser(prisma, ADMIN);
+  seedAuthUser(prisma, REGULAR);
 });
 
 // ─── Access Control ──────────────────────────────────────────────────────────
@@ -35,15 +40,15 @@ describe('Admin access control', () => {
     expect(res.statusCode).toBe(200);
   });
 
-  it('should deny regular user access to admin routes (401)', async () => {
+  it('should deny regular user access to admin routes (403)', async () => {
     const res = await app.inject({
       method: 'GET',
       url: '/admin/users',
       headers: { cookie: userCookie },
     });
 
-    // requireRole throws UnauthorizedError (401) for insufficient permissions
-    expect(res.statusCode).toBe(401);
+    // requireRole throws ForbiddenError (403) when authenticated but lacks role
+    expect(res.statusCode).toBe(403);
   });
 
   it('should deny unauthenticated access to admin routes', async () => {
@@ -73,8 +78,9 @@ describe('GET /admin/users', () => {
 
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body);
-    expect(body.users).toHaveLength(2);
-    expect(body.total).toBe(2);
+    // 2 pushed + 2 auth-seeded baseline (admin-1 + user-1).
+    expect(body.users).toHaveLength(4);
+    expect(body.total).toBe(4);
   });
 });
 
@@ -257,7 +263,8 @@ describe('GET /admin/analytics', () => {
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body);
     expect(body.stats).toBeDefined();
-    expect(body.stats.totalUsers).toBe(2);
+    // 2 pushed + 2 auth-seeded baseline (admin-1 + user-1).
+    expect(body.stats.totalUsers).toBe(4);
     expect(body.stats.activeSubscriptions).toBe(1);
     expect(body.recentActivity).toBeDefined();
   });
@@ -269,7 +276,7 @@ describe('GET /admin/analytics', () => {
       headers: { cookie: userCookie },
     });
 
-    expect(res.statusCode).toBe(401);
+    expect(res.statusCode).toBe(403);
   });
 });
 
@@ -339,17 +346,31 @@ describe('POST /admin/grant-premium', () => {
 // ─── POST /admin/grant-admin ────────────────────────────────────────────────
 
 describe('POST /admin/grant-admin', () => {
-  it('should promote user to admin role', async () => {
-    prisma._store.user.push({
-      id: 'promote-me',
-      email: 'regular@test.com',
-      role: 'user',
-    });
+  it('should refuse a regular admin (super_admin only)', async () => {
+    prisma._store.user.push({ id: 'promote-me', email: 'regular@test.com', role: 'user' });
 
     const res = await app.inject({
       method: 'POST',
       url: '/admin/grant-admin',
       headers: { cookie: adminCookie },
+      payload: { userId: 'promote-me' },
+    });
+
+    // requireRole rejects insufficient permissions with 403 (ForbiddenError).
+    expect(res.statusCode).toBe(403);
+  });
+
+  it('should promote user to admin when the caller is super_admin', async () => {
+    const SUPER = { userId: 'super-1', email: 'super@example.com', role: 'super_admin' };
+    seedAuthUser(prisma, SUPER);
+    const superCookie = authCookie(SUPER);
+
+    prisma._store.user.push({ id: 'promote-me', email: 'regular@test.com', role: 'user' });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/admin/grant-admin',
+      headers: { cookie: superCookie },
       payload: { userId: 'promote-me' },
     });
 
@@ -366,7 +387,7 @@ describe('POST /admin/grant-admin', () => {
 // ─── DELETE /admin/users/:id ─────────────────────────────────────────────────
 
 describe('DELETE /admin/users/:id', () => {
-  it('should delete a user', async () => {
+  it('should refuse a regular admin (super_admin only)', async () => {
     prisma._store.user.push({ id: 'del-1', email: 'delete@test.com' });
 
     const res = await app.inject({
@@ -375,8 +396,30 @@ describe('DELETE /admin/users/:id', () => {
       headers: { cookie: adminCookie },
     });
 
+    expect(res.statusCode).toBe(403);
+  });
+
+  it('should soft-delete (ban) a user when the caller is super_admin', async () => {
+    const SUPER = { userId: 'super-1', email: 'super@example.com', role: 'super_admin' };
+    seedAuthUser(prisma, SUPER);
+    const superCookie = authCookie(SUPER);
+
+    prisma._store.user.push({ id: 'del-1', email: 'delete@test.com', banned: false });
+
+    const res = await app.inject({
+      method: 'DELETE',
+      url: '/admin/users/del-1',
+      headers: { cookie: superCookie },
+    });
+
     expect(res.statusCode).toBe(200);
-    expect(prisma.user.delete).toHaveBeenCalledWith({ where: { id: 'del-1' } });
+    // Soft-delete: user is marked banned, not removed from the store.
+    expect(prisma.user.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'del-1' },
+        data: expect.objectContaining({ banned: true }),
+      }),
+    );
   });
 });
 

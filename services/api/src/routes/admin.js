@@ -2,14 +2,21 @@ import { authenticate, requireRole } from '../middleware/auth.js';
 import { createAuditLog } from '../utils/audit.js';
 import { ValidationError, NotFoundError } from '../utils/errors.js';
 
+function normalizeEmail(email) {
+  return String(email || '').trim().toLowerCase();
+}
+
 export default async function adminRoutes(fastify) {
   const prisma = fastify.prisma;
 
-  // Require admin for all routes in this scope
+  // Default scope: any admin or super_admin can view/moderate.
   fastify.addHook('preHandler', authenticate);
   fastify.addHook('preHandler', requireRole('admin', 'super_admin'));
 
-  // GET /admin/users — list all users with optional search
+  // The most dangerous actions (granting privileges, hard-deleting users)
+  // are gated to super_admin only via per-route preHandler.
+  const requireSuperAdmin = requireRole('super_admin');
+
   fastify.get('/users', async (request) => {
     const { search, page = 1, limit = 50 } = request.query;
     const skip = (page - 1) * limit;
@@ -42,7 +49,6 @@ export default async function adminRoutes(fastify) {
     return { users, total, page: Number(page), limit: Number(limit) };
   });
 
-  // POST /admin/search-users — search users by email/name/phone
   fastify.post('/search-users', async (request) => {
     const { query } = request.body || {};
     if (!query) throw new ValidationError('query is required');
@@ -66,7 +72,6 @@ export default async function adminRoutes(fastify) {
     return { users };
   });
 
-  // GET /admin/banned — get banned users and pre-banned users
   fastify.get('/banned', async () => {
     const [bannedUsers, preBannedUsers] = await Promise.all([
       prisma.user.findMany({
@@ -76,21 +81,25 @@ export default async function adminRoutes(fastify) {
           banReason: true, bannedDate: true, bannedBy: true,
         },
       }),
-      prisma.preBannedUser.findMany({
-        where: { status: 'active' },
-      }),
+      prisma.preBannedUser.findMany({ where: { status: 'active' } }),
     ]);
 
     return { bannedUsers, preBannedUsers };
   });
 
-  // POST /admin/ban — ban a user
   fastify.post('/ban', async (request) => {
     const { userId, reason } = request.body || {};
     if (!userId) throw new ValidationError('userId is required');
 
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new NotFoundError('User not found');
+
+    if (user.id === request.user.userId) {
+      throw new ValidationError('Cannot ban your own account');
+    }
+    if (user.role === 'super_admin' && request.user.role !== 'super_admin') {
+      throw new ValidationError('Only a super admin can ban another super admin');
+    }
 
     await prisma.user.update({
       where: { id: userId },
@@ -102,18 +111,21 @@ export default async function adminRoutes(fastify) {
       },
     });
 
-    await createAuditLog(prisma, {
-      userId: request.user.userId,
-      action: 'ban_user',
-      entityType: 'user',
-      entityId: userId,
-      metadata: { reason },
-    });
+    await createAuditLog(
+      prisma,
+      {
+        userId: request.user.userId,
+        action: 'ban_user',
+        entityType: 'user',
+        entityId: userId,
+        metadata: { reason },
+      },
+      { required: true }
+    );
 
     return { success: true };
   });
 
-  // POST /admin/unban — unban a user or remove a pre-ban
   fastify.post('/unban', async (request) => {
     const { userId, preBanId, isPreBanned } = request.body || {};
 
@@ -133,26 +145,28 @@ export default async function adminRoutes(fastify) {
       throw new ValidationError('userId or preBanId is required');
     }
 
-    await createAuditLog(prisma, {
-      userId: request.user.userId,
-      action: 'unban_user',
-      entityType: 'user',
-      entityId: userId || preBanId,
-    });
+    await createAuditLog(
+      prisma,
+      {
+        userId: request.user.userId,
+        action: 'unban_user',
+        entityType: 'user',
+        entityId: userId || preBanId,
+      },
+      { required: true }
+    );
 
     return { success: true };
   });
 
-  // POST /admin/pre-ban — pre-ban a user before they create an account
   fastify.post('/pre-ban', async (request) => {
     const { email, phoneNumber, fullName, reason } = request.body || {};
     if (!email && !phoneNumber && !fullName) {
       throw new ValidationError('At least one identifier (email, phoneNumber, fullName) is required');
     }
 
-    // Check if user already exists and ban them directly
     if (email) {
-      const existing = await prisma.user.findUnique({ where: { email } });
+      const existing = await prisma.user.findUnique({ where: { email: normalizeEmail(email) } });
       if (existing) {
         await prisma.user.update({
           where: { id: existing.id },
@@ -163,13 +177,24 @@ export default async function adminRoutes(fastify) {
             bannedBy: request.user.userId,
           },
         });
+        await createAuditLog(
+          prisma,
+          {
+            userId: request.user.userId,
+            action: 'pre_ban_user.immediate',
+            entityType: 'user',
+            entityId: existing.id,
+            metadata: { reason },
+          },
+          { required: true }
+        );
         return { success: true, type: 'immediate_ban', userId: existing.id };
       }
     }
 
     const preBan = await prisma.preBannedUser.create({
       data: {
-        email: email || null,
+        email: email ? normalizeEmail(email) : null,
         phoneNumber: phoneNumber || null,
         fullName: fullName || null,
         reason: reason || null,
@@ -177,18 +202,23 @@ export default async function adminRoutes(fastify) {
       },
     });
 
-    await createAuditLog(prisma, {
-      userId: request.user.userId,
-      action: 'pre_ban_user',
-      entityType: 'pre_banned_user',
-      entityId: preBan.id,
-      metadata: { email, phoneNumber, fullName, reason },
-    });
+    await createAuditLog(
+      prisma,
+      {
+        userId: request.user.userId,
+        action: 'pre_ban_user',
+        entityType: 'pre_banned_user',
+        entityId: preBan.id,
+        metadata: { email, phoneNumber, fullName, reason },
+      },
+      { required: true }
+    );
 
     return { success: true, type: 'pre_ban', preBanId: preBan.id };
   });
 
-  // POST /admin/grant-premium — grant premium access to a user
+  // Granting premium access does not change role boundaries — keep accessible
+  // to admin and super_admin, but audit it as a security-relevant change.
   fastify.post('/grant-premium', async (request) => {
     const { userId } = request.body || {};
     if (!userId) throw new ValidationError('userId is required');
@@ -202,18 +232,24 @@ export default async function adminRoutes(fastify) {
       },
     });
 
-    await createAuditLog(prisma, {
-      userId: request.user.userId,
-      action: 'grant_premium',
-      entityType: 'user',
-      entityId: userId,
-    });
+    await createAuditLog(
+      prisma,
+      {
+        userId: request.user.userId,
+        action: 'grant_premium',
+        entityType: 'user',
+        entityId: userId,
+      },
+      { required: true }
+    );
 
     return { success: true };
   });
 
-  // POST /admin/grant-admin — grant admin privileges
-  fastify.post('/grant-admin', async (request) => {
+  // Granting admin privileges is reserved for super_admin. Without this
+  // separation any admin can promote any user (including themselves via a
+  // proxy account) to admin, defeating the role boundary entirely.
+  fastify.post('/grant-admin', { preHandler: requireSuperAdmin }, async (request) => {
     const { userId } = request.body || {};
     if (!userId) throw new ValidationError('userId is required');
 
@@ -222,17 +258,20 @@ export default async function adminRoutes(fastify) {
       data: { role: 'admin' },
     });
 
-    await createAuditLog(prisma, {
-      userId: request.user.userId,
-      action: 'grant_admin',
-      entityType: 'user',
-      entityId: userId,
-    });
+    await createAuditLog(
+      prisma,
+      {
+        userId: request.user.userId,
+        action: 'grant_admin',
+        entityType: 'user',
+        entityId: userId,
+      },
+      { required: true }
+    );
 
     return { success: true };
   });
 
-  // GET /admin/analytics — platform analytics
   fastify.get('/analytics', async () => {
     const [
       totalUsers, activeSubscriptions, totalSearches,
@@ -261,7 +300,6 @@ export default async function adminRoutes(fastify) {
     };
   });
 
-  // GET /admin/messages — list support messages
   fastify.get('/messages', async (request) => {
     const { status } = request.query;
     const where = status ? { status } : {};
@@ -269,16 +307,13 @@ export default async function adminRoutes(fastify) {
     const messages = await prisma.message.findMany({
       where: { ...where, category: 'support' },
       orderBy: { createdAt: 'desc' },
-      include: {
-        sender: { select: { email: true, displayName: true } },
-      },
+      include: { sender: { select: { email: true, displayName: true } } },
       take: 100,
     });
 
     return { messages };
   });
 
-  // POST /admin/messages/:id/reply — reply to a support message
   fastify.post('/messages/:id/reply', async (request) => {
     const { id } = request.params;
     const { body } = request.body || {};
@@ -306,7 +341,6 @@ export default async function adminRoutes(fastify) {
     return { reply };
   });
 
-  // POST /admin/messages/:id/close — close a support message
   fastify.post('/messages/:id/close', async (request) => {
     const { id } = request.params;
     await prisma.message.update({
@@ -316,17 +350,36 @@ export default async function adminRoutes(fastify) {
     return { success: true };
   });
 
-  // DELETE /admin/users/:id — delete a user
-  fastify.delete('/users/:id', async (request) => {
+  // Hard-deleting a user cascades through every owned record. Reserve to
+  // super_admin and prefer soft deactivation (banned=true) for admins.
+  fastify.delete('/users/:id', { preHandler: requireSuperAdmin }, async (request) => {
     const { id } = request.params;
-    await prisma.user.delete({ where: { id } });
 
-    await createAuditLog(prisma, {
-      userId: request.user.userId,
-      action: 'delete_user',
-      entityType: 'user',
-      entityId: id,
+    if (id === request.user.userId) {
+      throw new ValidationError('Cannot delete your own account');
+    }
+
+    // Soft-delete by ban + reason for compliance-friendly audit trail.
+    await prisma.user.update({
+      where: { id },
+      data: {
+        banned: true,
+        banReason: 'Deleted/deactivated by super admin',
+        bannedDate: new Date(),
+        bannedBy: request.user.userId,
+      },
     });
+
+    await createAuditLog(
+      prisma,
+      {
+        userId: request.user.userId,
+        action: 'delete_user',
+        entityType: 'user',
+        entityId: id,
+      },
+      { required: true }
+    );
 
     return { success: true };
   });
