@@ -42,6 +42,9 @@ backups/
 # Prisma
 # Committed migrations are required in production (Dockerfile/Railway run
 # `prisma migrate deploy` which expects them on disk). Do NOT ignore them.
+# The blanket `*.sql` rule above would swallow them, so re-include explicitly.
+!services/api/prisma/migrations/
+!services/api/prisma/migrations/**/*.sql
 services/api/prisma/*.db
 services/api/prisma/*.db-journal
 
