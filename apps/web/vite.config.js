@@ -2,7 +2,14 @@ import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 import path from 'path'
 
-export default defineConfig({
+// `mode === 'desktop'` is passed by the Electron build (`vite build --mode desktop`).
+// The packaged app loads index.html over the file:// protocol, where root-absolute
+// asset URLs (Vite's default base '/') resolve to the drive root and 404 — the classic
+// Electron "white screen". Relative base './' fixes that. The web build (Vercel) keeps
+// base '/' because it serves behind a router that needs root-absolute asset URLs for
+// deep-link reloads.
+export default defineConfig(({ mode }) => ({
+  base: mode === 'desktop' ? './' : '/',
   plugins: [react()],
   resolve: {
     alias: {
@@ -57,4 +64,4 @@ export default defineConfig({
       },
     },
   },
-})
+}))
