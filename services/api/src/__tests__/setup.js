@@ -32,6 +32,22 @@ export function createPrismaMock() {
     return store[name];
   }
 
+  // Apply a Prisma `data` object to a record, honoring atomic
+  // increment/decrement/set operators the way the real client does.
+  const applyData = (record, data) => {
+    const next = { ...record };
+    for (const [key, val] of Object.entries(data)) {
+      if (val && typeof val === 'object' && !Array.isArray(val) && !(val instanceof Date)) {
+        if ('increment' in val) { next[key] = (next[key] || 0) + val.increment; continue; }
+        if ('decrement' in val) { next[key] = (next[key] || 0) - val.decrement; continue; }
+        if ('set' in val) { next[key] = val.set; continue; }
+      }
+      next[key] = val;
+    }
+    next.updatedAt = new Date();
+    return next;
+  };
+
   const createModel = (name) => ({
     findMany: vi.fn(async (args = {}) => {
       let records = [...getStore(name)];
@@ -75,19 +91,51 @@ export function createPrismaMock() {
       return record;
     }),
 
+    createMany: vi.fn(async ({ data }) => {
+      const rows = Array.isArray(data) ? data : [data];
+      for (const d of rows) {
+        getStore(name).push({
+          id: crypto.randomUUID(),
+          ...d,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+      }
+      return { count: rows.length };
+    }),
+
     update: vi.fn(async ({ where, data }) => {
       const arr = getStore(name);
-      const idx = arr.findIndex((r) => {
-        for (const [key, val] of Object.entries(where)) {
-          if (r[key] !== val) return false;
-        }
-        return true;
-      });
+      const idx = arr.findIndex((r) => matchWhere(r, where));
       if (idx >= 0) {
-        arr[idx] = { ...arr[idx], ...data, updatedAt: new Date() };
+        arr[idx] = applyData(arr[idx], data);
         return arr[idx];
       }
       return null;
+    }),
+
+    updateMany: vi.fn(async ({ where, data }) => {
+      const arr = getStore(name);
+      let count = 0;
+      for (let i = 0; i < arr.length; i++) {
+        if (!where || matchWhere(arr[i], where)) {
+          arr[i] = applyData(arr[i], data);
+          count++;
+        }
+      }
+      return { count };
+    }),
+
+    upsert: vi.fn(async ({ where, create, update }) => {
+      const arr = getStore(name);
+      const idx = arr.findIndex((r) => matchWhere(r, where));
+      if (idx >= 0) {
+        arr[idx] = applyData(arr[idx], update);
+        return arr[idx];
+      }
+      const record = { id: crypto.randomUUID(), ...create, createdAt: new Date(), updatedAt: new Date() };
+      arr.push(record);
+      return record;
     }),
 
     delete: vi.fn(async ({ where }) => {
@@ -199,6 +247,10 @@ function matchWhere(record, where) {
         if (!condition.in.includes(record[key])) return false;
         continue;
       }
+      if ('notIn' in condition) {
+        if (condition.notIn.includes(record[key])) return false;
+        continue;
+      }
       if ('contains' in condition) {
         const val = condition.mode === 'insensitive'
           ? String(record[key] || '').toLowerCase()
@@ -219,6 +271,18 @@ function matchWhere(record, where) {
         if (!(record[key] >= condition.gte)) return false;
         continue;
       }
+      if ('gt' in condition) {
+        if (!(record[key] > condition.gt)) return false;
+        continue;
+      }
+      if ('lte' in condition) {
+        if (!(record[key] <= condition.lte)) return false;
+        continue;
+      }
+      if ('lt' in condition) {
+        if (!(record[key] < condition.lt)) return false;
+        continue;
+      }
       if ('some' in condition) {
         // Simplified: skip relation filtering in mock
         continue;
@@ -234,7 +298,14 @@ function matchWhere(record, where) {
       if ('decrement' in condition) {
         continue;
       }
-      // Nested object — treat as sub-where
+      // A compound unique key (e.g. `projectId_userId: { projectId, userId }`)
+      // names no real column, so flatten its entries into sibling equality
+      // checks against the record itself.
+      if (record[key] === undefined) {
+        if (!matchWhere(record, condition)) return false;
+        continue;
+      }
+      // Otherwise it's a nested JSON column — treat as a sub-where.
       if (!matchWhere(record[key] || {}, condition)) return false;
       continue;
     }
@@ -310,7 +381,39 @@ export async function buildTestApp(prismaMock, opts = {}) {
  */
 import { generateAccessToken } from '../utils/auth.js';
 
-export function authCookie(userPayload) {
+/**
+ * Push a stub user record into the mock prisma store so the new DB-hydrating
+ * `authenticate()` middleware can find it. Idempotent.
+ */
+export function seedAuthUser(prisma, userPayload) {
+  if (!prisma) return;
+  const existing = prisma._store.user.find((u) => u.id === userPayload.userId);
+  if (existing) return;
+  prisma._store.user.push({
+    id: userPayload.userId,
+    email: userPayload.email,
+    role: userPayload.role,
+    passwordHash: '$2b$10$mockHashForAuthTests',
+    banned: false,
+    banReason: null,
+    bannedDate: null,
+    bannedBy: null,
+    displayName: null,
+    fullName: null,
+    phoneNumber: null,
+    educationLevel: null,
+    demographicsCollected: false,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
+}
+
+export function authCookie(userPayload, prisma) {
+  // When a prisma instance is provided, also seed the user record so the
+  // DB-hydrating authenticate() middleware can resolve it. Tests that pre-
+  // date this contract still get a token; they are expected to seed the
+  // user themselves (most do) or call seedAuthUser explicitly.
+  if (prisma) seedAuthUser(prisma, userPayload);
   const token = generateAccessToken(userPayload);
   return `accessToken=${token}`;
 }

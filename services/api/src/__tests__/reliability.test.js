@@ -1,0 +1,140 @@
+import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
+import { buildTestApp, createPrismaMock, authCookie } from './setup.js';
+import { parseJsonFromLLM } from '../services/llm.js';
+import { normalizeQuery } from '../services/genomicDatabases.js';
+import { __test as llmInternals } from '../routes/llm.js';
+
+// ─── parseJsonFromLLM ────────────────────────────────────────────────────────
+describe('parseJsonFromLLM', () => {
+  it('parses bare JSON', () => {
+    expect(parseJsonFromLLM('{"a":1}')).toEqual({ a: 1 });
+  });
+
+  it('strips ```json fences', () => {
+    const raw = '```json\n[{"q":"x"}]\n```';
+    expect(parseJsonFromLLM(raw)).toEqual([{ q: 'x' }]);
+  });
+
+  it('ignores leading/trailing prose around a JSON object', () => {
+    const raw = 'Sure! Here is the result:\n{"genes":["BRCA1"]}\nHope that helps.';
+    expect(parseJsonFromLLM(raw)).toEqual({ genes: ['BRCA1'] });
+  });
+
+  it('returns the fallback on malformed JSON instead of throwing', () => {
+    expect(parseJsonFromLLM('{not json', { fallback: 'FALLBACK' })).toBe('FALLBACK');
+  });
+
+  it('returns the fallback for empty / non-string input', () => {
+    expect(parseJsonFromLLM('', { fallback: null })).toBeNull();
+    expect(parseJsonFromLLM(undefined, { fallback: 42 })).toBe(42);
+  });
+
+  it('applies a boolean validator and falls back when it fails', () => {
+    const isArray = (v) => Array.isArray(v);
+    expect(parseJsonFromLLM('{"not":"array"}', { fallback: [], validate: isArray })).toEqual([]);
+    expect(parseJsonFromLLM('[1,2]', { fallback: [], validate: isArray })).toEqual([1, 2]);
+  });
+
+  it('supports a Zod-style { success, data } validator', () => {
+    const validator = (v) => (v && v.ok ? { success: true, data: v } : { success: false });
+    expect(parseJsonFromLLM('{"ok":true}', { validate: validator })).toEqual({ ok: true });
+    expect(parseJsonFromLLM('{"ok":false}', { fallback: 'X', validate: validator })).toBe('X');
+  });
+});
+
+// ─── normalizeQuery (genomic database inputs) ────────────────────────────────
+describe('normalizeQuery', () => {
+  it('trims and lower-cases so cache keys are case-insensitive', () => {
+    expect(normalizeQuery('  BRCA1 ')).toBe('brca1');
+  });
+
+  it('bounds the length to defeat oversized queries', () => {
+    const huge = 'a'.repeat(5000);
+    expect(normalizeQuery(huge).length).toBe(256);
+  });
+
+  it('returns empty string for nullish input', () => {
+    expect(normalizeQuery(undefined)).toBe('');
+    expect(normalizeQuery(null)).toBe('');
+  });
+});
+
+// ─── validatePrompt (LLM route bounds) ───────────────────────────────────────
+describe('validatePrompt', () => {
+  it('accepts a normal prompt', () => {
+    expect(() => llmInternals.validatePrompt('Explain BRCA1')).not.toThrow();
+  });
+
+  it('rejects a non-string prompt', () => {
+    expect(() => llmInternals.validatePrompt(undefined)).toThrow(/string/i);
+  });
+
+  it('rejects an over-long prompt', () => {
+    const huge = 'x'.repeat(llmInternals.MAX_PROMPT_CHARS + 1);
+    expect(() => llmInternals.validatePrompt(huge)).toThrow(/characters or fewer/i);
+  });
+});
+
+// ─── LLM route input bounds (integration) ────────────────────────────────────
+vi.mock('../services/llm.js', async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    generateExplanation: vi.fn(async (p, o) => `EXPL(${p.length}):${o.maxTokens}`),
+    generateChatResponse: vi.fn(async (m, o) => `CHAT(${m.length}):${o.maxTokens}`),
+    generateImage: vi.fn(async (_p, o) => ({ url: `https://img/${o.size}` })),
+  };
+});
+
+describe('LLM route input bounds', () => {
+  let app;
+  let prisma;
+
+  beforeAll(async () => {
+    prisma = createPrismaMock();
+    app = await buildTestApp(prisma, { csrf: false, includeLlm: true });
+  });
+
+  afterAll(async () => app.close());
+
+  beforeEach(() => {
+    prisma._reset();
+    prisma.learningSession.count = vi.fn(async () => 0);
+    prisma.licenseAssignment.findFirst = vi.fn(async () => null);
+    prisma.user.findUnique = vi.fn(async ({ where }) =>
+      prisma._store.user.find((u) => u.id === where.id) || null,
+    );
+    prisma._store.user.push({
+      id: 'free-user', email: 'free@example.com', role: 'user',
+      banned: false, subscriptions: [], createdAt: new Date(), updatedAt: new Date(),
+    });
+  });
+
+  const cookie = () => authCookie({ userId: 'free-user', email: 'free@example.com', role: 'user' });
+
+  it('rejects an over-long prompt with 400', async () => {
+    const res = await app.inject({
+      method: 'POST', url: '/llm/invoke', headers: { cookie: cookie() },
+      payload: { prompt: 'x'.repeat(llmInternals.MAX_PROMPT_CHARS + 1) },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('rejects a chat with too many messages', async () => {
+    const messages = Array.from({ length: llmInternals.MAX_CHAT_MESSAGES + 1 }, (_, i) => ({
+      role: 'user', content: `m${i}`,
+    }));
+    const res = await app.inject({
+      method: 'POST', url: '/llm/chat', headers: { cookie: cookie() }, payload: { messages },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('rejects a chat message that is individually too large', async () => {
+    const res = await app.inject({
+      method: 'POST', url: '/llm/chat', headers: { cookie: cookie() },
+      payload: { messages: [{ role: 'user', content: 'x'.repeat(llmInternals.MAX_MESSAGE_CHARS + 1) }] },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+});

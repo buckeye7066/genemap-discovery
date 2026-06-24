@@ -80,12 +80,17 @@ export default function SearchPage() {
       }
 
       try {
+        // Backend (POST /entities/search-history) expects { query, queryType,
+        // results }. The extra display fields (HPO term, candidate genes, count)
+        // have no dedicated columns, so they live in the free-form `results` JSON.
         await apiClient.saveSearchHistory({
-          phenotype_query: query,
-          hpo_term: results.hpoTerms?.[0] || null,
-          candidate_genes: results.candidateGenes.map(g => g.symbol),
-          search_type: isPremium ? "premium" : "free",
-          results_count: results.candidateGenes.length
+          query,
+          queryType: isPremium ? "premium" : "free",
+          results: {
+            hpoTerm: results.hpoTerms?.[0] || null,
+            candidateGenes: results.candidateGenes.map(g => g.symbol),
+            count: results.candidateGenes.length,
+          },
         });
       } catch (historyError) {
         log.debug("Could not save search history:", historyError);
@@ -141,13 +146,19 @@ export default function SearchPage() {
         return;
       }
 
-      await apiClient.saveMedicalData({
-        _entityType: 'GeneSet',
+      // A gene set is NOT medical data. saveMedicalData() requires
+      // dataType+content and is gated behind a HIPAA consent record, so the
+      // previous call here failed (400 / 403) and never persisted a set.
+      // saveGeneSet() targets POST /entities/gene-sets, whose contract is
+      // { name, description, genes, metadata }.
+      await apiClient.saveGeneSet({
         name,
         description,
         genes: genesToSave,
-        phenotype_context: searchQuery || null,
-        tags: tags || []
+        metadata: {
+          phenotypeContext: searchQuery || null,
+          tags: tags || [],
+        },
       });
 
       // Invalidate and refetch gene sets cache with user context
@@ -330,13 +341,63 @@ export default function SearchPage() {
 
             {!searchResults && !isLoading && !geneSetComparison && (
               <Card className="border-2 border-dashed border-slate-200 bg-slate-50/50">
-                <CardContent className="text-center py-8 sm:py-12">
-                  <DnaIcon className="w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-4 text-slate-400" />
-                  <h3 className="text-lg sm:text-xl font-semibold text-slate-700 mb-2">
-                    Start Your Discovery
-                  </h3>
-                  <p className="text-slate-500">
-                    Search by phenotype or input genes to begin analysis
+                <CardContent className="py-8 sm:py-12">
+                  <div className="text-center">
+                    <DnaIcon className="w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-4 text-slate-400" />
+                    <h3 className="text-lg sm:text-xl font-semibold text-slate-700 mb-2">
+                      Start Your Discovery
+                    </h3>
+                    <p className="text-slate-500 mb-1">
+                      Type a trait or symptom above (a &ldquo;phenotype&rdquo;), or enter a gene
+                      name. Not sure where to begin? Try one of these:
+                    </p>
+                  </div>
+
+                  {/* Example searches — one click runs a real search. */}
+                  <div className="flex flex-wrap justify-center gap-2 mt-4 max-w-2xl mx-auto">
+                    {[
+                      "short stature",
+                      "hearing loss",
+                      "cystic fibrosis",
+                      "intellectual disability",
+                      "BRCA1",
+                      "rheumatoid arthritis",
+                    ].map((example) => (
+                      <button
+                        key={example}
+                        type="button"
+                        onClick={() => { setSearchQuery(example); handleSearch(example, false); }}
+                        className="px-3 py-1.5 rounded-full text-sm bg-white border border-slate-200 text-slate-700 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-400"
+                      >
+                        {example}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Plain-English glossary so beginners aren't blocked by jargon. */}
+                  <dl className="grid sm:grid-cols-2 gap-x-6 gap-y-2 mt-8 max-w-2xl mx-auto text-sm">
+                    <div className="flex gap-2">
+                      <dt className="font-semibold text-slate-700 shrink-0">Phenotype</dt>
+                      <dd className="text-slate-500">an observable trait or symptom</dd>
+                    </div>
+                    <div className="flex gap-2">
+                      <dt className="font-semibold text-slate-700 shrink-0">Gene set</dt>
+                      <dd className="text-slate-500">a saved list of genes</dd>
+                    </div>
+                    <div className="flex gap-2">
+                      <dt className="font-semibold text-slate-700 shrink-0">VCF</dt>
+                      <dd className="text-slate-500">a genetic variant file</dd>
+                    </div>
+                    <div className="flex gap-2">
+                      <dt className="font-semibold text-slate-700 shrink-0">HPO</dt>
+                      <dd className="text-slate-500">Human Phenotype Ontology term</dd>
+                    </div>
+                  </dl>
+
+                  <p className="text-xs text-center text-slate-400 mt-8 max-w-xl mx-auto">
+                    Educational and research support only. Results are not medical advice or a
+                    diagnosis &mdash; consult a qualified clinician or genetic counselor for
+                    interpretation of any health concern.
                   </p>
                 </CardContent>
               </Card>

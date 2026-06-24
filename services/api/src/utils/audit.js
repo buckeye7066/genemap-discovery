@@ -1,6 +1,19 @@
-export async function createAuditLog(prisma, { userId, action, entityType, entityId, metadata }) {
+/**
+ * Persist an audit log entry.
+ *
+ * `required: true` makes the call fatal if the insert fails. Use it for
+ * security-sensitive actions (admin grants, bans, billing, medical-data
+ * access) where silently swallowing a write is not acceptable. Routine
+ * activity logs default to best-effort so a non-critical persistence
+ * issue cannot take down the rest of the request.
+ */
+export async function createAuditLog(
+  prisma,
+  { userId, action, entityType, entityId, metadata },
+  { required = false } = {}
+) {
   try {
-    await prisma.auditLog.create({
+    return await prisma.auditLog.create({
       data: {
         userId,
         action,
@@ -10,6 +23,8 @@ export async function createAuditLog(prisma, { userId, action, entityType, entit
       },
     });
   } catch (error) {
-    console.error('Failed to create audit log:', error.message);
+    console.error(`[audit] Failed to create audit log (${action}):`, error.message);
+    if (required) throw error;
+    return null;
   }
 }

@@ -24,23 +24,23 @@ model User {
   createdAt             DateTime  @default(now()) @map("created_at")
   updatedAt             DateTime  @updatedAt @map("updated_at")
 
-  sessions             Session[]
-  subscriptions        Subscription[]
-  auditLogs            AuditLog[]
-  learningSessions     LearningSession[]
-  learningProgress     LearningProgress[]
-  searchHistory        SearchHistory[]
-  userActivities       UserActivity[]
-  medicalData          MedicalData[]
-  aiConversations      AIConversation[]
-  geneSets             GeneSet[]
-  researchProjects     ResearchProject[]
-  collaborations       ProjectCollaborator[]
-  sentMessages         Message[]           @relation("sender")
-  receivedMessages     Message[]           @relation("receiver")
-  annotations          ProjectAnnotation[]
-  consentRecords       ConsentRecord[]
-  deletionRequests     DataDeletionRequest[]
+  sessions         Session[]
+  subscriptions    Subscription[]
+  auditLogs        AuditLog[]
+  learningSessions LearningSession[]
+  learningProgress LearningProgress[]
+  searchHistory    SearchHistory[]
+  userActivities   UserActivity[]
+  medicalData      MedicalData[]
+  aiConversations  AIConversation[]
+  geneSets         GeneSet[]
+  researchProjects ResearchProject[]
+  collaborations   ProjectCollaborator[]
+  sentMessages     Message[]             @relation("sender")
+  receivedMessages Message[]             @relation("receiver")
+  annotations      ProjectAnnotation[]
+  consentRecords   ConsentRecord[]
+  deletionRequests DataDeletionRequest[]
 
   @@map("users")
 }
@@ -51,10 +51,11 @@ model Session {
   refreshTokenHash String   @map("refresh_token_hash")
   expiresAt        DateTime @map("expires_at")
   createdAt        DateTime @default(now()) @map("created_at")
-  
+
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+
   @@index([userId])
+  @@index([expiresAt])
   @@map("sessions")
 }
 
@@ -68,9 +69,9 @@ model Subscription {
   currentPeriodEnd     DateTime? @map("current_period_end")
   createdAt            DateTime  @default(now()) @map("created_at")
   updatedAt            DateTime  @updatedAt @map("updated_at")
-  
+
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+
   @@index([userId, status])
   @@map("subscriptions")
 }
@@ -93,10 +94,10 @@ model InstitutionalLicense {
   adminUsers           String[] @map("admin_users")
   createdAt            DateTime @default(now()) @map("created_at")
   updatedAt            DateTime @updatedAt @map("updated_at")
-  
+
   assignments LicenseAssignment[]
   usageLogs   LicenseUsageLog[]
-  
+
   @@map("institutional_licenses")
 }
 
@@ -110,9 +111,9 @@ model LicenseAssignment {
   department     String?
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
-  
+
   license InstitutionalLicense @relation(fields: [licenseId], references: [id], onDelete: Cascade)
-  
+
   @@index([userEmail, status])
   @@index([licenseId])
   @@map("license_assignments")
@@ -125,9 +126,9 @@ model LicenseUsageLog {
   action    String
   metadata  Json?
   createdAt DateTime @default(now()) @map("created_at")
-  
+
   license InstitutionalLicense @relation(fields: [licenseId], references: [id], onDelete: Cascade)
-  
+
   @@map("license_usage_logs")
 }
 
@@ -139,9 +140,9 @@ model AuditLog {
   entityId   String?  @map("entity_id")
   metadata   Json?
   createdAt  DateTime @default(now()) @map("created_at")
-  
+
   user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
-  
+
   @@index([userId, createdAt])
   @@map("audit_log")
 }
@@ -151,7 +152,7 @@ model StripeEvent {
   stripeEventId String   @unique @map("stripe_event_id")
   type          String
   receivedAt    DateTime @default(now()) @map("received_at")
-  
+
   @@map("stripe_events")
 }
 
@@ -163,9 +164,9 @@ model LearningSession {
   type      String
   content   Json?
   createdAt DateTime @default(now()) @map("created_at")
-  
+
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+
   @@index([userId, type, createdAt])
   @@map("learning_sessions")
 }
@@ -175,13 +176,13 @@ model LearningProgress {
   userId         String   @map("user_id")
   topicId        String   @map("topic_id")
   bestScore      Int      @default(0) @map("best_score")
-  totalQuestions  Int      @default(0) @map("total_questions")
+  totalQuestions Int      @default(0) @map("total_questions")
   attempts       Int      @default(0)
   lastAttemptAt  DateTime @default(now()) @map("last_attempt_at")
   createdAt      DateTime @default(now()) @map("created_at")
-  
+
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+
   @@unique([userId, topicId])
   @@index([userId])
   @@map("learning_progress")
@@ -217,15 +218,15 @@ model UserActivity {
 }
 
 model MedicalData {
-  id          String   @id @default(uuid())
-  userId      String   @map("user_id")
-  dataType    String   @map("data_type")
-  title       String?
-  content     Json
-  fileUrl     String?  @map("file_url")
-  metadata    Json?
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  dataType  String   @map("data_type")
+  title     String?
+  content   Json
+  fileUrl   String?  @map("file_url")
+  metadata  Json?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -316,17 +317,17 @@ model ProjectCollaborator {
 }
 
 model Message {
-  id         String    @id @default(uuid())
-  senderId   String    @map("sender_id")
-  receiverId String?   @map("receiver_id")
+  id         String   @id @default(uuid())
+  senderId   String   @map("sender_id")
+  receiverId String?  @map("receiver_id")
   subject    String
   body       String
-  category   String    @default("general")
-  status     String    @default("open")
-  parentId   String?   @map("parent_id")
+  category   String   @default("general")
+  status     String   @default("open")
+  parentId   String?  @map("parent_id")
   metadata   Json?
-  createdAt  DateTime  @default(now()) @map("created_at")
-  updatedAt  DateTime  @updatedAt @map("updated_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
 
   sender   User  @relation("sender", fields: [senderId], references: [id], onDelete: Cascade)
   receiver User? @relation("receiver", fields: [receiverId], references: [id], onDelete: SetNull)
@@ -337,31 +338,31 @@ model Message {
 }
 
 model PreBannedUser {
-  id          String   @id @default(uuid())
+  id          String    @id @default(uuid())
   email       String?
-  phoneNumber String?  @map("phone_number")
-  fullName    String?  @map("full_name")
+  phoneNumber String?   @map("phone_number")
+  fullName    String?   @map("full_name")
   reason      String?
-  status      String   @default("active")
-  bannedBy    String   @map("banned_by")
+  status      String    @default("active")
+  bannedBy    String    @map("banned_by")
   triggeredAt DateTime? @map("triggered_at")
-  createdAt   DateTime @default(now()) @map("created_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
 
   @@map("pre_banned_users")
 }
 
 model ProjectAnnotation {
-  id          String   @id @default(uuid())
-  projectId   String   @map("project_id")
-  userId      String   @map("user_id")
-  targetType  String   @map("target_type")
-  targetId    String   @map("target_id")
-  content     String
-  parentId    String?  @map("parent_id")
-  resolved    Boolean  @default(false)
-  metadata    Json?
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id         String   @id @default(uuid())
+  projectId  String   @map("project_id")
+  userId     String   @map("user_id")
+  targetType String   @map("target_type")
+  targetId   String   @map("target_id")
+  content    String
+  parentId   String?  @map("parent_id")
+  resolved   Boolean  @default(false)
+  metadata   Json?
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
 
   project ResearchProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
   user    User            @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -397,5 +398,6 @@ model DataDeletionRequest {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  @@index([status, requestedAt])
   @@map("data_deletion_requests")
 }

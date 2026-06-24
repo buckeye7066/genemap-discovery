@@ -1,0 +1,471 @@
+-- CreateSchema
+CREATE SCHEMA IF NOT EXISTS "public";
+
+-- CreateTable
+CREATE TABLE "users" (
+    "id" TEXT NOT NULL,
+    "email" TEXT NOT NULL,
+    "password_hash" TEXT NOT NULL,
+    "role" TEXT NOT NULL DEFAULT 'user',
+    "education_level" TEXT,
+    "display_name" TEXT,
+    "full_name" TEXT,
+    "phone_number" TEXT,
+    "banned" BOOLEAN NOT NULL DEFAULT false,
+    "ban_reason" TEXT,
+    "banned_date" TIMESTAMP(3),
+    "banned_by" TEXT,
+    "demographics_collected" BOOLEAN NOT NULL DEFAULT false,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "users_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "sessions" (
+    "id" TEXT NOT NULL,
+    "user_id" TEXT NOT NULL,
+    "refresh_token_hash" TEXT NOT NULL,
+    "expires_at" TIMESTAMP(3) NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "sessions_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "subscriptions" (
+    "id" TEXT NOT NULL,
+    "user_id" TEXT NOT NULL,
+    "stripe_customer_id" TEXT,
+    "stripe_subscription_id" TEXT,
+    "status" TEXT NOT NULL,
+    "plan_type" TEXT NOT NULL,
+    "current_period_end" TIMESTAMP(3),
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "subscriptions_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "institutional_licenses" (
+    "id" TEXT NOT NULL,
+    "organization_name" TEXT NOT NULL,
+    "contact_email" TEXT NOT NULL,
+    "license_type" TEXT NOT NULL,
+    "max_seats" INTEGER NOT NULL,
+    "assigned_seats" INTEGER NOT NULL DEFAULT 0,
+    "status" TEXT NOT NULL,
+    "start_date" TIMESTAMP(3) NOT NULL,
+    "end_date" TIMESTAMP(3) NOT NULL,
+    "renewal_date" TIMESTAMP(3) NOT NULL,
+    "auto_renew" BOOLEAN NOT NULL DEFAULT false,
+    "stripe_customer_id" TEXT,
+    "stripe_subscription_id" TEXT,
+    "pricing" JSONB NOT NULL,
+    "admin_users" TEXT[],
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "institutional_licenses_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "license_assignments" (
+    "id" TEXT NOT NULL,
+    "license_id" TEXT NOT NULL,
+    "user_email" TEXT NOT NULL,
+    "assigned_by" TEXT NOT NULL,
+    "status" TEXT NOT NULL,
+    "invitation_sent" BOOLEAN NOT NULL DEFAULT false,
+    "department" TEXT,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "license_assignments_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "license_usage_logs" (
+    "id" TEXT NOT NULL,
+    "license_id" TEXT NOT NULL,
+    "user_email" TEXT NOT NULL,
+    "action" TEXT NOT NULL,
+    "metadata" JSONB,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "license_usage_logs_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "audit_log" (
+    "id" TEXT NOT NULL,
+    "user_id" TEXT,
+    "action" TEXT NOT NULL,
+    "entity_type" TEXT NOT NULL,
+    "entity_id" TEXT,
+    "metadata" JSONB,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "audit_log_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "stripe_events" (
+    "id" TEXT NOT NULL,
+    "stripe_event_id" TEXT NOT NULL,
+    "type" TEXT NOT NULL,
+    "received_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "stripe_events_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "learning_sessions" (
+    "id" TEXT NOT NULL,
+    "user_id" TEXT NOT NULL,
+    "topic" TEXT NOT NULL,
+    "level" TEXT NOT NULL,
+    "type" TEXT NOT NULL,
+    "content" JSONB,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "learning_sessions_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "learning_progress" (
+    "id" TEXT NOT NULL,
+    "user_id" TEXT NOT NULL,
+    "topic_id" TEXT NOT NULL,
+    "best_score" INTEGER NOT NULL DEFAULT 0,
+    "total_questions" INTEGER NOT NULL DEFAULT 0,
+    "attempts" INTEGER NOT NULL DEFAULT 0,
+    "last_attempt_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "learning_progress_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "search_history" (
+    "id" TEXT NOT NULL,
+    "user_id" TEXT NOT NULL,
+    "query" TEXT NOT NULL,
+    "query_type" TEXT NOT NULL,
+    "results" JSONB,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "search_history_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "user_activities" (
+    "id" TEXT NOT NULL,
+    "user_id" TEXT NOT NULL,
+    "activity_type" TEXT NOT NULL,
+    "entity_type" TEXT,
+    "entity_id" TEXT,
+    "metadata" JSONB,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "user_activities_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "medical_data" (
+    "id" TEXT NOT NULL,
+    "user_id" TEXT NOT NULL,
+    "data_type" TEXT NOT NULL,
+    "title" TEXT,
+    "content" JSONB NOT NULL,
+    "file_url" TEXT,
+    "metadata" JSONB,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "medical_data_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "ai_conversations" (
+    "id" TEXT NOT NULL,
+    "user_id" TEXT NOT NULL,
+    "assistant_type" TEXT NOT NULL,
+    "title" TEXT,
+    "messages" JSONB NOT NULL,
+    "metadata" JSONB,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "ai_conversations_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "gene_sets" (
+    "id" TEXT NOT NULL,
+    "user_id" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "description" TEXT,
+    "genes" TEXT[],
+    "metadata" JSONB,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "gene_sets_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "research_projects" (
+    "id" TEXT NOT NULL,
+    "user_id" TEXT NOT NULL,
+    "title" TEXT NOT NULL,
+    "description" TEXT,
+    "status" TEXT NOT NULL DEFAULT 'active',
+    "genes" TEXT[],
+    "metadata" JSONB,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "research_projects_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "project_versions" (
+    "id" TEXT NOT NULL,
+    "project_id" TEXT NOT NULL,
+    "version" INTEGER NOT NULL,
+    "changes" JSONB NOT NULL,
+    "notes" TEXT,
+    "created_by" TEXT NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "project_versions_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "project_collaborators" (
+    "id" TEXT NOT NULL,
+    "project_id" TEXT NOT NULL,
+    "user_id" TEXT NOT NULL,
+    "role" TEXT NOT NULL DEFAULT 'viewer',
+    "added_by" TEXT NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "project_collaborators_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "messages" (
+    "id" TEXT NOT NULL,
+    "sender_id" TEXT NOT NULL,
+    "receiver_id" TEXT,
+    "subject" TEXT NOT NULL,
+    "body" TEXT NOT NULL,
+    "category" TEXT NOT NULL DEFAULT 'general',
+    "status" TEXT NOT NULL DEFAULT 'open',
+    "parent_id" TEXT,
+    "metadata" JSONB,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "messages_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "pre_banned_users" (
+    "id" TEXT NOT NULL,
+    "email" TEXT,
+    "phone_number" TEXT,
+    "full_name" TEXT,
+    "reason" TEXT,
+    "status" TEXT NOT NULL DEFAULT 'active',
+    "banned_by" TEXT NOT NULL,
+    "triggered_at" TIMESTAMP(3),
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "pre_banned_users_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "project_annotations" (
+    "id" TEXT NOT NULL,
+    "project_id" TEXT NOT NULL,
+    "user_id" TEXT NOT NULL,
+    "target_type" TEXT NOT NULL,
+    "target_id" TEXT NOT NULL,
+    "content" TEXT NOT NULL,
+    "parent_id" TEXT,
+    "resolved" BOOLEAN NOT NULL DEFAULT false,
+    "metadata" JSONB,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "project_annotations_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "consent_records" (
+    "id" TEXT NOT NULL,
+    "user_id" TEXT NOT NULL,
+    "consent_type" TEXT NOT NULL,
+    "version" TEXT NOT NULL,
+    "granted" BOOLEAN NOT NULL,
+    "ip_address" TEXT,
+    "metadata" JSONB,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "consent_records_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "data_deletion_requests" (
+    "id" TEXT NOT NULL,
+    "user_id" TEXT NOT NULL,
+    "status" TEXT NOT NULL DEFAULT 'pending',
+    "requested_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "completed_at" TIMESTAMP(3),
+    "deleted_types" TEXT[],
+
+    CONSTRAINT "data_deletion_requests_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateIndex
+CREATE UNIQUE INDEX "users_email_key" ON "users"("email");
+
+-- CreateIndex
+CREATE INDEX "sessions_user_id_idx" ON "sessions"("user_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "subscriptions_stripe_subscription_id_key" ON "subscriptions"("stripe_subscription_id");
+
+-- CreateIndex
+CREATE INDEX "subscriptions_user_id_status_idx" ON "subscriptions"("user_id", "status");
+
+-- CreateIndex
+CREATE INDEX "license_assignments_user_email_status_idx" ON "license_assignments"("user_email", "status");
+
+-- CreateIndex
+CREATE INDEX "license_assignments_license_id_idx" ON "license_assignments"("license_id");
+
+-- CreateIndex
+CREATE INDEX "audit_log_user_id_created_at_idx" ON "audit_log"("user_id", "created_at");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "stripe_events_stripe_event_id_key" ON "stripe_events"("stripe_event_id");
+
+-- CreateIndex
+CREATE INDEX "learning_sessions_user_id_type_created_at_idx" ON "learning_sessions"("user_id", "type", "created_at");
+
+-- CreateIndex
+CREATE INDEX "learning_progress_user_id_idx" ON "learning_progress"("user_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "learning_progress_user_id_topic_id_key" ON "learning_progress"("user_id", "topic_id");
+
+-- CreateIndex
+CREATE INDEX "search_history_user_id_created_at_idx" ON "search_history"("user_id", "created_at");
+
+-- CreateIndex
+CREATE INDEX "user_activities_user_id_created_at_idx" ON "user_activities"("user_id", "created_at");
+
+-- CreateIndex
+CREATE INDEX "medical_data_user_id_data_type_idx" ON "medical_data"("user_id", "data_type");
+
+-- CreateIndex
+CREATE INDEX "ai_conversations_user_id_assistant_type_idx" ON "ai_conversations"("user_id", "assistant_type");
+
+-- CreateIndex
+CREATE INDEX "gene_sets_user_id_idx" ON "gene_sets"("user_id");
+
+-- CreateIndex
+CREATE INDEX "research_projects_user_id_idx" ON "research_projects"("user_id");
+
+-- CreateIndex
+CREATE INDEX "project_versions_project_id_idx" ON "project_versions"("project_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "project_collaborators_project_id_user_id_key" ON "project_collaborators"("project_id", "user_id");
+
+-- CreateIndex
+CREATE INDEX "messages_sender_id_idx" ON "messages"("sender_id");
+
+-- CreateIndex
+CREATE INDEX "messages_receiver_id_status_idx" ON "messages"("receiver_id", "status");
+
+-- CreateIndex
+CREATE INDEX "project_annotations_project_id_target_type_target_id_idx" ON "project_annotations"("project_id", "target_type", "target_id");
+
+-- CreateIndex
+CREATE INDEX "consent_records_user_id_consent_type_idx" ON "consent_records"("user_id", "consent_type");
+
+-- CreateIndex
+CREATE INDEX "data_deletion_requests_user_id_idx" ON "data_deletion_requests"("user_id");
+
+-- AddForeignKey
+ALTER TABLE "sessions" ADD CONSTRAINT "sessions_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "subscriptions" ADD CONSTRAINT "subscriptions_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "license_assignments" ADD CONSTRAINT "license_assignments_license_id_fkey" FOREIGN KEY ("license_id") REFERENCES "institutional_licenses"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "license_usage_logs" ADD CONSTRAINT "license_usage_logs_license_id_fkey" FOREIGN KEY ("license_id") REFERENCES "institutional_licenses"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "audit_log" ADD CONSTRAINT "audit_log_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "learning_sessions" ADD CONSTRAINT "learning_sessions_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "learning_progress" ADD CONSTRAINT "learning_progress_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "search_history" ADD CONSTRAINT "search_history_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "user_activities" ADD CONSTRAINT "user_activities_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "medical_data" ADD CONSTRAINT "medical_data_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "ai_conversations" ADD CONSTRAINT "ai_conversations_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "gene_sets" ADD CONSTRAINT "gene_sets_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "research_projects" ADD CONSTRAINT "research_projects_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "project_versions" ADD CONSTRAINT "project_versions_project_id_fkey" FOREIGN KEY ("project_id") REFERENCES "research_projects"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "project_collaborators" ADD CONSTRAINT "project_collaborators_project_id_fkey" FOREIGN KEY ("project_id") REFERENCES "research_projects"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "project_collaborators" ADD CONSTRAINT "project_collaborators_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "messages" ADD CONSTRAINT "messages_sender_id_fkey" FOREIGN KEY ("sender_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "messages" ADD CONSTRAINT "messages_receiver_id_fkey" FOREIGN KEY ("receiver_id") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "project_annotations" ADD CONSTRAINT "project_annotations_project_id_fkey" FOREIGN KEY ("project_id") REFERENCES "research_projects"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "project_annotations" ADD CONSTRAINT "project_annotations_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "consent_records" ADD CONSTRAINT "consent_records_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "data_deletion_requests" ADD CONSTRAINT "data_deletion_requests_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+

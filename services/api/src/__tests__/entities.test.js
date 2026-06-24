@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
-import { buildTestApp, createPrismaMock, authCookie } from './setup.js';
+import { buildTestApp, createPrismaMock, authCookie, seedAuthUser } from './setup.js';
 
 let app;
 let prisma;
@@ -8,6 +8,22 @@ const USER_A = { userId: 'user-a', email: 'a@example.com', role: 'user' };
 const USER_B = { userId: 'user-b', email: 'b@example.com', role: 'user' };
 const cookieA = authCookie(USER_A);
 const cookieB = authCookie(USER_B);
+
+/**
+ * Seed a granted consent record so the medical-data write path passes
+ * requireConsent. Tests that exercise the negative path can clear the
+ * consentRecord store before issuing the request.
+ */
+function seedMedicalConsent(prisma, userId) {
+  prisma._store.consentRecord.push({
+    id: `consent-${userId}`,
+    userId,
+    consentType: 'medical_data_storage',
+    version: '1.0',
+    granted: true,
+    createdAt: new Date(),
+  });
+}
 
 beforeAll(async () => {
   prisma = createPrismaMock();
@@ -23,6 +39,10 @@ afterAll(async () => {
 
 beforeEach(() => {
   prisma._reset();
+  // The new DB-hydrating authenticate middleware needs the cookie's user
+  // record to exist. Seed both standard test principals on every test.
+  seedAuthUser(prisma, USER_A);
+  seedAuthUser(prisma, USER_B);
 });
 
 // ─── Search History ──────────────────────────────────────────────────────────
@@ -119,7 +139,9 @@ describe('Search History CRUD', () => {
 // ─── Medical Data ────────────────────────────────────────────────────────────
 
 describe('Medical Data CRUD', () => {
-  it('POST /entities/medical-data — should create record', async () => {
+  it('POST /entities/medical-data — should create record after consent is granted', async () => {
+    seedMedicalConsent(prisma, USER_A.userId);
+
     const res = await app.inject({
       method: 'POST',
       url: '/entities/medical-data',
@@ -130,11 +152,24 @@ describe('Medical Data CRUD', () => {
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body);
     expect(body.record.dataType).toBe('lab_result');
-    // Content is returned plaintext to the client
     expect(body.record.content).toBe('WBC: 7.2');
   });
 
+  it('POST /entities/medical-data — should refuse without consent (HIPAA gate)', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/entities/medical-data',
+      headers: { cookie: cookieA },
+      payload: { dataType: 'lab_result', content: 'WBC: 7.2' },
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(JSON.parse(res.body).error).toMatch(/consent required/i);
+  });
+
   it('POST /entities/medical-data — should reject missing required fields', async () => {
+    seedMedicalConsent(prisma, USER_A.userId);
+
     const res = await app.inject({
       method: 'POST',
       url: '/entities/medical-data',

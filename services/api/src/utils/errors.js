@@ -1,7 +1,11 @@
 export function sanitizeError(error) {
-  const message = error.message || 'An unexpected error occurred';
-  const sanitized = message.replace(/password|secret|key|token/gi, '***');
-  return sanitized;
+  const message = error?.message || 'An unexpected error occurred';
+  // Mask common secret-bearing tokens in error strings before they hit the
+  // log pipeline. Conservative pattern: matches both whole-word identifiers
+  // and inline values like "Bearer eyJ...".
+  return String(message)
+    .replace(/(password|secret|key|token|authorization)[=:][^\s,]+/gi, '$1=***')
+    .replace(/\bBearer\s+[A-Za-z0-9._-]+/gi, 'Bearer ***');
 }
 
 export class AppError extends Error {

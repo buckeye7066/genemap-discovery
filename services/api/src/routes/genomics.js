@@ -6,6 +6,7 @@ import {
   searchClinVar,
   searchPhenotypes,
 } from '../services/genomicDatabases.js';
+import { ValidationError, NotFoundError } from '../utils/errors.js';
 
 export default async function genomicsRoutes(fastify) {
   fastify.addHook('preHandler', authenticate);
@@ -13,7 +14,7 @@ export default async function genomicsRoutes(fastify) {
   // ─── Variant Lookup ────────────────────────────────────────────
   fastify.get('/variant/search', async (request) => {
     const { q } = request.query;
-    if (!q) return { error: 'Query parameter q is required', hits: [] };
+    if (!q) throw new ValidationError('Query parameter q is required');
     const data = await searchVariants(q);
     return data;
   });
@@ -21,7 +22,7 @@ export default async function genomicsRoutes(fastify) {
   fastify.get('/variant/:id', async (request) => {
     const { id } = request.params;
     const data = await lookupVariant(id);
-    if (!data) return { error: 'Variant not found' };
+    if (!data) throw new NotFoundError('Variant not found');
     return data;
   });
 
@@ -29,14 +30,14 @@ export default async function genomicsRoutes(fastify) {
   fastify.get('/gene/:symbol', async (request) => {
     const { symbol } = request.params;
     const data = await lookupGene(symbol);
-    if (!data) return { error: 'Gene not found' };
+    if (!data) throw new NotFoundError('Gene not found');
     return data;
   });
 
   // ─── ClinVar Search ───────────────────────────────────────────
   fastify.get('/clinvar/search', async (request) => {
     const { q } = request.query;
-    if (!q) return { error: 'Query parameter q is required', esearchresult: { idlist: [] } };
+    if (!q) throw new ValidationError('Query parameter q is required');
     const data = await searchClinVar(q);
     return data;
   });
@@ -44,7 +45,7 @@ export default async function genomicsRoutes(fastify) {
   // ─── Phenotype / HPO Search ────────────────────────────────────
   fastify.get('/phenotype/search', async (request) => {
     const { q } = request.query;
-    if (!q) return { error: 'Query parameter q is required', terms: [] };
+    if (!q) throw new ValidationError('Query parameter q is required');
     const data = await searchPhenotypes(q);
     return data;
   });

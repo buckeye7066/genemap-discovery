@@ -1,22 +1,52 @@
 import { ZodError } from 'zod';
 import { AppError, sanitizeError } from '../utils/errors.js';
 
-// Detect operational app errors regardless of cross-realm prototype chains
-// (vitest can load errors.js multiple times in some scenarios; relying on
-// `instanceof` alone made errors fall through to Fastify's default JSON
-// formatter, leaking statusCode/error/message instead of {error: '...'}).
+/**
+ * Detect operational app errors regardless of cross-realm prototype chains
+ * (vitest can load errors.js multiple times in some scenarios; relying on
+ * `instanceof` alone made errors fall through to Fastify's default JSON
+ * formatter, leaking statusCode/error/message instead of {error: '...'}).
+ */
 function isAppError(error) {
   if (error instanceof AppError) return true;
-  return Boolean(error && error.isOperational && typeof error.statusCode === 'number' && error.statusCode >= 400 && error.statusCode < 600);
+  return Boolean(
+    error &&
+      error.isOperational &&
+      typeof error.statusCode === 'number' &&
+      error.statusCode >= 400 &&
+      error.statusCode < 600
+  );
 }
 
 export function errorHandler(error, request, reply) {
-  // sanitizeError strips substrings like password|secret|key|token before logging.
-  console.error('Error:', sanitizeError(error));
+  const requestId = request.id;
+  const isProd = request.server?.env?.isProduction ?? process.env.NODE_ENV === 'production';
+
+  // Use the Fastify pino logger so logs are structured (JSON) and include
+  // request context in production. The previous handler used console.error
+  // which produced unindexed plain-text and lost the requestId/traceability.
+  request.log.error(
+    {
+      requestId,
+      err: {
+        name: error.name,
+        message: sanitizeError(error),
+        code: error.code,
+        statusCode: error.statusCode,
+        // Stack traces are useful in dev/test but can leak file system
+        // layout in production logs that get aggregated to third parties.
+        stack: isProd ? undefined : error.stack,
+      },
+      route: request.routerPath || request.url,
+      method: request.method,
+    },
+    'request failed'
+  );
 
   if (error instanceof ZodError) {
     return reply.status(400).send({
       error: 'Validation failed',
+      requestId,
       details: error.errors,
     });
   }
@@ -24,10 +54,13 @@ export function errorHandler(error, request, reply) {
   if (isAppError(error)) {
     return reply.status(error.statusCode).send({
       error: error.message,
+      code: error.code,
+      requestId,
     });
   }
 
   return reply.status(500).send({
     error: 'Internal server error',
+    requestId,
   });
 }

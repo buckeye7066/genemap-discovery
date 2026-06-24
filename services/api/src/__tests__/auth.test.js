@@ -164,6 +164,12 @@ describe('POST /auth/login', () => {
 
 describe('POST /auth/logout', () => {
   it('should log out an authenticated user and clear cookies', async () => {
+    // authenticate() now hydrates the user from the DB on every request,
+    // so the user record must exist before the logout call.
+    prisma._store.user.push({
+      id: 'user-1', email: 'alice@example.com', role: 'user', banned: false,
+      createdAt: new Date(), updatedAt: new Date(),
+    });
     const cookie = authCookie({ userId: 'user-1', email: 'alice@example.com', role: 'user' });
 
     const res = await app.inject({

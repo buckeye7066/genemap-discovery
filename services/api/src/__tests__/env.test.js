@@ -17,6 +17,12 @@ function prodEnv(overrides = {}) {
     STRIPE_WEBHOOK_SECRET: 'whsec_test',
     STRIPE_PRICE_MONTHLY: 'price_m',
     STRIPE_PRICE_YEARLY: 'price_y',
+    STRIPE_PRICE_TEAM_MONTHLY: 'price_team_m',
+    STRIPE_PRICE_TEAM_YEARLY: 'price_team_y',
+    STRIPE_PRICE_DEPT_MONTHLY: 'price_dept_m',
+    STRIPE_PRICE_DEPT_YEARLY: 'price_dept_y',
+    STRIPE_PRICE_ENT_MONTHLY: 'price_ent_m',
+    STRIPE_PRICE_ENT_YEARLY: 'price_ent_y',
     OPENAI_API_KEY: 'sk-test',
     ...overrides,
   };

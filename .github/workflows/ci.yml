@@ -34,10 +34,32 @@ jobs:
           cache: 'pnpm'
       - name: Install (frozen lockfile)
         run: pnpm install --frozen-lockfile
+      - name: Build shared package
+        # @genemap/shared resolves via dist/*.d.ts (its package "types"/"exports"
+        # point at ./dist). Without this, `pnpm typecheck` fails with TS2307
+        # "Cannot find module '@genemap/shared'" on web imports of it.
+        run: pnpm --filter @genemap/shared build
       - name: Lint (web + api)
         run: pnpm lint
       - name: Typecheck
         run: pnpm typecheck
+
+  verify-migrations:
+    # Hard-fail the pipeline if a refactor accidentally re-ignores or wipes
+    # the prisma migrations folder. Without this, a missing migration would
+    # only surface at deploy time when `prisma migrate deploy` runs.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Migrations directory present
+        run: test -d services/api/prisma/migrations
+      - name: At least one migration.sql exists
+        run: |
+          count=$(find services/api/prisma/migrations -name migration.sql | wc -l)
+          echo "Found $count migration.sql files"
+          test "$count" -gt 0
+      - name: migration_lock.toml exists
+        run: test -f services/api/prisma/migrations/migration_lock.toml
 
   test:
     runs-on: ubuntu-latest
@@ -75,9 +97,6 @@ jobs:
           cache: 'pnpm'
       - name: Install (frozen lockfile)
         run: pnpm install --frozen-lockfile
-      # The shared package must build hard — a failing types/runtime contract
-      # silently breaking the API/web wire-up is exactly the kind of release
-      # gap a `continue-on-error` mask used to hide.
       - name: Build shared package
         run: pnpm --filter @genemap/shared build
       - name: Build web bundle
@@ -90,6 +109,70 @@ jobs:
           name: web-dist
           path: apps/web/dist
           retention-days: 7
+
+  docker-build-api:
+    # Build the API image we ship to Railway, on the same commit. Without
+    # this, lockfile drift, missing build deps, or a broken Dockerfile only
+    # surface in production.
+    runs-on: ubuntu-latest
+    needs: [verify-migrations]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Build API image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: services/api/Dockerfile
+          push: false
+          load: true
+          tags: genemap-api:ci
+
+  migration-smoke:
+    # Spin up Postgres and run `prisma migrate deploy` against it on every
+    # PR. Catches drift between schema.prisma and the committed migrations
+    # before it reaches production.
+    runs-on: ubuntu-latest
+    needs: [verify-migrations]
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_DB: genemap
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/genemap
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+      - name: Install (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+      - name: Generate Prisma client
+        run: pnpm --filter @genemap/api db:generate
+      - name: Apply migrations
+        run: pnpm --filter @genemap/api db:migrate:deploy
+      - name: Verify schema matches migrations
+        run: |
+          cd services/api
+          npx prisma migrate diff \
+            --from-schema-datasource prisma/schema.prisma \
+            --to-schema-datamodel prisma/schema.prisma \
+            --exit-code
 
   security-audit:
     runs-on: ubuntu-latest
@@ -104,8 +187,5 @@ jobs:
           cache: 'pnpm'
       - name: Install (frozen lockfile)
         run: pnpm install --frozen-lockfile
-      # `--prod` filters dev-only advisories that don't ship to production.
-      # Set to `--audit-level=high` so moderate transitive advisories are
-      # logged but do not block release; raise to `moderate` later.
       - name: Dependency audit
         run: pnpm audit --prod --audit-level=high

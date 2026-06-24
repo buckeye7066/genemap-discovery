@@ -7,16 +7,28 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Shield, Crown, CheckCircle, AlertCircle, Loader2, LogOut } from "lucide-react";
+import { Shield, Crown, CheckCircle, AlertCircle, Loader2, LogOut, Gift, Users, XCircle } from "lucide-react";
 
+/**
+ * Super-admin bootstrap page.
+ *
+ * The previous implementation routed everything through `apiClient.updateProfile`
+ * with `_adminAction` flags — there is no such backend contract. The API
+ * exposes `/admin/grant-admin` and `/admin/grant-premium` (gated on
+ * super_admin / admin) and `/admin/search-users` for finding the target by
+ * email. Use those.
+ */
 export default function SuperAdminSetupPage() {
   const navigate = useNavigate();
-  const { user: currentUser } = useAuth();
+  const { user: currentUser, checkAuth } = useAuth();
   const [searchEmail, setSearchEmail] = useState("");
+  const [freeEmail, setFreeEmail] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
+
+  const isSuperAdmin = currentUser?.role === 'super_admin';
 
   useEffect(() => {
     if (currentUser === undefined) return;
@@ -24,82 +36,188 @@ export default function SuperAdminSetupPage() {
       navigate(createPageUrl("Home"));
       return;
     }
-    if (!currentUser.super_admin) {
+    if (!isSuperAdmin) {
       navigate(createPageUrl("Home"));
       return;
     }
     setIsLoading(false);
-  }, [currentUser]);
+  }, [currentUser, isSuperAdmin, navigate]);
 
-  const handleLogout = () => {
-    apiClient.logout();
+  const handleLogout = async () => {
+    try {
+      await apiClient.logout();
+    } finally {
+      window.location.href = '/login';
+    }
   };
 
   const handleGrantSuperAdmin = async () => {
-    if (!searchEmail.trim()) {
+    const email = searchEmail.trim().toLowerCase();
+    if (!email) {
       setError("Please enter an email address");
       return;
     }
 
-    if (!confirm(`Grant administrator privileges to ${searchEmail}?`)) {
-      return;
-    }
+    if (!confirm(`Grant administrator privileges to ${email}?`)) return;
 
     setIsSaving(true);
     setError(null);
     setSuccess(null);
 
     try {
-      const response = await apiClient.updateProfile({
-        _adminAction: 'grantAdmin',
-        targetEmail: searchEmail.trim()
-      });
+      const searchResult = await apiClient.searchUsers(email);
+      const target = (searchResult.users || []).find((u) => u.email?.toLowerCase() === email)
+        || (searchResult.users || [])[0];
 
-      if (response.error) {
-        setError(response.error);
+      if (!target?.id) {
+        setError("User not found. The target must register before being promoted.");
         return;
       }
 
-      setSuccess(`Successfully granted administrator privileges to ${searchEmail}`);
+      await apiClient.grantAdmin(target.id);
+      setSuccess(`Granted administrator privileges to ${target.email}`);
       setSearchEmail("");
 
-      // If granting to self, reload page
-      if (searchEmail.trim() === currentUser.email) {
-        setTimeout(() => {
-          window.location.reload();
-        }, 1000);
+      if (target.email?.toLowerCase() === currentUser.email?.toLowerCase()) {
+        await checkAuth();
+        setTimeout(() => window.location.reload(), 750);
       }
     } catch (err) {
       console.error("Error granting admin:", err);
-      setError(err.message || "Failed to grant privileges. Please try again.");
+      setError(err?.message || "Failed to grant privileges. Please try again.");
     } finally {
       setIsSaving(false);
     }
   };
 
   const handleGrantPremium = async () => {
-    if (!confirm('Grant yourself premium access?')) {
-      return;
-    }
+    if (!confirm('Grant yourself premium access?')) return;
 
     setIsSaving(true);
     setError(null);
     setSuccess(null);
 
     try {
-      const response = await apiClient.updateProfile({
-        _adminAction: 'grantPremium'
-      });
+      await apiClient.grantPremium(currentUser.id);
+      setSuccess('Premium access granted! Reload the page to see changes.');
+      await checkAuth();
+    } catch (err) {
+      console.error("Error granting premium:", err);
+      setError(err?.message || "Failed to grant premium access.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
-      if (response?.error) {
-        setError(response.error);
+  const handleGrantFreePeriod = async (period) => {
+    const email = freeEmail.trim().toLowerCase();
+    if (!email) {
+      setError("Please enter an email address");
+      return;
+    }
+
+    if (!confirm(`Grant a free ${period} to ${email}?`)) return;
+
+    setIsSaving(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const searchResult = await apiClient.searchUsers(email);
+      const target = (searchResult.users || []).find((u) => u.email?.toLowerCase() === email)
+        || (searchResult.users || [])[0];
+
+      if (!target?.id) {
+        setError("User not found. The target must register before being comped.");
         return;
       }
 
-      setSuccess('Premium access granted! Reload the page to see changes.');
+      const res = await apiClient.grantFreePeriod(target.id, period);
+      const until = res?.currentPeriodEnd
+        ? new Date(res.currentPeriodEnd).toLocaleDateString()
+        : "";
+      setSuccess(`Granted a free ${period} to ${target.email}${until ? ` — premium until ${until}` : ""}.`);
+      setFreeEmail("");
     } catch (err) {
-      console.error("Error granting premium:", err);
-      setError(err.message || "Failed to grant premium access.");
+      console.error("Error granting free period:", err);
+      setError(err?.message || `Failed to grant free ${period}. Please try again.`);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleRevokeFreePeriod = async () => {
+    const email = freeEmail.trim().toLowerCase();
+    if (!email) {
+      setError("Please enter an email address");
+      return;
+    }
+
+    if (!confirm(`End the free period for ${email}?`)) return;
+
+    setIsSaving(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const searchResult = await apiClient.searchUsers(email);
+      const target = (searchResult.users || []).find((u) => u.email?.toLowerCase() === email)
+        || (searchResult.users || [])[0];
+
+      if (!target?.id) {
+        setError("User not found.");
+        return;
+      }
+
+      const res = await apiClient.revokeFreePeriod(target.id);
+      setSuccess(
+        res?.revoked > 0
+          ? `Ended the free period for ${target.email}.`
+          : `${target.email} had no active free period.`
+      );
+      setFreeEmail("");
+    } catch (err) {
+      console.error("Error revoking free period:", err);
+      setError(err?.message || "Failed to end the free period. Please try again.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleGrantFreePeriodAll = async (period) => {
+    if (!confirm(`Give EVERY user a free ${period}? This affects all non-banned accounts.`)) return;
+
+    setIsSaving(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const res = await apiClient.grantFreePeriodAll(period);
+      setSuccess(
+        `Granted a free ${period} to ${res.total} user${res.total === 1 ? "" : "s"} ` +
+          `(${res.created} new, ${res.extended} extended).`
+      );
+    } catch (err) {
+      console.error("Error granting free period to all:", err);
+      setError(err?.message || `Failed to grant a free ${period} to all users.`);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleRevokeFreePeriodAll = async () => {
+    if (!confirm("End ALL active free periods? Paid subscriptions are not affected.")) return;
+
+    setIsSaving(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const res = await apiClient.revokeFreePeriodAll();
+      setSuccess(`Ended ${res.revoked} active free period${res.revoked === 1 ? "" : "s"}.`);
+    } catch (err) {
+      console.error("Error revoking all free periods:", err);
+      setError(err?.message || "Failed to end all free periods.");
     } finally {
       setIsSaving(false);
     }
@@ -127,12 +245,7 @@ export default function SuperAdminSetupPage() {
               </div>
             </div>
             <div className="flex-1 flex justify-end">
-              <Button
-                onClick={handleLogout}
-                variant="outline"
-                size="sm"
-                className="gap-2"
-              >
+              <Button onClick={handleLogout} variant="outline" size="sm" className="gap-2">
                 <LogOut className="w-4 h-4" />
                 Logout
               </Button>
@@ -173,7 +286,7 @@ export default function SuperAdminSetupPage() {
                 type="email"
                 value={searchEmail}
                 onChange={(e) => setSearchEmail(e.target.value)}
-                placeholder="Enter your email address..."
+                placeholder="Enter user email address..."
                 onKeyDown={(e) => e.key === 'Enter' && handleGrantSuperAdmin()}
               />
             </div>
@@ -229,6 +342,117 @@ export default function SuperAdminSetupPage() {
           </CardContent>
         </Card>
 
+        <Card className="shadow-lg mb-6 border-2 border-emerald-200">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Gift className="w-5 h-5 text-emerald-600" />
+              Grant Free Period
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-slate-600">
+              Comp a user a free week or month of premium. The window expires
+              automatically — repeated grants stack and never shorten existing access.
+            </p>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-2">
+                User Email Address
+              </label>
+              <Input
+                type="email"
+                value={freeEmail}
+                onChange={(e) => setFreeEmail(e.target.value)}
+                placeholder="Enter user email address..."
+              />
+            </div>
+            <div className="flex gap-3">
+              <Button
+                onClick={() => handleGrantFreePeriod("week")}
+                disabled={isSaving || !freeEmail.trim()}
+                className="flex-1 bg-emerald-600 hover:bg-emerald-700"
+              >
+                {isSaving ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <Gift className="w-4 h-4 mr-2" />
+                )}
+                Free Week
+              </Button>
+              <Button
+                onClick={() => handleGrantFreePeriod("month")}
+                disabled={isSaving || !freeEmail.trim()}
+                className="flex-1 bg-emerald-600 hover:bg-emerald-700"
+              >
+                {isSaving ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <Gift className="w-4 h-4 mr-2" />
+                )}
+                Free Month
+              </Button>
+            </div>
+            <Button
+              onClick={handleRevokeFreePeriod}
+              disabled={isSaving || !freeEmail.trim()}
+              variant="outline"
+              className="w-full text-slate-600 hover:text-red-600 hover:border-red-300"
+            >
+              <XCircle className="w-4 h-4 mr-2" />
+              End Free Period
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-lg mb-6 border-2 border-amber-200">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Users className="w-5 h-5 text-amber-600" />
+              All Users
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-slate-600">
+              Comp <span className="font-medium">every non-banned user</span> at once — useful for
+              a launch promo or an apology credit. Paid subscriptions are never affected.
+            </p>
+            <div className="flex gap-3">
+              <Button
+                onClick={() => handleGrantFreePeriodAll("week")}
+                disabled={isSaving}
+                className="flex-1 bg-amber-600 hover:bg-amber-700"
+              >
+                {isSaving ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <Gift className="w-4 h-4 mr-2" />
+                )}
+                Give All a Week
+              </Button>
+              <Button
+                onClick={() => handleGrantFreePeriodAll("month")}
+                disabled={isSaving}
+                className="flex-1 bg-amber-600 hover:bg-amber-700"
+              >
+                {isSaving ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <Gift className="w-4 h-4 mr-2" />
+                )}
+                Give All a Month
+              </Button>
+            </div>
+            <Button
+              onClick={handleRevokeFreePeriodAll}
+              disabled={isSaving}
+              variant="outline"
+              className="w-full text-slate-600 hover:text-red-600 hover:border-red-300"
+            >
+              <XCircle className="w-4 h-4 mr-2" />
+              End All Free Periods
+            </Button>
+          </CardContent>
+        </Card>
+
         <Card className="shadow-lg border-2 border-blue-200">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -248,7 +472,7 @@ export default function SuperAdminSetupPage() {
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-slate-600">Administrator:</span>
-                {currentUser?.super_admin ? (
+                {isSuperAdmin ? (
                   <span className="flex items-center gap-1 text-green-600 font-medium">
                     <CheckCircle className="w-4 h-4" />
                     Yes
@@ -262,12 +486,12 @@ export default function SuperAdminSetupPage() {
         </Card>
 
         <div className="mt-6 p-4 bg-amber-50 border border-amber-200 rounded-lg">
-          <h3 className="font-semibold text-amber-900 mb-2">⚠️ Administrator Privileges</h3>
+          <h3 className="font-semibold text-amber-900 mb-2">Administrator Privileges</h3>
           <ul className="text-sm text-amber-800 space-y-1">
-            <li>• Full access to ban/unban any user</li>
-            <li>• View all banned users and reasons</li>
-            <li>• Access newsletter subscriber list</li>
-            <li>• Complete control over platform moderation</li>
+            <li>- Full access to ban/unban any user</li>
+            <li>- View all banned users and reasons</li>
+            <li>- Access newsletter subscriber list</li>
+            <li>- Complete control over platform moderation</li>
           </ul>
         </div>
       </div>
