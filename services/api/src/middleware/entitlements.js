@@ -1,4 +1,5 @@
 import { ForbiddenError } from '../utils/errors.js';
+import { isFreeWeekActive } from '../utils/freeWeek.js';
 
 const FREE_TIER_LIMITS = {
   explanations_per_day: 5,
@@ -47,6 +48,18 @@ export async function checkEducationEntitlement(request, reply) {
       isPremium: true,
       isInstitutional: false,
       isAdmin: true,
+      tier: 'premium',
+      limits: null,
+    };
+    return;
+  }
+
+  // Free Week promotion: while active, everyone gets unlimited Premium access.
+  if (isFreeWeekActive(process.env)) {
+    request.entitlements = {
+      isPremium: true,
+      isInstitutional: false,
+      isFreeWeek: true,
       tier: 'premium',
       limits: null,
     };

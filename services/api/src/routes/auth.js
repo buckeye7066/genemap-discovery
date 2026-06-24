@@ -10,6 +10,7 @@ import {
 } from '../utils/auth.js';
 import { authenticate } from '../middleware/auth.js';
 import { ensureCsrfCookie } from '../middleware/csrf.js';
+import { computeFreeWeekStatus } from '../utils/freeWeek.js';
 import { ValidationError, UnauthorizedError } from '../utils/errors.js';
 import { createAuditLog } from '../utils/audit.js';
 import { getAuthCookieOptions, getClearCookieOptions } from '../utils/cookies.js';
@@ -287,8 +288,12 @@ export default async function authRoutes(fastify) {
     }
 
     const isAdmin = user.role === 'admin' || user.role === 'super_admin';
+    // Free Week promotion: while active, every user is Premium (kept in
+    // lock-step with checkEducationEntitlement so the UI and the API agree).
+    const freeWeek = computeFreeWeekStatus(process.env);
     const isPremium = Boolean(
       isAdmin ||
+        freeWeek.active ||
         (user.subscriptions?.length ?? 0) > 0 ||
         (licenseAssignment && licenseAssignment.license?.status === 'active')
     );
@@ -296,6 +301,8 @@ export default async function authRoutes(fastify) {
     const entitlements = {
       isPremium,
       isAdmin,
+      isFreeWeek: freeWeek.active,
+      freeWeek,
       licenseInfo: licenseAssignment
         ? {
             organizationName: licenseAssignment.license.organizationName,
