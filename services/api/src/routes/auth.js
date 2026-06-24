@@ -10,7 +10,7 @@ import {
 } from '../utils/auth.js';
 import { authenticate } from '../middleware/auth.js';
 import { ensureCsrfCookie } from '../middleware/csrf.js';
-import { computeFreeWeekStatus } from '../utils/freeWeek.js';
+import { computeFreeWeekStatus, freeWeekSignupGrant } from '../utils/freeWeek.js';
 import { ValidationError, UnauthorizedError } from '../utils/errors.js';
 import { createAuditLog } from '../utils/audit.js';
 import { getAuthCookieOptions, getClearCookieOptions } from '../utils/cookies.js';
@@ -62,6 +62,27 @@ export default async function authRoutes(fastify) {
         role: 'user',
       },
     });
+
+    // Free Week promotion: a user who signs up while the window is open gets
+    // their OWN full free period from now — an 'admin_granted' subscription that
+    // self-expires at currentPeriodEnd, the same shape checkEducationEntitlement
+    // and the admin comp feature use. Best-effort: never fail a registration if
+    // the comp write fails.
+    const signupGrant = freeWeekSignupGrant(process.env);
+    if (signupGrant) {
+      try {
+        await prisma.subscription.create({
+          data: {
+            userId: user.id,
+            status: 'active',
+            planType: 'admin_granted',
+            currentPeriodEnd: new Date(signupGrant.until),
+          },
+        });
+      } catch (err) {
+        request.log?.warn?.({ err: err?.message, userId: user.id }, 'free-week signup grant failed');
+      }
+    }
 
     await createAuditLog(prisma, {
       userId: user.id,

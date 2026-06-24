@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeFreeWeekStatus, isFreeWeekActive } from '../utils/freeWeek.js';
+import { computeFreeWeekStatus, isFreeWeekActive, freeWeekSignupGrant } from '../utils/freeWeek.js';
 
 const T0 = Date.parse('2026-06-24T12:00:00Z');
 
@@ -33,5 +33,28 @@ describe('freeWeek promotion', () => {
     expect(isFreeWeekActive(env, Date.parse('2026-06-24T12:00:00Z'))).toBe(false);
     expect(isFreeWeekActive(env, Date.parse('2026-06-28T12:00:00Z'))).toBe(true);
     expect(isFreeWeekActive(env, Date.parse('2026-07-02T00:00:01Z'))).toBe(false);
+  });
+});
+
+describe('freeWeekSignupGrant (per-signup full period)', () => {
+  const DAY = 24 * 60 * 60 * 1000;
+
+  it('returns null when the promo is off', () => {
+    expect(freeWeekSignupGrant({}, T0)).toBe(null);
+  });
+
+  it('grants a full week from now by default while active', () => {
+    const g = freeWeekSignupGrant({ FREE_WEEK_ENABLED: 'true' }, T0);
+    expect(g).toMatchObject({ period: 'week', days: 7 });
+    expect(Date.parse(g.until)).toBe(T0 + 7 * DAY);
+  });
+
+  it('honors FREE_WEEK_SIGNUP_PERIOD=month and disable=none', () => {
+    expect(freeWeekSignupGrant({ FREE_WEEK_ENABLED: 'true', FREE_WEEK_SIGNUP_PERIOD: 'month' }, T0)).toMatchObject({ period: 'month', days: 30 });
+    expect(freeWeekSignupGrant({ FREE_WEEK_ENABLED: 'true', FREE_WEEK_SIGNUP_PERIOD: 'none' }, T0)).toBe(null);
+  });
+
+  it('is null once the window has closed', () => {
+    expect(freeWeekSignupGrant({ FREE_WEEK_ENABLED: 'true', FREE_WEEK_END: '2026-06-01T00:00:00Z' }, T0)).toBe(null);
   });
 });
