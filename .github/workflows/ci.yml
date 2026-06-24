@@ -34,6 +34,11 @@ jobs:
           cache: 'pnpm'
       - name: Install (frozen lockfile)
         run: pnpm install --frozen-lockfile
+      - name: Build shared package
+        # @genemap/shared resolves via dist/*.d.ts (its package "types"/"exports"
+        # point at ./dist). Without this, `pnpm typecheck` fails with TS2307
+        # "Cannot find module '@genemap/shared'" on web imports of it.
+        run: pnpm --filter @genemap/shared build
       - name: Lint (web + api)
         run: pnpm lint
       - name: Typecheck
