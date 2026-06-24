@@ -492,6 +492,75 @@ Use clear, engaging language appropriate for the user's background. Format with 
     };
   }
 
+  // Standalone analysis of a user-supplied gene set with no phenotype context.
+  // This is what powers "Analyze with Robert" before any phenotype search has
+  // run — previously the button had nothing to call in that case.
+  static async analyzeGenes(genes, isPremium = false) {
+    const cleanGenes = (genes || []).map(g => g.trim().toUpperCase()).filter(Boolean);
+    if (cleanGenes.length === 0) {
+      throw new Error("Enter at least one gene to analyze.");
+    }
+
+    // Education-appropriate tone, matching the rest of the search flow.
+    let userPreferences = null;
+    try {
+      const user = await apiClient.getMe();
+      userPreferences = {
+        age: user?.age,
+        education_level: user?.education_level,
+        field_of_study: user?.field_of_study
+      };
+    } catch (err) {
+      // Not logged in — fall back to the general-audience tone.
+    }
+
+    const educationContext = this.getEducationContext(userPreferences);
+
+    const prompt = `
+You are Robert, an AI gene analysis assistant. The user has supplied a set of genes
+they are researching, with no specific phenotype in mind. Analyze the set itself.
+
+**User's Genes (${cleanGenes.length}):** ${cleanGenes.join(', ')}
+
+Provide a comprehensive analysis tailored for ${educationContext}.
+
+**Analysis should include:**
+1. **Overview**: What kinds of genes these are and any theme connecting them.
+2. **Per-Gene Highlights**: For each gene, its primary function and best-known disease/phenotype associations.
+3. **Shared Biology**: Pathways, protein families, or biological processes the genes have in common.
+4. **Notable Phenotypes**: The most significant phenotypes/diseases linked to this set (cite OMIM/ClinVar/HPO where relevant).
+5. **Recommendations**: Suggested next steps — phenotypes worth searching, related genes to add, or analyses to run.
+
+Use clear, engaging language appropriate for the reader's background. Format with markdown for readability.
+`;
+
+    const analysisResponse = await apiClient.invokeLLM(prompt, {
+      add_context_from_internet: true
+    });
+    const analysis = analysisResponse?.result || analysisResponse || "Gene set analysis";
+
+    // getFunctionalRelationships guards its own bounds; only worth it for >1 gene.
+    let functionalRelationships = [];
+    if (cleanGenes.length > 1 && cleanGenes.length <= 10) {
+      functionalRelationships = await this.getFunctionalRelationships(cleanGenes);
+    }
+
+    // Shaped to match compareGeneSets() so a single results component can render
+    // both flows. With no phenotype, every input gene is "unique to user".
+    return {
+      mode: "gene-analysis",
+      userGenes: cleanGenes,
+      phenotypeGenes: [],
+      phenotype: null,
+      overlapping: [],
+      uniqueToUser: cleanGenes,
+      uniqueToPhenotype: [],
+      analysis,
+      functionalRelationships,
+      isPremium
+    };
+  }
+
   static async getFunctionalRelationships(genes) {
     if (genes.length === 0) return [];
 

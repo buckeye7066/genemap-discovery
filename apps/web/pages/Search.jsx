@@ -108,9 +108,32 @@ export default function SearchPage() {
     setUserInputGenes(genes);
     setGeneSetComparison(null);
 
-    // If there are existing search results, trigger comparison
-    if (searchResults && genes.length > 0) {
+    if (genes.length === 0) return; // Clear button path — nothing to analyze.
+
+    // If a phenotype search already ran, compare the two sets against it.
+    // Otherwise analyze the user's genes on their own so "Analyze with Robert"
+    // always produces a result instead of silently doing nothing.
+    if (searchResults) {
       handleCompareWithPhenotype(genes);
+    } else {
+      handleAnalyzeGenes(genes);
+    }
+  };
+
+  const handleAnalyzeGenes = async (genes) => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const analysis = await PhenotypeSearchService.analyzeGenes(
+        genes,
+        searchResults?.isPremium ?? false
+      );
+      setGeneSetComparison(analysis);
+    } catch (err) {
+      setError(getErrorMessage(err) || "Failed to analyze genes");
+      log.error("Gene analysis error:", err);
+    } finally {
+      setIsLoading(false);
     }
   };
 
