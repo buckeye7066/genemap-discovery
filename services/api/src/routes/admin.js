@@ -24,6 +24,66 @@ function computeFreePeriodEnd(currentEnd, days) {
   return new Date(base + days * 24 * 60 * 60 * 1000);
 }
 
+/**
+ * Comp every (non-banned) user a free period. Existing admin-granted comps are
+ * extended in place (never shortened); users without one get a fresh comp.
+ * Real Stripe subscriptions are never touched — we only ever create/extend
+ * rows whose planType is 'admin_granted'.
+ */
+async function grantFreePeriodToAll(prisma, days) {
+  const freshEnd = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+
+  const comps = await prisma.subscription.findMany({
+    where: { status: 'active', planType: 'admin_granted' },
+    select: { id: true, userId: true, currentPeriodEnd: true },
+  });
+
+  for (const comp of comps) {
+    await prisma.subscription.update({
+      where: { id: comp.id },
+      data: { currentPeriodEnd: computeFreePeriodEnd(comp.currentPeriodEnd, days) },
+    });
+  }
+
+  const compedUserIds = comps.map((c) => c.userId);
+  const usersWithout = await prisma.user.findMany({
+    where: { banned: false, id: { notIn: compedUserIds } },
+    select: { id: true },
+  });
+
+  if (usersWithout.length > 0) {
+    await prisma.subscription.createMany({
+      data: usersWithout.map((u) => ({
+        userId: u.id,
+        status: 'active',
+        planType: 'admin_granted',
+        currentPeriodEnd: freshEnd,
+      })),
+    });
+  }
+
+  return {
+    extended: comps.length,
+    created: usersWithout.length,
+    total: comps.length + usersWithout.length,
+  };
+}
+
+/**
+ * End an admin-granted comp by canceling it and expiring its window. Scoped to
+ * a single user, or all users when userId is null. Only 'admin_granted' rows
+ * are affected, so paid Stripe subscriptions are left intact.
+ */
+async function revokeFreePeriod(prisma, userId) {
+  const where = { status: 'active', planType: 'admin_granted' };
+  if (userId) where.userId = userId;
+  const result = await prisma.subscription.updateMany({
+    where,
+    data: { status: 'canceled', currentPeriodEnd: new Date() },
+  });
+  return { revoked: result.count };
+}
+
 export default async function adminRoutes(fastify) {
   const prisma = fastify.prisma;
 
@@ -271,11 +331,29 @@ export default async function adminRoutes(fastify) {
   // webhooks). Expiry is enforced by checkEducationEntitlement honoring
   // currentPeriodEnd.
   fastify.post('/grant-free-period', async (request) => {
-    const { userId, period } = request.body || {};
-    if (!userId) throw new ValidationError('userId is required');
+    const { userId, period, scope } = request.body || {};
 
     const days = FREE_PERIOD_DAYS[period];
     if (!days) throw new ValidationError('period must be "week" or "month"');
+
+    // Bulk grant: comp every non-banned user at once.
+    if (scope === 'all') {
+      const result = await grantFreePeriodToAll(prisma, days);
+      await createAuditLog(
+        prisma,
+        {
+          userId: request.user.userId,
+          action: 'grant_free_period.all',
+          entityType: 'system',
+          entityId: 'all_users',
+          metadata: { period, days, ...result },
+        },
+        { required: true }
+      );
+      return { success: true, scope: 'all', period, ...result };
+    }
+
+    if (!userId) throw new ValidationError('userId is required');
 
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new NotFoundError('User not found');
@@ -318,6 +396,49 @@ export default async function adminRoutes(fastify) {
     );
 
     return { success: true, period, currentPeriodEnd: newEnd.toISOString() };
+  });
+
+  // End a complimentary period early — for one user, or all users at once.
+  // Only admin-granted comps are canceled; paid Stripe subscriptions are
+  // untouched and continue to be driven by webhooks.
+  fastify.post('/revoke-free-period', async (request) => {
+    const { userId, scope } = request.body || {};
+
+    if (scope === 'all') {
+      const result = await revokeFreePeriod(prisma, null);
+      await createAuditLog(
+        prisma,
+        {
+          userId: request.user.userId,
+          action: 'revoke_free_period.all',
+          entityType: 'system',
+          entityId: 'all_users',
+          metadata: { ...result },
+        },
+        { required: true }
+      );
+      return { success: true, scope: 'all', ...result };
+    }
+
+    if (!userId) throw new ValidationError('userId is required');
+
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new NotFoundError('User not found');
+
+    const result = await revokeFreePeriod(prisma, userId);
+    await createAuditLog(
+      prisma,
+      {
+        userId: request.user.userId,
+        action: 'revoke_free_period',
+        entityType: 'user',
+        entityId: userId,
+        metadata: { ...result },
+      },
+      { required: true }
+    );
+
+    return { success: true, ...result };
   });
 
   // Granting admin privileges is reserved for super_admin. Without this

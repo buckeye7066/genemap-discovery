@@ -454,6 +454,107 @@ describe('POST /admin/grant-free-period', () => {
     });
     expect(res.statusCode).toBe(403);
   });
+
+  it('scope:"all" comps every non-banned user and skips banned ones', async () => {
+    prisma._store.user.push(
+      { id: 'u-a', email: 'a@test.com', role: 'user', banned: false },
+      { id: 'u-b', email: 'b@test.com', role: 'user', banned: false },
+      { id: 'u-banned', email: 'banned@test.com', role: 'user', banned: true },
+    );
+    // One user already has a comp — it should be extended, not duplicated.
+    prisma._store.subscription.push({
+      id: 'sub-a', userId: 'u-a', status: 'active', planType: 'admin_granted',
+      currentPeriodEnd: new Date(Date.now() + 2 * DAY), createdAt: new Date(),
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/admin/grant-free-period',
+      headers: { cookie: adminCookie },
+      payload: { scope: 'all', period: 'week' },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.scope).toBe('all');
+    expect(body.extended).toBe(1); // u-a
+    // Every non-banned user without a comp gets one (admin, regular, comp-target,
+    // u-b — but not the banned user).
+    const compRows = prisma._store.subscription.filter((s) => s.planType === 'admin_granted');
+    expect(compRows.some((s) => s.userId === 'u-banned')).toBe(false);
+    expect(compRows.some((s) => s.userId === 'u-b')).toBe(true);
+    // u-a still has exactly one comp row (extended in place).
+    expect(compRows.filter((s) => s.userId === 'u-a')).toHaveLength(1);
+  });
+});
+
+// ─── POST /admin/revoke-free-period ──────────────────────────────────────────
+
+describe('POST /admin/revoke-free-period', () => {
+  const DAY = 24 * 60 * 60 * 1000;
+
+  it('cancels a single user\'s comp but leaves a paid sub intact', async () => {
+    prisma._store.user.push({ id: 'rev-target', email: 'rev@test.com', role: 'user' });
+    prisma._store.subscription.push(
+      { id: 'comp', userId: 'rev-target', status: 'active', planType: 'admin_granted',
+        currentPeriodEnd: new Date(Date.now() + 5 * DAY) },
+      { id: 'paid', userId: 'rev-target', status: 'active', planType: 'month',
+        currentPeriodEnd: new Date(Date.now() + 20 * DAY) },
+    );
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/admin/revoke-free-period',
+      headers: { cookie: adminCookie },
+      payload: { userId: 'rev-target' },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().revoked).toBe(1);
+    const comp = prisma._store.subscription.find((s) => s.id === 'comp');
+    const paid = prisma._store.subscription.find((s) => s.id === 'paid');
+    expect(comp.status).toBe('canceled');
+    expect(paid.status).toBe('active'); // Stripe sub untouched
+  });
+
+  it('scope:"all" cancels every active comp and no paid subs', async () => {
+    prisma._store.subscription.push(
+      { id: 'c1', userId: 'x', status: 'active', planType: 'admin_granted', currentPeriodEnd: new Date() },
+      { id: 'c2', userId: 'y', status: 'active', planType: 'admin_granted', currentPeriodEnd: new Date() },
+      { id: 'p1', userId: 'z', status: 'active', planType: 'year', currentPeriodEnd: new Date() },
+    );
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/admin/revoke-free-period',
+      headers: { cookie: adminCookie },
+      payload: { scope: 'all' },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().revoked).toBe(2);
+    expect(prisma._store.subscription.find((s) => s.id === 'p1').status).toBe('active');
+  });
+
+  it('rejects missing userId without scope', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/admin/revoke-free-period',
+      headers: { cookie: adminCookie },
+      payload: {},
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('denies a regular user (403)', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/admin/revoke-free-period',
+      headers: { cookie: userCookie },
+      payload: { scope: 'all' },
+    });
+    expect(res.statusCode).toBe(403);
+  });
 });
 
 // ─── POST /admin/grant-admin ────────────────────────────────────────────────

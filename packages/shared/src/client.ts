@@ -288,6 +288,26 @@ export class ApiClient {
       body: JSON.stringify({ userId, period }),
     });
   }
+  grantFreePeriodAll(
+    period: 'week' | 'month'
+  ): Promise<{ success: boolean; scope: 'all'; period: string; extended: number; created: number; total: number }> {
+    return this.request('/admin/grant-free-period', {
+      method: 'POST',
+      body: JSON.stringify({ scope: 'all', period }),
+    });
+  }
+  revokeFreePeriod(userId: string): Promise<{ success: boolean; revoked: number }> {
+    return this.request('/admin/revoke-free-period', {
+      method: 'POST',
+      body: JSON.stringify({ userId }),
+    });
+  }
+  revokeFreePeriodAll(): Promise<{ success: boolean; scope: 'all'; revoked: number }> {
+    return this.request('/admin/revoke-free-period', {
+      method: 'POST',
+      body: JSON.stringify({ scope: 'all' }),
+    });
+  }
   grantAdmin(userId: string): Promise<{ success: boolean }> {
     return this.request('/admin/grant-admin', { method: 'POST', body: JSON.stringify({ userId }) });
   }

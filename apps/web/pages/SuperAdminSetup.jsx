@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Shield, Crown, CheckCircle, AlertCircle, Loader2, LogOut, Gift } from "lucide-react";
+import { Shield, Crown, CheckCircle, AlertCircle, Loader2, LogOut, Gift, Users, XCircle } from "lucide-react";
 
 /**
  * Super-admin bootstrap page.
@@ -141,6 +141,83 @@ export default function SuperAdminSetupPage() {
     } catch (err) {
       console.error("Error granting free period:", err);
       setError(err?.message || `Failed to grant free ${period}. Please try again.`);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleRevokeFreePeriod = async () => {
+    const email = freeEmail.trim().toLowerCase();
+    if (!email) {
+      setError("Please enter an email address");
+      return;
+    }
+
+    if (!confirm(`End the free period for ${email}?`)) return;
+
+    setIsSaving(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const searchResult = await apiClient.searchUsers(email);
+      const target = (searchResult.users || []).find((u) => u.email?.toLowerCase() === email)
+        || (searchResult.users || [])[0];
+
+      if (!target?.id) {
+        setError("User not found.");
+        return;
+      }
+
+      const res = await apiClient.revokeFreePeriod(target.id);
+      setSuccess(
+        res?.revoked > 0
+          ? `Ended the free period for ${target.email}.`
+          : `${target.email} had no active free period.`
+      );
+      setFreeEmail("");
+    } catch (err) {
+      console.error("Error revoking free period:", err);
+      setError(err?.message || "Failed to end the free period. Please try again.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleGrantFreePeriodAll = async (period) => {
+    if (!confirm(`Give EVERY user a free ${period}? This affects all non-banned accounts.`)) return;
+
+    setIsSaving(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const res = await apiClient.grantFreePeriodAll(period);
+      setSuccess(
+        `Granted a free ${period} to ${res.total} user${res.total === 1 ? "" : "s"} ` +
+          `(${res.created} new, ${res.extended} extended).`
+      );
+    } catch (err) {
+      console.error("Error granting free period to all:", err);
+      setError(err?.message || `Failed to grant a free ${period} to all users.`);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleRevokeFreePeriodAll = async () => {
+    if (!confirm("End ALL active free periods? Paid subscriptions are not affected.")) return;
+
+    setIsSaving(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const res = await apiClient.revokeFreePeriodAll();
+      setSuccess(`Ended ${res.revoked} active free period${res.revoked === 1 ? "" : "s"}.`);
+    } catch (err) {
+      console.error("Error revoking all free periods:", err);
+      setError(err?.message || "Failed to end all free periods.");
     } finally {
       setIsSaving(false);
     }
@@ -314,6 +391,65 @@ export default function SuperAdminSetupPage() {
                 Free Month
               </Button>
             </div>
+            <Button
+              onClick={handleRevokeFreePeriod}
+              disabled={isSaving || !freeEmail.trim()}
+              variant="outline"
+              className="w-full text-slate-600 hover:text-red-600 hover:border-red-300"
+            >
+              <XCircle className="w-4 h-4 mr-2" />
+              End Free Period
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-lg mb-6 border-2 border-amber-200">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Users className="w-5 h-5 text-amber-600" />
+              All Users
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-slate-600">
+              Comp <span className="font-medium">every non-banned user</span> at once — useful for
+              a launch promo or an apology credit. Paid subscriptions are never affected.
+            </p>
+            <div className="flex gap-3">
+              <Button
+                onClick={() => handleGrantFreePeriodAll("week")}
+                disabled={isSaving}
+                className="flex-1 bg-amber-600 hover:bg-amber-700"
+              >
+                {isSaving ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <Gift className="w-4 h-4 mr-2" />
+                )}
+                Give All a Week
+              </Button>
+              <Button
+                onClick={() => handleGrantFreePeriodAll("month")}
+                disabled={isSaving}
+                className="flex-1 bg-amber-600 hover:bg-amber-700"
+              >
+                {isSaving ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <Gift className="w-4 h-4 mr-2" />
+                )}
+                Give All a Month
+              </Button>
+            </div>
+            <Button
+              onClick={handleRevokeFreePeriodAll}
+              disabled={isSaving}
+              variant="outline"
+              className="w-full text-slate-600 hover:text-red-600 hover:border-red-300"
+            >
+              <XCircle className="w-4 h-4 mr-2" />
+              End All Free Periods
+            </Button>
           </CardContent>
         </Card>
 

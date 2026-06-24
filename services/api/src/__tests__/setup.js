@@ -91,6 +91,19 @@ export function createPrismaMock() {
       return record;
     }),
 
+    createMany: vi.fn(async ({ data }) => {
+      const rows = Array.isArray(data) ? data : [data];
+      for (const d of rows) {
+        getStore(name).push({
+          id: crypto.randomUUID(),
+          ...d,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+      }
+      return { count: rows.length };
+    }),
+
     update: vi.fn(async ({ where, data }) => {
       const arr = getStore(name);
       const idx = arr.findIndex((r) => matchWhere(r, where));
@@ -232,6 +245,10 @@ function matchWhere(record, where) {
     if (condition && typeof condition === 'object' && !Array.isArray(condition)) {
       if ('in' in condition) {
         if (!condition.in.includes(record[key])) return false;
+        continue;
+      }
+      if ('notIn' in condition) {
+        if (condition.notIn.includes(record[key])) return false;
         continue;
       }
       if ('contains' in condition) {
