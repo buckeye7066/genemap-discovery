@@ -225,6 +225,41 @@ describe('Admin methods', () => {
     expect(fetchCalls[0].method).toBe('POST');
   });
 
+  it('grantFreePeriod() should POST a 7-day free period', async () => {
+    await client.grantFreePeriod('u-1', 'week');
+    expect(fetchCalls[0].url).toBe('http://localhost:3000/admin/grant-free-period');
+    expect(fetchCalls[0].method).toBe('POST');
+    expect(JSON.parse(fetchCalls[0].body)).toEqual({ userId: 'u-1', period: 'week' });
+  });
+
+  it('grantFreePeriod() should POST a 30-day free period', async () => {
+    await client.grantFreePeriod('u-1', 'month');
+    expect(fetchCalls[0].url).toBe('http://localhost:3000/admin/grant-free-period');
+    expect(fetchCalls[0].method).toBe('POST');
+    expect(JSON.parse(fetchCalls[0].body)).toEqual({ userId: 'u-1', period: 'month' });
+  });
+
+  it('grantFreePeriodAll() should POST a bulk free-period grant', async () => {
+    await client.grantFreePeriodAll('month');
+    expect(fetchCalls[0].url).toBe('http://localhost:3000/admin/grant-free-period');
+    expect(fetchCalls[0].method).toBe('POST');
+    expect(JSON.parse(fetchCalls[0].body)).toEqual({ scope: 'all', period: 'month' });
+  });
+
+  it('revokeFreePeriod() should POST /admin/revoke-free-period', async () => {
+    await client.revokeFreePeriod('u-1');
+    expect(fetchCalls[0].url).toBe('http://localhost:3000/admin/revoke-free-period');
+    expect(fetchCalls[0].method).toBe('POST');
+    expect(JSON.parse(fetchCalls[0].body)).toEqual({ userId: 'u-1' });
+  });
+
+  it('revokeFreePeriodAll() should POST a bulk revoke request', async () => {
+    await client.revokeFreePeriodAll();
+    expect(fetchCalls[0].url).toBe('http://localhost:3000/admin/revoke-free-period');
+    expect(fetchCalls[0].method).toBe('POST');
+    expect(JSON.parse(fetchCalls[0].body)).toEqual({ scope: 'all' });
+  });
+
   it('grantAdmin() should POST /admin/grant-admin', async () => {
     await client.grantAdmin('u-1');
     expect(fetchCalls[0].url).toBe('http://localhost:3000/admin/grant-admin');

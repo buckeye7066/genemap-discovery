@@ -29,8 +29,8 @@ import { useEducationLevel, EDUCATION_LEVELS } from "./lib/EducationLevelContext
 import { useAuth } from "./lib/AuthContext";
 import { isAdminUser, isSuperAdmin } from "./lib/roles";
 
-// Navigation is organized around user *intent* (Learn → Discover → Research →
-// My Data → Account) rather than by internal feature area. Each group maps to a
+// Navigation is organized around user *intent* (Learn -> Discover -> Research ->
+// My Data -> Account) rather than by internal feature area. Each group maps to a
 // question a user is trying to answer, which keeps the sidebar scannable for
 // first-time and non-technical users. The Admin group is role-gated (see below)
 // and never rendered for ordinary accounts.
@@ -74,7 +74,7 @@ const accountNav = [
 ];
 
 // Admin-only. `superAdminOnly` items are additionally hidden from plain admins.
-// NOTE: hiding nav is UX sugar only — the backend (requireRole / requireSuperAdmin)
+// NOTE: hiding nav is UX sugar only; the backend (requireRole / requireSuperAdmin)
 // is the real authorization boundary. See services/api/src/routes/admin.js.
 const adminNav = [
   { title: "License Manager", url: createPageUrl("InstitutionalAdmin"), icon: Building2, badge: "Teams" },
@@ -85,7 +85,7 @@ const adminNav = [
   { title: "Newsletter Subs", url: createPageUrl("AxiomNewsletter"), icon: Mail },
   { title: "Function Tester", url: createPageUrl("AdminFunctionTester"), icon: Server },
   { title: "Function Reviewer", url: createPageUrl("FunctionReviewer"), icon: Code2 },
-  { title: "Admin Setup", url: createPageUrl("SuperAdminSetup"), icon: Crown, superAdminOnly: true },
+  { title: "Access Grants", url: createPageUrl("SuperAdminSetup"), icon: Crown },
 ];
 
 const ACCENT_COLORS = {

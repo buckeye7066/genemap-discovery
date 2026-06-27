@@ -7,28 +7,101 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { isAdminUser, isSuperAdmin as isSuperAdminUser } from "../lib/roles";
 import { Shield, Crown, CheckCircle, AlertCircle, Loader2, LogOut, Gift, Users, XCircle } from "lucide-react";
 
 /**
  * Super-admin bootstrap page.
  *
  * The previous implementation routed everything through `apiClient.updateProfile`
- * with `_adminAction` flags — there is no such backend contract. The API
- * exposes `/admin/grant-admin` and `/admin/grant-premium` (gated on
- * super_admin / admin) and `/admin/search-users` for finding the target by
- * email. Use those.
+ * with `_adminAction` flags; there is no such backend contract. The API
+ * exposes `/admin/grant-admin`, `/admin/grant-premium`, and
+ * `/admin/grant-free-period` (gated by role), plus `/admin/search-users` for
+ * finding the target by email. Use those.
  */
+const PERIOD_OPTIONS = [
+  {
+    value: "week",
+    label: "7 days",
+    description: "Grant one week of premium access. Existing complimentary time is extended, never shortened.",
+  },
+  {
+    value: "month",
+    label: "30 days",
+    description: "Grant thirty days of premium access. Paid Stripe subscriptions are not changed.",
+  },
+];
+
+const TOGGLE_TONES = {
+  emerald: {
+    shell: "border-emerald-200 bg-emerald-50",
+    active: "bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm",
+    inactive: "text-emerald-900 hover:bg-white",
+  },
+  amber: {
+    shell: "border-amber-200 bg-amber-50",
+    active: "bg-amber-600 hover:bg-amber-700 text-white shadow-sm",
+    inactive: "text-amber-900 hover:bg-white",
+  },
+};
+
+function periodLabel(period) {
+  return period === "month" ? "30 days" : "7 days";
+}
+
+function FreePeriodToggle({ value, onChange, tone = "emerald", disabled = false, label = "Free access duration" }) {
+  const colors = TOGGLE_TONES[tone] || TOGGLE_TONES.emerald;
+
+  return (
+    <TooltipProvider delayDuration={150}>
+      <div
+        role="group"
+        aria-label={label}
+        className={`grid grid-cols-2 gap-2 rounded-lg border p-1 ${colors.shell}`}
+      >
+        {PERIOD_OPTIONS.map((option) => {
+          const selected = value === option.value;
+          return (
+            <Tooltip key={option.value}>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  variant={selected ? "default" : "ghost"}
+                  aria-pressed={selected}
+                  aria-label={`Select ${option.label} free access`}
+                  disabled={disabled}
+                  onClick={() => onChange(option.value)}
+                  className={`h-11 text-sm font-semibold ${selected ? colors.active : colors.inactive}`}
+                >
+                  {option.label}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="max-w-xs text-center">
+                {option.description}
+              </TooltipContent>
+            </Tooltip>
+          );
+        })}
+      </div>
+    </TooltipProvider>
+  );
+}
+
 export default function SuperAdminSetupPage() {
   const navigate = useNavigate();
   const { user: currentUser, checkAuth } = useAuth();
   const [searchEmail, setSearchEmail] = useState("");
   const [freeEmail, setFreeEmail] = useState("");
+  const [freePeriod, setFreePeriod] = useState("week");
+  const [bulkFreePeriod, setBulkFreePeriod] = useState("week");
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
 
-  const isSuperAdmin = currentUser?.role === 'super_admin';
+  const isAdmin = isAdminUser(currentUser);
+  const isSuperAdmin = isSuperAdminUser(currentUser);
 
   useEffect(() => {
     if (currentUser === undefined) return;
@@ -36,12 +109,12 @@ export default function SuperAdminSetupPage() {
       navigate(createPageUrl("Home"));
       return;
     }
-    if (!isSuperAdmin) {
+    if (!isAdmin) {
       navigate(createPageUrl("Home"));
       return;
     }
     setIsLoading(false);
-  }, [currentUser, isSuperAdmin, navigate]);
+  }, [currentUser, isAdmin, navigate]);
 
   const handleLogout = async () => {
     try {
@@ -116,7 +189,8 @@ export default function SuperAdminSetupPage() {
       return;
     }
 
-    if (!confirm(`Grant a free ${period} to ${email}?`)) return;
+    const label = periodLabel(period);
+    if (!confirm(`Grant ${label} of free premium access to ${email}?`)) return;
 
     setIsSaving(true);
     setError(null);
@@ -136,11 +210,11 @@ export default function SuperAdminSetupPage() {
       const until = res?.currentPeriodEnd
         ? new Date(res.currentPeriodEnd).toLocaleDateString()
         : "";
-      setSuccess(`Granted a free ${period} to ${target.email}${until ? ` — premium until ${until}` : ""}.`);
+      setSuccess(`Granted ${label} of free premium access to ${target.email}${until ? `; premium until ${until}` : ""}.`);
       setFreeEmail("");
     } catch (err) {
       console.error("Error granting free period:", err);
-      setError(err?.message || `Failed to grant free ${period}. Please try again.`);
+      setError(err?.message || `Failed to grant ${label} of free access. Please try again.`);
     } finally {
       setIsSaving(false);
     }
@@ -185,7 +259,8 @@ export default function SuperAdminSetupPage() {
   };
 
   const handleGrantFreePeriodAll = async (period) => {
-    if (!confirm(`Give EVERY user a free ${period}? This affects all non-banned accounts.`)) return;
+    const label = periodLabel(period);
+    if (!confirm(`Give EVERY non-banned user ${label} of free premium access?`)) return;
 
     setIsSaving(true);
     setError(null);
@@ -194,12 +269,12 @@ export default function SuperAdminSetupPage() {
     try {
       const res = await apiClient.grantFreePeriodAll(period);
       setSuccess(
-        `Granted a free ${period} to ${res.total} user${res.total === 1 ? "" : "s"} ` +
+        `Granted ${label} of free premium access to ${res.total} user${res.total === 1 ? "" : "s"} ` +
           `(${res.created} new, ${res.extended} extended).`
       );
     } catch (err) {
       console.error("Error granting free period to all:", err);
-      setError(err?.message || `Failed to grant a free ${period} to all users.`);
+      setError(err?.message || `Failed to grant ${label} of free access to all users.`);
     } finally {
       setIsSaving(false);
     }
@@ -252,10 +327,10 @@ export default function SuperAdminSetupPage() {
             </div>
           </div>
           <h1 className="text-3xl md:text-4xl font-bold text-slate-900 mb-4">
-            Administrator Setup
+            Access Grants
           </h1>
           <p className="text-lg text-slate-600">
-            Grant administrator privileges to manage users and system settings
+            Grant complimentary access windows and manage privileged account access
           </p>
         </div>
 
@@ -273,43 +348,45 @@ export default function SuperAdminSetupPage() {
           </Alert>
         )}
 
-        <Card className="shadow-lg mb-6">
-          <CardHeader>
-            <CardTitle>Grant Administrator Access</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
-                Email Address
-              </label>
-              <Input
-                type="email"
-                value={searchEmail}
-                onChange={(e) => setSearchEmail(e.target.value)}
-                placeholder="Enter user email address..."
-                onKeyDown={(e) => e.key === 'Enter' && handleGrantSuperAdmin()}
-              />
-            </div>
+        {isSuperAdmin && (
+          <Card className="shadow-lg mb-6">
+            <CardHeader>
+              <CardTitle>Grant Administrator Access</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Email Address
+                </label>
+                <Input
+                  type="email"
+                  value={searchEmail}
+                  onChange={(e) => setSearchEmail(e.target.value)}
+                  placeholder="Enter user email address..."
+                  onKeyDown={(e) => e.key === 'Enter' && handleGrantSuperAdmin()}
+                />
+              </div>
 
-            <Button
-              onClick={handleGrantSuperAdmin}
-              disabled={isSaving || !searchEmail.trim()}
-              className="w-full bg-purple-600 hover:bg-purple-700"
-            >
-              {isSaving ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Granting Access...
-                </>
-              ) : (
-                <>
-                  <Crown className="w-4 h-4 mr-2" />
-                  Grant Administrator Privileges
-                </>
-              )}
-            </Button>
-          </CardContent>
-        </Card>
+              <Button
+                onClick={handleGrantSuperAdmin}
+                disabled={isSaving || !searchEmail.trim()}
+                className="w-full bg-purple-600 hover:bg-purple-700"
+              >
+                {isSaving ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Granting Access...
+                  </>
+                ) : (
+                  <>
+                    <Crown className="w-4 h-4 mr-2" />
+                    Grant Administrator Privileges
+                  </>
+                )}
+              </Button>
+            </CardContent>
+          </Card>
+        )}
 
         <Card className="shadow-lg mb-6 border-2 border-purple-200">
           <CardHeader>
@@ -351,8 +428,8 @@ export default function SuperAdminSetupPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm text-slate-600">
-              Comp a user a free week or month of premium. The window expires
-              automatically — repeated grants stack and never shorten existing access.
+              Choose 7 days or 30 days, enter the user's email, then grant a self-expiring
+              premium window. Repeated grants extend access and never shorten it.
             </p>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">
@@ -365,32 +442,24 @@ export default function SuperAdminSetupPage() {
                 placeholder="Enter user email address..."
               />
             </div>
-            <div className="flex gap-3">
-              <Button
-                onClick={() => handleGrantFreePeriod("week")}
-                disabled={isSaving || !freeEmail.trim()}
-                className="flex-1 bg-emerald-600 hover:bg-emerald-700"
-              >
-                {isSaving ? (
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                ) : (
-                  <Gift className="w-4 h-4 mr-2" />
-                )}
-                Free Week
-              </Button>
-              <Button
-                onClick={() => handleGrantFreePeriod("month")}
-                disabled={isSaving || !freeEmail.trim()}
-                className="flex-1 bg-emerald-600 hover:bg-emerald-700"
-              >
-                {isSaving ? (
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                ) : (
-                  <Gift className="w-4 h-4 mr-2" />
-                )}
-                Free Month
-              </Button>
-            </div>
+            <FreePeriodToggle
+              value={freePeriod}
+              onChange={setFreePeriod}
+              disabled={isSaving}
+              label="Single-user free access duration"
+            />
+            <Button
+              onClick={() => handleGrantFreePeriod(freePeriod)}
+              disabled={isSaving || !freeEmail.trim()}
+              className="w-full min-h-11 bg-emerald-600 hover:bg-emerald-700"
+            >
+              {isSaving ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <Gift className="w-4 h-4 mr-2" />
+              )}
+              Grant {periodLabel(freePeriod)} free
+            </Button>
             <Button
               onClick={handleRevokeFreePeriod}
               disabled={isSaving || !freeEmail.trim()}
@@ -412,35 +481,28 @@ export default function SuperAdminSetupPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm text-slate-600">
-              Comp <span className="font-medium">every non-banned user</span> at once — useful for
-              a launch promo or an apology credit. Paid subscriptions are never affected.
+              Grant the selected complimentary window to <span className="font-medium">every non-banned user</span>.
+              Paid subscriptions are never affected.
             </p>
-            <div className="flex gap-3">
-              <Button
-                onClick={() => handleGrantFreePeriodAll("week")}
-                disabled={isSaving}
-                className="flex-1 bg-amber-600 hover:bg-amber-700"
-              >
-                {isSaving ? (
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                ) : (
-                  <Gift className="w-4 h-4 mr-2" />
-                )}
-                Give All a Week
-              </Button>
-              <Button
-                onClick={() => handleGrantFreePeriodAll("month")}
-                disabled={isSaving}
-                className="flex-1 bg-amber-600 hover:bg-amber-700"
-              >
-                {isSaving ? (
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                ) : (
-                  <Gift className="w-4 h-4 mr-2" />
-                )}
-                Give All a Month
-              </Button>
-            </div>
+            <FreePeriodToggle
+              value={bulkFreePeriod}
+              onChange={setBulkFreePeriod}
+              tone="amber"
+              disabled={isSaving}
+              label="All-user free access duration"
+            />
+            <Button
+              onClick={() => handleGrantFreePeriodAll(bulkFreePeriod)}
+              disabled={isSaving}
+              className="w-full min-h-11 bg-amber-600 hover:bg-amber-700"
+            >
+              {isSaving ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <Gift className="w-4 h-4 mr-2" />
+              )}
+              Give all {periodLabel(bulkFreePeriod)}
+            </Button>
             <Button
               onClick={handleRevokeFreePeriodAll}
               disabled={isSaving}
@@ -462,20 +524,20 @@ export default function SuperAdminSetupPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-3">
                 <span className="text-sm text-slate-600">Email:</span>
-                <span className="font-medium text-slate-900">{currentUser?.email}</span>
+                <span className="font-medium text-slate-900 text-right break-all">{currentUser?.email}</span>
               </div>
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-3">
                 <span className="text-sm text-slate-600">Role:</span>
                 <span className="font-medium text-slate-900">{currentUser?.role || "user"}</span>
               </div>
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-3">
                 <span className="text-sm text-slate-600">Administrator:</span>
-                {isSuperAdmin ? (
+                {isAdmin ? (
                   <span className="flex items-center gap-1 text-green-600 font-medium">
                     <CheckCircle className="w-4 h-4" />
-                    Yes
+                    {isSuperAdmin ? "Super admin" : "Admin"}
                   </span>
                 ) : (
                   <span className="text-slate-400">No</span>
@@ -486,12 +548,12 @@ export default function SuperAdminSetupPage() {
         </Card>
 
         <div className="mt-6 p-4 bg-amber-50 border border-amber-200 rounded-lg">
-          <h3 className="font-semibold text-amber-900 mb-2">Administrator Privileges</h3>
+          <h3 className="font-semibold text-amber-900 mb-2">Access grant rules</h3>
           <ul className="text-sm text-amber-800 space-y-1">
-            <li>- Full access to ban/unban any user</li>
-            <li>- View all banned users and reasons</li>
-            <li>- Access newsletter subscriber list</li>
-            <li>- Complete control over platform moderation</li>
+            <li>- Admins can grant 7-day or 30-day complimentary premium windows</li>
+            <li>- Free windows expire automatically and can be ended early</li>
+            <li>- Paid Stripe subscriptions are not changed by these controls</li>
+            <li>- Granting administrator privileges remains limited to super admins</li>
           </ul>
         </div>
       </div>
