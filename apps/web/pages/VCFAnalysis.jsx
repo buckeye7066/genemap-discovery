@@ -30,11 +30,39 @@ import {
 } from "lucide-react";
 import VCFParser from "../components/medical/VCFParser";
 
+const MAX_VCF_TEXT_BYTES = 1_000_000;
+const MAX_COMPRESSED_VCF_BYTES = 5_000_000;
+
+async function readVcfFile(file) {
+  if (!file) throw new Error("Select a VCF file first.");
+
+  if (file.name.endsWith(".vcf.gz")) {
+    if (file.size > MAX_COMPRESSED_VCF_BYTES) {
+      throw new Error("Compressed VCF files must be 5 MB or smaller for browser upload.");
+    }
+    if (typeof DecompressionStream === "undefined") {
+      throw new Error("This browser cannot read .vcf.gz files. Decompress the file locally and upload .vcf.");
+    }
+    const stream = file.stream().pipeThrough(new DecompressionStream("gzip"));
+    const text = await new Response(stream).text();
+    if (new Blob([text]).size > MAX_VCF_TEXT_BYTES) {
+      throw new Error("VCF content must be 1 MB or smaller after decompression.");
+    }
+    return text;
+  }
+
+  if (file.size > MAX_VCF_TEXT_BYTES) {
+    throw new Error("VCF files must be 1 MB or smaller for browser upload.");
+  }
+  return file.text();
+}
+
 export default function VCFAnalysisPage() {
   const { user } = useAuth();
   const [file, setFile] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadedFileUrl, setUploadedFileUrl] = useState(null);
+  const [uploadedVcfText, setUploadedVcfText] = useState(null);
   const [variants, setVariants] = useState([]);
   const [enrichedVariants, setEnrichedVariants] = useState([]);
   const [relatedGenes, setRelatedGenes] = useState([]);
@@ -48,7 +76,17 @@ export default function VCFAnalysisPage() {
         alert("Please select a valid VCF file (.vcf or .vcf.gz)");
         return;
       }
+      if (selectedFile.name.endsWith('.vcf') && selectedFile.size > MAX_VCF_TEXT_BYTES) {
+        alert("VCF files must be 1 MB or smaller. Use a smaller fixture or subset for this browser workflow.");
+        return;
+      }
+      if (selectedFile.name.endsWith('.vcf.gz') && selectedFile.size > MAX_COMPRESSED_VCF_BYTES) {
+        alert("Compressed VCF files must be 5 MB or smaller. Use a smaller fixture or subset for this browser workflow.");
+        return;
+      }
       setFile(selectedFile);
+      setUploadedFileUrl(null);
+      setUploadedVcfText(null);
     }
   };
 
@@ -57,12 +95,12 @@ export default function VCFAnalysisPage() {
 
     setIsUploading(true);
     try {
-      // Create a local blob URL for client-side VCF parsing
-      const fileUrl = URL.createObjectURL(file);
-      setUploadedFileUrl(fileUrl);
+      const text = await readVcfFile(file);
+      setUploadedVcfText(text);
+      setUploadedFileUrl(file.name);
     } catch (err) {
       log.error("Upload error:", err);
-      alert("Failed to upload file. Please try again.");
+      alert(err.message || "Failed to read file. Please try again.");
     } finally {
       setIsUploading(false);
     }
@@ -106,12 +144,13 @@ export default function VCFAnalysisPage() {
         const batchResults = await Promise.all(
           batch.map(async (symbol) => {
             try {
-              const response = await apiClient.invokeLLM(
-                `Provide a brief 2-3 sentence summary for gene ${symbol} that was found in a VCF analysis. Include its function, associated diseases, and clinical relevance.`,
-                { add_context_from_internet: true }
-              );
-              const summary = response?.result || `Gene ${symbol} identified in VCF analysis.`;
-              return { symbol, summary };
+              const geneInfo = await apiClient.lookupGene(symbol);
+              const location = [geneInfo.seq_region_name, geneInfo.start, geneInfo.end]
+                .filter(Boolean)
+                .join(':');
+              const summary = geneInfo.description ||
+                `${geneInfo.display_name || symbol} identified in the parsed VCF${location ? ` at ${location}` : ''}.`;
+              return { symbol, summary, source: 'Ensembl REST' };
             } catch (err) {
               return { symbol, summary: `Gene ${symbol} identified in VCF analysis.` };
             }
@@ -168,7 +207,7 @@ export default function VCFAnalysisPage() {
             VCF Analysis & Variant Enrichment
           </h1>
           <p className="text-lg text-slate-600 max-w-3xl mx-auto">
-            Upload your VCF file for comprehensive variant analysis with dbSNP, gnomAD, and gene integration
+            Upload your VCF file for deterministic parsing and source-grounded public database annotations
           </p>
         </div>
 
@@ -176,8 +215,8 @@ export default function VCFAnalysisPage() {
         <Alert className="mb-6 bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200">
           <Info className="h-4 w-4 text-blue-600" />
           <AlertDescription className="text-blue-900">
-            <strong>Comprehensive Analysis:</strong> We'll parse your VCF, enrich variants with population databases, 
-            predict clinical significance, and link to gene data from your searches!
+            <strong>Research and education only:</strong> VCF parsing is deterministic, raw VCF content is not sent to cloud AI by default,
+            and clinically significant findings should be confirmed with a qualified professional or certified lab.
           </AlertDescription>
         </Alert>
 
@@ -245,12 +284,12 @@ export default function VCFAnalysisPage() {
                   <div className="bg-cyan-50 p-4 rounded-lg border border-cyan-200">
                     <h4 className="font-medium text-cyan-900 mb-2 text-sm">What happens next:</h4>
                     <ul className="text-sm text-cyan-800 space-y-1">
-                      <li>✓ Parse VCF and extract all variants</li>
-                      <li>✓ Enrich with dbSNP rsIDs and annotations</li>
-                      <li>✓ Add gnomAD population frequencies</li>
-                      <li>✓ Predict pathogenicity (SIFT, PolyPhen, CADD)</li>
-                      <li>✓ Link variants to gene information</li>
-                      <li>✓ Generate clinical recommendations</li>
+                      <li>Parse VCF and extract bounded variant records</li>
+                      <li>Query MyVariant.info when rsIDs are available</li>
+                      <li>Search ClinVar and return source metadata</li>
+                      <li>Link variants to Ensembl gene information when present</li>
+                      <li>Return not found instead of inferred clinical claims</li>
+                      <li>Flag that clinical confirmation is required</li>
                     </ul>
                   </div>
                 </CardContent>
@@ -261,6 +300,7 @@ export default function VCFAnalysisPage() {
             {uploadedFileUrl && (
               <VCFParser
                 fileUrl={uploadedFileUrl}
+                vcfText={uploadedVcfText}
                 onVariantsParsed={handleVariantsParsed}
                 onEnrichmentComplete={handleEnrichmentComplete}
               />
@@ -445,11 +485,11 @@ export default function VCFAnalysisPage() {
               <CardContent className="space-y-2 text-sm">
                 <div className="flex items-center gap-2">
                   <Database className="w-4 h-4 text-purple-600" />
-                  <span className="text-slate-700">dbSNP - Variant validation</span>
+                  <span className="text-slate-700">MyVariant.info - Variant annotations</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Database className="w-4 h-4 text-purple-600" />
-                  <span className="text-slate-700">gnomAD - Population frequencies</span>
+                  <span className="text-slate-700">Ensembl - Gene lookup</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Database className="w-4 h-4 text-purple-600" />
@@ -457,7 +497,7 @@ export default function VCFAnalysisPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <Database className="w-4 h-4 text-purple-600" />
-                  <span className="text-slate-700">CADD - Pathogenicity scores</span>
+                  <span className="text-slate-700">No cloud AI for raw VCF by default</span>
                 </div>
               </CardContent>
             </Card>

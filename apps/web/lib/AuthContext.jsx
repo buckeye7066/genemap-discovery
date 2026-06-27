@@ -18,10 +18,15 @@ export const AuthProvider = ({ children }) => {
       setUser(userData);
       setIsAuthenticated(true);
     } catch (error) {
-      console.error('Auth check failed:', error);
+      setUser(null);
       setIsAuthenticated(false);
       if (error?.status === 403 && error?.code === 'user_not_registered') {
         setAuthError({ type: 'user_not_registered', message: error.message });
+      } else if (error?.status === 401) {
+        setAuthError({ type: 'auth_required', message: error.message || 'Authentication required' });
+      } else {
+        console.error('Auth check failed:', error);
+        setAuthError({ type: 'auth_error', message: error?.message || 'Unable to check authentication' });
       }
     } finally {
       setIsLoadingAuth(false);
@@ -53,9 +58,13 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const logout = useCallback(async () => {
-    await apiClient.logout();
-    setUser(null);
-    setIsAuthenticated(false);
+    try {
+      await apiClient.logout();
+    } finally {
+      setUser(null);
+      setIsAuthenticated(false);
+      setAuthError({ type: 'auth_required', message: 'Logged out' });
+    }
   }, []);
 
   const value = useMemo(() => ({

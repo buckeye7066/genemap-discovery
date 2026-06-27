@@ -7,7 +7,6 @@ let prisma;
 const USER_A = { userId: 'user-a', email: 'a@example.com', role: 'user' };
 const USER_B = { userId: 'user-b', email: 'b@example.com', role: 'user' };
 const cookieA = authCookie(USER_A);
-const cookieB = authCookie(USER_B);
 
 /**
  * Seed a granted consent record so the medical-data write path passes

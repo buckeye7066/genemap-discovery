@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "pnpm -r --parallel --filter ./apps/* dev",
+    "dev": "pnpm --parallel --filter @genemap/api --filter @genemap/web dev",
     "dev:api": "pnpm --filter @genemap/api dev",
     "dev:web": "pnpm --filter @genemap/web dev",
     "build": "pnpm -r build",
@@ -16,6 +16,7 @@
     "build:desktop:mac": "pnpm build:web && pnpm --filter @genemap/desktop build:mac",
     "test": "pnpm -r test",
     "test:api": "pnpm --filter @genemap/api test",
+    "test:api:integration": "pnpm --filter @genemap/api test:integration",
     "test:shared": "pnpm --filter @genemap/shared test",
     "lint": "pnpm --filter @genemap/web lint && pnpm --filter @genemap/api lint",
     "lint:api": "pnpm --filter @genemap/api lint",

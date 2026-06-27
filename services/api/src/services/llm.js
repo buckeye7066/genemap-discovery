@@ -3,6 +3,15 @@ import * as anthropicService from './anthropic.js';
 
 const TEXT_PROVIDER = process.env.LLM_TEXT_PROVIDER || 'openai';
 const DEFAULT_TIMEOUT_MS = Number(process.env.LLM_TIMEOUT_MS || 30_000);
+const RETRYABLE_STATUS = new Set([408, 429, 500, 502, 503, 504]);
+const PROVIDER_HOSTS = {
+  anthropic: 'api.anthropic.com',
+  claude: 'api.anthropic.com',
+  openai: 'api.openai.com',
+  gpt: 'api.openai.com',
+};
+const DEFAULT_ATTEMPTS = 3;
+const DEFAULT_RETRY_BASE_MS = Number(process.env.LLM_RETRY_BASE_MS || 150);
 
 /**
  * Robustly extract a JSON value from a raw LLM completion.
@@ -66,12 +75,67 @@ function getTextProvider(providerOverride) {
   }
 }
 
+function providerHost(provider) {
+  return PROVIDER_HOSTS[provider || TEXT_PROVIDER] || 'llm-provider';
+}
+
+function isRetryableProviderError(error) {
+  if (String(error?.message || '').includes('_API_KEY')) return false;
+  if (typeof error?.status === 'number') {
+    return RETRYABLE_STATUS.has(error.status);
+  }
+  if (typeof error?.statusCode === 'number') {
+    return RETRYABLE_STATUS.has(error.statusCode);
+  }
+  return true;
+}
+
+function sanitizeProviderError(error, host, attempts) {
+  const status = error?.status ?? error?.statusCode;
+  const statusText = typeof status === 'number' ? ` HTTP ${status}` : '';
+  return new Error(`LLM provider ${host} failed${statusText} after ${attempts} attempt(s)`);
+}
+
+async function sleep(ms) {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export async function withProviderRetry(operation, {
+  provider,
+  attempts = DEFAULT_ATTEMPTS,
+  baseDelayMs = DEFAULT_RETRY_BASE_MS,
+} = {}) {
+  const host = providerHost(provider);
+  let lastError;
+
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    if (attempt > 0) {
+      const backoff = baseDelayMs * 2 ** (attempt - 1) + Math.floor(Math.random() * baseDelayMs);
+      await sleep(backoff);
+    }
+
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error;
+      if (!isRetryableProviderError(error) || attempt === attempts - 1) {
+        throw sanitizeProviderError(error, host, attempt + 1);
+      }
+    }
+  }
+
+  throw sanitizeProviderError(lastError, host, attempts);
+}
+
 export async function generateExplanation(
   prompt,
   { provider, maxTokens = 2000, temperature = 0.7, timeoutMs = DEFAULT_TIMEOUT_MS } = {}
 ) {
   const service = getTextProvider(provider);
-  return service.generateText(prompt, { maxTokens, temperature, timeoutMs });
+  return withProviderRetry(
+    () => service.generateText(prompt, { maxTokens, temperature, timeoutMs }),
+    { provider }
+  );
 }
 
 export async function generateChatResponse(
@@ -79,19 +143,28 @@ export async function generateChatResponse(
   { provider, maxTokens = 2000, temperature = 0.7, timeoutMs = DEFAULT_TIMEOUT_MS } = {}
 ) {
   const service = getTextProvider(provider);
-  return service.generateChatResponse(messages, { maxTokens, temperature, timeoutMs });
+  return withProviderRetry(
+    () => service.generateChatResponse(messages, { maxTokens, temperature, timeoutMs }),
+    { provider }
+  );
 }
 
 export async function generateImage(
   prompt,
   { size = '1024x1024', quality = 'standard', timeoutMs = DEFAULT_TIMEOUT_MS } = {}
 ) {
-  return openaiService.generateImage(prompt, { size, quality, timeoutMs });
+  return withProviderRetry(
+    () => openaiService.generateImage(prompt, { size, quality, timeoutMs }),
+    { provider: 'openai' }
+  );
 }
 
 export async function generateQuiz(prompt, { provider, maxTokens = 3000, timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
   const service = getTextProvider(provider);
-  const raw = await service.generateText(prompt, { maxTokens, temperature: 0.5, timeoutMs });
+  const raw = await withProviderRetry(
+    () => service.generateText(prompt, { maxTokens, temperature: 0.5, timeoutMs }),
+    { provider }
+  );
 
   // A quiz must be a non-empty array of question objects. If the model returns
   // malformed JSON, fall back to the raw text so the caller can surface a

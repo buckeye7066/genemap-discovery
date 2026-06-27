@@ -218,7 +218,6 @@ export default async function authRoutes(fastify) {
     });
     let matched = null;
     for (const s of sessions) {
-      // eslint-disable-next-line no-await-in-loop
       if (await verifyRefreshTokenHash(refreshToken, s.refreshTokenHash)) {
         matched = s;
         break;

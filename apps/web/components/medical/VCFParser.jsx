@@ -12,12 +12,10 @@ import {
   AlertCircle,
   Database,
   TrendingUp,
-  Info,
-  Download,
-  Sparkles
+  Info
 } from "lucide-react";
 
-export default function VCFParser({ fileUrl, onVariantsParsed, onEnrichmentComplete }) {
+export default function VCFParser({ fileUrl, vcfText, onVariantsParsed, onEnrichmentComplete }) {
   const [isParsing, setIsParsing] = useState(false);
   const [isEnriching, setIsEnriching] = useState(false);
   const [parseSuccess, setParseSuccess] = useState(false);
@@ -35,82 +33,18 @@ export default function VCFParser({ fileUrl, onVariantsParsed, onEnrichmentCompl
     setParseProgress(10);
 
     try {
-      // Fetch VCF content
-      const response = await fetch(fileUrl);
-      const vcfText = await response.text();
+      let text = vcfText;
+      if (!text && fileUrl) {
+        const response = await fetch(fileUrl);
+        text = await response.text();
+      }
+      if (!text) {
+        throw new Error("No VCF content is available to parse");
+      }
       setParseProgress(30);
 
-      // Parse with LLM for structured extraction
-      const prompt = `Parse this VCF (Variant Call Format) file and extract ALL variants with comprehensive details.
-
-VCF Content (first 50KB):
-${vcfText.substring(0, 50000)}
-
-**Parse the following for EACH variant:**
-1. **Basic Info:**
-   - Chromosome (CHROM)
-   - Position (POS)
-   - rsID (ID) - if available, otherwise "."
-   - Reference allele (REF)
-   - Alternate allele (ALT)
-   
-2. **Quality Metrics:**
-   - Quality score (QUAL)
-   - Filter status (FILTER)
-   - Depth (DP from INFO or FORMAT)
-   
-3. **Variant Type:**
-   - Determine type: SNV, Insertion, Deletion, MNV, Complex
-   - Based on REF and ALT lengths
-   
-4. **Genomic Context:**
-   - Gene symbol (if in INFO field or can be inferred)
-   - Transcript impact (if available)
-   - Coding/non-coding
-   
-5. **Clinical Significance (if in INFO):**
-   - CLNSIG, CLNDN, CLNREVSTAT fields
-   - Any pathogenicity predictions
-
-**Return JSON array with ALL variants found. Include:**
-- At least the top 100 most significant variants (by QUAL or clinical significance)
-- All variants with clinical annotations
-- Representative samples of different variant types
-
-**JSON Schema:**
-{
-  "variants": [
-    {
-      "chromosome": "chr1",
-      "position": 12345,
-      "rsid": "rs12345",
-      "ref": "A",
-      "alt": "G",
-      "quality": 100,
-      "filter": "PASS",
-      "depth": 50,
-      "variant_type": "SNV",
-      "gene": "BRCA1",
-      "clinical_significance": "Pathogenic",
-      "zygosity": "heterozygous"
-    }
-  ],
-  "summary": {
-    "total_variants": 1500,
-    "parsed_variants": 100,
-    "variant_types": {
-      "SNV": 80,
-      "Insertion": 10,
-      "Deletion": 8,
-      "Other": 2
-    }
-  }
-}`;
-
       setParseProgress(50);
-
-      const { result: raw } = await apiClient.invokeLLM(prompt);
-      const result = typeof raw === 'string' ? JSON.parse(raw.match(/\{[\s\S]*\}/)?.[0] || '{"variants":[],"summary":{}}') : raw;
+      const result = await apiClient.parseVcf(text, 1000);
 
       setParseProgress(100);
       setVariants(result.variants || []);
@@ -140,68 +74,18 @@ ${vcfText.substring(0, 50000)}
     setEnrichProgress(10);
 
     try {
-      // Enrich variants with dbSNP and gnomAD data
-      const variantsToEnrich = variants.slice(0, 50); // Top 50 for detailed enrichment
-      
-      const prompt = `Enrich these genetic variants with data from dbSNP and gnomAD databases.
-
-**Variants to Enrich:**
-${JSON.stringify(variantsToEnrich, null, 2)}
-
-**For EACH variant, fetch from dbSNP and gnomAD:**
-
-1. **dbSNP Data:**
-   - Validated rsID
-   - Global MAF (Minor Allele Frequency)
-   - Clinical significance
-   - Molecular consequence
-   - Gene annotation
-   - Protein change (if coding)
-   
-2. **gnomAD Data:**
-   - Population allele frequencies:
-     * Overall (gnomAD v3.1.2)
-     * African/African American
-     * Latino/Admixed American
-     * Ashkenazi Jewish
-     * East Asian
-     * European (non-Finnish)
-     * South Asian
-   - Homozygote count
-   - Filtering status
-   
-3. **Functional Predictions:**
-   - SIFT score and prediction
-   - PolyPhen-2 score and prediction
-   - CADD score (if available)
-   - REVEL score (if available)
-   
-4. **Clinical Annotations:**
-   - ClinVar classification
-   - Disease associations
-   - Review status
-   - Submitter information
-   
-5. **Interpretation:**
-   - Likely pathogenicity (Pathogenic, Likely Pathogenic, VUS, Likely Benign, Benign)
-   - Evidence level
-   - Recommendation for clinical action
-
-**Use your knowledge of these databases to provide comprehensive annotations.**
-
-Return enriched variant data with all available information.`;
-
+      const variantsToEnrich = variants.slice(0, 50);
       setEnrichProgress(40);
 
-      const { result: enrichRaw } = await apiClient.invokeLLM(prompt);
-      const enriched = typeof enrichRaw === 'string' ? JSON.parse(enrichRaw.match(/\{[\s\S]*\}/)?.[0] || '{"enriched_variants":[]}') : enrichRaw;
+      const enriched = await apiClient.enrichVcfVariants(variantsToEnrich);
+      const enrichedList = enriched.enrichedVariants || enriched.enriched_variants || [];
 
       setEnrichProgress(100);
-      setEnrichedVariants(enriched.enriched_variants || []);
+      setEnrichedVariants(enrichedList);
       setEnrichmentSuccess(true);
 
       if (onEnrichmentComplete) {
-        onEnrichmentComplete(enriched.enriched_variants || []);
+        onEnrichmentComplete(enrichedList);
       }
 
     } catch (err) {
@@ -295,7 +179,7 @@ Return enriched variant data with all available information.`;
             <Alert className="bg-white border-green-200">
               <Info className="h-4 w-4 text-green-600" />
               <AlertDescription className="text-green-900 text-sm">
-                Next: Enrich these variants with dbSNP and gnomAD data for comprehensive annotations!
+                Next: enrich these variants with source-grounded public database annotations.
               </AlertDescription>
             </Alert>
           </CardContent>
@@ -309,7 +193,7 @@ Return enriched variant data with all available information.`;
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h4 className="font-semibold text-slate-900 mb-1">Step 2: Enrich with Database Annotations</h4>
-                <p className="text-sm text-slate-600">Add dbSNP, gnomAD, and clinical data</p>
+                <p className="text-sm text-slate-600">Add source-grounded public database annotations</p>
               </div>
               <Database className="w-8 h-8 text-purple-600" />
             </div>
@@ -322,7 +206,7 @@ Return enriched variant data with all available information.`;
                 </div>
                 <Progress value={enrichProgress} className="h-2" />
                 <p className="text-xs text-slate-500">
-                  Fetching data from dbSNP, gnomAD, ClinVar...
+                  Querying public genomic databases...
                 </p>
               </div>
             ) : (
@@ -330,18 +214,18 @@ Return enriched variant data with all available information.`;
                 <div className="bg-white p-3 rounded border border-purple-200 text-sm">
                   <p className="font-medium text-purple-900 mb-2">Will enrich with:</p>
                   <ul className="space-y-1 text-slate-700">
-                    <li>✓ dbSNP validation & annotations</li>
-                    <li>✓ gnomAD population frequencies</li>
-                    <li>✓ ClinVar clinical significance</li>
-                    <li>✓ Pathogenicity predictions (SIFT, PolyPhen, CADD)</li>
-                    <li>✓ Clinical recommendations</li>
+                    <li>MyVariant.info annotations when an rsID is available</li>
+                    <li>Ensembl gene lookup when the VCF includes gene symbols</li>
+                    <li>ClinVar search results with source metadata</li>
+                    <li>Not found responses instead of inferred claims</li>
+                    <li>Clinical confirmation required for significant findings</li>
                   </ul>
                 </div>
                 <Button
                   onClick={enrichVariants}
                   className="w-full bg-purple-600 hover:bg-purple-700"
                 >
-                  <Sparkles className="w-4 h-4 mr-2" />
+                  <Database className="w-4 h-4 mr-2" />
                   Enrich Variants (Top 50)
                 </Button>
               </div>
@@ -368,7 +252,13 @@ Return enriched variant data with all available information.`;
           <CardContent>
             <div className="space-y-3 max-h-96 overflow-y-auto">
               {enrichedVariants.map((ev, idx) => {
-                const v = ev.original_variant;
+                const v = ev.original_variant || ev.originalVariant || {};
+                const annotations = ev.annotations || {};
+                const clinVarResultId = annotations.clinVar?.search?.esearchresult?.idlist?.[0];
+                const clinVarSummary = clinVarResultId
+                  ? annotations.clinVar?.data?.result?.[clinVarResultId]
+                  : null;
+                const classification = clinVarSummary?.clinical_significance?.description || null;
                 return (
                   <Card key={idx} className="border border-slate-200 hover:shadow-md transition-shadow">
                     <CardContent className="pt-4">
@@ -383,45 +273,45 @@ Return enriched variant data with all available information.`;
                             </Badge>
                           )}
                         </div>
-                        {ev.interpretation?.classification && (
-                          <Badge className={getClinicalSignificanceColor(ev.interpretation.classification)}>
-                            {ev.interpretation.classification}
+                        {classification && (
+                          <Badge className={getClinicalSignificanceColor(classification)}>
+                            {classification}
                           </Badge>
                         )}
                       </div>
 
                       <div className="grid grid-cols-2 gap-2 text-xs mt-3">
-                        {ev.dbsnp?.validated_rsid && (
+                        {(annotations.myVariant?.data?.dbsnp?.rsid || v.rsid) && (
                           <div>
-                            <p className="text-slate-500">dbSNP</p>
-                            <p className="font-medium">{ev.dbsnp.validated_rsid}</p>
+                            <p className="text-slate-500">Variant ID</p>
+                            <p className="font-medium">{annotations.myVariant?.data?.dbsnp?.rsid || v.rsid}</p>
                           </div>
                         )}
-                        {ev.gnomad?.overall_af !== undefined && (
+                        {annotations.myVariant?.status && (
                           <div>
-                            <p className="text-slate-500">gnomAD AF</p>
-                            <p className="font-medium">{(ev.gnomad.overall_af * 100).toFixed(4)}%</p>
+                            <p className="text-slate-500">MyVariant.info</p>
+                            <p className="font-medium">{annotations.myVariant.status}</p>
                           </div>
                         )}
-                        {ev.predictions?.cadd && (
+                        {annotations.ensemblGene?.data?.display_name && (
                           <div>
-                            <p className="text-slate-500">CADD Score</p>
-                            <p className="font-medium">{ev.predictions.cadd}</p>
+                            <p className="text-slate-500">Ensembl Gene</p>
+                            <p className="font-medium">{annotations.ensemblGene.data.display_name}</p>
                           </div>
                         )}
-                        {ev.dbsnp?.molecular_consequence && (
+                        {annotations.clinVar?.status && (
                           <div>
-                            <p className="text-slate-500">Consequence</p>
-                            <p className="font-medium">{ev.dbsnp.molecular_consequence}</p>
+                            <p className="text-slate-500">ClinVar</p>
+                            <p className="font-medium">{annotations.clinVar.status}</p>
                           </div>
                         )}
                       </div>
 
-                      {ev.interpretation?.recommendation && (
+                      {ev.evidenceSummary && (
                         <Alert className="mt-3 bg-blue-50 border-blue-200">
                           <Info className="h-3 w-3 text-blue-600" />
                           <AlertDescription className="text-blue-900 text-xs">
-                            {ev.interpretation.recommendation}
+                            {ev.evidenceSummary} Confirm clinically significant variants with a qualified professional or certified lab.
                           </AlertDescription>
                         </Alert>
                       )}

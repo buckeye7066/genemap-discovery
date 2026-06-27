@@ -35,11 +35,13 @@ pnpm test
 
 ### Integration Tests
 ```bash
-pnpm test:integration
+pnpm test:api:integration
 ```
 - [ ] API integration tests passing
-- [ ] Database migrations tested
+- [ ] PostgreSQL-backed integration tests passing with `TEST_DB=postgres`
+- [ ] Database migrations tested with `pnpm db:migrate:deploy`
 - [ ] Authentication flows verified
+- [ ] Stripe webhook idempotency verified against real unique constraints
 
 ### E2E Tests
 ```bash
@@ -78,6 +80,12 @@ pnpm audit
 - [ ] All inputs validated with Zod
 - [ ] SQL injection prevented (Prisma ORM)
 - [ ] XSS prevention verified
+
+### Genomic Data & AI Safety
+- [ ] Raw VCF uploads use deterministic parsing by default
+- [ ] Raw VCF/genomic-looking content is rejected by LLM routes unless `ALLOW_GENOMIC_LLM_UPLOAD=true`
+- [ ] LLM genomic upload consent type/version and audit logging reviewed before enabling
+- [ ] VCF parse/enrich tests enforce payload size and batch limits
 
 ## Gate 4: Database
 
@@ -147,7 +155,8 @@ pnpm db:migrate
 ### Rollback Plan
 - [ ] Rollback procedure documented
 - [ ] Rollback tested on staging
-- [ ] Base44 fallback maintained for 30 days
+- [ ] Prior Railway/Vercel release rollback tested
+- [ ] Database backup restoration path tested
 - [ ] DNS TTL reduced for quick failover
 
 ### Data Migration
@@ -186,7 +195,7 @@ Execute 24 hours before cutover:
 
 ```bash
 # Run full test suite
-pnpm test && pnpm test:integration && pnpm test:e2e
+pnpm test && pnpm test:api:integration && pnpm test:e2e
 
 # Verify builds
 pnpm build
@@ -195,7 +204,7 @@ pnpm build
 pnpm audit
 
 # Validate database
-pnpm db:generate && pnpm db:push --dry-run
+pnpm db:generate && pnpm db:migrate:deploy
 
 # Test staging environment
 curl https://staging-api.yourdomain.com/health

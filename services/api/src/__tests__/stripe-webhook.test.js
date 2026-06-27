@@ -111,6 +111,54 @@ describe('POST /billing/webhook', () => {
     expect(prisma._store.subscription.length).toBe(0);
   });
 
+  it('claims concurrent duplicate subscription checkouts before side effects', async () => {
+    prisma._store.user.push({ id: 'u-1', email: 'a@x.com', role: 'user' });
+    Stripe.__setNextEvent({
+      id: 'evt_concurrent_subscription',
+      type: 'checkout.session.completed',
+      data: {
+        object: {
+          metadata: { userId: 'u-1' },
+          subscription: 'sub_concurrent',
+          customer: 'cus_concurrent',
+        },
+      },
+    });
+
+    const responses = await Promise.all([postWebhook({}), postWebhook({})]);
+    expect(responses.map((res) => res.statusCode)).toEqual([200, 200]);
+    expect(responses.some((res) => JSON.parse(res.body).duplicate === true)).toBe(true);
+    expect(prisma._store.subscription).toHaveLength(1);
+    expect(prisma._store.stripeEvent).toHaveLength(1);
+  });
+
+  it('claims concurrent duplicate institutional checkouts before side effects', async () => {
+    Stripe.__setNextEvent({
+      id: 'evt_concurrent_license',
+      type: 'checkout.session.completed',
+      data: {
+        object: {
+          metadata: {
+            userId: 'u-admin',
+            isInstitutional: 'true',
+            organizationName: 'Acme Genetics',
+            contactEmail: 'admin@acme.test',
+            licenseType: 'team',
+            seats: '5',
+          },
+          subscription: 'sub_license',
+          customer: 'cus_license',
+        },
+      },
+    });
+
+    const responses = await Promise.all([postWebhook({}), postWebhook({})]);
+    expect(responses.map((res) => res.statusCode)).toEqual([200, 200]);
+    expect(responses.some((res) => JSON.parse(res.body).duplicate === true)).toBe(true);
+    expect(prisma._store.institutionalLicense).toHaveLength(1);
+    expect(prisma._store.stripeEvent).toHaveLength(1);
+  });
+
   it('does NOT mark the event as processed when handling fails', async () => {
     prisma._store.user.push({ id: 'u-1', email: 'a@x.com', role: 'user' });
     // Force prisma.subscription.create to blow up to simulate a downstream failure.

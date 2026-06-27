@@ -320,6 +320,66 @@ export interface ClinicalTrial {
   [key: string]: unknown;
 }
 
+export interface ClinicalTrialSearchResponse {
+  totalCount: number;
+  studies: ClinicalTrial[];
+}
+
+export interface ClinicalTrialDetailResponse {
+  study: ClinicalTrial;
+}
+
+export interface VcfParsedVariant {
+  chromosome: string;
+  position: number;
+  id?: string | null;
+  rsid?: string | null;
+  referenceAllele: string;
+  alternateAllele: string;
+  ref: string;
+  alt: string;
+  quality?: number | null;
+  filter?: string | null;
+  info?: Record<string, unknown>;
+  gene?: string | null;
+  variantType: string;
+  variant_type: string;
+  genotype?: string | null;
+  zygosity?: string | null;
+  stableVariantKey: string;
+  hgvs?: string;
+  [key: string]: unknown;
+}
+
+export interface VcfParseResponse {
+  variants: VcfParsedVariant[];
+  summary: {
+    totalVariants: number;
+    total_variants: number;
+    parsedVariants: number;
+    parsed_variants: number;
+    variantTypes: Record<string, number>;
+    variant_types: Record<string, number>;
+    truncated: boolean;
+  };
+  limits?: Record<string, number>;
+}
+
+export interface VcfEnrichment {
+  originalVariant: VcfParsedVariant;
+  original_variant: VcfParsedVariant;
+  annotations: Record<string, unknown>;
+  evidenceSummary: string;
+  clinicalConfirmationRequired: boolean;
+  questionsForClinician: string[];
+  [key: string]: unknown;
+}
+
+export interface VcfEnrichmentResponse {
+  enrichedVariants: VcfEnrichment[];
+  enriched_variants: VcfEnrichment[];
+}
+
 // ─── Consent & HIPAA ────────────────────────────────────────────────────────
 
 export interface ConsentRecord {

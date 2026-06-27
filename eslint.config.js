@@ -11,7 +11,6 @@ export default [
       "**/build/**",
       "**/.next/**",
       "apps/desktop/**",
-      "functions/**",
     ],
   },
   // Backend (API) — Node ESM

@@ -34,7 +34,11 @@ import type {
   ClinVarResult,
   PhenotypeResult,
   ClinicalTrialSearchParams,
-  ClinicalTrial,
+  ClinicalTrialSearchResponse,
+  ClinicalTrialDetailResponse,
+  VcfParsedVariant,
+  VcfParseResponse,
+  VcfEnrichmentResponse,
   ConsentRecord,
   DataDeletionRequest,
   DeletionRequestStatus,
@@ -503,9 +507,21 @@ export class ApiClient {
   searchPhenotypes(query: string): Promise<{ terms?: PhenotypeResult[] } | PhenotypeResult[]> {
     return this.request(`/genomics/phenotype/search?q=${encodeURIComponent(query)}`);
   }
+  parseVcf(text: string, maxVariants?: number): Promise<VcfParseResponse> {
+    return this.request('/genomics/vcf/parse', {
+      method: 'POST',
+      body: JSON.stringify({ text, maxVariants }),
+    });
+  }
+  enrichVcfVariants(variants: VcfParsedVariant[]): Promise<VcfEnrichmentResponse> {
+    return this.request('/genomics/vcf/enrich', {
+      method: 'POST',
+      body: JSON.stringify({ variants }),
+    });
+  }
 
   // ─── Clinical Trials ────────────────
-  searchClinicalTrials(params: ClinicalTrialSearchParams = {}): Promise<{ trials?: ClinicalTrial[] } | ClinicalTrial[]> {
+  searchClinicalTrials(params: ClinicalTrialSearchParams = {}): Promise<ClinicalTrialSearchResponse> {
     const qs = new URLSearchParams();
     if (params.condition) qs.set('condition', params.condition);
     if (params.gene) qs.set('gene', params.gene);
@@ -513,7 +529,7 @@ export class ApiClient {
     if (params.pageSize) qs.set('pageSize', String(params.pageSize));
     return this.request(`/clinical-trials/search?${qs.toString()}`);
   }
-  getClinicalTrial(nctId: string): Promise<ClinicalTrial> {
+  getClinicalTrial(nctId: string): Promise<ClinicalTrialDetailResponse> {
     return this.request(`/clinical-trials/${encodeURIComponent(nctId)}`);
   }
 
