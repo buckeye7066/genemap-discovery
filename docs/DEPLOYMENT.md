@@ -296,6 +296,21 @@ Use Railway dashboard to monitor:
 
 See `docs/BACKUP.md` for backup procedures.
 
+## Production Launch Verification
+
+Before admitting real users, complete `docs/PRODUCTION_LAUNCH.md` and run:
+
+```bash
+pnpm launch:verify -- \
+  --api-url=https://your-api.railway.app \
+  --web-url=https://yourdomain.com \
+  --evidence=ops/production-launch-evidence.json
+```
+
+The verifier checks production env safety, live Stripe configuration shape,
+launch evidence for backups/monitoring/retention/legal review, `/healthz`,
+`/readyz`, and the deployed web app.
+
 ## Security Checklist
 
 - [ ] All environment variables set

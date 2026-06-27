@@ -133,6 +133,19 @@ pnpm db:migrate
 - [ ] Health check endpoints responding
 - [ ] Alerting rules defined
 
+### Production Launch Verification
+```bash
+pnpm launch:verify -- \
+  --api-url=https://api.yourdomain.com \
+  --web-url=https://yourdomain.com \
+  --evidence=ops/production-launch-evidence.json
+```
+- [ ] `ops/production-launch-evidence.json` completed from `docs/production-launch-evidence.example.json`
+- [ ] Production secrets stored in Railway/Vercel/secret manager and rotated for launch
+- [ ] `/healthz` and `/readyz` pass against production, with `medicalEncryption=true`
+- [ ] Stripe live webhook endpoint and required events verified
+- [ ] Backup restore test, monitoring dashboard, alert path, retention policy, and legal/compliance sign-off recorded
+
 ## Gate 6: Documentation
 
 ### Technical Documentation
@@ -185,6 +198,7 @@ pnpm db:migrate
 - [ ] Product owner approval
 - [ ] Compliance review (if required)
 - [ ] Legal review (if required)
+- [ ] Data retention policy approved (`docs/DATA_RETENTION.md`)
 
 ### Communication
 - [ ] Internal stakeholders notified
@@ -212,6 +226,12 @@ pnpm db:generate && pnpm db:migrate:deploy
 # Test staging environment
 curl https://staging-api.yourdomain.com/health
 curl https://staging.yourdomain.com
+
+# Verify production launch evidence and deployed health/readiness
+pnpm launch:verify -- \
+  --api-url=https://api.yourdomain.com \
+  --web-url=https://yourdomain.com \
+  --evidence=ops/production-launch-evidence.json
 ```
 
 - [ ] All checks passing

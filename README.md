@@ -183,6 +183,8 @@ VITE_API_URL=http://localhost:3000
 - [Migration Guide](docs/MIGRATION_OFF_BASE44.md) - migration documentation
 - [Deployment Guide](docs/DEPLOYMENT.md) - Railway + Vercel deployment
 - [Release Gates](docs/RELEASE_GATES.md) - pre-deployment checklist
+- [Production Launch Verification](docs/PRODUCTION_LAUNCH.md) - final secrets, backup, monitoring, Stripe, retention, and sign-off gate
+- [Data Retention Policy](docs/DATA_RETENTION.md) - production retention baseline for health-adjacent data
 - [Cutover Plan](docs/CUTOVER_CHECKLIST.md) - production cutover steps
 - [Backup Guide](docs/BACKUP.md) - backup and recovery procedures
 - [Historical Audits](docs/audits/README.md) - archived point-in-time audit reports
@@ -241,6 +243,7 @@ pnpm db:push          # Push schema to development database
 pnpm db:migrate       # Create/run a Prisma migration
 pnpm db:migrate:deploy
 pnpm db:studio
+pnpm launch:verify    # Verify production env, evidence, health, readiness, and web launch checks
 ```
 
 ## Contributing
