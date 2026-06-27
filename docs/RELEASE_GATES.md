@@ -62,7 +62,9 @@ pnpm test:e2e
 pnpm audit
 ```
 - [ ] No high/critical vulnerabilities
-- [ ] Known vulnerabilities have mitigation plan
+- [ ] No production dependency vulnerabilities at moderate severity or above
+- [ ] Dependabot is enabled for npm, GitHub Actions, and Docker updates
+- [ ] Known development-only vulnerabilities have mitigation plan
 
 ### Secret Management
 - [ ] No secrets in code or committed files
@@ -114,6 +116,7 @@ pnpm db:migrate
 
 ### Environment Configuration
 - [ ] All environment variables documented
+- [ ] Runtime uses supported Node.js 24+ image/runtime
 - [ ] Staging environment matches production
 - [ ] CORS origins configured correctly
 - [ ] Stripe keys (test/live) configured per environment
