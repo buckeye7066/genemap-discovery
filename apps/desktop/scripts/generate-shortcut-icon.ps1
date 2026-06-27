@@ -1,6 +1,6 @@
 # Generates the GeneMap desktop-shortcut icon: a white X-shaped chromosome on
-# an orange glowing background, written as a 256x256 PNG-compressed .ico
-# (supported by Windows Vista+). Dependency-free — uses System.Drawing only.
+# an Ohio State scarlet/gray background, written as a 256x256 PNG-compressed
+# .ico (supported by Windows Vista+). Dependency-free; uses System.Drawing only.
 #
 #   pwsh apps/desktop/scripts/generate-shortcut-icon.ps1
 #
@@ -15,7 +15,7 @@ $g.SmoothingMode     = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
 $g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
 $g.Clear([System.Drawing.Color]::Transparent)
 
-# ── Rounded-square tile path ────────────────────────────────────────────────
+# Rounded-square tile path
 function New-RoundedRect([single]$x, [single]$y, [single]$w, [single]$h, [single]$r) {
   $p = New-Object System.Drawing.Drawing2D.GraphicsPath
   $d = $r * 2
@@ -29,26 +29,32 @@ function New-RoundedRect([single]$x, [single]$y, [single]$w, [single]$h, [single
 
 $tile = New-RoundedRect 8 8 ($size - 16) ($size - 16) 52
 
-# Deep orange base fill.
-$baseBrush = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(255, 194, 65, 12))
+# Deep scarlet base fill.
+$baseBrush = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(255, 186, 12, 47))
 $g.FillPath($baseBrush, $tile)
 
-# Radial "glow": bright warm center fading outward, clipped to the tile.
+# Radial highlight: soft gray center fading outward, clipped to the tile.
 $glowPath = New-Object System.Drawing.Drawing2D.GraphicsPath
 $glowPath.AddEllipse(-30, -30, ($size + 60), ($size + 60))
 $glow = New-Object System.Drawing.Drawing2D.PathGradientBrush($glowPath)
 $glow.CenterPoint   = New-Object System.Drawing.PointF(($size / 2), ($size * 0.42))
-$glow.CenterColor   = [System.Drawing.Color]::FromArgb(255, 255, 196, 92)
-$glow.SurroundColors = @([System.Drawing.Color]::FromArgb(0, 255, 120, 0))
+$glow.CenterColor   = [System.Drawing.Color]::FromArgb(145, 167, 177, 183)
+$glow.SurroundColors = @([System.Drawing.Color]::FromArgb(0, 74, 5, 19))
 $g.SetClip($tile)
 $g.FillPath($glow, $glowPath)
 $g.ResetClip()
 
+# Subtle gray diagonals echo the web/PWA icon.
+$stripe = New-Object System.Drawing.Pen ([System.Drawing.Color]::FromArgb(55, 167, 177, 183)), 2
+for ($i = -$size; $i -lt ($size * 2); $i += 34) {
+  $g.DrawLine($stripe, $i, $size, ($i + $size), 0)
+}
+
 # Subtle inner highlight ring for depth.
-$ring = New-Object System.Drawing.Pen ([System.Drawing.Color]::FromArgb(70, 255, 230, 180)), 2
+$ring = New-Object System.Drawing.Pen ([System.Drawing.Color]::FromArgb(80, 255, 255, 255)), 2
 $g.DrawPath($ring, (New-RoundedRect 10 10 ($size - 20) ($size - 20) 50))
 
-# ── Chromosome: two capsules crossing as an X ───────────────────────────────
+# Chromosome: two capsules crossing as an X
 # A capsule is a fully-rounded rectangle (radius = width/2).
 function Draw-Capsule([single]$angleDeg, $brush, $pen) {
   $state = $g.Save()
@@ -87,15 +93,15 @@ $edgePen = New-Object System.Drawing.Pen ([System.Drawing.Color]::FromArgb(90, 1
 Draw-Capsule 28 $bodyBrush $edgePen
 Draw-Capsule -28 $bodyBrush $edgePen
 
-# Centromere: a small warm dot at the crossing to read as the chromosome waist.
-$centro = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(255, 194, 65, 12))
+# Centromere: a small scarlet dot at the crossing to read as the chromosome waist.
+$centro = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(255, 186, 12, 47))
 $g.FillEllipse($centro, ($size / 2 - 13), ($size / 2 - 13), 26, 26)
-$centroHi = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(255, 255, 196, 92))
+$centroHi = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(255, 255, 225, 232))
 $g.FillEllipse($centroHi, ($size / 2 - 7), ($size / 2 - 7), 14, 14)
 
 $g.Dispose()
 
-# ── Write PNG, then wrap it in an .ico container ────────────────────────────
+# Write PNG, then wrap it in an .ico container
 $pngStream = New-Object System.IO.MemoryStream
 $bmp.Save($pngStream, [System.Drawing.Imaging.ImageFormat]::Png)
 $png = $pngStream.ToArray()

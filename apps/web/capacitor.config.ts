@@ -6,18 +6,23 @@ const config: CapacitorConfig = {
   webDir: 'dist',
   server: {
     androidScheme: 'https',
+    iosScheme: 'https',
+  },
+  ios: {
+    contentInset: 'automatic',
+    preferredContentMode: 'mobile',
   },
   plugins: {
     SplashScreen: {
       launchShowDuration: 2000,
       launchAutoHide: true,
-      backgroundColor: '#1e3a8a',
+      backgroundColor: '#ba0c2f',
       showSpinner: true,
       spinnerColor: '#ffffff',
     },
     StatusBar: {
       style: 'DARK',
-      backgroundColor: '#1e3a8a',
+      backgroundColor: '#ba0c2f',
     },
     Keyboard: {
       resize: 'body',

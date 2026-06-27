@@ -168,7 +168,8 @@ export default function Layout({ children, currentPageName }) {
     addMetaTag('apple-mobile-web-app-capable', 'yes');
     addMetaTag('apple-mobile-web-app-title', 'GeneMap');
     addMetaTag('apple-mobile-web-app-status-bar-style', 'default');
-    addMetaTag('theme-color', '#1e3a8a');
+    addMetaTag('mobile-web-app-capable', 'yes');
+    addMetaTag('theme-color', '#ba0c2f');
     addMetaTag('format-detection', 'telephone=no');
     
     // Security for embedded browsers

@@ -7,7 +7,7 @@
  * desktop build hard-fails. Rather than pull in a native image toolchain
  * (sharp / png-to-ico), this script renders the brand mark from scratch:
  *
- *   1. draw an RGBA bitmap (blue→indigo rounded tile + DNA double-helix),
+ *   1. draw an RGBA bitmap (Ohio State scarlet/gray tile + DNA double-helix),
  *   2. encode it as PNG using only Node's built-in zlib,
  *   3. wrap the PNG into .ico and .icns container formats (both can embed a
  *      PNG payload directly), no external binaries required.
@@ -26,7 +26,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const desktopIcons = path.join(__dirname, '..', 'icons');
 const webIcons = path.join(__dirname, '..', '..', 'web', 'public', 'icons');
 
-// ─── PNG encoder (zlib only) ─────────────────────────────────────────────────
+// PNG encoder (zlib only)
 const CRC_TABLE = (() => {
   const t = new Uint32Array(256);
   for (let n = 0; n < 256; n++) {
@@ -66,7 +66,7 @@ function encodePNG(size, rgba) {
   return Buffer.concat([sig, chunk('IHDR', ihdr), chunk('IDAT', idat), chunk('IEND', Buffer.alloc(0))]);
 }
 
-// ─── Artwork ─────────────────────────────────────────────────────────────────
+// Artwork
 function lerp(a, b, t) { return a + (b - a) * t; }
 
 function render(size) {
@@ -86,7 +86,7 @@ function render(size) {
     buf[i + 3] = Math.round(outA * 255);
   };
 
-  // Rounded-rect gradient tile (blue #2563eb → indigo #4f46e5).
+  // Rounded-rect gradient tile (Ohio State scarlet -> deep scarlet).
   const inRounded = (x, y) => {
     const rx = Math.max(0, radius - x, x - (size - 1 - radius));
     const ry = Math.max(0, radius - y, y - (size - 1 - radius));
@@ -96,7 +96,18 @@ function render(size) {
     for (let x = 0; x < size; x++) {
       if (!inRounded(x, y)) continue;
       const t = (x + y) / (2 * size);
-      blend(x, y, Math.round(lerp(37, 79, t)), Math.round(lerp(99, 70, t)), Math.round(lerp(235, 229, t)), 1);
+      blend(x, y, Math.round(lerp(186, 74, t)), Math.round(lerp(12, 5, t)), Math.round(lerp(47, 19, t)), 1);
+    }
+  }
+
+  // Fine gray diagonal lines keep the mark from becoming a flat red square.
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      if (!inRounded(x, y)) continue;
+      const stripe = (x + y) % Math.max(16, Math.round(size * 0.16));
+      if (stripe < Math.max(1, Math.round(size * 0.01))) {
+        blend(x, y, 167, 177, 183, 0.22);
+      }
     }
   }
 
@@ -129,7 +140,7 @@ function render(size) {
       const rsteps = 12;
       for (let k = 0; k <= rsteps; k++) {
         const rx = lerp(xA, xB, k / rsteps);
-        disc(rx, y, node * 0.45, [226, 232, 240], 0.55);
+        disc(rx, y, node * 0.45, [167, 177, 183], 0.55);
       }
     }
     // strands (front strand brighter)
@@ -141,7 +152,7 @@ function render(size) {
   return buf;
 }
 
-// ─── Container wrappers ──────────────────────────────────────────────────────
+// Container wrappers
 function pngToIco(png256) {
   const header = Buffer.alloc(6);
   header.writeUInt16LE(0, 0);
@@ -169,7 +180,7 @@ function pngsToIcns(entries) {
   return Buffer.concat([head, body]);
 }
 
-// ─── Emit ────────────────────────────────────────────────────────────────────
+// Emit
 mkdirSync(desktopIcons, { recursive: true });
 mkdirSync(webIcons, { recursive: true });
 

@@ -1,11 +1,11 @@
 {
   "name": "GeneMap Discovery",
   "short_name": "GeneMap",
-  "description": "Genetics education and discovery platform — learn genetics at your level",
+  "description": "Genetics education and discovery platform - learn genetics at your level",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#1e3a8a",
-  "theme_color": "#1e3a8a",
+  "background_color": "#f6f7f8",
+  "theme_color": "#ba0c2f",
   "orientation": "any",
   "icons": [
     {
