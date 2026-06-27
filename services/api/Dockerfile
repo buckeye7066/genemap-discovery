@@ -5,6 +5,7 @@ FROM node:24-bookworm-slim AS deps
 WORKDIR /app
 
 # Enable corepack for pnpm.
+RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates && rm -rf /var/lib/apt/lists/*
 RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
 
 # Copy workspace manifests so pnpm can install just the API + its workspace
@@ -19,6 +20,7 @@ RUN pnpm install --frozen-lockfile --filter @genemap/api... --filter @genemap/sh
 # ─── build stage ──────────────────────────────────────────────────────────────
 FROM node:24-bookworm-slim AS build
 WORKDIR /app
+RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates && rm -rf /var/lib/apt/lists/*
 RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
 
 COPY --from=deps /app/node_modules ./node_modules
@@ -41,6 +43,7 @@ ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOST=0.0.0.0
 
+RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates && rm -rf /var/lib/apt/lists/*
 RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
 
 # Copy only what we need to run the API.
