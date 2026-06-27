@@ -120,6 +120,24 @@ describe('LLM route input bounds', () => {
     expect(res.statusCode).toBe(400);
   });
 
+  it('rejects raw VCF-looking content by default', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/llm/invoke',
+      headers: { cookie: cookie() },
+      payload: {
+        prompt: [
+          '#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO',
+          '1\t10\trs1\tA\tG\t99\tPASS\t.',
+          '1\t11\trs2\tC\tT\t99\tPASS\t.',
+          '1\t12\trs3\tG\tA\t99\tPASS\t.',
+        ].join('\n'),
+      },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body).error).toMatch(/Raw VCF/i);
+  });
+
   it('rejects a chat with too many messages', async () => {
     const messages = Array.from({ length: llmInternals.MAX_CHAT_MESSAGES + 1 }, (_, i) => ({
       role: 'user', content: `m${i}`,

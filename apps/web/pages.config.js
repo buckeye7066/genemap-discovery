@@ -32,8 +32,10 @@ const LearnGenetics = lazy(() => import('./pages/LearnGenetics'));
 const TopicExplorer = lazy(() => import('./pages/TopicExplorer'));
 const QuizMode = lazy(() => import('./pages/QuizMode'));
 const LearningPath = lazy(() => import('./pages/LearningPath'));
+const Login = lazy(() => import('./pages/Login'));
 
 export const PAGES = {
+    "Login": Login,
     "LearnGenetics": LearnGenetics,
     "TopicExplorer": TopicExplorer,
     "QuizMode": QuizMode,
@@ -69,6 +71,7 @@ export const PAGES = {
 
 export const pagesConfig = {
     mainPage: "LearnGenetics",
+    publicPages: ["Login"],
     Pages: PAGES,
     Layout: __Layout,
 };

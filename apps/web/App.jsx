@@ -5,7 +5,7 @@ import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClientInstance } from '@/lib/query-client'
 import NavigationTracker from '@/lib/NavigationTracker'
 import { pagesConfig } from './pages.config'
-import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
+import { BrowserRouter as Router, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import PageNotFound from './lib/PageNotFound';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import { EducationLevelProvider } from '@/lib/EducationLevelContext';
@@ -16,16 +16,18 @@ const VisualEditAgent = import.meta.env.DEV
   ? lazy(() => import('@/lib/VisualEditAgent'))
   : () => null;
 
-const { Pages, Layout, mainPage } = pagesConfig;
+const { Pages, Layout, mainPage, publicPages = [] } = pagesConfig;
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
 const MainPage = mainPageKey ? Pages[mainPageKey] : () => null;
+const publicPageKeys = new Set(publicPages);
 
 const LayoutWrapper = ({ children, currentPageName }) => Layout ?
   <Layout currentPageName={currentPageName}>{children}</Layout>
   : <>{children}</>;
 
 const AuthenticatedApp = () => {
-  const { isLoadingAuth, isLoadingPublicSettings, authError, isAuthenticated, navigateToLogin } = useAuth();
+  const { isLoadingAuth, isLoadingPublicSettings, authError, isAuthenticated } = useAuth();
+  const location = useLocation();
 
   if (isLoadingPublicSettings || isLoadingAuth) {
     return <LoadingSpinner />;
@@ -34,15 +36,40 @@ const AuthenticatedApp = () => {
   if (authError) {
     if (authError.type === 'user_not_registered') {
       return <UserNotRegisteredError />;
-    } else if (authError.type === 'auth_required') {
-      navigateToLogin();
-      return null;
     }
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <Suspense fallback={<LoadingSpinner />}>
+        <Routes>
+          {Object.entries(Pages)
+            .filter(([path]) => publicPageKeys.has(path))
+            .map(([path, Page]) => (
+              <Route
+                key={path}
+                path={`/${path.toLowerCase()}`}
+                element={
+                  <ErrorBoundary name={path}>
+                    <Page />
+                  </ErrorBoundary>
+                }
+              />
+            ))}
+          <Route path="*" element={<Navigate to="/login" replace state={{ from: location }} />} />
+        </Routes>
+      </Suspense>
+    );
   }
 
   return (
     <Suspense fallback={<LoadingSpinner />}>
       <Routes>
+        {Object.entries(Pages)
+          .filter(([path]) => publicPageKeys.has(path))
+          .map(([path]) => (
+            <Route key={path} path={`/${path.toLowerCase()}`} element={<Navigate to="/" replace />} />
+          ))}
         <Route path="/" element={
           <LayoutWrapper currentPageName={mainPageKey}>
             <ErrorBoundary name={mainPageKey}>
@@ -50,7 +77,7 @@ const AuthenticatedApp = () => {
             </ErrorBoundary>
           </LayoutWrapper>
         } />
-        {Object.entries(Pages).map(([path, Page]) => (
+        {Object.entries(Pages).filter(([path]) => !publicPageKeys.has(path)).map(([path, Page]) => (
           <Route
             key={path}
             path={`/${path.toLowerCase()}`}

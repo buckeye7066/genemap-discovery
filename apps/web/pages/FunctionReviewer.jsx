@@ -268,7 +268,7 @@ export default function FunctionReviewer() {
               {/* Stats */}
               <div className="grid grid-cols-3 gap-4 mb-10">
                 <div className="bg-white/10 rounded-xl p-4">
-                  <p className="text-3xl font-bold text-cyan-400">{KNOWN_FUNCTIONS.filter(f => f.filePath.startsWith('functions/')).length}</p>
+                  <p className="text-3xl font-bold text-cyan-400">{KNOWN_FUNCTIONS.filter(f => f.filePath?.startsWith('services/api/')).length}</p>
                   <p className="text-sm text-slate-400">Backend</p>
                 </div>
                 <div className="bg-white/10 rounded-xl p-4">

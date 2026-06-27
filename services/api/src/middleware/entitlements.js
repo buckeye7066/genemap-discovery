@@ -148,7 +148,6 @@ export async function recordUsage(prisma, userId, sessionType, content = {}) {
   } catch (err) {
     // Best-effort persistence — never break a successful user-facing call due
     // to a usage-tracking write failure. Surface it via stderr for observability.
-    // eslint-disable-next-line no-console
     console.error('[entitlements] recordUsage failed:', err?.message || err);
     return null;
   }

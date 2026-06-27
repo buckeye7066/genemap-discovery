@@ -26,10 +26,32 @@ process.env.LOG_LEVEL = 'silent';
  */
 export function createPrismaMock() {
   const store = {};
+  const uniqueFields = {
+    user: ['email'],
+    stripeEvent: ['stripeEventId'],
+    subscription: ['stripeSubscriptionId'],
+  };
 
   function getStore(name) {
     if (!store[name]) store[name] = [];
     return store[name];
+  }
+
+  function createUniqueError(model, field) {
+    const err = new Error(`Unique constraint failed on ${model}.${field}`);
+    err.code = 'P2002';
+    err.meta = { target: [field] };
+    return err;
+  }
+
+  function assertUnique(name, data, ignoreId = null) {
+    for (const field of uniqueFields[name] || []) {
+      if (data[field] === undefined || data[field] === null) continue;
+      const duplicate = getStore(name).find((record) =>
+        record.id !== ignoreId && record[field] === data[field]
+      );
+      if (duplicate) throw createUniqueError(name, field);
+    }
   }
 
   // Apply a Prisma `data` object to a record, honoring atomic
@@ -51,7 +73,7 @@ export function createPrismaMock() {
   const createModel = (name) => ({
     findMany: vi.fn(async (args = {}) => {
       let records = [...getStore(name)];
-      const { where, orderBy, take, skip, include, select } = args;
+      const { where, take, skip } = args;
 
       if (where) {
         records = records.filter((r) => matchWhere(r, where));
@@ -81,6 +103,7 @@ export function createPrismaMock() {
     }),
 
     create: vi.fn(async ({ data }) => {
+      assertUnique(name, data);
       const record = {
         id: crypto.randomUUID(),
         ...data,
@@ -133,6 +156,7 @@ export function createPrismaMock() {
         arr[idx] = applyData(arr[idx], update);
         return arr[idx];
       }
+      assertUnique(name, create);
       const record = { id: crypto.randomUUID(), ...create, createdAt: new Date(), updatedAt: new Date() };
       arr.push(record);
       return record;
@@ -201,7 +225,19 @@ export function createPrismaMock() {
     $queryRaw: vi.fn(async () => [{ '?column?': 1 }]),
     $disconnect: vi.fn(),
     $transaction: vi.fn(async (callback) => {
-      if (typeof callback === 'function') return callback(prisma);
+      if (typeof callback === 'function') {
+        const snapshot = Object.fromEntries(
+          Object.entries(store).map(([key, rows]) => [key, rows.map((row) => ({ ...row }))])
+        );
+        try {
+          return await callback(prisma);
+        } catch (err) {
+          for (const key of Object.keys(store)) {
+            store[key] = snapshot[key] ? snapshot[key].map((row) => ({ ...row })) : [];
+          }
+          throw err;
+        }
+      }
       return Promise.all(callback);
     }),
 
@@ -370,6 +406,10 @@ export async function buildTestApp(prismaMock, opts = {}) {
   if (opts.includeBilling) {
     const { default: billingRoutes } = await import('../routes/billing.js');
     await app.register(billingRoutes, { prefix: '/billing' });
+  }
+  if (opts.includeGenomics) {
+    const { default: genomicsRoutes } = await import('../routes/genomics.js');
+    await app.register(genomicsRoutes, { prefix: '/genomics' });
   }
 
   await app.ready();

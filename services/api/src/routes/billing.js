@@ -66,6 +66,14 @@ const portalSchema = z.object({
   returnUrl: z.string().url(),
 });
 
+function isStripeEventDuplicate(error) {
+  if (error?.code !== 'P2002') return false;
+  const target = error?.meta?.target;
+  if (!target) return false;
+  const fields = Array.isArray(target) ? target : [String(target)];
+  return fields.some((field) => field === 'stripeEventId' || field === 'stripe_event_id');
+}
+
 /**
  * Reject Stripe redirect URLs that point outside our trusted origins.
  * Otherwise an attacker could prefill `successUrl` with a domain they own,
@@ -254,15 +262,13 @@ export default async function billingRoutes(fastify) {
       return reply.status(400).send({ error: 'Webhook signature verification failed' });
     }
 
-    const existingEvent = await prisma.stripeEvent.findUnique({
-      where: { stripeEventId: event.id },
-    });
-    if (existingEvent) {
-      return reply.send({ received: true, duplicate: true });
-    }
-
     try {
-      switch (event.type) {
+      await prisma.$transaction(async (tx) => {
+        await tx.stripeEvent.create({
+          data: { stripeEventId: event.id, type: event.type },
+        });
+
+        switch (event.type) {
         case 'checkout.session.completed': {
           const session = event.data.object;
 
@@ -279,7 +285,7 @@ export default async function billingRoutes(fastify) {
                 session.metadata.licenseType === 'department' ? 69.99 : 59.99,
             };
 
-            const license = await prisma.institutionalLicense.create({
+            const license = await tx.institutionalLicense.create({
               data: {
                 organizationName: session.metadata.organizationName,
                 contactEmail: session.metadata.contactEmail,
@@ -300,7 +306,7 @@ export default async function billingRoutes(fastify) {
               },
             });
 
-            await createAuditLog(prisma, {
+            await createAuditLog(tx, {
               userId: session.metadata.userId,
               action: 'license.created',
               entityType: 'institutional_license',
@@ -315,7 +321,7 @@ export default async function billingRoutes(fastify) {
 
             const subscription = await stripe.subscriptions.retrieve(subscriptionId);
 
-            await prisma.subscription.create({
+            await tx.subscription.create({
               data: {
                 userId,
                 stripeCustomerId: customerId,
@@ -326,7 +332,7 @@ export default async function billingRoutes(fastify) {
               },
             });
 
-            await createAuditLog(prisma, {
+            await createAuditLog(tx, {
               userId,
               action: 'subscription.created',
               entityType: 'subscription',
@@ -338,7 +344,7 @@ export default async function billingRoutes(fastify) {
 
         case 'customer.subscription.updated': {
           const subscription = event.data.object;
-          await prisma.subscription.updateMany({
+          await tx.subscription.updateMany({
             where: { stripeSubscriptionId: subscription.id },
             data: {
               status: subscription.status,
@@ -351,11 +357,11 @@ export default async function billingRoutes(fastify) {
         case 'customer.subscription.deleted': {
           const subscription = event.data.object;
           await Promise.all([
-            prisma.subscription.updateMany({
+            tx.subscription.updateMany({
               where: { stripeSubscriptionId: subscription.id },
               data: { status: 'canceled' },
             }),
-            prisma.institutionalLicense.updateMany({
+            tx.institutionalLicense.updateMany({
               where: { stripeSubscriptionId: subscription.id },
               data: { status: 'canceled' },
             }),
@@ -366,7 +372,7 @@ export default async function billingRoutes(fastify) {
         case 'invoice.payment_succeeded': {
           const invoice = event.data.object;
           const subscriptionId = invoice.subscription;
-          await prisma.subscription.updateMany({
+          await tx.subscription.updateMany({
             where: { stripeSubscriptionId: subscriptionId },
             data: {
               status: 'active',
@@ -379,26 +385,20 @@ export default async function billingRoutes(fastify) {
         case 'invoice.payment_failed': {
           const invoice = event.data.object;
           const subscriptionId = invoice.subscription;
-          await prisma.subscription.updateMany({
+          await tx.subscription.updateMany({
             where: { stripeSubscriptionId: subscriptionId },
             data: { status: 'past_due' },
           });
           break;
         }
-      }
+        }
+      });
     } catch (error) {
+      if (isStripeEventDuplicate(error)) {
+        return reply.send({ received: true, duplicate: true });
+      }
       console.error('Error processing webhook:', error.message);
       return reply.status(500).send({ error: 'Webhook processing failed' });
-    }
-
-    try {
-      await prisma.stripeEvent.create({
-        data: { stripeEventId: event.id, type: event.type },
-      });
-    } catch (e) {
-      if (e.code !== 'P2002') {
-        console.error('Failed to record stripe event after success:', e.message);
-      }
     }
 
     reply.send({ received: true });

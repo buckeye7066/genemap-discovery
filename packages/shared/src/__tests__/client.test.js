@@ -260,21 +260,63 @@ describe('Genomics methods', () => {
     await client.searchClinVar('pathogenic');
     expect(fetchCalls[0].url).toBe('http://localhost:3000/genomics/clinvar/search?q=pathogenic');
   });
+
+  it('parseVcf() should POST /genomics/vcf/parse', async () => {
+    await client.parseVcf('#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO', 25);
+    expect(fetchCalls[0].url).toBe('http://localhost:3000/genomics/vcf/parse');
+    expect(fetchCalls[0].method).toBe('POST');
+    expect(JSON.parse(fetchCalls[0].body)).toEqual({
+      text: '#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO',
+      maxVariants: 25,
+    });
+  });
+
+  it('enrichVcfVariants() should POST /genomics/vcf/enrich', async () => {
+    await client.enrichVcfVariants([{
+      chromosome: 'chr1',
+      position: 10,
+      referenceAllele: 'A',
+      alternateAllele: 'G',
+      ref: 'A',
+      alt: 'G',
+      variantType: 'SNV',
+      variant_type: 'SNV',
+      stableVariantKey: 'chr1:10:A>G',
+    }]);
+    expect(fetchCalls[0].url).toBe('http://localhost:3000/genomics/vcf/enrich');
+    expect(fetchCalls[0].method).toBe('POST');
+  });
 });
 
 // ── Clinical Trials ──────────────────────────────────────────────────────────
 
 describe('Clinical Trials methods', () => {
   it('searchClinicalTrials() should GET /clinical-trials/search', async () => {
-    await client.searchClinicalTrials({ condition: 'cancer', gene: 'BRCA1' });
+    global.fetch = vi.fn(async (url, config) => {
+      fetchCalls.push({ url, ...config });
+      return {
+        ok: true,
+        json: async () => ({ totalCount: 1, studies: [{ nctId: 'NCT001', title: 'Trial' }] }),
+      };
+    });
+    const result = await client.searchClinicalTrials({ condition: 'cancer', gene: 'BRCA1' });
     expect(fetchCalls[0].url).toContain('/clinical-trials/search?');
     expect(fetchCalls[0].url).toContain('condition=cancer');
     expect(fetchCalls[0].url).toContain('gene=BRCA1');
+    expect(result).toEqual({ totalCount: 1, studies: [{ nctId: 'NCT001', title: 'Trial' }] });
   });
 
   it('getClinicalTrial(nctId) should GET /clinical-trials/:nctId', async () => {
-    await client.getClinicalTrial('NCT001');
+    global.fetch = vi.fn(async (url, config) => {
+      fetchCalls.push({ url, ...config });
+      return {
+        ok: true,
+        json: async () => ({ study: { nctId: 'NCT001', title: 'Trial' } }),
+      };
+    });
+    const result = await client.getClinicalTrial('NCT001');
     expect(fetchCalls[0].url).toBe('http://localhost:3000/clinical-trials/NCT001');
+    expect(result).toEqual({ study: { nctId: 'NCT001', title: 'Trial' } });
   });
 });
 
