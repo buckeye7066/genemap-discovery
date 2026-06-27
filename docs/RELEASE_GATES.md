@@ -62,7 +62,7 @@ pnpm test:e2e
 pnpm audit
 ```
 - [ ] No high/critical vulnerabilities
-- [ ] No production dependency vulnerabilities at moderate severity or above
+- [ ] No known dependency vulnerabilities in the full lockfile
 - [ ] Dependabot is enabled for npm, GitHub Actions, and Docker updates
 - [ ] Known development-only vulnerabilities have mitigation plan
 
