@@ -5,7 +5,7 @@
     "dockerfilePath": "services/api/Dockerfile"
   },
   "deploy": {
-    "startCommand": "sh -c \"node node_modules/prisma/build/index.js migrate deploy --schema services/api/prisma/schema.prisma && node services/api/src/index.js\"",
+    "startCommand": "sh -c \"pnpm --filter @genemap/api db:migrate:deploy && node services/api/src/index.js\"",
     "healthcheckPath": "/readyz",
     "healthcheckTimeout": 300,
     "restartPolicyType": "ON_FAILURE",
