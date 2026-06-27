@@ -1,0 +1,68 @@
+name: Production Smoke
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '*/15 * * * *'
+
+concurrency:
+  group: production-smoke
+  cancel-in-progress: true
+
+env:
+  API_URL: https://genemap-api-production.up.railway.app
+  WEB_URL: https://genemap-discovery.vercel.app
+
+jobs:
+  smoke:
+    name: Live health, readiness, CORS, and web shell
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+
+      - name: Check API liveness
+        run: |
+          body="$(curl --fail --silent --show-error --max-time 15 "$API_URL/healthz")"
+          BODY="$body" node -e '
+            const body = JSON.parse(process.env.BODY);
+            if (body.status !== "ok") {
+              throw new Error(`/healthz expected status ok, got ${JSON.stringify(body)}`);
+            }
+          '
+
+      - name: Check API readiness and medical encryption
+        run: |
+          body="$(curl --fail --silent --show-error --max-time 15 "$API_URL/readyz")"
+          BODY="$body" node -e '
+            const body = JSON.parse(process.env.BODY);
+            if (body.status !== "ready" || body.medicalEncryption !== true) {
+              throw new Error(`/readyz expected ready with medicalEncryption=true, got ${JSON.stringify(body)}`);
+            }
+          '
+
+      - name: Check production CORS for web origin
+        run: |
+          headers="$(mktemp)"
+          curl --fail --silent --show-error --max-time 15 \
+            --output /dev/null \
+            --dump-header "$headers" \
+            --request OPTIONS \
+            --header "Origin: $WEB_URL" \
+            --header "Access-Control-Request-Method: GET" \
+            "$API_URL/healthz"
+          grep -Fi "access-control-allow-origin: $WEB_URL" "$headers"
+          grep -Fi "access-control-allow-credentials: true" "$headers"
+
+      - name: Check web app shell
+        run: |
+          html="$(curl --fail --silent --show-error --location --max-time 20 "$WEB_URL")"
+          case "$html" in
+            *'<title>GeneMap Discovery</title>'*'<div id="root"'*) ;;
+            *)
+              echo "Web app did not return the expected GeneMap HTML shell."
+              exit 1
+              ;;
+          esac

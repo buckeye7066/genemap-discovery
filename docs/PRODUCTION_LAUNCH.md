@@ -53,6 +53,12 @@ Before launch, configure:
 
 Record the dashboard URL and escalation path in the launch evidence file.
 
+This repo also includes `.github/workflows/production-smoke.yml`, a scheduled
+and manually runnable live smoke check for the production web URL, API
+`/healthz`, API `/readyz`, `medicalEncryption=true`, and production CORS. Treat
+that workflow as a basic uptime signal only; it does not replace dedicated error
+tracking, log aggregation, alert routing, or backup/restore evidence.
+
 ## 4. Configure Stripe Live Webhooks
 
 In the live Stripe dashboard:
