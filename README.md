@@ -41,8 +41,8 @@ See [docs/MIGRATION_OFF_BASE44.md](docs/MIGRATION_OFF_BASE44.md) for migration d
 
 ### Prerequisites
 
-- Node.js 20+
-- pnpm 8+
+- Node.js 24+
+- pnpm 9+
 - PostgreSQL 16+
 
 ### Installation
@@ -92,6 +92,7 @@ pnpm test:api
 pnpm test:shared
 pnpm lint
 pnpm typecheck
+pnpm audit
 ```
 
 ## Project Structure
