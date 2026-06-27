@@ -1,7 +1,7 @@
 # Production image for the @genemap/api Fastify service.
 # Multi-stage so the runtime image carries only built artifacts + prod deps.
 
-FROM node:24-bookworm-slim AS deps
+FROM node:26-bookworm-slim AS deps
 WORKDIR /app
 
 # Enable corepack for pnpm.
@@ -17,7 +17,7 @@ COPY packages/shared/package.json ./packages/shared/
 RUN pnpm install --frozen-lockfile --filter @genemap/api... --filter @genemap/shared
 
 # ─── build stage ──────────────────────────────────────────────────────────────
-FROM node:24-bookworm-slim AS build
+FROM node:26-bookworm-slim AS build
 WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
 
@@ -35,7 +35,7 @@ RUN pnpm --filter @genemap/shared build
 RUN pnpm --filter @genemap/api db:generate
 
 # ─── runtime stage ────────────────────────────────────────────────────────────
-FROM node:24-bookworm-slim AS runtime
+FROM node:26-bookworm-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
