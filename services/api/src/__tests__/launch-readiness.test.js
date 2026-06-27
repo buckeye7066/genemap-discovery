@@ -1,14 +1,26 @@
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
-import {
-  checkHttpEndpoints,
-  parseArgs,
-  runLaunchVerification,
-  validateEvidence,
-  validateLaunchEnv,
-} from '../../../../scripts/verify-production-launch.mjs';
+import { beforeAll, describe, expect, it } from 'vitest';
+
+let checkHttpEndpoints;
+let parseArgs;
+let runLaunchVerification;
+let validateEvidence;
+let validateLaunchEnv;
+
+beforeAll(async () => {
+  const launchVerifier = await import(
+    new URL('../../../../scripts/verify-production-launch.mjs', import.meta.url)
+  );
+  ({
+    checkHttpEndpoints,
+    parseArgs,
+    runLaunchVerification,
+    validateEvidence,
+    validateLaunchEnv,
+  } = launchVerifier);
+});
 
 const NOW = new Date('2026-06-27T12:00:00.000Z');
 
@@ -166,7 +178,7 @@ describe('production launch verification', () => {
     expect(failures(checks)).toEqual([]);
   });
 
-  it('runs the full verifier with an evidence file and skipped HTTP checks', async () => {
+  it('does not allow skipped HTTP checks to pass launch verification', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'genemap-launch-'));
     const evidenceFile = join(dir, 'evidence.json');
     writeFileSync(evidenceFile, JSON.stringify(VALID_EVIDENCE), 'utf8');
@@ -178,6 +190,7 @@ describe('production launch verification', () => {
       now: NOW,
     });
 
-    expect(result.ok).toBe(true);
+    expect(result.ok).toBe(false);
+    expect(failures(result.checks).map((check) => check.id)).toContain('http.skipped');
   });
 });

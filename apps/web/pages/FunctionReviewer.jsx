@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { apiClient } from "@genemap/shared";
 import { useAuth } from "../lib/AuthContext";
 import { KNOWN_FUNCTIONS, getFunctionById, getAllCategories } from "../components/functionRegistry";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -38,12 +37,8 @@ import {
   FolderTree,
   Info,
   Github,
-  Upload,
   Rocket
 } from "lucide-react";
-
-// Code bundle for GitHub sync - maps file paths to their source
-const CODE_BUNDLE = {};
 
 export default function FunctionReviewer() {
   const { user, isLoadingAuth } = useAuth();
@@ -58,8 +53,6 @@ export default function FunctionReviewer() {
   const [expandedDeps, setExpandedDeps] = useState({});
   const [activeTab, setActiveTab] = useState("overview");
   const [showBeginScreen, setShowBeginScreen] = useState(true);
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [syncResult, setSyncResult] = useState(null);
 
   // Get all categories
   const categories = useMemo(() => getAllCategories(), []);
@@ -95,51 +88,11 @@ export default function FunctionReviewer() {
     }
   }, [selectedFunctionId]);
 
-  const handleBeginSync = async () => {
-    setIsSyncing(true);
-    setSyncResult(null);
+  const handleBeginSync = () => {
     setError(null);
-
-    try {
-      // Build code bundle from registry - we'll send file paths and the backend
-      // will note these. Since we can't read files from frontend, we send metadata.
-      const codeBundle = {};
-      
-      // Add all known functions with placeholder indicating they exist
-      KNOWN_FUNCTIONS.forEach(fn => {
-        codeBundle[fn.filePath] = `// File: ${fn.filePath}\n// Function ID: ${fn.functionId}\n// Export Type: ${fn.exportType}\n// Category: ${fn.category}\n// Description: ${fn.description || 'No description'}\n// \n// NOTE: Source code must be copied manually from Base44 editor.\n// This is a placeholder indicating this file exists in the app.\n`;
-      });
-
-      // Add a manifest file
-      codeBundle['MANIFEST.json'] = JSON.stringify({
-        appName: 'GeneMap',
-        syncDate: new Date().toISOString(),
-        totalFunctions: KNOWN_FUNCTIONS.length,
-        categories: getAllCategories(),
-        functions: KNOWN_FUNCTIONS.map(fn => ({
-          id: fn.functionId,
-          path: fn.filePath,
-          category: fn.category,
-          exportType: fn.exportType
-        }))
-      }, null, 2);
-
-      // syncToGitHub is a cloud function - use apiClient.invokeLLM as a placeholder
-      // or call a dedicated admin endpoint when available
-      const response = await apiClient.invokeLLM(
-        `Sync ${KNOWN_FUNCTIONS.length} functions to GitHub. Return JSON with ok: true, data: { synced: ${KNOWN_FUNCTIONS.length} }`
-      ).catch(() => null);
-
-      // For now, proceed to function browser after sync attempt
-      setSyncResult({ ok: true, data: { synced: KNOWN_FUNCTIONS.length } });
-      setShowBeginScreen(false);
-      if (KNOWN_FUNCTIONS.length > 0) {
-        setSelectedFunctionId(KNOWN_FUNCTIONS[0].functionId);
-      }
-    } catch (err) {
-      setError(err.message || 'Failed to sync to GitHub');
-    } finally {
-      setIsSyncing(false);
+    setShowBeginScreen(false);
+    if (KNOWN_FUNCTIONS.length > 0) {
+      setSelectedFunctionId(KNOWN_FUNCTIONS[0].functionId);
     }
   };
 
@@ -262,7 +215,7 @@ export default function FunctionReviewer() {
                 Function Reviewer
               </h1>
               <p className="text-xl text-slate-300 mb-8">
-                Sync all your code to GitHub with one click
+                Browse the registered function map
               </p>
 
               {/* Stats */}
@@ -288,34 +241,14 @@ export default function FunctionReviewer() {
                 </Alert>
               )}
 
-              {/* Sync Result */}
-              {syncResult && (
-                <Alert className="mb-6 bg-green-500/20 border-green-500/50">
-                  <CheckCircle2 className="w-4 h-4 text-green-400" />
-                  <AlertDescription className="text-white">
-                    Synced {syncResult.data?.synced || 0} files to GitHub!
-                  </AlertDescription>
-                </Alert>
-              )}
-
               {/* BEGIN Button */}
               <Button
                 onClick={handleBeginSync}
-                disabled={isSyncing}
                 size="lg"
                 className="w-full h-16 text-xl font-bold bg-gradient-to-r from-green-500 to-cyan-500 hover:from-green-600 hover:to-cyan-600 text-white shadow-lg shadow-green-500/30 mb-4"
               >
-                {isSyncing ? (
-                  <>
-                    <Loader2 className="w-6 h-6 mr-3 animate-spin" />
-                    Syncing to GitHub...
-                  </>
-                ) : (
-                  <>
-                    <Rocket className="w-6 h-6 mr-3" />
-                    BEGIN - Sync to GitHub
-                  </>
-                )}
+                <Rocket className="w-6 h-6 mr-3" />
+                Open Function Browser
               </Button>
 
               {/* Skip Button */}
@@ -324,12 +257,12 @@ export default function FunctionReviewer() {
                 variant="ghost"
                 className="text-slate-400 hover:text-white hover:bg-white/10"
               >
-                Skip sync, just browse functions →
+                Browse registry only →
               </Button>
 
               {/* Info */}
               <p className="text-xs text-slate-500 mt-8">
-                Pushes all {KNOWN_FUNCTIONS.length} registered functions to your GitHub repo
+                Shows {KNOWN_FUNCTIONS.length} registered functions. This page does not push source code to GitHub.
               </p>
             </CardContent>
           </Card>

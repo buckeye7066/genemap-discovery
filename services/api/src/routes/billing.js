@@ -4,7 +4,14 @@ import { authenticate } from '../middleware/auth.js';
 import { ValidationError, ForbiddenError } from '../utils/errors.js';
 import { createAuditLog } from '../utils/audit.js';
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || 'sk_test_mock');
+const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY) : null;
+
+function requireStripe() {
+  if (!stripe) {
+    throw new ValidationError('Stripe is not configured for this deployment');
+  }
+  return stripe;
+}
 
 /**
  * Build the price-id lookup table from server env. The previous implementation
@@ -146,7 +153,7 @@ export default async function billingRoutes(fastify) {
       metadata: { userId: user.id },
     };
 
-    const session = await stripe.checkout.sessions.create(sessionParams);
+    const session = await requireStripe().checkout.sessions.create(sessionParams);
 
     await createAuditLog(prisma, {
       userId: user.id,
@@ -175,7 +182,7 @@ export default async function billingRoutes(fastify) {
       throw new ValidationError('No active subscription found');
     }
 
-    const session = await stripe.billingPortal.sessions.create({
+    const session = await requireStripe().billingPortal.sessions.create({
       customer: subscription.stripeCustomerId,
       return_url: body.returnUrl,
     });
@@ -225,7 +232,7 @@ export default async function billingRoutes(fastify) {
       },
     };
 
-    const session = await stripe.checkout.sessions.create(sessionParams);
+    const session = await requireStripe().checkout.sessions.create(sessionParams);
 
     await createAuditLog(prisma, {
       userId: user.id,
@@ -254,9 +261,15 @@ export default async function billingRoutes(fastify) {
       return reply.status(500).send({ error: 'Webhook not configured' });
     }
 
+    const stripeClient = stripe;
+    if (!stripeClient) {
+      console.error('STRIPE_SECRET_KEY not configured');
+      return reply.status(500).send({ error: 'Stripe not configured' });
+    }
+
     let event;
     try {
-      event = stripe.webhooks.constructEvent(request.rawBody, sig, webhookSecret);
+      event = stripeClient.webhooks.constructEvent(request.rawBody, sig, webhookSecret);
     } catch (err) {
       console.error('Webhook signature verification failed:', err.message);
       return reply.status(400).send({ error: 'Webhook signature verification failed' });
@@ -319,7 +332,7 @@ export default async function billingRoutes(fastify) {
             const subscriptionId = session.subscription;
             const customerId = session.customer;
 
-            const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+            const subscription = await stripeClient.subscriptions.retrieve(subscriptionId);
 
             await tx.subscription.create({
               data: {

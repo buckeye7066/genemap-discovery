@@ -1,5 +1,3 @@
-#!/usr/bin/env node
-
 import { existsSync, readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { loadEnv } from '../services/api/src/config/env.js';
@@ -354,7 +352,10 @@ export async function runLaunchVerification(opts = {}) {
   }
 
   if (opts.skipHttp) {
-    checks.push(pass('http.skipped', 'HTTP endpoint checks skipped by flag'));
+    checks.push(fail(
+      'http.skipped',
+      'HTTP endpoint checks were skipped. This is an evidence-only dry run, not launch approval. Run without --skip-http against production URLs for a passing launch proof.'
+    ));
   } else {
     checks.push(...await checkHttpEndpoints({
       apiUrl: opts.apiUrl || source.PRODUCTION_API_URL || source.API_URL,
@@ -379,7 +380,7 @@ Options:
   --web-url=URL       Production web app URL. Can also use PRODUCTION_WEB_URL.
   --evidence=PATH     Launch evidence JSON file. Default: ${DEFAULT_EVIDENCE_FILE}
   --timeout-ms=N      HTTP timeout per request. Default: ${DEFAULT_TIMEOUT_MS}
-  --skip-http         Only validate env and launch evidence.
+  --skip-http         Validate env and launch evidence only; exits non-zero because live HTTP proof is incomplete.
   --json              Print machine-readable JSON.
 `);
 }

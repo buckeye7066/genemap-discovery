@@ -115,8 +115,9 @@ The verifier checks:
 - `/healthz` and `/readyz`, including `medicalEncryption=true`.
 - The deployed web app returns HTML over HTTPS.
 
-For an evidence-only dry run, use `--skip-http`. A real launch should not skip
-HTTP checks.
+For an evidence-only dry run, use `--skip-http`. That mode exits non-zero and
+cannot be used as launch approval because it does not prove the live API or web
+deployment.
 
 ## 8. Go / No-Go Rule
 
