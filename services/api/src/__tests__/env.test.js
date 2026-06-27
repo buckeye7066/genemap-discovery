@@ -13,16 +13,16 @@ function prodEnv(overrides = {}) {
     COOKIE_SECRET: STRONG_SECRET + 'c',
     CORS_ORIGINS: 'https://app.example.com',
     MEDICAL_DATA_ENCRYPTION_KEY: VALID_KEY,
-    STRIPE_SECRET_KEY: 'sk_live_test',
-    STRIPE_WEBHOOK_SECRET: 'whsec_test',
-    STRIPE_PRICE_MONTHLY: 'price_m',
-    STRIPE_PRICE_YEARLY: 'price_y',
-    STRIPE_PRICE_TEAM_MONTHLY: 'price_team_m',
-    STRIPE_PRICE_TEAM_YEARLY: 'price_team_y',
-    STRIPE_PRICE_DEPT_MONTHLY: 'price_dept_m',
-    STRIPE_PRICE_DEPT_YEARLY: 'price_dept_y',
-    STRIPE_PRICE_ENT_MONTHLY: 'price_ent_m',
-    STRIPE_PRICE_ENT_YEARLY: 'price_ent_y',
+    STRIPE_SECRET_KEY: 'sk_live_123456789abcdef',
+    STRIPE_WEBHOOK_SECRET: 'whsec_123456789abcdef',
+    STRIPE_PRICE_MONTHLY: 'price_123456monthly',
+    STRIPE_PRICE_YEARLY: 'price_123456yearly',
+    STRIPE_PRICE_TEAM_MONTHLY: 'price_123456teamMonthly',
+    STRIPE_PRICE_TEAM_YEARLY: 'price_123456teamYearly',
+    STRIPE_PRICE_DEPT_MONTHLY: 'price_123456deptMonthly',
+    STRIPE_PRICE_DEPT_YEARLY: 'price_123456deptYearly',
+    STRIPE_PRICE_ENT_MONTHLY: 'price_123456entMonthly',
+    STRIPE_PRICE_ENT_YEARLY: 'price_123456entYearly',
     OPENAI_API_KEY: 'sk-test',
     ...overrides,
   };
@@ -66,6 +66,16 @@ describe('loadEnv (production)', () => {
   it('throws when MEDICAL_DATA_ENCRYPTION_KEY is not 64 hex chars', () => {
     const source = prodEnv({ MEDICAL_DATA_ENCRYPTION_KEY: 'zz'.repeat(32) });
     expect(() => loadEnv({ source })).toThrowError(/MEDICAL_DATA_ENCRYPTION_KEY/);
+  });
+
+  it('throws when production Stripe uses test-mode credentials', () => {
+    const source = prodEnv({ STRIPE_SECRET_KEY: 'sk_test_123456789abcdef' });
+    expect(() => loadEnv({ source })).toThrowError(/STRIPE_SECRET_KEY/);
+  });
+
+  it('throws when production Stripe price ids are placeholders', () => {
+    const source = prodEnv({ STRIPE_PRICE_MONTHLY: 'price_monthly' });
+    expect(() => loadEnv({ source })).toThrowError(/STRIPE_PRICE_MONTHLY/);
   });
 
   it('throws when no LLM provider key is configured', () => {

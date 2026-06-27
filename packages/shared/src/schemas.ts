@@ -11,7 +11,6 @@ export const loginSchema = z.object({
 });
 
 export const checkoutSessionSchema = z.object({
-  priceId: z.string().optional(),
   plan: z.enum(['monthly', 'yearly']).optional(),
   successUrl: z.string().url(),
   cancelUrl: z.string().url(),

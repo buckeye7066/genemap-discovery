@@ -117,6 +117,20 @@ function isValidMedicalKey(value) {
   return /^[0-9a-f]+$/i.test(value);
 }
 
+function isValidStripePriceId(value) {
+  if (!value) return false;
+  if (!/^price_[A-Za-z0-9_]{6,}$/.test(value)) return false;
+  return !/^price_(your|monthly|yearly|team|dept|department|ent|enterprise|id)/i.test(value);
+}
+
+function isValidStripeLiveSecret(value) {
+  return typeof value === 'string' && value.startsWith('sk_live_') && value.length > 'sk_live_'.length + 8;
+}
+
+function isValidStripeWebhookSecret(value) {
+  return typeof value === 'string' && value.startsWith('whsec_') && value.length > 'whsec_'.length + 8;
+}
+
 /**
  * Load + validate the runtime environment.
  *
@@ -150,6 +164,26 @@ export function loadEnv(opts = {}) {
     if (env.MEDICAL_DATA_ENCRYPTION_KEY && !isValidMedicalKey(env.MEDICAL_DATA_ENCRYPTION_KEY)) {
       weak.push('MEDICAL_DATA_ENCRYPTION_KEY (must be 64 hex characters / 32 bytes)');
     }
+    if (env.STRIPE_SECRET_KEY && !isValidStripeLiveSecret(env.STRIPE_SECRET_KEY)) {
+      weak.push('STRIPE_SECRET_KEY (must be a live-mode sk_live_ key for production)');
+    }
+    if (env.STRIPE_WEBHOOK_SECRET && !isValidStripeWebhookSecret(env.STRIPE_WEBHOOK_SECRET)) {
+      weak.push('STRIPE_WEBHOOK_SECRET (must be a Stripe whsec_ signing secret)');
+    }
+    for (const key of [
+      'STRIPE_PRICE_MONTHLY',
+      'STRIPE_PRICE_YEARLY',
+      'STRIPE_PRICE_TEAM_MONTHLY',
+      'STRIPE_PRICE_TEAM_YEARLY',
+      'STRIPE_PRICE_DEPT_MONTHLY',
+      'STRIPE_PRICE_DEPT_YEARLY',
+      'STRIPE_PRICE_ENT_MONTHLY',
+      'STRIPE_PRICE_ENT_YEARLY',
+    ]) {
+      if (env[key] && !isValidStripePriceId(env[key])) {
+        weak.push(`${key} (must be a real Stripe price_ id, not a placeholder)`);
+      }
+    }
     if (!hasLLMProvider(env, source)) {
       missing.push('OPENAI_API_KEY or ANTHROPIC_API_KEY (set SKIP_LLM_KEY_CHECK=1 to bypass)');
     }
@@ -160,6 +194,9 @@ export function loadEnv(opts = {}) {
     }
     if (env.MEDICAL_DATA_ENCRYPTION_KEY && !isValidMedicalKey(env.MEDICAL_DATA_ENCRYPTION_KEY)) {
       warn('MEDICAL_DATA_ENCRYPTION_KEY is set but is not 64 hex characters; will be rejected in production');
+    }
+    if (env.STRIPE_SECRET_KEY && env.STRIPE_SECRET_KEY.startsWith('sk_live_') === false) {
+      warn('STRIPE_SECRET_KEY is not a live-mode key; this is allowed outside production only');
     }
   }
 

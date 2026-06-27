@@ -25,7 +25,7 @@
     "test:shared": "corepack pnpm --filter @genemap/shared test",
     "lint": "corepack pnpm --filter @genemap/web lint && corepack pnpm --filter @genemap/api lint",
     "lint:api": "corepack pnpm --filter @genemap/api lint",
-    "typecheck": "corepack pnpm --filter @genemap/web typecheck && corepack pnpm --filter @genemap/shared typecheck && corepack pnpm --filter @genemap/api typecheck && node --check scripts/verify-production-launch.mjs",
+    "typecheck": "corepack pnpm --filter @genemap/shared build && corepack pnpm --filter @genemap/web typecheck && corepack pnpm --filter @genemap/shared typecheck && corepack pnpm --filter @genemap/api typecheck && node --check scripts/verify-production-launch.mjs",
     "audit": "corepack pnpm audit --audit-level=low",
     "launch:verify": "node scripts/verify-production-launch.mjs",
     "release:check": "corepack pnpm install --frozen-lockfile && corepack pnpm lint && corepack pnpm typecheck && corepack pnpm test && corepack pnpm --filter @genemap/shared build && corepack pnpm build:web && corepack pnpm run audit",

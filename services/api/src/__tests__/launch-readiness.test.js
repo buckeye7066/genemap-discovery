@@ -33,16 +33,16 @@ const VALID_ENV = {
   COOKIE_SECRET: `${STRONG_SECRET}c`,
   CORS_ORIGINS: 'https://app.example.com',
   MEDICAL_DATA_ENCRYPTION_KEY: 'a'.repeat(64),
-  STRIPE_SECRET_KEY: 'sk_live_123456789',
-  STRIPE_WEBHOOK_SECRET: 'whsec_123456789',
-  STRIPE_PRICE_MONTHLY: 'price_monthly',
-  STRIPE_PRICE_YEARLY: 'price_yearly',
-  STRIPE_PRICE_TEAM_MONTHLY: 'price_team_monthly',
-  STRIPE_PRICE_TEAM_YEARLY: 'price_team_yearly',
-  STRIPE_PRICE_DEPT_MONTHLY: 'price_dept_monthly',
-  STRIPE_PRICE_DEPT_YEARLY: 'price_dept_yearly',
-  STRIPE_PRICE_ENT_MONTHLY: 'price_ent_monthly',
-  STRIPE_PRICE_ENT_YEARLY: 'price_ent_yearly',
+  STRIPE_SECRET_KEY: 'sk_live_123456789abcdef',
+  STRIPE_WEBHOOK_SECRET: 'whsec_123456789abcdef',
+  STRIPE_PRICE_MONTHLY: 'price_123456monthly',
+  STRIPE_PRICE_YEARLY: 'price_123456yearly',
+  STRIPE_PRICE_TEAM_MONTHLY: 'price_123456teamMonthly',
+  STRIPE_PRICE_TEAM_YEARLY: 'price_123456teamYearly',
+  STRIPE_PRICE_DEPT_MONTHLY: 'price_123456deptMonthly',
+  STRIPE_PRICE_DEPT_YEARLY: 'price_123456deptYearly',
+  STRIPE_PRICE_ENT_MONTHLY: 'price_123456entMonthly',
+  STRIPE_PRICE_ENT_YEARLY: 'price_123456entYearly',
   OPENAI_API_KEY: 'sk-live-openai-placeholder-for-validation',
 };
 
@@ -140,7 +140,8 @@ describe('production launch verification', () => {
       ...VALID_ENV,
       STRIPE_SECRET_KEY: 'sk_test_123456789',
     });
-    expect(failures(checks).map((check) => check.id)).toContain('stripe.secretKey');
+    expect(failures(checks).map((check) => check.id)).toContain('env.loadEnv');
+    expect(failures(checks)[0].message).toMatch(/STRIPE_SECRET_KEY/);
   });
 
   it('accepts complete operational launch evidence', () => {

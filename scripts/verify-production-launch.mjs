@@ -81,6 +81,12 @@ function checkUrl(id, value, { requireHttps = true, allowLocalhost = false } = {
   }
 }
 
+function isValidStripePriceId(value) {
+  return typeof value === 'string'
+    && /^price_[A-Za-z0-9_]{6,}$/.test(value)
+    && !/^price_(your|monthly|yearly|team|dept|department|ent|enterprise|id)/i.test(value);
+}
+
 export function parseArgs(argv = process.argv.slice(2)) {
   const opts = {
     apiUrl: process.env.PRODUCTION_API_URL || process.env.API_URL || '',
@@ -153,10 +159,10 @@ export function validateLaunchEnv(source = process.env) {
     'STRIPE_PRICE_ENT_YEARLY',
   ]) {
     const value = env[key];
-    if (typeof value === 'string' && value.startsWith('price_') && !value.includes('your')) {
+    if (isValidStripePriceId(value)) {
       checks.push(pass(`stripe.${key}`, `${key} has a Stripe price id`));
     } else {
-      checks.push(fail(`stripe.${key}`, `${key} must be a real Stripe price_ id`));
+      checks.push(fail(`stripe.${key}`, `${key} must be a real Stripe price_ id, not a placeholder`));
     }
   }
 
