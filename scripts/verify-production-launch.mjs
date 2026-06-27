@@ -1,0 +1,415 @@
+#!/usr/bin/env node
+
+import { existsSync, readFileSync } from 'node:fs';
+import { pathToFileURL } from 'node:url';
+import { loadEnv } from '../services/api/src/config/env.js';
+
+const DEFAULT_TIMEOUT_MS = 8000;
+const DEFAULT_EVIDENCE_FILE = 'ops/production-launch-evidence.json';
+const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+
+const REQUIRED_STRIPE_EVENTS = [
+  'checkout.session.completed',
+  'customer.subscription.created',
+  'customer.subscription.updated',
+  'customer.subscription.deleted',
+  'invoice.payment_succeeded',
+  'invoice.payment_failed',
+];
+
+function pass(id, message) {
+  return { id, status: 'pass', message };
+}
+
+function fail(id, message) {
+  return { id, status: 'fail', message };
+}
+
+function isBlank(value) {
+  return typeof value !== 'string' || value.trim().length === 0;
+}
+
+function asArray(value) {
+  return Array.isArray(value) ? value : [];
+}
+
+function parseJsonFile(filePath) {
+  return JSON.parse(readFileSync(filePath, 'utf8'));
+}
+
+function parseDate(value) {
+  if (isBlank(value)) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function daysAgo(date, now = new Date()) {
+  return (now.getTime() - date.getTime()) / ONE_DAY_MS;
+}
+
+function checkRecentDate(id, value, maxAgeDays, now) {
+  const date = parseDate(value);
+  if (!date) return fail(id, `missing or invalid timestamp: ${value || '(empty)'}`);
+  if (date.getTime() > now.getTime() + ONE_DAY_MS) {
+    return fail(id, `timestamp is in the future: ${value}`);
+  }
+  const age = daysAgo(date, now);
+  if (age > maxAgeDays) {
+    return fail(id, `timestamp is ${Math.floor(age)} days old; expected <= ${maxAgeDays} days`);
+  }
+  return pass(id, `timestamp is recent (${value})`);
+}
+
+function checkUrl(id, value, { requireHttps = true, allowLocalhost = false } = {}) {
+  if (isBlank(value)) return fail(id, 'URL is required');
+  try {
+    const url = new URL(value);
+    const host = url.hostname.toLowerCase();
+    const isLocal =
+      host === 'localhost' ||
+      host === '127.0.0.1' ||
+      host === '0.0.0.0' ||
+      host.endsWith('.local');
+
+    if (requireHttps && url.protocol !== 'https:') {
+      return fail(id, `expected https URL, got ${url.protocol}`);
+    }
+    if (!allowLocalhost && isLocal) {
+      return fail(id, `local URL is not valid for production launch: ${value}`);
+    }
+    return pass(id, `${url.origin} is a valid production URL`);
+  } catch {
+    return fail(id, `invalid URL: ${value}`);
+  }
+}
+
+export function parseArgs(argv = process.argv.slice(2)) {
+  const opts = {
+    apiUrl: process.env.PRODUCTION_API_URL || process.env.API_URL || '',
+    webUrl: process.env.PRODUCTION_WEB_URL || process.env.WEB_URL || '',
+    evidenceFile: process.env.LAUNCH_EVIDENCE_FILE || DEFAULT_EVIDENCE_FILE,
+    timeoutMs: DEFAULT_TIMEOUT_MS,
+    skipHttp: false,
+    json: false,
+  };
+
+  for (const arg of argv) {
+    if (arg === '--') continue;
+    else if (arg === '--skip-http') opts.skipHttp = true;
+    else if (arg === '--json') opts.json = true;
+    else if (arg.startsWith('--api-url=')) opts.apiUrl = arg.slice('--api-url='.length);
+    else if (arg.startsWith('--web-url=')) opts.webUrl = arg.slice('--web-url='.length);
+    else if (arg.startsWith('--evidence=')) opts.evidenceFile = arg.slice('--evidence='.length);
+    else if (arg.startsWith('--timeout-ms=')) opts.timeoutMs = Number(arg.slice('--timeout-ms='.length));
+    else if (arg === '--help' || arg === '-h') opts.help = true;
+    else throw new Error(`Unknown argument: ${arg}`);
+  }
+  return opts;
+}
+
+export function validateLaunchEnv(source = process.env) {
+  const checks = [];
+  let env;
+
+  try {
+    env = loadEnv({ source, warn: () => {} });
+    checks.push(pass('env.loadEnv', 'production environment passes API startup validation'));
+  } catch (err) {
+    checks.push(fail('env.loadEnv', err.message));
+    return { env: null, checks };
+  }
+
+  if (env.NODE_ENV === 'production') {
+    checks.push(pass('env.NODE_ENV', 'NODE_ENV=production'));
+  } else {
+    checks.push(fail('env.NODE_ENV', `NODE_ENV must be production, got ${env.NODE_ENV}`));
+  }
+
+  for (const origin of env.corsAllowList()) {
+    checks.push(checkUrl(`env.CORS_ORIGINS.${origin}`, origin, { requireHttps: true }));
+  }
+  if (env.corsAllowList().includes('*')) {
+    checks.push(fail('env.CORS_ORIGINS.wildcard', 'wildcard CORS is not allowed in production'));
+  }
+
+  if (env.STRIPE_SECRET_KEY?.startsWith('sk_live_')) {
+    checks.push(pass('stripe.secretKey', 'Stripe secret key is live-mode'));
+  } else {
+    checks.push(fail('stripe.secretKey', 'STRIPE_SECRET_KEY must start with sk_live_ for production'));
+  }
+
+  if (env.STRIPE_WEBHOOK_SECRET?.startsWith('whsec_')) {
+    checks.push(pass('stripe.webhookSecret', 'Stripe webhook signing secret is present'));
+  } else {
+    checks.push(fail('stripe.webhookSecret', 'STRIPE_WEBHOOK_SECRET must start with whsec_'));
+  }
+
+  for (const key of [
+    'STRIPE_PRICE_MONTHLY',
+    'STRIPE_PRICE_YEARLY',
+    'STRIPE_PRICE_TEAM_MONTHLY',
+    'STRIPE_PRICE_TEAM_YEARLY',
+    'STRIPE_PRICE_DEPT_MONTHLY',
+    'STRIPE_PRICE_DEPT_YEARLY',
+    'STRIPE_PRICE_ENT_MONTHLY',
+    'STRIPE_PRICE_ENT_YEARLY',
+  ]) {
+    const value = env[key];
+    if (typeof value === 'string' && value.startsWith('price_') && !value.includes('your')) {
+      checks.push(pass(`stripe.${key}`, `${key} has a Stripe price id`));
+    } else {
+      checks.push(fail(`stripe.${key}`, `${key} must be a real Stripe price_ id`));
+    }
+  }
+
+  return { env, checks };
+}
+
+export function validateEvidence(evidence, opts = {}) {
+  const now = opts.now || new Date();
+  const checks = [];
+
+  checks.push(isBlank(evidence?.reviewedBy)
+    ? fail('evidence.reviewedBy', 'reviewedBy is required')
+    : pass('evidence.reviewedBy', `reviewed by ${evidence.reviewedBy}`));
+  checks.push(checkRecentDate('evidence.reviewedAt', evidence?.reviewedAt, 30, now));
+
+  const secrets = evidence?.productionSecrets || {};
+  checks.push(secrets.storedInSecretManager === true
+    ? pass('secrets.storedInSecretManager', 'production secrets are stored in a secret manager')
+    : fail('secrets.storedInSecretManager', 'production secrets must be stored in Railway/Vercel/1Password/etc.'));
+  checks.push(secrets.rotatedForLaunch === true
+    ? pass('secrets.rotatedForLaunch', 'launch secrets were rotated/generated for launch')
+    : fail('secrets.rotatedForLaunch', 'launch secrets must be newly generated or explicitly rotated'));
+  checks.push(isBlank(secrets.manager)
+    ? fail('secrets.manager', 'secret manager name is required')
+    : pass('secrets.manager', `secret manager recorded: ${secrets.manager}`));
+
+  const backups = evidence?.backups || {};
+  checks.push(backups.automaticBackupsEnabled === true
+    ? pass('backups.automaticBackupsEnabled', 'automatic database backups enabled')
+    : fail('backups.automaticBackupsEnabled', 'automatic database backups must be enabled'));
+  checks.push(Number(backups.retentionDays) >= 7
+    ? pass('backups.retentionDays', `backup retention is ${backups.retentionDays} days`)
+    : fail('backups.retentionDays', 'backup retention must be at least 7 days'));
+  checks.push(checkRecentDate('backups.lastSuccessfulBackupAt', backups.lastSuccessfulBackupAt, 2, now));
+  checks.push(checkRecentDate('backups.restoreTestedAt', backups.restoreTestedAt, 90, now));
+  checks.push(isBlank(backups.restoreRunbook)
+    ? fail('backups.restoreRunbook', 'restore runbook path is required')
+    : pass('backups.restoreRunbook', `restore runbook recorded: ${backups.restoreRunbook}`));
+
+  const monitoring = evidence?.monitoring || {};
+  checks.push(monitoring.errorTrackingConfigured === true
+    ? pass('monitoring.errorTrackingConfigured', 'error tracking configured')
+    : fail('monitoring.errorTrackingConfigured', 'error tracking must be configured'));
+  checks.push(monitoring.logAggregationConfigured === true
+    ? pass('monitoring.logAggregationConfigured', 'log aggregation configured')
+    : fail('monitoring.logAggregationConfigured', 'log aggregation must be configured'));
+  checks.push(monitoring.alertingConfigured === true
+    ? pass('monitoring.alertingConfigured', 'alerting configured')
+    : fail('monitoring.alertingConfigured', 'alerting rules must be configured'));
+  checks.push(checkUrl('monitoring.dashboardUrl', monitoring.dashboardUrl, { requireHttps: true }));
+  checks.push(isBlank(monitoring.pagerEscalation)
+    ? fail('monitoring.pagerEscalation', 'pager/on-call escalation path is required')
+    : pass('monitoring.pagerEscalation', 'pager/on-call escalation path recorded'));
+
+  const stripe = evidence?.stripe || {};
+  checks.push(stripe.liveMode === true
+    ? pass('stripe.liveMode', 'Stripe live mode confirmed')
+    : fail('stripe.liveMode', 'Stripe live mode must be confirmed'));
+  checks.push(checkUrl('stripe.webhookEndpoint', stripe.webhookEndpoint, { requireHttps: true }));
+  if (!String(stripe.webhookEndpoint || '').endsWith('/billing/webhook')) {
+    checks.push(fail('stripe.webhookEndpoint.path', 'Stripe webhook endpoint must end with /billing/webhook'));
+  } else {
+    checks.push(pass('stripe.webhookEndpoint.path', 'Stripe webhook endpoint path is correct'));
+  }
+  const events = asArray(stripe.webhookEvents);
+  for (const eventName of REQUIRED_STRIPE_EVENTS) {
+    checks.push(events.includes(eventName)
+      ? pass(`stripe.event.${eventName}`, `${eventName} configured`)
+      : fail(`stripe.event.${eventName}`, `${eventName} must be enabled on the Stripe webhook`));
+  }
+  checks.push(checkRecentDate('stripe.lastWebhookTestAt', stripe.lastWebhookTestAt, 30, now));
+
+  const retention = evidence?.dataRetention || {};
+  checks.push(retention.policyApproved === true
+    ? pass('retention.policyApproved', 'data retention policy approved')
+    : fail('retention.policyApproved', 'data retention policy must be approved before launch'));
+  checks.push(isBlank(retention.policyDocument)
+    ? fail('retention.policyDocument', 'data retention policy document path is required')
+    : pass('retention.policyDocument', `data retention policy documented at ${retention.policyDocument}`));
+  checks.push(Number(retention.deletionRequestSlaDays) > 0 && Number(retention.deletionRequestSlaDays) <= 30
+    ? pass('retention.deletionRequestSlaDays', `deletion SLA is ${retention.deletionRequestSlaDays} days`)
+    : fail('retention.deletionRequestSlaDays', 'deletion request SLA must be between 1 and 30 days'));
+  checks.push(Number(retention.backupRetentionDays) >= 7
+    ? pass('retention.backupRetentionDays', `backup retention is ${retention.backupRetentionDays} days`)
+    : fail('retention.backupRetentionDays', 'backup retention must be at least 7 days'));
+
+  const legal = evidence?.legalCompliance || {};
+  checks.push(legal.legalReviewCompleted === true
+    ? pass('legal.legalReviewCompleted', 'legal review completed')
+    : fail('legal.legalReviewCompleted', 'legal review must be completed or formally waived'));
+  checks.push(legal.complianceReviewCompleted === true
+    ? pass('legal.complianceReviewCompleted', 'compliance review completed')
+    : fail('legal.complianceReviewCompleted', 'compliance review must be completed or formally waived'));
+  checks.push(isBlank(legal.reviewer)
+    ? fail('legal.reviewer', 'legal/compliance reviewer is required')
+    : pass('legal.reviewer', `legal/compliance reviewer recorded: ${legal.reviewer}`));
+  checks.push(checkRecentDate('legal.reviewedAt', legal.reviewedAt, 365, now));
+  checks.push(legal.medicalDisclaimerApproved === true
+    ? pass('legal.medicalDisclaimerApproved', 'medical/genomics disclaimer approved')
+    : fail('legal.medicalDisclaimerApproved', 'medical/genomics disclaimer approval is required'));
+  checks.push(['signed', 'not_required'].includes(legal.baaStatus)
+    ? pass('legal.baaStatus', `BAA status recorded: ${legal.baaStatus}`)
+    : fail('legal.baaStatus', 'baaStatus must be "signed" or "not_required"'));
+
+  return checks;
+}
+
+async function fetchJson(fetchImpl, url, timeoutMs) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetchImpl(url, { signal: controller.signal });
+    const text = await response.text();
+    let body = null;
+    try {
+      body = text ? JSON.parse(text) : null;
+    } catch {
+      body = text;
+    }
+    return { response, body };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+export async function checkHttpEndpoints(opts) {
+  const {
+    apiUrl,
+    webUrl,
+    fetchImpl = globalThis.fetch,
+    timeoutMs = DEFAULT_TIMEOUT_MS,
+  } = opts;
+  const checks = [];
+
+  checks.push(checkUrl('http.apiUrl', apiUrl, { requireHttps: true }));
+  checks.push(checkUrl('http.webUrl', webUrl, { requireHttps: true }));
+  if (checks.some((check) => check.status === 'fail')) return checks;
+  if (typeof fetchImpl !== 'function') {
+    checks.push(fail('http.fetch', 'global fetch is not available'));
+    return checks;
+  }
+
+  const apiBase = apiUrl.replace(/\/+$/, '');
+  const webBase = webUrl.replace(/\/+$/, '');
+
+  try {
+    const { response, body } = await fetchJson(fetchImpl, `${apiBase}/healthz`, timeoutMs);
+    checks.push(response.ok && body?.status === 'ok'
+      ? pass('http.healthz', '/healthz returned status ok')
+      : fail('http.healthz', `/healthz expected 200 {status:"ok"}, got ${response.status}`));
+  } catch (err) {
+    checks.push(fail('http.healthz', `/healthz request failed: ${err.message}`));
+  }
+
+  try {
+    const { response, body } = await fetchJson(fetchImpl, `${apiBase}/readyz`, timeoutMs);
+    checks.push(response.ok && body?.status === 'ready' && body?.medicalEncryption === true
+      ? pass('http.readyz', '/readyz returned ready with medicalEncryption=true')
+      : fail('http.readyz', `/readyz expected ready + encryption, got status ${response.status}`));
+  } catch (err) {
+    checks.push(fail('http.readyz', `/readyz request failed: ${err.message}`));
+  }
+
+  try {
+    const response = await fetchImpl(webBase, { signal: AbortSignal.timeout(timeoutMs) });
+    const contentType = response.headers?.get?.('content-type') || '';
+    checks.push(response.ok && contentType.includes('text/html')
+      ? pass('http.web', 'web app returned HTML')
+      : fail('http.web', `web app expected HTML 200, got ${response.status} ${contentType}`));
+  } catch (err) {
+    checks.push(fail('http.web', `web request failed: ${err.message}`));
+  }
+
+  return checks;
+}
+
+export async function runLaunchVerification(opts = {}) {
+  const source = opts.source || process.env;
+  const checks = [];
+
+  checks.push(...validateLaunchEnv(source).checks);
+
+  const evidenceFile = opts.evidenceFile || DEFAULT_EVIDENCE_FILE;
+  if (!existsSync(evidenceFile)) {
+    checks.push(fail('evidence.file', `missing launch evidence file: ${evidenceFile}`));
+  } else {
+    try {
+      checks.push(pass('evidence.file', `loaded ${evidenceFile}`));
+      checks.push(...validateEvidence(parseJsonFile(evidenceFile), { now: opts.now }));
+    } catch (err) {
+      checks.push(fail('evidence.file', `could not parse evidence file: ${err.message}`));
+    }
+  }
+
+  if (opts.skipHttp) {
+    checks.push(pass('http.skipped', 'HTTP endpoint checks skipped by flag'));
+  } else {
+    checks.push(...await checkHttpEndpoints({
+      apiUrl: opts.apiUrl || source.PRODUCTION_API_URL || source.API_URL,
+      webUrl: opts.webUrl || source.PRODUCTION_WEB_URL || source.WEB_URL,
+      fetchImpl: opts.fetchImpl,
+      timeoutMs: opts.timeoutMs || DEFAULT_TIMEOUT_MS,
+    }));
+  }
+
+  return {
+    ok: checks.every((check) => check.status === 'pass'),
+    checks,
+  };
+}
+
+function printHelp() {
+  console.log(`Usage:
+  pnpm launch:verify -- --api-url=https://api.example.com --web-url=https://app.example.com --evidence=ops/production-launch-evidence.json
+
+Options:
+  --api-url=URL       Production API base URL. Can also use PRODUCTION_API_URL.
+  --web-url=URL       Production web app URL. Can also use PRODUCTION_WEB_URL.
+  --evidence=PATH     Launch evidence JSON file. Default: ${DEFAULT_EVIDENCE_FILE}
+  --timeout-ms=N      HTTP timeout per request. Default: ${DEFAULT_TIMEOUT_MS}
+  --skip-http         Only validate env and launch evidence.
+  --json              Print machine-readable JSON.
+`);
+}
+
+function formatChecks(checks) {
+  return checks
+    .map((check) => `${check.status === 'pass' ? 'PASS' : 'FAIL'} ${check.id}: ${check.message}`)
+    .join('\n');
+}
+
+async function main() {
+  const opts = parseArgs();
+  if (opts.help) {
+    printHelp();
+    return;
+  }
+
+  const result = await runLaunchVerification(opts);
+  if (opts.json) {
+    console.log(JSON.stringify(result, null, 2));
+  } else {
+    console.log(formatChecks(result.checks));
+    console.log(result.ok ? '\nProduction launch verification passed.' : '\nProduction launch verification failed.');
+  }
+  process.exitCode = result.ok ? 0 : 1;
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((err) => {
+    console.error(err);
+    process.exitCode = 1;
+  });
+}
