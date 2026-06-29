@@ -1,13 +1,12 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
 import { apiClient } from "@genemap/shared";
-import { createPageUrl } from "@/utils";
 import { useAuth } from "../lib/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -33,12 +32,13 @@ import {
   Link as LinkIcon,
   Microscope,
   FileText,
-  Pencil
+  ExternalLink
 } from "lucide-react";
 
 export default function ProfilePage() {
-  const navigate = useNavigate();
   const { user, isLoadingAuth } = useAuth();
+  const [phoneNumber, setPhoneNumber] = useState("");
+  const [mailingListOptIn, setMailingListOptIn] = useState(false);
   const [age, setAge] = useState("");
   const [educationLevel, setEducationLevel] = useState("");
   const [fieldOfStudy, setFieldOfStudy] = useState("");
@@ -55,6 +55,8 @@ export default function ProfilePage() {
 
   useEffect(() => {
     if (user) {
+      setPhoneNumber(user.phone_number || "");
+      setMailingListOptIn(Boolean(user.mailing_list_opt_in));
       setAge(user.age || "");
       setEducationLevel(user.education_level || "");
       setFieldOfStudy(user.field_of_study || "");
@@ -120,6 +122,12 @@ export default function ProfilePage() {
 
     try {
       await apiClient.updateProfile({
+        // Contact info (camelCase keys the /auth/me handler accepts, same as the
+        // onboarding flow). demographicsCollected stays true once set.
+        phoneNumber: phoneNumber,
+        mailingListOptIn: mailingListOptIn,
+        demographicsCollected: true,
+        // Research / personalization profile.
         age,
         education_level: educationLevel,
         field_of_study: fieldOfStudy,
@@ -241,11 +249,6 @@ export default function ProfilePage() {
                   </span>
                 </div>
                 <div className="flex items-center gap-2 text-sm">
-                  <Phone className="w-4 h-4 text-slate-500" />
-                  <span className="font-medium">Phone:</span>
-                  <span className="text-slate-700">{user.phone_number || "Not provided"}</span>
-                </div>
-                <div className="flex items-center gap-2 text-sm">
                   <Shield className="w-4 h-4 text-slate-500" />
                   <span className="font-medium">Role:</span>
                   <Badge variant={user.role === "admin" ? "default" : "secondary"}>
@@ -254,15 +257,7 @@ export default function ProfilePage() {
                 </div>
               </div>
 
-              <div className="pt-4 border-t space-y-2">
-                <Button
-                  variant="outline"
-                  className="w-full gap-2"
-                  onClick={() => navigate(createPageUrl("DemographicCollection"))}
-                >
-                  <Pencil className="w-4 h-4" />
-                  Edit Contact Info
-                </Button>
+              <div className="pt-4 border-t">
                 <Button
                   variant="outline"
                   className="w-full gap-2"
@@ -285,6 +280,53 @@ export default function ProfilePage() {
             <CardContent>
               <form onSubmit={handleSubmit} className="space-y-6">
                 <div className="space-y-4">
+                  <h3 className="font-semibold text-slate-900 flex items-center gap-2">
+                    <Phone className="w-4 h-4" />
+                    Contact Information
+                  </h3>
+
+                  <div>
+                    <Label htmlFor="phone">Phone Number</Label>
+                    <div className="relative mt-1">
+                      <Phone className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
+                      <Input
+                        id="phone"
+                        type="tel"
+                        placeholder="(555) 123-4567"
+                        value={phoneNumber}
+                        onChange={(e) => setPhoneNumber(e.target.value)}
+                        className="pl-10"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                    <Checkbox
+                      id="mailing-list"
+                      checked={mailingListOptIn}
+                      onCheckedChange={setMailingListOptIn}
+                    />
+                    <div className="flex-1">
+                      <label htmlFor="mailing-list" className="text-sm font-medium text-slate-900 cursor-pointer">
+                        Join Axiom Biolabs Mailing List
+                      </label>
+                      <p className="text-xs text-slate-600 mt-1">
+                        Updates about new features, research insights, and exclusive offers from Axiom Biolabs.
+                      </p>
+                      <a
+                        href="https://www.axiombiolabs.com"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 mt-1"
+                      >
+                        Visit Axiom Biolabs Website
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-4 pt-4 border-t">
                   <h3 className="font-semibold text-slate-900 flex items-center gap-2">
                     <User className="w-4 h-4" />
                     Basic Information
