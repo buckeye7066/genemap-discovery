@@ -255,7 +255,7 @@ export default function Layout({ children, currentPageName }) {
                 </p>
                 <div className="text-center">
                   <a
-                    href="https://www.axiombiolabs.com"
+                    href="https://axiombiolabs.org"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-[11px] text-blue-500 hover:text-blue-600 font-medium inline-flex items-center gap-1 transition-colors"

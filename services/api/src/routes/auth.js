@@ -81,8 +81,10 @@ export default async function authRoutes(fastify) {
 
     // Issue CSRF cookie on register so the SPA can immediately make
     // state-changing calls (logout, profile update) without a /auth/me
-    // round-trip.
-    ensureCsrfCookie(request, reply);
+    // round-trip. Also return the token in the body: on a cross-site deploy
+    // the SPA can't read the cookie (different domain), so the body is the
+    // only channel that reaches it.
+    const csrfToken = ensureCsrfCookie(request, reply);
 
     reply
       .setCookie('accessToken', accessToken, getAuthCookieOptions({ maxAge: 15 * 60 }))
@@ -93,6 +95,7 @@ export default async function authRoutes(fastify) {
           email: user.email,
           role: user.role,
         },
+        csrfToken,
       });
   });
 
@@ -160,8 +163,9 @@ export default async function authRoutes(fastify) {
     });
 
     // Same rationale as /register: ensure the SPA always has a CSRF token
-    // BEFORE its first authenticated state-changing call.
-    ensureCsrfCookie(request, reply);
+    // BEFORE its first authenticated state-changing call, and hand it back in
+    // the body so cross-site SPAs (which can't read the cookie) get it too.
+    const csrfToken = ensureCsrfCookie(request, reply);
 
     reply
       .setCookie('accessToken', accessToken, getAuthCookieOptions({ maxAge: 15 * 60 }))
@@ -172,6 +176,7 @@ export default async function authRoutes(fastify) {
           email: user.email,
           role: user.role,
         },
+        csrfToken,
       });
   });
 
@@ -245,12 +250,12 @@ export default async function authRoutes(fastify) {
       data: { userId: user.id, refreshTokenHash: newHash, expiresAt: newExpires },
     });
 
-    ensureCsrfCookie(request, reply);
+    const csrfToken = ensureCsrfCookie(request, reply);
 
     reply
       .setCookie('accessToken', newAccess, getAuthCookieOptions({ maxAge: 15 * 60 }))
       .setCookie('refreshToken', newRefresh, getAuthCookieOptions({ maxAge: 7 * 24 * 60 * 60 }))
-      .send({ ok: true });
+      .send({ ok: true, csrfToken });
   });
 
   fastify.get('/me', { preHandler: authenticate }, async (request, reply) => {
@@ -303,7 +308,7 @@ export default async function authRoutes(fastify) {
         : null,
     };
 
-    ensureCsrfCookie(request, reply);
+    const csrfToken = ensureCsrfCookie(request, reply);
 
     reply.send({
       id: user.id,
@@ -317,6 +322,7 @@ export default async function authRoutes(fastify) {
       banned: user.banned,
       ban_reason: user.banReason || null,
       entitlements,
+      csrfToken,
     });
   });
 

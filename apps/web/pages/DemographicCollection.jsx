@@ -198,7 +198,7 @@ export default function DemographicCollectionPage() {
               </div>
 
               <a
-                href="https://www.axiombiolabs.com"
+                href="https://axiombiolabs.org"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700 transition-colors"

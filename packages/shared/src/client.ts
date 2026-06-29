@@ -91,10 +91,40 @@ function resolveDefaultBaseURL(): string {
 const DEFAULT_BASE_URL = resolveDefaultBaseURL();
 
 /**
- * Read the CSRF token from the non-HttpOnly cookie set by the API on
- * every authenticated GET response (see services/api/src/middleware/csrf.js).
+ * CSRF token store.
+ *
+ * On a same-origin deployment the API's non-HttpOnly `csrfToken` cookie is
+ * readable via document.cookie. On a cross-site deployment (Vercel web ↔
+ * Railway API) that cookie lives on a different registrable domain and is
+ * invisible to this JS, so the API also returns the token in auth response
+ * bodies (login/register/refresh/me). We cache that value here — in memory,
+ * mirrored to localStorage so it survives reloads — and prefer it over the
+ * cookie. See services/api/src/middleware/csrf.js.
  */
+const CSRF_STORAGE_KEY = 'genemap.csrfToken';
+let inMemoryCsrfToken: string | null = readStoredCsrfToken();
+
+function readStoredCsrfToken(): string | null {
+  try {
+    return typeof localStorage !== 'undefined' ? localStorage.getItem(CSRF_STORAGE_KEY) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function setCsrfToken(token: string | null): void {
+  inMemoryCsrfToken = token;
+  try {
+    if (typeof localStorage === 'undefined') return;
+    if (token) localStorage.setItem(CSRF_STORAGE_KEY, token);
+    else localStorage.removeItem(CSRF_STORAGE_KEY);
+  } catch {
+    /* localStorage may be unavailable (private mode, SSR) — memory cache still works */
+  }
+}
+
 function getCsrfToken(): string | null {
+  if (inMemoryCsrfToken) return inMemoryCsrfToken;
   if (typeof document === 'undefined') return null;
   const match = document.cookie.match(/(?:^|; )csrfToken=([^;]+)/);
   return match ? decodeURIComponent(match[1]) : null;
@@ -162,7 +192,17 @@ export class ApiClient {
     // 204 No Content: callers expect undefined. Avoid response.json() throw.
     if (response.status === 204) return undefined as T;
 
-    return (await response.json()) as T;
+    const data = (await response.json()) as T;
+
+    // Auth responses carry a fresh CSRF token in the body so cross-site SPAs
+    // (which cannot read the API's cookie) can echo it on later writes. Capture
+    // it transparently; callers keep their existing typed return shape.
+    if (data && typeof data === 'object' && 'csrfToken' in data) {
+      const token = (data as { csrfToken?: unknown }).csrfToken;
+      if (typeof token === 'string') setCsrfToken(token);
+    }
+
+    return data;
   }
 
   // ─── Auth ────────────────────────────────────────────────────────
@@ -172,8 +212,14 @@ export class ApiClient {
   login(data: LoginRequest): Promise<AuthResponse> {
     return this.request('/auth/login', { method: 'POST', body: JSON.stringify(data) });
   }
-  logout(): Promise<{ success: boolean }> {
-    return this.request('/auth/logout', { method: 'POST' });
+  async logout(): Promise<{ success: boolean }> {
+    try {
+      return await this.request('/auth/logout', { method: 'POST' });
+    } finally {
+      // Drop the cached CSRF token so a subsequent login starts clean and a
+      // stale token can't leak across sessions on a shared device.
+      setCsrfToken(null);
+    }
   }
   getMe(): Promise<User> {
     return this.request('/auth/me');
