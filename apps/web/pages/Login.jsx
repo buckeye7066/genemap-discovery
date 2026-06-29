@@ -60,7 +60,7 @@ export default function Login() {
             </div>
             <div>
               <CardTitle className="text-2xl text-white">GeneMap Discovery</CardTitle>
-              <p className="mt-1 text-sm text-slate-400">
+              <p className="mt-1 text-sm text-slate-300">
                 {isRegister ? "Create your research account" : "Sign in to continue"}
               </p>
             </div>
@@ -90,9 +90,9 @@ export default function Login() {
             </div>
 
             {hasProtectedRedirect && (
-              <Alert className="mb-4 border-cyan-900/70 bg-cyan-950/40 text-cyan-50">
-                <AlertDescription>
-                  Sign in to continue to <span className="font-medium">{redirectTo}</span>.
+              <Alert className="mb-4 border-cyan-600/70 bg-cyan-950/70 text-cyan-50 [&_*]:text-cyan-50">
+                <AlertDescription className="text-cyan-50">
+                  Sign in to continue to <span className="font-semibold text-white">{redirectTo}</span>.
                 </AlertDescription>
               </Alert>
             )}
