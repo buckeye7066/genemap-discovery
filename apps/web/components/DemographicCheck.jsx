@@ -10,18 +10,28 @@ export default function DemographicCheck({ children }) {
   const [shouldRedirect, setShouldRedirect] = useState(false);
 
   useEffect(() => {
-    if (isLoadingAuth || !user) return;
+    if (isLoadingAuth || !user) {
+      // Not logged in (or still resolving auth): never hold the redirect spinner.
+      if (shouldRedirect) setShouldRedirect(false);
+      return;
+    }
 
     const demographicPath = createPageUrl("DemographicCollection");
     if (location.pathname === demographicPath || location.pathname.includes('demographic')) {
+      // We've arrived on the demographic page — clear the redirect flag so the
+      // page renders instead of an endless spinner. (Without this reset the
+      // wrapper stayed on the spinner forever, the root cause of the hang.)
+      if (shouldRedirect) setShouldRedirect(false);
       return;
     }
 
     if (!user.demographics_collected) {
       setShouldRedirect(true);
       navigate(demographicPath, { replace: true });
+    } else if (shouldRedirect) {
+      setShouldRedirect(false);
     }
-  }, [user, isLoadingAuth, location.pathname, navigate]);
+  }, [user, isLoadingAuth, location.pathname, navigate, shouldRedirect]);
 
   if (isLoadingAuth || shouldRedirect) {
     return (
