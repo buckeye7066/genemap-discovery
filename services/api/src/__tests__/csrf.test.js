@@ -91,6 +91,37 @@ describe('CSRF middleware', () => {
     expect(res.statusCode).toBe(200);
   });
 
+  it('accepts a valid HMAC header token with no cookie (cross-site deploy)', async () => {
+    // On a cross-domain deploy (Vercel web ↔ Railway API) the csrfToken cookie
+    // is unreadable by the SPA and never sent, so only the header arrives. A
+    // genuinely signed token must still be honored.
+    prisma._store.user.push({
+      id: 'u1', email: 'u@x.com', role: 'user', displayName: 'Old',
+      banned: false, demographicsCollected: false,
+    });
+    const csrf = issueCsrfToken('u1');
+    const session = authCookie({ userId: 'u1', email: 'u@x.com', role: 'user' });
+    const res = await app.inject({
+      method: 'PUT',
+      url: '/auth/me',
+      headers: { cookie: session, 'x-csrf-token': csrf },
+      payload: { displayName: 'New' },
+    });
+    expect(res.statusCode).toBe(200);
+  });
+
+  it('rejects a forged/unsigned header token when no cookie is present', async () => {
+    const session = authCookie({ userId: 'u1', email: 'u@x.com', role: 'user' });
+    const res = await app.inject({
+      method: 'PUT',
+      url: '/auth/me',
+      headers: { cookie: session, 'x-csrf-token': 'forged-not-hmac-signed' },
+      payload: { displayName: 'Bad' },
+    });
+    expect(res.statusCode).toBe(403);
+    expect(JSON.parse(res.body).error).toMatch(/csrf/i);
+  });
+
   it('does not require CSRF on /auth/login (no session yet)', async () => {
     const res = await app.inject({
       method: 'POST',
