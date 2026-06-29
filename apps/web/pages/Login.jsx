@@ -20,7 +20,11 @@ export default function Login() {
 
   const isRegister = mode === "register";
   const redirectFrom = location.state?.from;
-  const hasProtectedRedirect = Boolean(redirectFrom?.pathname && redirectFrom.pathname !== "/login");
+  const hasProtectedRedirect = Boolean(
+    redirectFrom?.pathname &&
+    redirectFrom.pathname !== "/login" &&
+    redirectFrom.pathname !== "/"
+  );
   const redirectTo = hasProtectedRedirect
     ? `${redirectFrom.pathname}${redirectFrom.search || ""}${redirectFrom.hash || ""}`
     : "/";
