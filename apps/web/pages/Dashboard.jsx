@@ -144,7 +144,9 @@ export default function Dashboard() {
 Keep each insight under 50 words, practical, and personalized.`;
 
       const response = await apiClient.invokeLLM(prompt);
-      setPersonalizedInsights(response);
+      // invokeLLM resolves to { result, disclaimer }; render only the text.
+      const insightText = typeof response === 'string' ? response : response?.result;
+      if (insightText) setPersonalizedInsights(insightText);
     } catch (err) {
       log.error("Error generating insights:", err);
     }

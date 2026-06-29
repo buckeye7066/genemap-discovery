@@ -40,12 +40,14 @@ export default function AdminFunctionTester() {
       const response = await apiClient.invokeLLM(
         'Run a health check on all backend functions. Return JSON with ok, checked, passed, failed, skipped counts and an errorReport string.'
       );
+      // invokeLLM resolves to { result, disclaimer }; the JSON lives in .result.
+      const raw = response?.result || response;
       // Parse the LLM response as test results if possible
       try {
-        const parsed = typeof response === 'string' ? JSON.parse(response) : response;
+        const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
         setResults(parsed);
       } catch {
-        setResults({ ok: true, data: { checked: 0, passed: 0, failed: 0, skipped: 0, errorReport: response || 'No report' } });
+        setResults({ ok: true, data: { checked: 0, passed: 0, failed: 0, skipped: 0, errorReport: raw || 'No report' } });
       }
     } catch (err) {
       setError(err.message || 'Failed to run tests');

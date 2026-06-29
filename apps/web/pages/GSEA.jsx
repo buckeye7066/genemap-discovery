@@ -96,12 +96,14 @@ ${geneSymbols}
 }`;
 
       const response = await apiClient.invokeLLM(prompt);
+      // invokeLLM resolves to { result, disclaimer }; the JSON lives in .result.
+      const raw = response?.result || response;
       // Parse the response if it's a string containing JSON
-      let parsed = response;
-      if (typeof response === 'string') {
+      let parsed = raw;
+      if (typeof raw === 'string') {
         try {
           // Try to extract JSON from the response
-          const jsonMatch = response.match(/\{[\s\S]*\}/);
+          const jsonMatch = raw.match(/\{[\s\S]*\}/);
           if (jsonMatch) {
             parsed = JSON.parse(jsonMatch[0]);
           }
