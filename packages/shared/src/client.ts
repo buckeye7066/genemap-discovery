@@ -62,6 +62,24 @@ import type {
  *
  * Override at runtime by passing a baseURL to the ApiClient constructor.
  */
+/**
+ * Sanitize a base URL. Env values pasted into a .env file or a Railway/Vercel
+ * dashboard field frequently pick up a trailing newline; left unstripped that
+ * `\r\n` lands between the host and the path (e.g. `…railway.app\r\n/auth/me`),
+ * which browsers handle inconsistently — sometimes 200, sometimes a silent
+ * failure that resets the form. Strip ALL control characters (CR/LF/tab/etc.),
+ * trim surrounding whitespace, and drop any trailing slash so `${base}${path}`
+ * is always well-formed. Resilient even if a stray newline sneaks back in later.
+ */
+export function sanitizeBaseURL(raw: string | undefined | null): string {
+  if (!raw) return '';
+  return String(raw)
+    // eslint-disable-next-line no-control-regex -- intentionally stripping CR/LF/control chars
+    .replace(/[\u0000-\u001F\u007F]+/g, '')
+    .trim()
+    .replace(/\/+$/, '');
+}
+
 function resolveDefaultBaseURL(): string {
   // Vite injects import.meta.env at build time; guard against non-browser
   // environments (Node tests) where import.meta.env is undefined.
@@ -73,7 +91,8 @@ function resolveDefaultBaseURL(): string {
     envApiUrl = undefined;
   }
 
-  if (envApiUrl) return envApiUrl;
+  const cleanedEnv = sanitizeBaseURL(envApiUrl);
+  if (cleanedEnv) return cleanedEnv;
 
   if (typeof window !== 'undefined') {
     const host = window.location.hostname;
@@ -123,7 +142,9 @@ export class ApiClient {
   baseURL: string;
 
   constructor(baseURL: string = DEFAULT_BASE_URL) {
-    this.baseURL = baseURL;
+    // Sanitize here too so a polluted constructor override (or env value that
+    // sneaks a newline back in) can never produce a malformed request URL.
+    this.baseURL = sanitizeBaseURL(baseURL);
   }
 
   async request<T = unknown>(path: string, options: ApiRequestOptions = {}): Promise<T> {

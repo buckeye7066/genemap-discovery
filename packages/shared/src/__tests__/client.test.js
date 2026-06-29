@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { ApiClient } from '../client.js';
+import { ApiClient, sanitizeBaseURL } from '../client.js';
 
 // ── Fetch mock ───────────────────────────────────────────────────────────────
 
@@ -29,6 +29,26 @@ describe('ApiClient constructor', () => {
   it('should create instance with custom baseURL', () => {
     const c = new ApiClient('https://api.example.com');
     expect(c.baseURL).toBe('https://api.example.com');
+  });
+});
+
+describe('sanitizeBaseURL (guards against CR/LF-polluted env values)', () => {
+  it('strips control characters, trims, and removes trailing slashes', () => {
+    expect(sanitizeBaseURL('https://genemap-api-production.up.railway.app\r\n')).toBe(
+      'https://genemap-api-production.up.railway.app',
+    );
+    expect(sanitizeBaseURL('https://x.com\n')).toBe('https://x.com');
+    expect(sanitizeBaseURL('  https://api.example.com/  ')).toBe('https://api.example.com');
+    expect(sanitizeBaseURL('')).toBe('');
+    expect(sanitizeBaseURL(undefined)).toBe('');
+    expect(sanitizeBaseURL(null)).toBe('');
+  });
+
+  it('a CR/LF-polluted baseURL still yields a well-formed request URL', async () => {
+    const c = new ApiClient('https://genemap-api-production.up.railway.app\r\n');
+    expect(c.baseURL).toBe('https://genemap-api-production.up.railway.app');
+    await c.request('/auth/me', { method: 'GET' });
+    expect(fetchCalls[0].url).toBe('https://genemap-api-production.up.railway.app/auth/me');
   });
 });
 
