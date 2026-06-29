@@ -37,6 +37,7 @@ import {
 
 export default function ProfilePage() {
   const { user, isLoadingAuth } = useAuth();
+  const [fullName, setFullName] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [mailingListOptIn, setMailingListOptIn] = useState(false);
   const [age, setAge] = useState("");
@@ -55,6 +56,7 @@ export default function ProfilePage() {
 
   useEffect(() => {
     if (user) {
+      setFullName(user.full_name || "");
       setPhoneNumber(user.phone_number || "");
       setMailingListOptIn(Boolean(user.mailing_list_opt_in));
       setAge(user.age || "");
@@ -93,7 +95,7 @@ export default function ProfilePage() {
         try {
           const dataUrl = event.target.result;
           setProfilePicture(dataUrl);
-          await apiClient.updateProfile({ profile_picture: dataUrl });
+          await apiClient.updateProfile({ profilePicture: dataUrl });
           setSuccess(true);
           setTimeout(() => setSuccess(false), 3000);
         } catch (err) {
@@ -122,20 +124,22 @@ export default function ProfilePage() {
 
     try {
       await apiClient.updateProfile({
-        // Contact info (camelCase keys the /auth/me handler accepts, same as the
-        // onboarding flow). demographicsCollected stays true once set.
+        // All camelCase — the /auth/me handler reads camelCase keys, so the
+        // snake_case ones this used to send (education_level, field_of_study,
+        // research_interests, …) were silently dropped and never persisted.
+        fullName: fullName,
         phoneNumber: phoneNumber,
         mailingListOptIn: mailingListOptIn,
         demographicsCollected: true,
         // Research / personalization profile.
         age,
-        education_level: educationLevel,
-        field_of_study: fieldOfStudy,
-        research_interests: researchInterests,
-        current_projects: currentProjects,
+        educationLevel: educationLevel,
+        fieldOfStudy: fieldOfStudy,
+        researchInterests: researchInterests,
+        currentProjects: currentProjects,
         publications: publications,
-        linkedin_url: linkedinUrl,
-        orcid_id: orcidId,
+        linkedinUrl: linkedinUrl,
+        orcidId: orcidId,
       });
 
       setSuccess(true);
@@ -331,7 +335,21 @@ export default function ProfilePage() {
                     <User className="w-4 h-4" />
                     Basic Information
                   </h3>
-                  
+
+                  <div>
+                    <Label htmlFor="full-name">Name</Label>
+                    <div className="relative mt-1">
+                      <User className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
+                      <Input
+                        id="full-name"
+                        placeholder="Your full name"
+                        value={fullName}
+                        onChange={(e) => setFullName(e.target.value)}
+                        className="pl-10"
+                      />
+                    </div>
+                  </div>
+
                   <div>
                     <Label htmlFor="age">Age (Optional)</Label>
                     <Input

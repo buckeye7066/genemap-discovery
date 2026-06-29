@@ -319,6 +319,15 @@ export default async function authRoutes(fastify) {
       phone_number: user.phoneNumber || null,
       education_level: user.educationLevel || null,
       demographics_collected: user.demographicsCollected,
+      mailing_list_opt_in: user.mailingListOptIn,
+      age: user.age ?? null,
+      field_of_study: user.fieldOfStudy || null,
+      research_interests: user.researchInterests || null,
+      current_projects: user.currentProjects || null,
+      publications: user.publications || null,
+      linkedin_url: user.linkedinUrl || null,
+      orcid_id: user.orcidId || null,
+      profile_picture: user.profilePicture || null,
       banned: user.banned,
       ban_reason: user.banReason || null,
       entitlements,
@@ -327,8 +336,22 @@ export default async function authRoutes(fastify) {
   });
 
   fastify.put('/me', { preHandler: authenticate }, async (request, reply) => {
-    const { displayName, fullName, phoneNumber, educationLevel, demographicsCollected } =
-      request.body || {};
+    const {
+      displayName,
+      fullName,
+      phoneNumber,
+      educationLevel,
+      demographicsCollected,
+      mailingListOptIn,
+      age,
+      fieldOfStudy,
+      researchInterests,
+      currentProjects,
+      publications,
+      linkedinUrl,
+      orcidId,
+      profilePicture,
+    } = request.body || {};
 
     const data = {};
     if (displayName !== undefined) data.displayName = displayName;
@@ -336,6 +359,20 @@ export default async function authRoutes(fastify) {
     if (phoneNumber !== undefined) data.phoneNumber = phoneNumber;
     if (educationLevel !== undefined) data.educationLevel = educationLevel;
     if (demographicsCollected !== undefined) data.demographicsCollected = demographicsCollected;
+    if (mailingListOptIn !== undefined) data.mailingListOptIn = Boolean(mailingListOptIn);
+    if (age !== undefined) {
+      // The age input is a free <input type="number"> — empty string clears it,
+      // anything non-numeric is ignored rather than throwing a Prisma type error.
+      const parsed = age === '' || age === null ? null : Number.parseInt(age, 10);
+      data.age = Number.isNaN(parsed) ? null : parsed;
+    }
+    if (fieldOfStudy !== undefined) data.fieldOfStudy = fieldOfStudy;
+    if (researchInterests !== undefined) data.researchInterests = researchInterests;
+    if (currentProjects !== undefined) data.currentProjects = currentProjects;
+    if (publications !== undefined) data.publications = publications;
+    if (linkedinUrl !== undefined) data.linkedinUrl = linkedinUrl;
+    if (orcidId !== undefined) data.orcidId = orcidId;
+    if (profilePicture !== undefined) data.profilePicture = profilePicture;
 
     const user = await prisma.user.update({
       where: { id: request.user.userId },
@@ -356,8 +393,18 @@ export default async function authRoutes(fastify) {
       role: user.role,
       display_name: user.displayName,
       full_name: user.fullName,
+      phone_number: user.phoneNumber || null,
       education_level: user.educationLevel,
       demographics_collected: user.demographicsCollected,
+      mailing_list_opt_in: user.mailingListOptIn,
+      age: user.age ?? null,
+      field_of_study: user.fieldOfStudy || null,
+      research_interests: user.researchInterests || null,
+      current_projects: user.currentProjects || null,
+      publications: user.publications || null,
+      linkedin_url: user.linkedinUrl || null,
+      orcid_id: user.orcidId || null,
+      profile_picture: user.profilePicture || null,
     });
   });
 }

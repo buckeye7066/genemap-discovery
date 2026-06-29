@@ -18,6 +18,7 @@ export default function DemographicCollectionPage() {
   // `isLoading` never cleared and the page spun forever — the second half of
   // the infinite-spinner hang.)
   const { user, isLoadingAuth, navigateToLogin } = useAuth();
+  const [fullName, setFullName] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [mailingListOptIn, setMailingListOptIn] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -42,6 +43,9 @@ export default function DemographicCollectionPage() {
     // Prefill from the saved profile so returning users can edit their details
     // (previously this page redirected completed users away, so there was no
     // way to change a phone number or mailing-list preference after sign-up).
+    if (user.full_name) {
+      setFullName(user.full_name);
+    }
     if (user.phone_number) {
       setPhoneNumber(user.phone_number);
     }
@@ -65,6 +69,7 @@ export default function DemographicCollectionPage() {
 
     try {
       await apiClient.updateProfile({
+        fullName: fullName.trim(),
         phoneNumber: phoneNumber,
         mailingListOptIn: mailingListOptIn,
         demographicsCollected: true
@@ -148,11 +153,6 @@ export default function DemographicCollectionPage() {
                 ✓ Account Information (from your login)
               </div>
               <div className="flex items-center gap-2 text-sm">
-                <UserCircle className="w-4 h-4 text-blue-600" />
-                <span className="text-slate-600">Name:</span>
-                <span className="font-medium text-slate-900">{user?.full_name || "Not provided"}</span>
-              </div>
-              <div className="flex items-center gap-2 text-sm">
                 <Mail className="w-4 h-4 text-blue-600" />
                 <span className="text-slate-600">Email:</span>
                 <span className="font-medium text-slate-900">{user?.email}</span>
@@ -160,6 +160,23 @@ export default function DemographicCollectionPage() {
               <p className="text-xs text-blue-700 mt-2">
                 You can log in anytime using your email and password
               </p>
+            </div>
+
+            {/* Name Input */}
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-2">
+                Name
+              </label>
+              <div className="relative">
+                <UserCircle className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <Input
+                  type="text"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  placeholder="Your full name"
+                  className="pl-10"
+                />
+              </div>
             </div>
 
             {/* Phone Number Input */}

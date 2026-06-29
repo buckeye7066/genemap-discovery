@@ -21,6 +21,15 @@ model User {
   bannedDate            DateTime? @map("banned_date")
   bannedBy              String?   @map("banned_by")
   demographicsCollected Boolean   @default(false) @map("demographics_collected")
+  mailingListOptIn      Boolean   @default(false) @map("mailing_list_opt_in")
+  age                   Int?
+  fieldOfStudy          String?   @map("field_of_study")
+  researchInterests     String?   @map("research_interests")
+  currentProjects       String?   @map("current_projects")
+  publications          String?
+  linkedinUrl           String?   @map("linkedin_url")
+  orcidId               String?   @map("orcid_id")
+  profilePicture        String?   @map("profile_picture")
   createdAt             DateTime  @default(now()) @map("created_at")
   updatedAt             DateTime  @updatedAt @map("updated_at")
 
