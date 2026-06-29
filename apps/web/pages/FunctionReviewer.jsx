@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useAuth } from "../lib/AuthContext";
+import { isAdminUser } from "../lib/roles";
 import { KNOWN_FUNCTIONS, getFunctionById, getAllCategories } from "../components/functionRegistry";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -181,7 +182,7 @@ export default function FunctionReviewer() {
     );
   }
 
-  if (!user || user.role !== 'admin') {
+  if (!isAdminUser(user)) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-6">
         <div className="max-w-2xl mx-auto">

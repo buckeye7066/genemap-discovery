@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { apiClient } from "@genemap/shared";
 import { useAuth } from "../lib/AuthContext";
+import { isAdminUser } from "../lib/roles";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -98,7 +99,7 @@ export default function AdminFunctionTester() {
     );
   }
 
-  if (!user || user.role !== 'admin') {
+  if (!isAdminUser(user)) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-6">
         <div className="max-w-2xl mx-auto">

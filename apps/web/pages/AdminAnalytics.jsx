@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { apiClient } from "@genemap/shared";
 import { useAuth } from "../lib/AuthContext";
+import { isAdminUser } from "../lib/roles";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -49,7 +50,7 @@ export default function AdminAnalytics() {
   const loadAnalytics = async () => {
     setIsLoading(true);
     try {
-      if (user?.role !== 'admin') {
+      if (!isAdminUser(user)) {
         setError('Admin access required');
         return;
       }
@@ -170,7 +171,7 @@ export default function AdminAnalytics() {
     );
   }
 
-  if (error || user?.role !== 'admin') {
+  if (error || !isAdminUser(user)) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-6">
         <div className="max-w-4xl mx-auto">
