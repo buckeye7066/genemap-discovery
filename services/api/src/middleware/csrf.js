@@ -19,6 +19,7 @@
  */
 
 import crypto from 'crypto';
+import { getCsrfCookieOptions } from '../utils/cookies.js';
 
 const CSRF_COOKIE = 'csrfToken';
 const CSRF_HEADER = 'x-csrf-token';
@@ -105,14 +106,12 @@ export function ensureCsrfCookie(request, reply) {
   }
 
   const token = issueCsrfToken(userId);
-  const isProd = process.env.NODE_ENV === 'production';
-  reply.setCookie(CSRF_COOKIE, token, {
-    httpOnly: false,
-    secure: isProd,
-    sameSite: 'lax',
-    path: '/',
-    maxAge: 60 * 60 * 24, // 24h
-  });
+  // Use the shared cookie options so the CSRF cookie honors
+  // CROSS_ORIGIN_COOKIES (SameSite=None; Secure) exactly like the auth
+  // cookies. Previously this hardcoded SameSite=Lax, so on a cross-site
+  // (Vercel web ↔ Railway API) deployment the cookie was never sent on the
+  // SPA's XHR requests — half the reason the profile gate 403'd.
+  reply.setCookie(CSRF_COOKIE, token, getCsrfCookieOptions({ maxAge: 60 * 60 * 24 }));
   return token;
 }
 
@@ -148,15 +147,32 @@ export async function requireCsrf(request, reply) {
   const cookieToken = request.cookies?.[CSRF_COOKIE];
   const headerToken = request.headers[CSRF_HEADER];
 
-  if (!cookieToken || !headerToken || !constantTimeEqual(cookieToken, headerToken)) {
+  // A custom request header is mandatory in every mode. Browsers force a CORS
+  // preflight for `X-CSRF-Token` on cross-origin requests, and our CORS policy
+  // only allowlists the real web origin — so a malicious site can never attach
+  // this header. The header's presence is itself the cross-site CSRF barrier.
+  if (!headerToken) {
     reply.code(403).send({ error: 'CSRF token missing or invalid' });
     return reply;
   }
 
-  // Verify HMAC integrity — proves the token was issued by us and is bound
-  // to a specific principal. Tampering with the embedded userId invalidates
-  // the signature.
-  if (!verifyCsrfTokenIntegrity(cookieToken)) {
+  // Same-origin double-submit (dev, tests, reverse-proxy deploys): when the
+  // SPA shares an origin with the API it can read the csrfToken cookie, so we
+  // require the cookie and header to agree and the cookie to be HMAC-valid.
+  if (cookieToken) {
+    if (!constantTimeEqual(cookieToken, headerToken) || !verifyCsrfTokenIntegrity(cookieToken)) {
+      reply.code(403).send({ error: 'CSRF token missing or invalid' });
+      return reply;
+    }
+    return;
+  }
+
+  // Cross-site deploy (Vercel web ↔ Railway API): the csrfToken cookie lives on
+  // a different registrable domain, so the SPA's JS can't read it and it never
+  // reaches us. Fall back to validating the HMAC-signed token the SPA echoes in
+  // the header (it received it in the auth response body). Forgery is blocked by
+  // the server-side HMAC secret plus the CORS preflight barrier above.
+  if (!verifyCsrfTokenIntegrity(headerToken)) {
     reply.code(403).send({ error: 'CSRF token missing or invalid' });
     return reply;
   }
