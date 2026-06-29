@@ -79,9 +79,14 @@ function GeneCard({ gene, rank, isPremium, isSelected = false, onSelect = null }
   const trackGeneView = async (geneSymbol) => {
     try {
       await apiClient.logActivity({
-        activity_type: "gene_view",
-        gene_symbol: geneSymbol,
+        // Backend contract is camelCase activityType + entityType/entityId; the
+        // old activity_type/gene_symbol shape failed validation ("activityType
+        // is required") so gene views were never recorded.
+        activityType: "gene_view",
+        entityType: "gene",
+        entityId: geneSymbol,
         metadata: {
+          gene_symbol: geneSymbol,
           confidence_score: gene.score,
           phenotypes: gene.phenotypes?.map(p => p.name) || []
         }

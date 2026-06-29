@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { apiClient } from "@genemap/shared";
 import { useAuth } from "../lib/AuthContext";
+import { isAdminUser, isSuperAdmin } from "../lib/roles";
 import { log } from "../components/shared/logger";
 import { getErrorMessage } from "../components/shared/errorUtils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -34,7 +35,7 @@ import {
 } from "@/components/ui/select";
 
 export default function UsersLogPage() {
-  const { user: currentUser } = useAuth();
+  const { user: currentUser, isLoadingAuth } = useAuth();
   const [users, setUsers] = useState([]);
   const [filteredUsers, setFilteredUsers] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -45,8 +46,10 @@ export default function UsersLogPage() {
   const [deletingUser, setDeletingUser] = useState(null);
 
   useEffect(() => {
+    if (isLoadingAuth) return;
     loadData();
-  }, []);
+     
+  }, [isLoadingAuth, currentUser]);
 
   useEffect(() => {
     applyFilters();
@@ -54,7 +57,7 @@ export default function UsersLogPage() {
 
   const loadData = async () => {
     try {
-      if (!currentUser?.super_admin) {
+      if (!isAdminUser(currentUser)) {
         setError("Access denied. Administrator privileges required.");
         setIsLoading(false);
         return;
@@ -110,13 +113,13 @@ export default function UsersLogPage() {
   const exportToCSV = () => {
     const headers = ["Name", "Email", "Phone", "Role", "Status", "Join Date", "Super Admin"];
     const rows = filteredUsers.map((user) => [
-      user.full_name || "",
+      user.fullName || user.full_name || "",
       user.email || "",
-      user.phone_number || "",
+      user.phoneNumber || user.phone_number || "",
       user.role || "user",
       user.banned ? "Banned" : "Active",
-      user.created_date ? format(new Date(user.created_date), "yyyy-MM-dd") : "",
-      user.super_admin ? "Yes" : "No"
+      user.createdAt ? format(new Date(user.createdAt), "yyyy-MM-dd") : "",
+      isSuperAdmin(user) ? "Yes" : "No"
     ]);
 
     const csvContent = [
@@ -140,8 +143,8 @@ export default function UsersLogPage() {
       total: users.length,
       active: users.filter((u) => !u.banned).length,
       banned: users.filter((u) => u.banned).length,
-      admins: users.filter((u) => u.role === "admin" || u.super_admin).length,
-      superAdmins: users.filter((u) => u.super_admin).length
+      admins: users.filter((u) => u.role === "admin" || u.role === "super_admin").length,
+      superAdmins: users.filter((u) => u.role === "super_admin").length
     };
   };
 
@@ -188,7 +191,7 @@ export default function UsersLogPage() {
     );
   }
 
-  if (!currentUser?.super_admin) {
+  if (!isAdminUser(currentUser)) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-6">
         <div className="max-w-2xl mx-auto">
@@ -361,12 +364,12 @@ export default function UsersLogPage() {
                         <div className="flex-1">
                           <div className="flex items-center gap-2 mb-2">
                             <span className="font-semibold text-slate-900">
-                              {user.full_name || "No name"}
+                              {user.fullName || user.full_name || "No name"}
                             </span>
                             <Badge variant={user.role === "admin" ? "default" : "secondary"}>
                               {user.role || "user"}
                             </Badge>
-                            {user.super_admin && (
+                            {isSuperAdmin(user) && (
                               <Badge className="bg-indigo-600">Super Admin</Badge>
                             )}
                             {user.banned ? (

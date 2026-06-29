@@ -32,7 +32,10 @@ export default function LearnGenetics() {
         apiClient.getLearningProgress(),
       ]);
       if (topicsRes.status === 'fulfilled') {
-        setCategories(topicsRes.value.categories || []);
+        // apiClient.getTopics() already unwraps to the categories ARRAY.
+        // (Reading `.categories` off the array yielded undefined → an empty
+        // "Learn Genetics" page with 0/0 topics.)
+        setCategories(topicsRes.value || []);
       }
       if (progressRes.status === 'fulfilled') {
         setProgress(progressRes.value.progress || []);

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { apiClient } from "@genemap/shared";
 import { useAuth } from "../lib/AuthContext";
+import { isAdminUser } from "../lib/roles";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,7 +23,7 @@ import {
 import { format } from "date-fns";
 
 export default function AxiomNewsletterPage() {
-  const { user: currentUser } = useAuth();
+  const { user: currentUser, isLoadingAuth } = useAuth();
   const [subscribedUsers, setSubscribedUsers] = useState([]);
   const [filteredUsers, setFilteredUsers] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -32,8 +33,10 @@ export default function AxiomNewsletterPage() {
   const [statsFilter, setStatsFilter] = useState("all"); // all, with_phone, without_phone
 
   useEffect(() => {
+    if (isLoadingAuth) return;
     loadData();
-  }, []);
+     
+  }, [isLoadingAuth, currentUser]);
 
   useEffect(() => {
     filterUsers();
@@ -41,7 +44,7 @@ export default function AxiomNewsletterPage() {
 
   const loadData = async () => {
     try {
-      if (!currentUser?.super_admin) {
+      if (!isAdminUser(currentUser)) {
         setError("Access denied. Administrator privileges required.");
         setIsLoading(false);
         return;
@@ -52,7 +55,7 @@ export default function AxiomNewsletterPage() {
       if (data.error) {
         throw new Error(data.error);
       }
-      const users = (data.users || []).filter(u => u.mailing_list_opt_in);
+      const users = (data.users || []).filter(u => u.mailingListOptIn);
       setSubscribedUsers(users);
       setFilteredUsers(users);
     } catch (err) {
@@ -71,16 +74,16 @@ export default function AxiomNewsletterPage() {
       const query = searchQuery.toLowerCase();
       filtered = filtered.filter(user => 
         user.email?.toLowerCase().includes(query) ||
-        user.full_name?.toLowerCase().includes(query) ||
-        user.phone_number?.toLowerCase().includes(query)
+        user.fullName?.toLowerCase().includes(query) ||
+        user.phoneNumber?.toLowerCase().includes(query)
       );
     }
 
     // Apply stats filter
     if (statsFilter === "with_phone") {
-      filtered = filtered.filter(user => user.phone_number);
+      filtered = filtered.filter(user => user.phoneNumber);
     } else if (statsFilter === "without_phone") {
-      filtered = filtered.filter(user => !user.phone_number);
+      filtered = filtered.filter(user => !user.phoneNumber);
     }
 
     setFilteredUsers(filtered);
@@ -92,10 +95,10 @@ export default function AxiomNewsletterPage() {
       const headers = ["Email", "Full Name", "Phone Number", "Role", "Joined Date"];
       const rows = filteredUsers.map(user => [
         user.email || "",
-        user.full_name || "",
-        user.phone_number || "",
+        user.fullName || "",
+        user.phoneNumber || "",
         user.role || "",
-        user.created_date ? format(new Date(user.created_date), "yyyy-MM-dd") : ""
+        user.createdAt ? format(new Date(user.createdAt), "yyyy-MM-dd") : ""
       ]);
 
       const csvContent = [
@@ -128,10 +131,10 @@ export default function AxiomNewsletterPage() {
     try {
       const exportData = filteredUsers.map(user => ({
         email: user.email,
-        full_name: user.full_name,
-        phone_number: user.phone_number,
+        full_name: user.fullName,
+        phone_number: user.phoneNumber,
         role: user.role,
-        joined_date: user.created_date
+        joined_date: user.createdAt
       }));
 
       const jsonContent = JSON.stringify(exportData, null, 2);
@@ -173,7 +176,7 @@ export default function AxiomNewsletterPage() {
     );
   }
 
-  if (!currentUser?.super_admin) {
+  if (!isAdminUser(currentUser)) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-6">
         <div className="max-w-2xl mx-auto">
@@ -356,10 +359,10 @@ export default function AxiomNewsletterPage() {
                           <div className="flex items-center gap-2 mb-2">
                             <UserIcon className="w-4 h-4 text-slate-500" />
                             <span className="font-semibold text-slate-900">
-                              {user.full_name || "No name provided"}
+                              {user.fullName || "No name provided"}
                             </span>
                             <Badge variant="outline">{user.role}</Badge>
-                            {!user.phone_number && (
+                            {!user.phoneNumber && (
                               <Badge variant="destructive" className="text-xs">
                                 No Phone
                               </Badge>
@@ -372,21 +375,21 @@ export default function AxiomNewsletterPage() {
                               <span className="font-mono">{user.email}</span>
                             </div>
                             
-                            {user.phone_number && (
+                            {user.phoneNumber && (
                               <div className="flex items-center gap-2 text-sm text-slate-600">
                                 <Phone className="w-4 h-4" />
-                                <span className="font-mono">{user.phone_number}</span>
+                                <span className="font-mono">{user.phoneNumber}</span>
                               </div>
                             )}
                             
-                            {user.created_date && (
+                            {user.createdAt && (
                               <div className="flex items-center gap-2 text-xs text-slate-500">
                                 <Calendar className="w-3 h-3" />
-                                Joined {format(new Date(user.created_date), "MMM d, yyyy 'at' h:mm a")}
+                                Joined {format(new Date(user.createdAt), "MMM d, yyyy 'at' h:mm a")}
                               </div>
                             )}
 
-                            {user.demographics_collected && (
+                            {user.demographicsCollected && (
                               <div className="mt-2">
                                 <Badge variant="secondary" className="text-xs">
                                   <CheckCircle className="w-3 h-3 mr-1" />

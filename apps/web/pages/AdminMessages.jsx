@@ -22,7 +22,7 @@ import {
 import { format } from "date-fns";
 
 export default function AdminMessages() {
-  const { user } = useAuth();
+  const { user, isLoadingAuth } = useAuth();
   const [messages, setMessages] = useState([]);
   const [selectedMessage, setSelectedMessage] = useState(null);
   const [response, setResponse] = useState("");
@@ -32,8 +32,10 @@ export default function AdminMessages() {
   const [success, setSuccess] = useState(null);
 
   useEffect(() => {
+    if (isLoadingAuth) return;
     loadData();
-  }, []);
+     
+  }, [isLoadingAuth, user]);
 
   const loadData = async () => {
     setIsLoading(true);
@@ -43,8 +45,10 @@ export default function AdminMessages() {
         return;
       }
 
-      const allMessages = await apiClient.getAdminMessages();
-      setMessages(allMessages || []);
+      // getAdminMessages resolves to { messages: [...] }; storing the whole
+      // object made `messages.filter(...)` throw "p.filter is not a function".
+      const { messages: allMessages } = await apiClient.getAdminMessages();
+      setMessages(Array.isArray(allMessages) ? allMessages : []);
     } catch (err) {
       console.error('Error loading messages:', err);
       setError(err.message || 'Failed to load messages');

@@ -68,7 +68,10 @@ export default function OnboardingTour({ onComplete, forceShow = false }) {
   const { user } = useAuth();
 
   useEffect(() => {
-    if (user && !user.onboarding_completed) {
+    // Completion is persisted (and checked) as `demographicsCollected` — the
+    // field markComplete() writes. The old `onboarding_completed` field never
+    // existed, so the tour auto-opened on every visit even after completion.
+    if (user && !user.demographicsCollected) {
       setIsVisible(true);
     }
   }, [user]);

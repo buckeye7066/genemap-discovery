@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { apiClient } from "@genemap/shared";
 import { useAuth } from "../lib/AuthContext";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
+import { normalizeSearchHistoryEntry } from "../lib/searchHistory";
 import { log } from "../components/shared/logger";
 import { DASHBOARD_REFRESH_INTERVAL_MS } from "../components/shared/constants";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -35,6 +36,7 @@ import OnboardingTour from "../components/dashboard/OnboardingTour";
 
 export default function Dashboard() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [recentGenes, setRecentGenes] = useState([]);
   const [recentSearches, setRecentSearches] = useState([]);
   const [projects, setProjects] = useState([]);
@@ -87,7 +89,10 @@ export default function Dashboard() {
         return;
       }
 
-      if (!user.onboarding_completed) {
+      // Onboarding completion is persisted as `demographicsCollected`. The old
+      // `onboarding_completed` field doesn't exist, so the tour reappeared on
+      // every visit.
+      if (!user.demographicsCollected) {
         setShowOnboarding(true);
       }
 
@@ -124,8 +129,13 @@ export default function Dashboard() {
 
   const generatePersonalizedInsights = async (user, activities, records, searches) => {
     try {
-      const uniqueGenes = [...new Set(activities.map(a => a.gene_symbol))];
-      const allPhenotypes = searches.flatMap(s => s.hpo_term || s.phenotype_query);
+      const uniqueGenes = [...new Set(
+        activities
+          .filter(a => a.activityType === 'gene_view')
+          .map(a => a.entityId || a.metadata?.gene_symbol)
+          .filter(Boolean)
+      )];
+      const allPhenotypes = searches.map(s => normalizeSearchHistoryEntry(s).query).filter(Boolean);
       const relevantGenes = records.flatMap(r => r.relevant_genes || []);
 
       const prompt = `As an AI genomics advisor, provide 3 personalized insights for this user:
@@ -171,6 +181,13 @@ Keep each insight under 50 words, practical, and personalized.`;
     return "Good evening";
   };
 
+  const handleCreateProject = () => navigate(createPageUrl("ResearchMode"));
+
+  // The activity feed holds many activity types; "Recently Viewed Genes" should
+  // only show gene_view rows, with the symbol read from entityId.
+  const geneViews = recentGenes.filter((a) => a.activityType === "gene_view");
+  const normalizedSearches = recentSearches.map(normalizeSearchHistoryEntry);
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-6">
@@ -197,7 +214,7 @@ Keep each insight under 50 words, practical, and personalized.`;
             <div>
               <h1 className="text-3xl md:text-4xl font-bold text-slate-900 flex items-center gap-2">
                 <LayoutDashboard className="w-8 h-8 text-blue-600" />
-                {getGreeting()}, {user?.full_name?.split(' ')[0] || 'there'}
+                {getGreeting()}, {(user?.fullName || user?.displayName)?.split(' ')[0] || 'there'}
               </h1>
               <p className="text-slate-600 mt-1">
                 Welcome to your personalized genomics dashboard
@@ -233,7 +250,7 @@ Keep each insight under 50 words, practical, and personalized.`;
                     <Eye className="w-5 h-5 text-blue-600" />
                   </div>
                   <div>
-                    <p className="text-2xl font-bold text-slate-900">{recentGenes.length}</p>
+                    <p className="text-2xl font-bold text-slate-900">{geneViews.length}</p>
                     <p className="text-xs text-slate-600">Genes Viewed</p>
                   </div>
                 </div>
@@ -297,11 +314,11 @@ Keep each insight under 50 words, practical, and personalized.`;
                       <TrendingUp className="w-5 h-5 text-blue-600" />
                       Recently Viewed Genes
                     </CardTitle>
-                    <Badge variant="outline">{recentGenes.length}</Badge>
+                    <Badge variant="outline">{geneViews.length}</Badge>
                   </div>
                 </CardHeader>
                 <CardContent>
-                  {recentGenes.length === 0 ? (
+                  {geneViews.length === 0 ? (
                     <div className="text-center py-8">
                       <Eye className="w-12 h-12 mx-auto mb-3 text-slate-300" />
                       <p className="text-slate-500 text-sm">No genes viewed yet</p>
@@ -313,24 +330,27 @@ Keep each insight under 50 words, practical, and personalized.`;
                     </div>
                   ) : (
                     <div className="space-y-2">
-                      {recentGenes.slice(0, 5).map((activity, idx) => (
-                        <Link 
-                          key={idx}
-                          to={`${createPageUrl("Search")}?query=${activity.gene_symbol}`}
-                          className="block p-3 hover:bg-slate-50 rounded-lg transition-colors"
-                        >
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <p className="font-semibold text-slate-900">{activity.gene_symbol}</p>
-                              <p className="text-xs text-slate-500">
-                                <Clock className="w-3 h-3 inline mr-1" />
-                                {new Date(activity.created_date).toLocaleString()}
-                              </p>
+                      {geneViews.slice(0, 5).map((activity, idx) => {
+                        const symbol = activity.entityId || activity.metadata?.gene_symbol || 'Unknown';
+                        return (
+                          <Link
+                            key={activity.id || idx}
+                            to={`${createPageUrl("Search")}?query=${encodeURIComponent(symbol)}`}
+                            className="block p-3 hover:bg-slate-50 rounded-lg transition-colors"
+                          >
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p className="font-semibold text-slate-900">{symbol}</p>
+                                <p className="text-xs text-slate-500">
+                                  <Clock className="w-3 h-3 inline mr-1" />
+                                  {activity.createdAt ? new Date(activity.createdAt).toLocaleString() : '—'}
+                                </p>
+                              </div>
+                              <ChevronRight className="w-4 h-4 text-slate-400" />
                             </div>
-                            <ChevronRight className="w-4 h-4 text-slate-400" />
-                          </div>
-                        </Link>
-                      ))}
+                          </Link>
+                        );
+                      })}
                     </div>
                   )}
                 </CardContent>
@@ -361,25 +381,27 @@ Keep each insight under 50 words, practical, and personalized.`;
                     </div>
                   ) : (
                     <div className="space-y-2">
-                      {recentSearches.map((search, idx) => (
+                      {normalizedSearches.map((search, idx) => (
                         <Link
-                          key={idx}
-                          to={`${createPageUrl("Search")}?query=${encodeURIComponent(search.phenotype_query)}`}
+                          key={search.id || idx}
+                          to={`${createPageUrl("Search")}?query=${encodeURIComponent(search.query)}`}
                           className="block p-3 hover:bg-slate-50 rounded-lg transition-colors"
                         >
                           <div className="flex items-center justify-between">
                             <div className="flex-1">
-                              <p className="font-medium text-slate-900">{search.phenotype_query}</p>
+                              <p className="font-medium text-slate-900">{search.query}</p>
                               <div className="flex items-center gap-2 mt-1">
                                 <Badge variant="outline" className="text-xs">
-                                  {search.results_count || 0} genes
+                                  {search.count || 0} genes
                                 </Badge>
-                                <Badge variant={search.search_type === 'premium' ? 'default' : 'secondary'} className="text-xs">
-                                  {search.search_type}
+                                <Badge variant={search.queryType === 'premium' ? 'default' : 'secondary'} className="text-xs">
+                                  {search.queryType}
                                 </Badge>
-                                <span className="text-xs text-slate-500">
-                                  {new Date(search.created_date).toLocaleDateString()}
-                                </span>
+                                {search.createdAt && (
+                                  <span className="text-xs text-slate-500">
+                                    {new Date(search.createdAt).toLocaleDateString()}
+                                  </span>
+                                )}
                               </div>
                             </div>
                             <ChevronRight className="w-4 h-4 text-slate-400" />
@@ -468,11 +490,11 @@ Keep each insight under 50 words, practical, and personalized.`;
                       >
                         <div className="flex items-center gap-3">
                           <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-                            conv.assistant_type === 'robert' 
-                              ? 'bg-blue-100' 
+                            conv.assistantType === 'robert'
+                              ? 'bg-blue-100'
                               : 'bg-purple-100'
                           }`}>
-                            {conv.assistant_type === 'robert' ? (
+                            {conv.assistantType === 'robert' ? (
                               <Brain className="w-4 h-4 text-blue-600" />
                             ) : (
                               <Heart className="w-4 h-4 text-purple-600" />
@@ -481,18 +503,20 @@ Keep each insight under 50 words, practical, and personalized.`;
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-1">
                               <p className="text-xs font-semibold text-slate-900 capitalize">
-                                {conv.assistant_type}
+                                {conv.assistantType}
                               </p>
                               <Badge variant="outline" className="text-xs">
                                 {conv.messages?.length || 0} msgs
                               </Badge>
                             </div>
                             <p className="text-xs text-slate-600 truncate">
-                              {conv.last_message_preview || 'No preview'}
+                              {conv.lastMessagePreview || conv.title || 'No preview'}
                             </p>
-                            <p className="text-xs text-slate-400 mt-1">
-                              {new Date(conv.updated_date).toLocaleString()}
-                            </p>
+                            {conv.updatedAt && (
+                              <p className="text-xs text-slate-400 mt-1">
+                                {new Date(conv.updatedAt).toLocaleString()}
+                              </p>
+                            )}
                           </div>
                         </div>
                       </Link>
@@ -514,7 +538,7 @@ Keep each insight under 50 words, practical, and personalized.`;
                       <Beaker className="w-5 h-5 text-green-600" />
                       Research Projects
                     </CardTitle>
-                    <Button variant="ghost" size="sm">
+                    <Button variant="ghost" size="sm" onClick={handleCreateProject}>
                       <Plus className="w-4 h-4" />
                     </Button>
                   </div>
@@ -524,7 +548,7 @@ Keep each insight under 50 words, practical, and personalized.`;
                     <div className="text-center py-8">
                       <Beaker className="w-12 h-12 mx-auto mb-3 text-slate-300" />
                       <p className="text-slate-500 text-sm mb-3">No projects yet</p>
-                      <Button size="sm" variant="outline">
+                      <Button size="sm" variant="outline" onClick={handleCreateProject}>
                         <Plus className="w-4 h-4 mr-2" />
                         Create Project
                       </Button>
@@ -605,14 +629,16 @@ Keep each insight under 50 words, practical, and personalized.`;
                         className="p-2 border border-slate-200 rounded text-xs"
                       >
                         <p className="font-medium text-slate-900">
-                          {record.file_type === 'genetic_test' ? '🧬' : 
-                           record.file_type === 'blood_test' ? '💉' : 
-                           record.file_type === 'vcf_file' ? '📊' : '📄'}{' '}
-                          {record.file_type.replace('_', ' ').toUpperCase()}
+                          {record.dataType === 'genetic_test' ? '🧬' :
+                           record.dataType === 'blood_test' ? '💉' :
+                           record.dataType === 'vcf_file' ? '📊' : '📄'}{' '}
+                          {(record.dataType || 'record').replace(/_/g, ' ').toUpperCase()}
                         </p>
-                        <p className="text-slate-500 mt-1">
-                          {new Date(record.created_date).toLocaleDateString()}
-                        </p>
+                        {record.createdAt && (
+                          <p className="text-slate-500 mt-1">
+                            {new Date(record.createdAt).toLocaleDateString()}
+                          </p>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -636,7 +662,7 @@ Keep each insight under 50 words, practical, and personalized.`;
                       New AI Chat
                     </Button>
                   </Link>
-                  {recentGenes.length >= 2 && (
+                  {geneViews.length >= 2 && (
                     <Link to={createPageUrl("VisualizationHub")}>
                       <Button variant="outline" size="sm" className="w-full justify-start gap-2">
                         <TrendingUp className="w-3 h-3" />

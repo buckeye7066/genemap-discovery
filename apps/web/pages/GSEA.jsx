@@ -6,6 +6,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Sparkles, Info } from "lucide-react";
 import GeneSetInput from "../components/gsea/GeneSetInput";
 import EnrichmentResults from "../components/gsea/EnrichmentResults";
+import { parseLLMJson } from "../components/shared/llmJson";
 
 export default function GSEAPage() {
   const { user } = useAuth();
@@ -93,31 +94,28 @@ ${geneSymbols}
       "confidence": "high/medium/low"
     }
   ]
-}`;
+}
 
-      const response = await apiClient.invokeLLM(prompt);
-      // invokeLLM resolves to { result, disclaimer }; the JSON lives in .result.
-      const raw = response?.result || response;
-      // Parse the response if it's a string containing JSON
-      let parsed = raw;
-      if (typeof raw === 'string') {
-        try {
-          // Try to extract JSON from the response
-          const jsonMatch = raw.match(/\{[\s\S]*\}/);
-          if (jsonMatch) {
-            parsed = JSON.parse(jsonMatch[0]);
-          }
-        } catch {
-          // If parsing fails, use the raw response
-        }
+Keep the JSON compact and within budget: return at most the top 8 pathways, the top 5 GO terms per category, and the top 6 disease associations. Return ONLY the JSON object, no prose or markdown fences.`;
+
+      // GSEA returns a large structured object; request the full token budget so
+      // the JSON isn't truncated mid-object (which parsed to nothing → "No
+      // enrichment results to display").
+      const response = await apiClient.invokeLLM(prompt, { maxTokens: 4096 });
+      const parsed = parseLLMJson(response, null);
+      if (!parsed || typeof parsed !== 'object') {
+        setError("Couldn't parse the enrichment results. Please try again.");
+        return;
       }
       setEnrichmentData(parsed);
-      
-      // Save to activity log
+
+      // Save to activity log. The backend expects `activityType` (camelCase) and
+      // an optional `entityType`; sending `activity_type`/`search_query` (the old
+      // Base44 shape) triggered "activityType is required".
       try {
         await apiClient.logActivity({
-          activity_type: "analysis",
-          search_query: `GSEA: ${genes.length} genes`,
+          activityType: "gsea_analysis",
+          entityType: "gene_set",
           metadata: {
             geneCount: genes.length,
             genes: genes.slice(0, 10)

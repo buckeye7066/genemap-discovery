@@ -35,7 +35,10 @@ import {
 } from "lucide-react";
 
 export default function AdminAnalytics() {
-  const [user, setUser] = useState(null);
+  // Use the authenticated user from context. This used to be a local
+  // useState(null) that nothing ever set, so isAdminUser(user) was always
+  // false and every visitor — super_admin included — saw "Admin access required".
+  const { user, isLoadingAuth } = useAuth();
   const [activities, setActivities] = useState([]);
   const [searches, setSearches] = useState([]);
   const [medicalRecords, setMedicalRecords] = useState([]);
@@ -44,8 +47,10 @@ export default function AdminAnalytics() {
   const [error, setError] = useState(null);
 
   useEffect(() => {
+    if (isLoadingAuth) return;
     loadAnalytics();
-  }, []);
+     
+  }, [isLoadingAuth, user]);
 
   const loadAnalytics = async () => {
     setIsLoading(true);

@@ -28,15 +28,19 @@ export default function TopicExplorer() {
   const [loading, setLoading] = useState({ explanation: false, image: false, chat: false });
 
   useEffect(() => {
-    if (topicTitle && level) {
+    // Load as soon as we have a topic. The level only tunes the prompt persona
+    // and defaults server-side, so we no longer block the explanation on the
+    // user having explicitly picked a level (which left the tab blank).
+    if (topicTitle) {
       loadExplanation();
     }
+     
   }, [topicTitle, level]);
 
   const loadExplanation = async () => {
     setLoading(prev => ({ ...prev, explanation: true }));
     try {
-      const res = await apiClient.getExplanation({ topic: topicTitle, level });
+      const res = await apiClient.getExplanation({ topic: topicTitle, level: level || 'undergraduate' });
       setExplanation(res.explanation || '');
     } catch (err) {
       setExplanation(`Unable to load explanation: ${err.message}`);
@@ -48,7 +52,7 @@ export default function TopicExplorer() {
   const loadImage = async () => {
     setLoading(prev => ({ ...prev, image: true }));
     try {
-      const res = await apiClient.generateImage({ topic: topicTitle, level });
+      const res = await apiClient.generateImage({ topic: topicTitle, level: level || 'undergraduate' });
       setImageData(res);
     } catch (err) {
       setImageData({ error: err.message });
@@ -66,10 +70,18 @@ export default function TopicExplorer() {
     setLoading(prev => ({ ...prev, chat: true }));
 
     try {
-      const contextMsg = { role: 'system', content: `The student is learning about: ${topicTitle}. Current discussion context is genetics education.` };
+      // The backend only accepts user/assistant turns (it injects its own
+      // safety/system prompt). Fold the topic context into the FIRST user turn
+      // so the tutor still knows what's being studied, without sending a
+      // client-supplied system message that the API rejects as invalid.
+      const outgoing = updatedMessages.map((m, i) =>
+        i === 0 && m.role === 'user'
+          ? { ...m, content: `(I'm learning about "${topicTitle}".) ${m.content}` }
+          : m
+      );
       const res = await apiClient.chat({
-        messages: [contextMsg, ...updatedMessages],
-        level,
+        messages: outgoing,
+        level: level || 'undergraduate',
       });
       setChatMessages(prev => [...prev, { role: 'assistant', content: res.response }]);
     } catch (err) {
@@ -204,7 +216,7 @@ export default function TopicExplorer() {
             <CardContent className="p-6 text-center">
               <HelpCircle className="w-12 h-12 text-purple-500 mx-auto mb-3" />
               <h3 className="text-lg font-semibold mb-2">Ready to test your knowledge?</h3>
-              <p className="text-slate-600 mb-4">Take a quiz on {topicTitle} at your learning level.</p>
+              <p className="text-slate-600 mb-4">Test your knowledge of {topicTitle || 'this topic'} at your learning level.</p>
               <Button
                 className="bg-gradient-to-r from-purple-500 to-pink-500 text-white"
                 onClick={() => navigate(`/quizmode?topic=${encodeURIComponent(topicId)}&title=${encodeURIComponent(topicTitle)}`)}

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, lazy, Suspense } from "react";
 import { useAuth } from "../lib/AuthContext";
+import { isAdminUser } from "../lib/roles";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -32,7 +33,7 @@ export default function ResearchMode() {
 
   useEffect(() => {
     if (!user) return;
-    const isAdmin = user?.super_admin === true || user?.role === "admin";
+    const isAdmin = isAdminUser(user);
     const isResearcher = user?.education_level === 'researcher' || 
                         user?.education_level === 'phd' ||
                         user?.education_level === 'medical_professional';

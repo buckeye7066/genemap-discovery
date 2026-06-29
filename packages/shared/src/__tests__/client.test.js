@@ -423,6 +423,28 @@ describe('Error handling', () => {
 
     await expect(client.getMe()).rejects.toThrow('Request failed');
   });
+
+  it('should throw a clear error on an empty 200 body (timed-out gateway)', async () => {
+    global.fetch = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      text: async () => '',
+      json: async () => { throw new Error('Unexpected end of JSON input'); },
+    }));
+
+    await expect(client.getMe()).rejects.toThrow(/empty response/i);
+  });
+
+  it('should throw a readable error on a non-JSON 200 body', async () => {
+    global.fetch = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      text: async () => '<html>502 Bad Gateway</html>',
+      json: async () => { throw new Error('Unexpected token <'); },
+    }));
+
+    await expect(client.getMe()).rejects.toThrow(/unreadable response/i);
+  });
 });
 
 // ── Silent token refresh on 401 ───────────────────────────────────────────────

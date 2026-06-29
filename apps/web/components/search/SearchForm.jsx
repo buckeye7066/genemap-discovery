@@ -75,6 +75,10 @@ export default function SearchForm({ onSearch, isLoading, initialQuery = "" }) {
               } else if (suggestion.type === "phenotype") {
                 setSearchMode("free_text");
               }
+              // Picking a suggestion should run the search, not just refill the box.
+              if (suggestion.text?.trim()) {
+                onSearch(suggestion.text.trim(), false);
+              }
             }}
             placeholder="e.g., Rheumatoid Arthritis, polydactyly, HP:0001166"
             disabled={isLoading}
