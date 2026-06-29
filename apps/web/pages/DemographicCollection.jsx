@@ -77,8 +77,12 @@ export default function DemographicCollectionPage() {
         setIsSaving(false);
         setTimeout(() => setSuccess(false), 4000);
       } else {
-        // First-time completion — continue into the app.
-        navigate(createPageUrl("Home"));
+        // First-time completion — land on the full Profile page (not Home) so
+        // the user immediately sees the unified, editable profile where phone,
+        // mailing list, and all research fields live together. Previously this
+        // dumped them on Home, leaving the rich profile undiscoverable behind
+        // the onboarding gate.
+        navigate(createPageUrl("Profile"));
       }
     } catch (err) {
       console.error("Error saving demographics:", err);
