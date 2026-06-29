@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { apiClient } from "@genemap/shared";
+import { createPageUrl } from "@/utils";
 import { useAuth } from "../lib/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -18,6 +20,7 @@ import {
 import {
   User,
   Mail,
+  Phone,
   Calendar,
   Shield,
   Loader2,
@@ -29,10 +32,12 @@ import {
   Camera,
   Link as LinkIcon,
   Microscope,
-  FileText
+  FileText,
+  Pencil
 } from "lucide-react";
 
 export default function ProfilePage() {
+  const navigate = useNavigate();
   const { user, isLoadingAuth } = useAuth();
   const [age, setAge] = useState("");
   const [educationLevel, setEducationLevel] = useState("");
@@ -236,6 +241,11 @@ export default function ProfilePage() {
                   </span>
                 </div>
                 <div className="flex items-center gap-2 text-sm">
+                  <Phone className="w-4 h-4 text-slate-500" />
+                  <span className="font-medium">Phone:</span>
+                  <span className="text-slate-700">{user.phone_number || "Not provided"}</span>
+                </div>
+                <div className="flex items-center gap-2 text-sm">
                   <Shield className="w-4 h-4 text-slate-500" />
                   <span className="font-medium">Role:</span>
                   <Badge variant={user.role === "admin" ? "default" : "secondary"}>
@@ -244,7 +254,15 @@ export default function ProfilePage() {
                 </div>
               </div>
 
-              <div className="pt-4 border-t">
+              <div className="pt-4 border-t space-y-2">
+                <Button
+                  variant="outline"
+                  className="w-full gap-2"
+                  onClick={() => navigate(createPageUrl("DemographicCollection"))}
+                >
+                  <Pencil className="w-4 h-4" />
+                  Edit Contact Info
+                </Button>
                 <Button
                   variant="outline"
                   className="w-full gap-2"

@@ -23,6 +23,12 @@ export default function DemographicCollectionPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState(null);
+  const [success, setSuccess] = useState(false);
+
+  // Edit mode = the user has already completed onboarding and is returning to
+  // update their info. We no longer bounce them to Home, so the profile is
+  // editable at any time.
+  const isEditMode = Boolean(user?.demographics_collected);
 
   useEffect(() => {
     if (isLoadingAuth) return; // auth still resolving → keep the loading state
@@ -33,11 +39,9 @@ export default function DemographicCollectionPage() {
       return;
     }
 
-    if (user.demographics_collected) {
-      navigate(createPageUrl("Home"));
-      return;
-    }
-
+    // Prefill from the saved profile so returning users can edit their details
+    // (previously this page redirected completed users away, so there was no
+    // way to change a phone number or mailing-list preference after sign-up).
     if (user.phone_number) {
       setPhoneNumber(user.phone_number);
     }
@@ -45,11 +49,11 @@ export default function DemographicCollectionPage() {
       setMailingListOptIn(user.mailing_list_opt_in);
     }
     setIsLoading(false);
-  }, [user, isLoadingAuth, navigate, navigateToLogin]);
+  }, [user, isLoadingAuth, navigateToLogin]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     if (!phoneNumber.trim()) {
       setError("Phone number is required");
       return;
@@ -57,6 +61,7 @@ export default function DemographicCollectionPage() {
 
     setIsSaving(true);
     setError(null);
+    setSuccess(false);
 
     try {
       await apiClient.updateProfile({
@@ -65,7 +70,16 @@ export default function DemographicCollectionPage() {
         demographicsCollected: true
       });
 
-      navigate(createPageUrl("Home"));
+      if (isEditMode) {
+        // Returning user just saved an edit — confirm in place instead of
+        // navigating away, so they can keep editing or go back when ready.
+        setSuccess(true);
+        setIsSaving(false);
+        setTimeout(() => setSuccess(false), 4000);
+      } else {
+        // First-time completion — continue into the app.
+        navigate(createPageUrl("Home"));
+      }
     } catch (err) {
       console.error("Error saving demographics:", err);
       setError("Failed to save information. Please try again.");
@@ -92,15 +106,30 @@ export default function DemographicCollectionPage() {
               <DnaIcon className="w-8 h-8 text-white" />
             </div>
           </div>
-          <CardTitle className="text-2xl">Complete Your Profile</CardTitle>
+          <CardTitle className="text-2xl">
+            {isEditMode ? "Edit Your Profile" : "Complete Your Profile"}
+          </CardTitle>
           <p className="text-slate-600 text-sm mt-2">
-            Please provide the following information to access GeneMap
+            {isEditMode
+              ? "Update your contact details and preferences below."
+              : "Please provide the following information to access GeneMap"}
           </p>
-          <p className="text-red-600 text-xs mt-1 font-medium">
-            * All fields are required
-          </p>
+          {!isEditMode && (
+            <p className="text-red-600 text-xs mt-1 font-medium">
+              * All fields are required
+            </p>
+          )}
         </CardHeader>
         <CardContent>
+          {success && (
+            <Alert className="mb-6 bg-green-50 border-green-200">
+              <CheckCircle className="h-4 w-4 text-green-600" />
+              <AlertDescription className="text-green-800">
+                Your profile was saved.
+              </AlertDescription>
+            </Alert>
+          )}
+
           {error && (
             <Alert variant="destructive" className="mb-6">
               <AlertCircle className="h-4 w-4" />
@@ -204,14 +233,26 @@ export default function DemographicCollectionPage() {
                 ) : (
                   <>
                     <CheckCircle className="w-4 h-4 mr-2" />
-                    Continue to GeneMap
+                    {isEditMode ? "Save Changes" : "Continue to GeneMap"}
                   </>
                 )}
               </Button>
-              
-              <p className="text-center text-xs text-slate-500">
-                This information is required to access the application
-              </p>
+
+              {isEditMode ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => navigate(createPageUrl("Home"))}
+                  disabled={isSaving}
+                >
+                  Back to GeneMap
+                </Button>
+              ) : (
+                <p className="text-center text-xs text-slate-500">
+                  This information is required to access the application
+                </p>
+              )}
             </div>
           </form>
         </CardContent>
