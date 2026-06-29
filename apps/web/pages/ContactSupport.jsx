@@ -128,7 +128,8 @@ Write a clear, professional message describing the issue. Include:
 Keep it concise (3-4 sentences) and professional but friendly.`;
 
       const response = await apiClient.invokeLLM(prompt);
-      setMessage(response);
+      // invokeLLM resolves to { result, disclaimer }; store only the text.
+      setMessage(response?.result || response);
     } catch (err) {
       setError("Failed to generate message. Please write it manually.");
     } finally {
