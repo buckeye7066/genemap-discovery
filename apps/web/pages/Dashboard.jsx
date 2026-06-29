@@ -214,7 +214,7 @@ Keep each insight under 50 words, practical, and personalized.`;
             <div>
               <h1 className="text-3xl md:text-4xl font-bold text-slate-900 flex items-center gap-2">
                 <LayoutDashboard className="w-8 h-8 text-blue-600" />
-                {getGreeting()}, {(user?.fullName || user?.displayName)?.split(' ')[0] || 'there'}
+                {getGreeting()}, {(user?.fullName || user?.full_name || user?.displayName)?.split(' ')[0] || 'there'}
               </h1>
               <p className="text-slate-600 mt-1">
                 Welcome to your personalized genomics dashboard

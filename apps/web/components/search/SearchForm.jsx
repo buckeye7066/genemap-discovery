@@ -110,8 +110,14 @@ export default function SearchForm({ onSearch, isLoading, initialQuery = "" }) {
               size="sm"
               type="button"
               onClick={() => {
+                // Search the clicked example directly. Passing `example`
+                // explicitly avoids relying on the async `query` state (which
+                // the autocomplete's suggestion fetch could overwrite — the bug
+                // where clicking "Cystic Fibrosis" ended up searching a
+                // suggested term like "Bronchiectasis").
                 setQuery(example);
                 setSearchMode("disease");
+                onSearch(example, false);
               }}
               disabled={isLoading}
               className="text-xs hover:bg-emerald-50 border-emerald-200 touch-manipulation min-h-[36px]"
@@ -138,6 +144,7 @@ export default function SearchForm({ onSearch, isLoading, initialQuery = "" }) {
               onClick={() => {
                 setQuery(example);
                 setSearchMode("free_text");
+                onSearch(example, false);
               }}
               disabled={isLoading}
               className="text-xs hover:bg-blue-50 touch-manipulation min-h-[36px]"
@@ -161,7 +168,10 @@ export default function SearchForm({ onSearch, isLoading, initialQuery = "" }) {
                 variant="outline"
                 size="sm"
                 type="button"
-                onClick={() => setQuery(example)}
+                onClick={() => {
+                  setQuery(example);
+                  onSearch(example, false);
+                }}
                 disabled={isLoading}
                 className="text-xs hover:bg-slate-50 touch-manipulation min-h-[36px]"
               >

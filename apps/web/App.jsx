@@ -8,6 +8,7 @@ import { pagesConfig } from './pages.config'
 import { BrowserRouter as Router, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import PageNotFound from './lib/PageNotFound';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
+import { isAdminUser } from '@/lib/roles';
 import { EducationLevelProvider } from '@/lib/EducationLevelContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import LoadingSpinner from '@/components/LoadingSpinner';
@@ -16,18 +17,20 @@ const VisualEditAgent = import.meta.env.DEV
   ? lazy(() => import('@/lib/VisualEditAgent'))
   : () => null;
 
-const { Pages, Layout, mainPage, publicPages = [] } = pagesConfig;
+const { Pages, Layout, mainPage, publicPages = [], adminPages = [] } = pagesConfig;
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
 const MainPage = mainPageKey ? Pages[mainPageKey] : () => null;
 const publicPageKeys = new Set(publicPages);
+const adminPageKeys = new Set(adminPages);
 
 const LayoutWrapper = ({ children, currentPageName }) => Layout ?
   <Layout currentPageName={currentPageName}>{children}</Layout>
   : <>{children}</>;
 
 const AuthenticatedApp = () => {
-  const { isLoadingAuth, isLoadingPublicSettings, authError, isAuthenticated } = useAuth();
+  const { isLoadingAuth, isLoadingPublicSettings, authError, isAuthenticated, user } = useAuth();
   const location = useLocation();
+  const userIsAdmin = isAdminUser(user);
 
   if (isLoadingPublicSettings || isLoadingAuth) {
     return <LoadingSpinner />;
@@ -82,11 +85,15 @@ const AuthenticatedApp = () => {
             key={path}
             path={`/${path.toLowerCase()}`}
             element={
-              <LayoutWrapper currentPageName={path}>
-                <ErrorBoundary name={path}>
-                  <Page />
-                </ErrorBoundary>
-              </LayoutWrapper>
+              adminPageKeys.has(path) && !userIsAdmin ? (
+                <Navigate to="/" replace />
+              ) : (
+                <LayoutWrapper currentPageName={path}>
+                  <ErrorBoundary name={path}>
+                    <Page />
+                  </ErrorBoundary>
+                </LayoutWrapper>
+              )
             }
           />
         ))}

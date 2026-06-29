@@ -20,38 +20,46 @@ export default function LearnGenetics() {
   const [searchQuery, setSearchQuery] = useState('');
   const [progress, setProgress] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [topicsError, setTopicsError] = useState(false);
 
   useEffect(() => {
     loadData();
   }, []);
 
   const loadData = async () => {
+    setLoading(true);
+    setTopicsError(false);
     try {
       const [topicsRes, progressRes] = await Promise.allSettled([
         apiClient.getTopics(),
         apiClient.getLearningProgress(),
       ]);
-      if (topicsRes.status === 'fulfilled') {
+      if (topicsRes.status === 'fulfilled' && Array.isArray(topicsRes.value) && topicsRes.value.length > 0) {
         // apiClient.getTopics() already unwraps to the categories ARRAY.
         // (Reading `.categories` off the array yielded undefined → an empty
         // "Learn Genetics" page with 0/0 topics.)
-        setCategories(topicsRes.value || []);
+        setCategories(topicsRes.value);
+      } else {
+        // Topics are a static catalog the page is useless without. Surface the
+        // failure with a retry instead of silently rendering an empty 0/0 page.
+        setTopicsError(true);
       }
       if (progressRes.status === 'fulfilled') {
         setProgress(progressRes.value.progress || []);
       }
     } catch {
-      // Non-critical
+      setTopicsError(true);
     } finally {
       setLoading(false);
     }
   };
 
+  const q = searchQuery.toLowerCase();
   const filteredCategories = categories.map(cat => ({
     ...cat,
-    topics: cat.topics.filter(t =>
-      t.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      t.description.toLowerCase().includes(searchQuery.toLowerCase())
+    topics: (cat.topics || []).filter(t =>
+      (t.title || '').toLowerCase().includes(q) ||
+      (t.description || '').toLowerCase().includes(q)
     ),
   })).filter(cat => cat.topics.length > 0);
 
@@ -143,6 +151,19 @@ export default function LearnGenetics() {
         <div className="flex flex-col items-center justify-center py-20">
           <div className="w-10 h-10 border-4 border-blue-100 border-t-blue-600 rounded-full animate-spin mb-3" />
           <p className="text-slate-500 text-sm">Loading topics...</p>
+        </div>
+      ) : topicsError ? (
+        <div className="flex flex-col items-center justify-center py-20 text-center">
+          <BookOpen className="w-10 h-10 text-slate-300 mb-3" />
+          <p className="text-slate-700 font-medium">We couldn't load the genetics topics.</p>
+          <p className="text-slate-500 text-sm mt-1 mb-4">This is usually a temporary connection hiccup.</p>
+          <Button onClick={loadData} className="bg-blue-600 hover:bg-blue-700">Try again</Button>
+        </div>
+      ) : filteredCategories.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-20 text-center">
+          <Search className="w-10 h-10 text-slate-300 mb-3" />
+          <p className="text-slate-700 font-medium">No topics match "{searchQuery}".</p>
+          <p className="text-slate-500 text-sm mt-1">Try a different search term.</p>
         </div>
       ) : (
         <div className="space-y-10">

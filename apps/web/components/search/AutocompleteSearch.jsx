@@ -35,9 +35,23 @@ export default function AutocompleteSearch({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  // Once a search is actually running (parent sets `disabled`), collapse the
+  // dropdown so it can't overlap the results area or get mis-clicked.
+  useEffect(() => {
+    if (disabled) {
+      setShowSuggestions(false);
+      setHighlightedIndex(-1);
+    }
+  }, [disabled]);
+
   // Fetch suggestions when user types
   useEffect(() => {
     const fetchSuggestions = async () => {
+      // Don't fetch (or surface) suggestions while a search is in flight.
+      if (disabled) {
+        setShowSuggestions(false);
+        return;
+      }
       // A selection just set `value`; consume the flag and skip the refetch so
       // the dropdown stays dismissed instead of re-populating.
       if (justSelectedRef.current) {

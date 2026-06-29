@@ -38,6 +38,10 @@ export default function TopicExplorer() {
   }, [topicTitle, level]);
 
   const loadExplanation = async () => {
+    if (!topicTitle) {
+      setExplanation('Pick a topic from Learn Genetics to see an explanation.');
+      return;
+    }
     setLoading(prev => ({ ...prev, explanation: true }));
     try {
       const res = await apiClient.getExplanation({ topic: topicTitle, level: level || 'undergraduate' });
@@ -50,6 +54,12 @@ export default function TopicExplorer() {
   };
 
   const loadImage = async () => {
+    // The API rejects an empty topic with a 400 ("Validation failed"). Guard it
+    // here so the user gets actionable guidance instead of a cryptic error.
+    if (!topicTitle) {
+      setImageData({ error: 'Pick a topic from Learn Genetics first, then generate an illustration.' });
+      return;
+    }
     setLoading(prev => ({ ...prev, image: true }));
     try {
       const res = await apiClient.generateImage({ topic: topicTitle, level: level || 'undergraduate' });

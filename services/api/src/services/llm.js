@@ -79,8 +79,23 @@ function providerHost(provider) {
   return PROVIDER_HOSTS[provider || TEXT_PROVIDER] || 'llm-provider';
 }
 
+// A client-side timeout (the SDK aborted the request after `timeoutMs`) is
+// fundamentally different from a transient 5xx: retrying it almost always times
+// out again, and each attempt burns the FULL timeout window. Three 30s attempts
+// is 90s — long enough for the upstream gateway/CDN to drop the connection and
+// hand the browser an empty body, which surfaces as the dreaded "server
+// returned an empty response". So timeouts must fail fast, not retry.
+function isTimeoutError(error) {
+  if (!error) return false;
+  const name = error.name || error.constructor?.name || '';
+  if (/timeout/i.test(name) || name === 'AbortError') return true;
+  if (error.code === 'ETIMEDOUT' || error.code === 'ESOCKETTIMEDOUT') return true;
+  return /timed?\s*out|timeout/i.test(String(error.message || ''));
+}
+
 function isRetryableProviderError(error) {
   if (String(error?.message || '').includes('_API_KEY')) return false;
+  if (isTimeoutError(error)) return false;
   if (typeof error?.status === 'number') {
     return RETRYABLE_STATUS.has(error.status);
   }
@@ -129,22 +144,22 @@ export async function withProviderRetry(operation, {
 
 export async function generateExplanation(
   prompt,
-  { provider, maxTokens = 2000, temperature = 0.7, timeoutMs = DEFAULT_TIMEOUT_MS } = {}
+  { provider, model, maxTokens = 2000, temperature = 0.7, timeoutMs = DEFAULT_TIMEOUT_MS } = {}
 ) {
   const service = getTextProvider(provider);
   return withProviderRetry(
-    () => service.generateText(prompt, { maxTokens, temperature, timeoutMs }),
+    () => service.generateText(prompt, { model, maxTokens, temperature, timeoutMs }),
     { provider }
   );
 }
 
 export async function generateChatResponse(
   messages,
-  { provider, maxTokens = 2000, temperature = 0.7, timeoutMs = DEFAULT_TIMEOUT_MS } = {}
+  { provider, model, maxTokens = 2000, temperature = 0.7, timeoutMs = DEFAULT_TIMEOUT_MS } = {}
 ) {
   const service = getTextProvider(provider);
   return withProviderRetry(
-    () => service.generateChatResponse(messages, { maxTokens, temperature, timeoutMs }),
+    () => service.generateChatResponse(messages, { model, maxTokens, temperature, timeoutMs }),
     { provider }
   );
 }
@@ -159,10 +174,10 @@ export async function generateImage(
   );
 }
 
-export async function generateQuiz(prompt, { provider, maxTokens = 3000, timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
+export async function generateQuiz(prompt, { provider, model, maxTokens = 3000, timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
   const service = getTextProvider(provider);
   const raw = await withProviderRetry(
-    () => service.generateText(prompt, { maxTokens, temperature: 0.5, timeoutMs }),
+    () => service.generateText(prompt, { model, maxTokens, temperature: 0.5, timeoutMs }),
     { provider }
   );
 

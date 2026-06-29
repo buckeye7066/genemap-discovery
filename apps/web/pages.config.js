@@ -69,9 +69,27 @@ export const PAGES = {
     "FunctionReviewer": FunctionReviewer,
 }
 
+// Owner/super-admin tooling. Each of these pages already self-guards and every
+// /admin/* API route enforces requireRole on the server, but listing them here
+// lets the router refuse to even render the shell for a non-admin — a third,
+// centralized layer of defense so a future page that forgets its own guard
+// still can't leak admin UI. (InstitutionalAdmin is intentionally excluded: it
+// gates on owning an institutional license, not on the admin role.)
+export const adminPages = [
+    "SuperAdminSetup",
+    "UsersLog",
+    "AdminAnalytics",
+    "AdminMessages",
+    "BannedUsers",
+    "AdminFunctionTester",
+    "FunctionReviewer",
+    "AxiomNewsletter",
+];
+
 export const pagesConfig = {
     mainPage: "LearnGenetics",
     publicPages: ["Login"],
+    adminPages,
     Pages: PAGES,
     Layout: __Layout,
 };

@@ -85,7 +85,7 @@ export default function AIAssistantsPage() {
   };
 
   const getWelcomeMessage = (assistant) => {
-    const name = user?.full_name?.split(' ')[0] || 'there';
+    const name = (user?.fullName || user?.full_name || user?.displayName)?.split(' ')[0] || 'there';
     
     if (assistant === 'robert') {
       return `Greetings, ${name}. I'm Robert, your AI genomics research assistant. I specialize in rigorous scientific analysis, evidence-based interpretation, and comprehensive data synthesis.

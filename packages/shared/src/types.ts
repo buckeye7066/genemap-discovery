@@ -457,6 +457,13 @@ export interface UnbanOptions {
 
 export interface ApiRequestOptions extends RequestInit {
   headers?: Record<string, string>;
+  /**
+   * Abort the request after this many ms. Without it a stalled upstream (e.g.
+   * a slow LLM call behind a dead connection) leaves the browser's fetch
+   * pending forever — the "perpetual spinner" users saw on gene search. 0
+   * disables the timeout. Defaults to ApiClient's DEFAULT_REQUEST_TIMEOUT_MS.
+   */
+  timeoutMs?: number;
 }
 
 // ─── Envelope helpers (used internally by ApiClient) ────────────────────────
