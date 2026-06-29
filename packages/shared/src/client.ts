@@ -288,7 +288,32 @@ export class ApiClient {
     // 204 No Content: callers expect undefined. Avoid response.json() throw.
     if (response.status === 204) return undefined as T;
 
-    const data = (await response.json()) as T;
+    // Read the body defensively. A real fetch Response exposes text(); reading
+    // text first lets an empty or non-JSON 2xx response (e.g. a gateway that
+    // returned 200 with no body when an upstream AI call timed out) surface as a
+    // clear, actionable error instead of the cryptic "Failed to execute 'json'
+    // on 'Response': Unexpected end of JSON input" that crashed every
+    // /education/* feature. (Some test doubles only stub json(); fall back to it.)
+    let data: T;
+    if (typeof response.text === 'function') {
+      const raw = await response.text();
+      if (!raw) {
+        throw new ApiError(
+          'The server returned an empty response. The request may have timed out — please try again.',
+          response.status
+        );
+      }
+      try {
+        data = JSON.parse(raw) as T;
+      } catch {
+        throw new ApiError(
+          'The server returned an unreadable response. The request may have timed out — please try again.',
+          response.status
+        );
+      }
+    } else {
+      data = (await response.json()) as T;
+    }
 
     // Auth responses carry a fresh CSRF token in the body so cross-site SPAs
     // (which cannot read the API's cookie) can echo it on later writes. Capture
@@ -459,6 +484,13 @@ export class ApiClient {
   }
   getAdminAnalytics(): Promise<AdminAnalytics> {
     return this.request('/admin/analytics');
+  }
+  runFunctionTests(): Promise<{
+    ok: boolean;
+    data: { checked: number; passed: number; failed: number; skipped: number; errorReport: string; checks?: unknown[] };
+    run_duration_ms: number;
+  }> {
+    return this.request('/admin/self-test');
   }
   async getAdminMessages(params: Record<string, string> = {}): Promise<{ messages: Message[] }> {
     const qs = new URLSearchParams(params).toString();

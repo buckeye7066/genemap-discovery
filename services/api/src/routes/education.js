@@ -78,20 +78,30 @@ const TOPICS_CATALOG = [
   },
 ];
 
+// A missing/blank/`null` level used to hard-fail Zod (`z.string().min(1)`),
+// surfacing to the user as a cryptic "Validation failed". The level only
+// selects a prompt persona, so coerce anything falsy to a sane default rather
+// than rejecting the whole request. Unknown strings fall back at prompt time.
+const DEFAULT_LEVEL = 'undergraduate';
+const levelField = z.preprocess(
+  (v) => (typeof v === 'string' && v.trim() ? v.trim() : DEFAULT_LEVEL),
+  z.string().min(1)
+);
+
 const explainSchema = z.object({
   topic: z.string().min(1).max(500),
-  level: z.string().min(1),
+  level: levelField,
   context: z.string().optional(),
 });
 
 const imageSchema = z.object({
   topic: z.string().min(1).max(500),
-  level: z.string().min(1),
+  level: levelField,
 });
 
 const quizSchema = z.object({
   topic: z.string().min(1).max(500),
-  level: z.string().min(1),
+  level: levelField,
   questionCount: z.number().min(1).max(20).optional(),
 });
 
@@ -123,7 +133,7 @@ export default async function educationRoutes(fastify) {
     reply.send({ categories: TOPICS_CATALOG });
   });
 
-  fastify.post('/explain', { preHandler: [authenticate, checkEducationEntitlement, enforceUsageLimit] }, async (request, reply) => {
+  fastify.post('/explain', { preHandler: [authenticate, checkEducationEntitlement, enforceUsageLimit] }, async (request) => {
     const { topic, level, context } = explainSchema.parse(request.body);
 
     const levelPrompt = LEVEL_PROMPTS[level] || LEVEL_PROMPTS.undergraduate;
@@ -160,16 +170,16 @@ export default async function educationRoutes(fastify) {
       }
     }
 
-    reply.send({
+    return {
       explanation,
       topic,
       level,
       usage: request.usageInfo || null,
       tier: request.entitlements?.tier || 'free',
-    });
+    };
   });
 
-  fastify.post('/image', { preHandler: [authenticate, checkEducationEntitlement, enforceUsageLimit] }, async (request, reply) => {
+  fastify.post('/image', { preHandler: [authenticate, checkEducationEntitlement, enforceUsageLimit] }, async (request) => {
     const { topic, level } = imageSchema.parse(request.body);
 
     const styleMap = {
@@ -192,10 +202,10 @@ export default async function educationRoutes(fastify) {
         });
       } catch { /* non-critical */ }
     }
-    reply.send({ imageUrl: result.url, revisedPrompt: result.revisedPrompt, topic, level, usage: request.usageInfo || null, tier: request.entitlements?.tier || 'free' });
+    return { imageUrl: result.url, revisedPrompt: result.revisedPrompt, topic, level, usage: request.usageInfo || null, tier: request.entitlements?.tier || 'free' };
   });
 
-  fastify.post('/quiz', { preHandler: [authenticate, checkEducationEntitlement, enforceUsageLimit] }, async (request, reply) => {
+  fastify.post('/quiz', { preHandler: [authenticate, checkEducationEntitlement, enforceUsageLimit] }, async (request) => {
     const { topic, level, questionCount = 5 } = quizSchema.parse(request.body);
 
     const levelPrompt = LEVEL_PROMPTS[level] || LEVEL_PROMPTS.undergraduate;
@@ -226,10 +236,10 @@ export default async function educationRoutes(fastify) {
         });
       } catch { /* non-critical */ }
     }
-    reply.send({ questions, topic, level, usage: request.usageInfo || null, tier: request.entitlements?.tier || 'free' });
+    return { questions, topic, level, usage: request.usageInfo || null, tier: request.entitlements?.tier || 'free' };
   });
 
-  fastify.post('/chat', { preHandler: [authenticate, checkEducationEntitlement, enforceUsageLimit] }, async (request, reply) => {
+  fastify.post('/chat', { preHandler: [authenticate, checkEducationEntitlement, enforceUsageLimit] }, async (request) => {
     const { messages, level } = chatSchema.parse(request.body);
 
     const levelPrompt = LEVEL_PROMPTS[level] || LEVEL_PROMPTS.undergraduate;
@@ -247,7 +257,7 @@ export default async function educationRoutes(fastify) {
         });
       } catch { /* non-critical */ }
     }
-    reply.send({ response, role: 'assistant', usage: request.usageInfo || null, tier: request.entitlements?.tier || 'free' });
+    return { response, role: 'assistant', usage: request.usageInfo || null, tier: request.entitlements?.tier || 'free' };
   });
 
   fastify.get('/progress', { preHandler: authenticate }, async (request, reply) => {

@@ -303,7 +303,7 @@ Keep it concise (3-4 sentences) and professional but friendly.`;
                     variant="outline"
                     size="sm"
                     onClick={handleAIAssist}
-                    disabled={isGenerating || !subject.trim() || !isIssue}
+                    disabled={isGenerating || !subject.trim()}
                     className="gap-2"
                   >
                     {isGenerating ? (

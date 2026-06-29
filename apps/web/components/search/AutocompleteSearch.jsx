@@ -3,6 +3,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Search, Dna } from "lucide-react";
 import { apiClient } from "@genemap/shared";
+import { parseLLMJson } from "../shared/llmJson";
 
 export default function AutocompleteSearch({ 
   value, 
@@ -17,6 +18,10 @@ export default function AutocompleteSearch({
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const wrapperRef = useRef(null);
   const inputRef = useRef(null);
+  // Set when the user picks a suggestion. The selection programmatically
+  // updates `value`, which would otherwise re-trigger the fetch effect and
+  // immediately re-open the dropdown ("won't dismiss / re-fills the box").
+  const justSelectedRef = useRef(false);
 
   // Close suggestions when clicking outside
   useEffect(() => {
@@ -33,6 +38,14 @@ export default function AutocompleteSearch({
   // Fetch suggestions when user types
   useEffect(() => {
     const fetchSuggestions = async () => {
+      // A selection just set `value`; consume the flag and skip the refetch so
+      // the dropdown stays dismissed instead of re-populating.
+      if (justSelectedRef.current) {
+        justSelectedRef.current = false;
+        setSuggestions([]);
+        setShowSuggestions(false);
+        return;
+      }
       if (!value || value.length < 2) {
         setSuggestions([]);
         return;
@@ -51,10 +64,10 @@ Format as JSON array with objects containing:
 - description: brief 1-line description
 
 Focus on the most common and relevant matches. Return JSON: {"suggestions": [...]}`;
-        const { result: raw } = await apiClient.invokeLLM(suggestionPrompt);
-        const response = typeof raw === 'string' ? JSON.parse(raw.match(/\{[\s\S]*\}/)?.[0] || '{"suggestions":[]}') : raw;
+        const raw = await apiClient.invokeLLM(suggestionPrompt);
+        const response = parseLLMJson(raw, { suggestions: [] });
 
-        if (response.suggestions) {
+        if (Array.isArray(response.suggestions) && response.suggestions.length > 0) {
           setSuggestions(response.suggestions.slice(0, 8));
           setShowSuggestions(true);
         }
@@ -101,10 +114,12 @@ Focus on the most common and relevant matches. Return JSON: {"suggestions": [...
   };
 
   const handleSelectSuggestion = (suggestion) => {
-    onChange(suggestion.text);
-    onSelect?.(suggestion);
+    justSelectedRef.current = true;
+    setSuggestions([]);
     setShowSuggestions(false);
     setHighlightedIndex(-1);
+    onChange(suggestion.text);
+    onSelect?.(suggestion);
     inputRef.current?.blur();
   };
 

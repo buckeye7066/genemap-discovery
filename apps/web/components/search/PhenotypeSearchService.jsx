@@ -2,6 +2,7 @@ import { apiClient } from "@genemap/shared";
 import { log } from "../shared/logger";
 import { getErrorMessage } from "../shared/errorUtils";
 import { GENE_ENRICHMENT_CONCURRENCY } from "../shared/constants";
+import { parseLLMJson } from "../shared/llmJson";
 
 export class PhenotypeSearchService {
   static async searchGenes(phenotypeQuery, isPremium = false) {
@@ -11,7 +12,7 @@ export class PhenotypeSearchService {
       let userPreferences = null;
       try {
         const user = await apiClient.getMe();
-        isAdmin = user?.super_admin === true || user?.role === "admin" || user?.role === "super_admin" || user?.entitlements?.isAdmin === true;
+        isAdmin = user?.role === "admin" || user?.role === "super_admin" || user?.entitlements?.isAdmin === true;
         userPreferences = {
           age: user?.age,
           education_level: user?.education_level,
@@ -97,13 +98,7 @@ Provide a comprehensive analysis for gene discovery.
       add_context_from_internet: true
     });
 
-    try {
-      const raw = response?.result || response;
-      const parsed = typeof raw === 'string' ? JSON.parse(raw.match(/\{[\s\S]*\}/)?.[0] || '{}') : raw;
-      return parsed;
-    } catch {
-      return {};
-    }
+    return parseLLMJson(response, {});
   }
 
   static async findCandidateGenes(phenotypeAnalysis, isPremium) {
@@ -157,18 +152,17 @@ Return 3-8 most relevant candidate genes ranked by evidence strength.
 `;
     }
 
+    // Request the full token budget: a 5-15 gene list with per-gene metadata and
+    // explanations easily exceeds the default cap, and a truncated reply yields
+    // invalid JSON → an empty list → the "Found 0 candidate genes" the user saw.
     const response = await apiClient.invokeLLM(prompt + '\n\nReturn your response as JSON with key "candidateGenes" containing an array of objects with: symbol, name, entrezId, ensemblId, chromosome, start, end, score, associationType, explanation.', {
-      add_context_from_internet: true
+      add_context_from_internet: true,
+      maxTokens: 4096
     });
 
-    try {
-      const raw = response?.result || response;
-      const parsed = typeof raw === 'string' ? JSON.parse(raw.match(/\{[\s\S]*\}|\[[\s\S]*\]/)?.[0] || '{}') : raw;
-      const geneResults = Array.isArray(parsed) ? { candidateGenes: parsed } : parsed;
-      return geneResults.candidateGenes || [];
-    } catch {
-      return [];
-    }
+    const parsed = parseLLMJson(response, { candidateGenes: [] });
+    const geneResults = Array.isArray(parsed) ? { candidateGenes: parsed } : parsed;
+    return (geneResults?.candidateGenes || []).filter((g) => g && g.symbol);
   }
 
   static async enrichGeneData(candidateGenes, isPremium, userPreferences) {
@@ -240,13 +234,7 @@ Focus on well-established gene-phenotype associations from OMIM, ClinVar, UniPro
       add_context_from_internet: true
     });
 
-    try {
-      const raw = response?.result || response;
-      const parsed = typeof raw === 'string' ? JSON.parse(raw.match(/\{[\s\S]*\}/)?.[0] || '{}') : raw;
-      return parsed.phenotypes || [];
-    } catch {
-      return [];
-    }
+    return parseLLMJson(response, { phenotypes: [] }).phenotypes || [];
   }
 
   static async generateGeneSummary(gene, phenotypes, userPreferences) {
@@ -303,14 +291,9 @@ Return ONLY an array of strings, no additional formatting.
       add_context_from_internet: true
     });
 
-    try {
-      const raw = response?.result || response;
-      const parsed = typeof raw === 'string' ? JSON.parse(raw.match(/\{[\s\S]*\}|\[[\s\S]*\]/)?.[0] || '{}') : raw;
-      if (Array.isArray(parsed)) return parsed;
-      return parsed.takeaways || [];
-    } catch {
-      return [];
-    }
+    const parsed = parseLLMJson(response, { takeaways: [] });
+    if (Array.isArray(parsed)) return parsed;
+    return parsed.takeaways || [];
   }
 
   static async generateFurtherReading(gene, userPreferences) {
@@ -338,16 +321,11 @@ Adjust complexity of search terms based on user background.
       add_context_from_internet: false
     });
 
-    try {
-      const raw = response?.result || response;
-      const parsed = typeof raw === 'string' ? JSON.parse(raw.match(/\{[\s\S]*\}/)?.[0] || '{}') : raw;
-      return {
-        resources: parsed.resources || [],
-        pubmedSearchTerms: parsed.pubmedSearchTerms || []
-      };
-    } catch {
-      return { resources: [], pubmedSearchTerms: [] };
-    }
+    const parsed = parseLLMJson(response, {});
+    return {
+      resources: parsed.resources || [],
+      pubmedSearchTerms: parsed.pubmedSearchTerms || []
+    };
   }
 
   static async getGeneExpressionData(geneSymbol) {
@@ -366,13 +344,7 @@ Use tissue names like: brain, heart, liver, kidney, muscle, lung, etc.
         add_context_from_internet: true
       });
 
-      try {
-        const raw = response?.result || response;
-        const parsed = typeof raw === 'string' ? JSON.parse(raw.match(/\{[\s\S]*\}/)?.[0] || '{}') : raw;
-        return parsed.expression || [];
-      } catch {
-        return [];
-      }
+      return parseLLMJson(response, { expression: [] }).expression || [];
     } catch (error) {
       log.error(`Error fetching expression data for ${geneSymbol}:`, error);
       return [];
@@ -401,13 +373,7 @@ Adjust technical depth, terminology, and focus based on the reader's background.
       add_context_from_internet: true
     });
 
-    let premiumData;
-    try {
-      const raw = response?.result || response;
-      premiumData = typeof raw === 'string' ? JSON.parse(raw.match(/\{[\s\S]*\}/)?.[0] || '{}') : raw;
-    } catch {
-      premiumData = { prevalence: {}, geneHistory: {}, mutations: [], treatments: [] };
-    }
+    const premiumData = parseLLMJson(response, { prevalence: {}, geneHistory: {}, mutations: [], treatments: [] });
 
     return {
       prevalenceData: premiumData.prevalence,
@@ -512,13 +478,7 @@ Return up to 5 most significant relationships.
         add_context_from_internet: true
       });
 
-      try {
-        const raw = response?.result || response;
-        const parsed = typeof raw === 'string' ? JSON.parse(raw.match(/\{[\s\S]*\}/)?.[0] || '{}') : raw;
-        return parsed.relationships || [];
-      } catch {
-        return [];
-      }
+      return parseLLMJson(response, { relationships: [] }).relationships || [];
     } catch (error) {
       log.error("Error getting functional relationships:", error);
       return [];

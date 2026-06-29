@@ -40,7 +40,7 @@ export default function QuizMode() {
     setFinished(false);
 
     try {
-      const res = await apiClient.generateQuiz({ topic: topicTitle, level, questionCount: 5 });
+      const res = await apiClient.generateQuiz({ topic: topicTitle, level: level || 'undergraduate', questionCount: 5 });
       const q = Array.isArray(res.questions) ? res.questions : [];
       if (q.length === 0) {
         setError('Could not generate quiz questions. Please try again.');

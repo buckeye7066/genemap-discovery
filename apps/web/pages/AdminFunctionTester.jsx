@@ -36,20 +36,11 @@ export default function AdminFunctionTester() {
     setResults(null);
 
     try {
-      // testAllFunctions is an admin cloud function - call via apiClient
-      // If a dedicated endpoint exists, use it; otherwise use invokeLLM as a health check
-      const response = await apiClient.invokeLLM(
-        'Run a health check on all backend functions. Return JSON with ok, checked, passed, failed, skipped counts and an errorReport string.'
-      );
-      // invokeLLM resolves to { result, disclaimer }; the JSON lives in .result.
-      const raw = response?.result || response;
-      // Parse the LLM response as test results if possible
-      try {
-        const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
-        setResults(parsed);
-      } catch {
-        setResults({ ok: true, data: { checked: 0, passed: 0, failed: 0, skipped: 0, errorReport: raw || 'No report' } });
-      }
+      // Real backend self-test (GET /admin/self-test): actually exercises DB
+      // connectivity, core tables, and required config and returns honest
+      // checked/passed/failed counts — not an LLM pretending to run tests.
+      const result = await apiClient.runFunctionTests();
+      setResults(result);
     } catch (err) {
       setError(err.message || 'Failed to run tests');
     } finally {
@@ -128,7 +119,8 @@ export default function AdminFunctionTester() {
             Heavyweight Function Tester
           </h1>
           <p className="text-lg text-slate-600">
-            Tests ALL backend functions with real payloads. Returns ALL failures together.
+            Runs the backend self-test suite (database, core tables, and required
+            configuration) and reports every failure together.
           </p>
         </div>
 
@@ -137,9 +129,9 @@ export default function AdminFunctionTester() {
           <CardContent className="pt-6">
             <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
               <div>
-                <h3 className="font-semibold text-slate-900">Run Full Test Suite</h3>
+                <h3 className="font-semibold text-slate-900">Run Self-Test Suite</h3>
                 <p className="text-sm text-slate-600">
-                  Tests 16 backend functions with self-test payloads
+                  Live checks against the API's database and configuration
                 </p>
               </div>
               <div className="flex gap-2 flex-wrap">

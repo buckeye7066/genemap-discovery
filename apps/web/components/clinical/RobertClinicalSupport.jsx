@@ -115,6 +115,15 @@ export default function RobertClinicalSupport({ gene, disease, targets, userEduc
     }
   };
 
+  // Robert can give a general (non-personalized) analysis without uploaded
+  // records. This backs the "Robert can still provide analysis" copy so the
+  // no-data screen isn't a dead end.
+  const runWithoutMedicalData = async () => {
+    setAnalysis(null);
+    setIsLoading(true);
+    await performClinicalAnalysis(user, []);
+  };
+
   const performClinicalAnalysis = async (user, records) => {
     try {
       const educationContext = getEducationContext(userEducationLevel || user?.education_level);
@@ -365,7 +374,10 @@ Provide a comprehensive but accessible clinical analysis formatted in clear sect
               <li>• Medical records or diagnoses</li>
               <li>• Symptom descriptions</li>
             </ul>
-            <Button className="mt-4 w-full" onClick={onClose}>
+            <Button className="mt-4 w-full" onClick={runWithoutMedicalData}>
+              Run general analysis without my data
+            </Button>
+            <Button variant="outline" className="mt-2 w-full" onClick={onClose}>
               Go to Medical Data Upload
             </Button>
           </div>

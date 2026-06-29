@@ -581,7 +581,10 @@ Make the explanation warm, clear, and empowering. Avoid unnecessary medical jarg
                               </div>
                               {voices.map((voice) => (
                                 <SelectItem key={voice.name} value={voice.name} className="text-xs">
-                                  {voice.name.replace(/^.*\s/, '')} {voice.localService ? '(Local)' : ''}
+                                  {/* Show the readable voice name (before any " - "/" (" locale
+                                      suffix). The old greedy /^.*\s/ stripped everything up to the
+                                      last space, leaving garbage like "States) (Local)". */}
+                                  {voice.name.split(/\s+[-(]/)[0].trim()} {voice.localService ? '(Local)' : ''}
                                 </SelectItem>
                               ))}
                             </div>

@@ -1,10 +1,11 @@
 import React from "react";
-import Dashboard from "./Dashboard";
+import { Navigate } from "react-router-dom";
 
 /**
- * Home page - redirects to Dashboard
- * This provides a landing page that shows the user's personalized dashboard
+ * `/home` is a legacy alias. It previously rendered a second copy of the
+ * Dashboard, so both /home and /dashboard showed the same page. Redirect to the
+ * canonical /dashboard route instead of duplicating it.
  */
 export default function Home() {
-  return <Dashboard />;
+  return <Navigate to="/dashboard" replace />;
 }

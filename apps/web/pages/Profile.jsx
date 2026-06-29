@@ -249,7 +249,7 @@ export default function ProfilePage() {
                   <Calendar className="w-4 h-4 text-slate-500" />
                   <span className="font-medium">Member since:</span>
                   <span className="text-slate-700">
-                    {new Date(user.created_date).toLocaleDateString()}
+                    {user.createdAt ? new Date(user.createdAt).toLocaleDateString() : '—'}
                   </span>
                 </div>
                 <div className="flex items-center gap-2 text-sm">

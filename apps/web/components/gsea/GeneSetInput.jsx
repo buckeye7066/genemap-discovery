@@ -24,7 +24,7 @@ export default function GeneSetInput({ onSubmit, isLoading }) {
         id="gsea-input"
         rows={8}
         className="w-full rounded-md border border-slate-200 p-3 text-sm font-mono"
-        placeholder="BRCA1\nTP53\nMYC"
+        placeholder="e.g. BRCA1, TP53, MYC, EGFR"
         value={text}
         onChange={(e) => setText(e.target.value)}
         disabled={isLoading}
