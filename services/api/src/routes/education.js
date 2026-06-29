@@ -83,6 +83,23 @@ const TOPICS_CATALOG = [
 // selects a prompt persona, so coerce anything falsy to a sane default rather
 // than rejecting the whole request. Unknown strings fall back at prompt time.
 const DEFAULT_LEVEL = 'undergraduate';
+
+// Education explanations and quizzes are long single-shot generations. On the
+// default gpt-4o they routinely run 25-40s and exceed the upstream gateway's
+// response window, which then returns the browser an empty body — the
+// "server returned an empty response. The request may have timed out" error
+// every /education/* learning feature was hitting. A smaller, faster model
+// returns comfortably inside the budget with more than enough quality for a
+// level-tuned explanation or a multiple-choice quiz. Override per-provider via
+// LLM_EDU_TEXT_MODEL; leave undefined for non-OpenAI providers so their own
+// default model stands.
+const EDU_TEXT_PROVIDER = process.env.LLM_TEXT_PROVIDER || 'openai';
+const EDU_TEXT_MODEL = process.env.LLM_EDU_TEXT_MODEL
+  || (EDU_TEXT_PROVIDER === 'openai' || EDU_TEXT_PROVIDER === 'gpt' ? 'gpt-4o-mini' : undefined);
+// Keep a single attempt comfortably under a ~30s gateway. Timeouts are no
+// longer retried (see services/llm.js), so this is the real worst case.
+const EDU_TIMEOUT_MS = Number(process.env.LLM_EDU_TIMEOUT_MS || 24_000);
+
 const levelField = z.preprocess(
   (v) => (typeof v === 'string' && v.trim() ? v.trim() : DEFAULT_LEVEL),
   z.string().min(1)
@@ -152,7 +169,11 @@ export default async function educationRoutes(fastify) {
       '3-5 bullet points summarizing the essentials.',
     ].join('\n');
 
-    const explanation = await llm.generateExplanation(prompt);
+    const explanation = await llm.generateExplanation(prompt, {
+      model: EDU_TEXT_MODEL,
+      maxTokens: 1400,
+      timeoutMs: EDU_TIMEOUT_MS,
+    });
 
     if (request.user?.userId) {
       try {
@@ -228,7 +249,11 @@ export default async function educationRoutes(fastify) {
       '[{"question": "...", "options": ["A", "B", "C", "D"], "correctIndex": 0, "explanation": "..."}]',
     ].join('\n');
 
-    const questions = await llm.generateQuiz(prompt);
+    const questions = await llm.generateQuiz(prompt, {
+      model: EDU_TEXT_MODEL,
+      maxTokens: 1800,
+      timeoutMs: EDU_TIMEOUT_MS,
+    });
     if (request.user?.userId) {
       try {
         await prisma.learningSession.create({
@@ -249,7 +274,10 @@ export default async function educationRoutes(fastify) {
     };
 
     const fullMessages = [systemMessage, ...messages];
-    const response = await llm.generateChatResponse(fullMessages);
+    // Keep the chat on the default (higher-quality) model — tutor turns are
+    // short, so latency is not the problem here — but still cap the wait so a
+    // stalled upstream returns a clean error instead of an empty gateway body.
+    const response = await llm.generateChatResponse(fullMessages, { timeoutMs: EDU_TIMEOUT_MS });
     if (request.user?.userId) {
       try {
         await prisma.learningSession.create({

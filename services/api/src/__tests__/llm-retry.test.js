@@ -30,6 +30,23 @@ describe('LLM provider retry', () => {
     expect(operation).toHaveBeenCalledTimes(1);
   });
 
+  it('does NOT retry a client-side timeout (would only blow the gateway budget)', async () => {
+    // The OpenAI/Anthropic SDKs throw an APITimeoutError when a call exceeds the
+    // per-request timeout. Retrying it just burns another full window, so after
+    // 3 attempts the upstream gateway drops the connection and the browser gets
+    // an empty body. Fail fast on the first timeout instead.
+    const timeout = new Error('Request timed out.');
+    timeout.name = 'APITimeoutError';
+    const operation = vi.fn().mockRejectedValue(timeout);
+
+    await expect(withProviderRetry(operation, {
+      provider: 'openai',
+      attempts: 3,
+      baseDelayMs: 0,
+    })).rejects.toThrow('LLM provider api.openai.com failed after 1 attempt(s)');
+    expect(operation).toHaveBeenCalledTimes(1);
+  });
+
   it('sanitizes repeated network failures to host-only errors', async () => {
     const operation = vi.fn().mockRejectedValue(
       new Error('fetch failed for https://api.anthropic.com/v1/messages?key=secret')

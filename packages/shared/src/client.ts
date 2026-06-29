@@ -181,6 +181,13 @@ const NO_REFRESH_PATHS = new Set([
   '/auth/logout',
 ]);
 
+// Hard ceiling on how long the browser will wait for any single request.
+// Chosen to sit just ABOVE the API's own LLM timeout (~30s) so that when an AI
+// call is merely slow the server still wins the race and returns a real
+// JSON error; the client only aborts when the connection is genuinely dead,
+// turning the old "perpetual spinner" into a clean, retryable error.
+const DEFAULT_REQUEST_TIMEOUT_MS = 40_000;
+
 export class ApiClient {
   baseURL: string;
 
@@ -247,13 +254,40 @@ export class ApiClient {
       }
     }
 
+    const { timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS, signal: callerSignal, ...restOptions } = options;
+
+    // Bound every request with an AbortController so a stalled connection can
+    // never hang the UI forever. Compose with any caller-supplied signal so
+    // explicit cancellation still works.
+    const controller = new AbortController();
+    const timer =
+      timeoutMs > 0 ? setTimeout(() => controller.abort(), timeoutMs) : undefined;
+    if (callerSignal) {
+      if (callerSignal.aborted) controller.abort();
+      else callerSignal.addEventListener('abort', () => controller.abort(), { once: true });
+    }
+
     const config: RequestInit = {
-      ...options,
+      ...restOptions,
       credentials: 'include',
       headers,
+      signal: controller.signal,
     };
 
-    const response = await fetch(url, config);
+    let response: Response;
+    try {
+      response = await fetch(url, config);
+    } catch (err) {
+      if (controller.signal.aborted && !callerSignal?.aborted) {
+        throw new ApiError(
+          'The request timed out — the server took too long to respond. Please try again.',
+          408
+        );
+      }
+      throw err;
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
 
     // Silent token refresh: an expired 15-min access token surfaces as a 401.
     // Rather than dumping the user back to /login (the old behaviour that

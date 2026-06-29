@@ -280,6 +280,11 @@ export default function VCFAnalysisPage() {
                       </>
                     )}
                   </Button>
+                  {!file && !isUploading && (
+                    <p className="text-xs text-slate-500 text-center -mt-2">
+                      Select a <code>.vcf</code> or <code>.vcf.gz</code> file above to enable analysis.
+                    </p>
+                  )}
 
                   <div className="bg-cyan-50 p-4 rounded-lg border border-cyan-200">
                     <h4 className="font-medium text-cyan-900 mb-2 text-sm">What happens next:</h4>

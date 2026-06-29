@@ -88,8 +88,14 @@ export default function VisualizationHub() {
     }
   };
 
-  const handleAddGene = async () => {
-    const gene = geneInput.trim().toUpperCase();
+  const handleAddGene = async (geneArg) => {
+    // Accept an explicit symbol (Quick Add chips pass it directly) and fall
+    // back to the input box for the manual Add button / Enter key. Relying on
+    // the async `geneInput` state caused the race where clicking BRCA1 then
+    // TP53 in quick succession dropped the second gene: the first timed-out
+    // handler had already cleared the input by the time the second ran.
+    const source = typeof geneArg === 'string' ? geneArg : geneInput;
+    const gene = source.trim().toUpperCase();
     if (!gene || selectedGenes.some(g => g.symbol === gene)) {
       return;
     }
@@ -465,10 +471,7 @@ export default function VisualizationHub() {
                     key={gene}
                     variant="outline"
                     size="sm"
-                    onClick={() => {
-                      setGeneInput(gene);
-                      setTimeout(() => handleAddGene(), 100);
-                    }}
+                    onClick={() => handleAddGene(gene)}
                     disabled={selectedGenes.some(g => g.symbol === gene) || isLoading}
                     className="min-h-[36px]"
                   >
