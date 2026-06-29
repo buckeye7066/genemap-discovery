@@ -17,7 +17,7 @@ export default function DemographicCollectionPage() {
   // (Previously this page kept a local `useState(null)` it never populated, so
   // `isLoading` never cleared and the page spun forever — the second half of
   // the infinite-spinner hang.)
-  const { user, isLoadingAuth, navigateToLogin } = useAuth();
+  const { user, isLoadingAuth, navigateToLogin, applyUser } = useAuth();
   const [fullName, setFullName] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [mailingListOptIn, setMailingListOptIn] = useState(false);
@@ -68,12 +68,17 @@ export default function DemographicCollectionPage() {
     setSuccess(false);
 
     try {
-      await apiClient.updateProfile({
+      const updatedUser = await apiClient.updateProfile({
         fullName: fullName.trim(),
         phoneNumber: phoneNumber,
         mailingListOptIn: mailingListOptIn,
         demographicsCollected: true
       });
+
+      // Push the saved user (demographics_collected=true) into auth state BEFORE
+      // navigating. Without this the DemographicCheck gate reads stale state and
+      // redirects straight back here — the infinite profile-build loop.
+      applyUser(updatedUser);
 
       if (isEditMode) {
         // Returning user just saved an edit — confirm in place instead of

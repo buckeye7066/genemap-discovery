@@ -41,6 +41,18 @@ export const AuthProvider = ({ children }) => {
     window.location.href = '/login';
   }, []);
 
+  // Apply a fresh user object returned by a write (e.g. PUT /auth/me) so the
+  // app's auth state stays in sync WITHOUT an extra round-trip. Critical for
+  // the onboarding flow: after saving demographics the gate must immediately
+  // see demographics_collected=true, or it bounces the user back to the
+  // profile-build screen in an endless loop.
+  const applyUser = useCallback((userData) => {
+    if (!userData) return;
+    setUser(userData);
+    setIsAuthenticated(true);
+    setAuthError(null);
+  }, []);
+
   const login = useCallback(async (credentials) => {
     const response = await apiClient.login(credentials);
     setUser(response.user);
@@ -78,7 +90,8 @@ export const AuthProvider = ({ children }) => {
     register,
     logout,
     checkAuth,
-  }), [user, isAuthenticated, isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin, login, register, logout, checkAuth]);
+    applyUser,
+  }), [user, isAuthenticated, isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin, login, register, logout, checkAuth, applyUser]);
 
   return (
     <AuthContext.Provider value={value}>

@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { ApiClient, sanitizeBaseURL } from '../client.js';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { ApiClient, sanitizeBaseURL, setCsrfToken } from '../client.js';
 
 // ── Fetch mock ───────────────────────────────────────────────────────────────
 
@@ -422,5 +422,102 @@ describe('Error handling', () => {
     }));
 
     await expect(client.getMe()).rejects.toThrow('Request failed');
+  });
+});
+
+// ── Silent token refresh on 401 ───────────────────────────────────────────────
+
+describe('401 auto-refresh interceptor', () => {
+  afterEach(() => {
+    // The CSRF token cache is module-level + in-memory; reset between tests so
+    // the "no prior session" guard test isn't polluted by an earlier login.
+    setCsrfToken(null);
+  });
+
+  it('refreshes the access token once and replays the original request', async () => {
+    setCsrfToken('csrf-abc'); // simulate a prior authenticated session
+    let meCalls = 0;
+    global.fetch = vi.fn(async (url) => {
+      if (url.endsWith('/auth/refresh')) {
+        return { ok: true, status: 200, json: async () => ({ csrfToken: 'csrf-new' }) };
+      }
+      // First /auth/me 401s (expired access token); the replay succeeds.
+      meCalls += 1;
+      if (meCalls === 1) {
+        return { ok: false, status: 401, json: async () => ({ error: 'Authentication required' }) };
+      }
+      return { ok: true, status: 200, json: async () => ({ id: 'u1', email: 'a@b.com' }) };
+    });
+
+    const user = await client.getMe();
+    expect(user).toEqual({ id: 'u1', email: 'a@b.com' });
+    expect(meCalls).toBe(2); // original + one replay
+    const refreshCalls = global.fetch.mock.calls.filter(([u]) => u.endsWith('/auth/refresh'));
+    expect(refreshCalls).toHaveLength(1);
+  });
+
+  it('propagates the 401 when refresh fails', async () => {
+    setCsrfToken('csrf-abc');
+    global.fetch = vi.fn(async (url) => {
+      if (url.endsWith('/auth/refresh')) {
+        return { ok: false, status: 401, json: async () => ({ error: 'No refresh token' }) };
+      }
+      return { ok: false, status: 401, json: async () => ({ error: 'Authentication required' }) };
+    });
+
+    await expect(client.getMe()).rejects.toThrow('Authentication required');
+  });
+
+  it('does NOT attempt refresh for an anonymous visitor (no cached CSRF token)', async () => {
+    // No setCsrfToken — represents a logged-out visitor whose getMe 401s.
+    global.fetch = vi.fn(async () => ({
+      ok: false,
+      status: 401,
+      json: async () => ({ error: 'Authentication required' }),
+    }));
+
+    await expect(client.getMe()).rejects.toThrow('Authentication required');
+    const refreshCalls = global.fetch.mock.calls.filter(([u]) => u.endsWith('/auth/refresh'));
+    expect(refreshCalls).toHaveLength(0);
+  });
+
+  it('does NOT recurse when /auth/refresh itself 401s during a login flow', async () => {
+    setCsrfToken('csrf-abc');
+    global.fetch = vi.fn(async () => ({
+      ok: false,
+      status: 401,
+      json: async () => ({ error: 'Invalid credentials' }),
+    }));
+
+    // login() is in NO_REFRESH_PATHS, so a 401 must surface immediately with
+    // exactly one network call — no refresh attempt, no retry storm.
+    await expect(client.login({ email: 'a@b.com', password: 'wrong' })).rejects.toThrow(
+      'Invalid credentials',
+    );
+    expect(global.fetch.mock.calls).toHaveLength(1);
+  });
+
+  it('de-duplicates concurrent 401s into a single refresh (single-flight)', async () => {
+    setCsrfToken('csrf-abc');
+    const expired = new Set();
+    global.fetch = vi.fn(async (url) => {
+      if (url.endsWith('/auth/refresh')) {
+        return { ok: true, status: 200, json: async () => ({ csrfToken: 'csrf-new' }) };
+      }
+      // Each distinct endpoint 401s once, then succeeds on replay.
+      if (!expired.has(url)) {
+        expired.add(url);
+        return { ok: false, status: 401, json: async () => ({ error: 'Authentication required' }) };
+      }
+      return { ok: true, status: 200, json: async () => ({ entries: [] }) };
+    });
+
+    await Promise.all([
+      client.getSearchHistory(),
+      client.getUserActivity(),
+    ]);
+
+    const refreshCalls = global.fetch.mock.calls.filter(([u]) => u.endsWith('/auth/refresh'));
+    expect(refreshCalls).toHaveLength(1);
   });
 });

@@ -168,8 +168,30 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Auth endpoints where a 401 means "these credentials/this session are
+ * genuinely invalid" rather than "the short-lived access token expired."
+ * We must NOT attempt a silent token refresh for these, or we'd (a) recurse
+ * on /auth/refresh itself and (b) mask a real bad-password 401 on login.
+ */
+const NO_REFRESH_PATHS = new Set([
+  '/auth/refresh',
+  '/auth/login',
+  '/auth/register',
+  '/auth/logout',
+]);
+
 export class ApiClient {
   baseURL: string;
+
+  /**
+   * Single-flight guard for token refresh. When several requests 401 at once
+   * (e.g. a page that fires getMe + getTopics together after the 15-min access
+   * token expired) they must share ONE /auth/refresh round-trip, not stampede
+   * the endpoint and rotate the refresh token N times. Concurrent callers await
+   * this same promise; it's cleared once settled.
+   */
+  private refreshPromise: Promise<boolean> | null = null;
 
   constructor(baseURL: string = DEFAULT_BASE_URL) {
     // Sanitize here too so a polluted constructor override (or env value that
@@ -177,7 +199,40 @@ export class ApiClient {
     this.baseURL = sanitizeBaseURL(baseURL);
   }
 
-  async request<T = unknown>(path: string, options: ApiRequestOptions = {}): Promise<T> {
+  /**
+   * Attempt to mint a fresh access token from the (httpOnly) refresh cookie.
+   * Returns true on success. De-duplicated via {@link refreshPromise} so a
+   * burst of 401s triggers exactly one rotation.
+   */
+  private tryRefresh(): Promise<boolean> {
+    if (!this.refreshPromise) {
+      this.refreshPromise = fetch(`${this.baseURL}/auth/refresh`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+      })
+        .then(async (res) => {
+          if (!res.ok) return false;
+          // /auth/refresh returns a fresh CSRF token in its body for cross-site
+          // SPAs that cannot read the rotated cookie — cache it before retrying.
+          const data = await res.json().catch(() => null);
+          const token = (data as { csrfToken?: unknown } | null)?.csrfToken;
+          if (typeof token === 'string') setCsrfToken(token);
+          return true;
+        })
+        .catch(() => false)
+        .finally(() => {
+          this.refreshPromise = null;
+        });
+    }
+    return this.refreshPromise;
+  }
+
+  async request<T = unknown>(
+    path: string,
+    options: ApiRequestOptions = {},
+    isRetry = false
+  ): Promise<T> {
     const url = `${this.baseURL}${path}`;
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -199,6 +254,26 @@ export class ApiClient {
     };
 
     const response = await fetch(url, config);
+
+    // Silent token refresh: an expired 15-min access token surfaces as a 401.
+    // Rather than dumping the user back to /login (the old behaviour that
+    // trapped them mid-flow with endless `401 ()` console errors), rotate the
+    // access token once via the long-lived refresh cookie and replay the
+    // request. We only do this when we have a cached CSRF token — i.e. a prior
+    // authenticated session existed — so anonymous visitors don't pay an extra
+    // round-trip on every 401.
+    if (
+      response.status === 401 &&
+      !isRetry &&
+      !NO_REFRESH_PATHS.has(path) &&
+      getCsrfToken()
+    ) {
+      const refreshed = await this.tryRefresh();
+      if (refreshed) {
+        return this.request<T>(path, options, true);
+      }
+    }
+
     if (!response.ok) {
       const body: { error?: string; code?: string; details?: unknown } =
         await response.json().catch(() => ({}));
