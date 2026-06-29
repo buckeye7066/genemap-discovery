@@ -13,7 +13,11 @@ import { UserCircle, Phone, Mail, CheckCircle, AlertCircle, ExternalLink } from 
 
 export default function DemographicCollectionPage() {
   const navigate = useNavigate();
-  const [user, setUser] = useState(null);
+  // Use the auth context as the single source of truth for the signed-in user.
+  // (Previously this page kept a local `useState(null)` it never populated, so
+  // `isLoading` never cleared and the page spun forever — the second half of
+  // the infinite-spinner hang.)
+  const { user, isLoadingAuth, navigateToLogin } = useAuth();
   const [phoneNumber, setPhoneNumber] = useState("");
   const [mailingListOptIn, setMailingListOptIn] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -21,7 +25,13 @@ export default function DemographicCollectionPage() {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    if (!user) return;
+    if (isLoadingAuth) return; // auth still resolving → keep the loading state
+
+    if (!user) {
+      // Not signed in — go to login instead of spinning forever.
+      navigateToLogin();
+      return;
+    }
 
     if (user.demographics_collected) {
       navigate(createPageUrl("Home"));
@@ -35,7 +45,7 @@ export default function DemographicCollectionPage() {
       setMailingListOptIn(user.mailing_list_opt_in);
     }
     setIsLoading(false);
-  }, [user]);
+  }, [user, isLoadingAuth, navigate, navigateToLogin]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
