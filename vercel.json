@@ -4,6 +4,9 @@
   "installCommand": "pnpm install --frozen-lockfile",
   "buildCommand": "pnpm --filter @genemap/shared build && pnpm --filter @genemap/web build",
   "outputDirectory": "apps/web/dist",
+  "rewrites": [
+    { "source": "/((?!assets/|icons/|\\.well-known/).*)", "destination": "/index.html" }
+  ],
   "headers": [
     {
       "source": "/(.*)",
