@@ -662,7 +662,20 @@ export default function VisualizationHub() {
         )}
 
         {/* Visualizations */}
-        {selectedGenes.length === 0 ? (
+        {selectedGenes.length === 0 && loadingGenes.length > 0 ? (
+          // A gene is being fetched but isn't in the list yet — show a loading
+          // state instead of "No Genes Selected", which otherwise read as the
+          // page contradicting itself while an add was in flight.
+          <Card className="border-2 border-dashed border-blue-200">
+            <CardContent className="text-center py-16">
+              <Loader2 className="w-12 h-12 mx-auto mb-4 text-blue-500 animate-spin" />
+              <h3 className="text-xl font-semibold text-slate-700 mb-2">
+                Loading {loadingGenes.join(', ')}…
+              </h3>
+              <p className="text-slate-500">Fetching gene data to visualize.</p>
+            </CardContent>
+          </Card>
+        ) : selectedGenes.length === 0 ? (
           <Card className="border-2 border-dashed border-slate-200">
             <CardContent className="text-center py-16">
               <BarChart3 className="w-16 h-16 mx-auto mb-4 text-slate-400" />
