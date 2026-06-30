@@ -175,17 +175,15 @@ Return 3-8 most relevant candidate genes ranked by evidence strength.
       const batchResults = await Promise.all(
         batch.map(async (gene) => {
           try {
-            const [phenotypes, expressionData] = await Promise.all([
-              this.getGenePhenotypes(gene.symbol),
-              this.getGeneExpressionData(gene.symbol)
-            ]);
-            
-            const [aiSummary, keyTakeaways, furtherReading] = await Promise.all([
-              this.generateGeneSummary(gene, phenotypes, userPreferences),
-              this.generateKeyTakeaways(gene, phenotypes, userPreferences),
-              this.generateFurtherReading(gene, userPreferences)
-            ]);
-            
+            // ONE combined call per gene instead of five (phenotypes, summary,
+            // takeaways, further-reading, expression). A disease search returns
+            // 5-15 genes; at five calls each that was 25-75 sequential LLM round
+            // trips from the browser — minutes of latency that blew the request
+            // timeout and left the user with a spinner and no results. Folding
+            // them into a single structured response keeps the same output shape
+            // while cutting the call count ~5x.
+            const enriched = await this.enrichGeneCombined(gene, userPreferences);
+
             let premiumData = {};
             if (isPremium) {
               premiumData = await this.getPremiumGeneData(gene.symbol, userPreferences);
@@ -194,11 +192,7 @@ Return 3-8 most relevant candidate genes ranked by evidence strength.
             return {
               ...gene,
               genomeBuild: "GRCh38",
-              phenotypes: phenotypes,
-              aiSummary: aiSummary,
-              keyTakeaways: keyTakeaways,
-              furtherReading: furtherReading,
-              expressionData: expressionData,
+              ...enriched,
               sources: ["MyGene.info", "Ensembl", "HPO", "GWAS", "UniProt", "HPA", "GTEx"],
               ...premiumData
             };
@@ -221,6 +215,42 @@ Return 3-8 most relevant candidate genes ranked by evidence strength.
     }
 
     return enrichedGenes;
+  }
+
+  // Single structured enrichment call. Returns the same fields the previous
+  // five separate calls produced, with per-field fallbacks so a partial or
+  // malformed response degrades gracefully instead of failing the whole gene.
+  static async enrichGeneCombined(gene, userPreferences) {
+    const explanationStyle = this.getEducationContext(userPreferences);
+    const prompt = `For the human gene ${gene.symbol} (${gene.name || ''}), provide a structured profile.
+Gene context: ${gene.explanation || ''}
+
+Tailor all prose for ${explanationStyle}. Ground facts in OMIM, ClinVar, UniProt, HPO, HPA, and GTEx. Do not include preamble or meta-commentary.
+
+Return ONLY a JSON object with these keys:
+- "summary": string, a 2-3 sentence factual summary (function, key disease associations, mechanism)
+- "keyTakeaways": array of 3-4 one-sentence strings
+- "phenotypes": array of { "name": string, "hpoId": string|null } for the main associated phenotypes/diseases
+- "expressionData": array of { "tissue": string, "expression": number } for the top 8 tissues by GTEx TPM
+- "furtherReading": { "resources": array of { "name": string, "url": string }, "pubmedSearchTerms": array of strings }`;
+
+    const response = await apiClient.invokeLLM(prompt, { add_context_from_internet: true, maxTokens: 2048 });
+    const parsed = parseLLMJson(response, {});
+
+    return {
+      phenotypes: Array.isArray(parsed.phenotypes) ? parsed.phenotypes : [],
+      aiSummary: (typeof parsed.summary === 'string' && parsed.summary.trim())
+        ? parsed.summary
+        : `${gene.symbol} is associated with the searched phenotype. ${gene.explanation || ''}`,
+      keyTakeaways: Array.isArray(parsed.keyTakeaways) ? parsed.keyTakeaways : [],
+      expressionData: Array.isArray(parsed.expressionData) ? parsed.expressionData : [],
+      furtherReading: parsed.furtherReading && typeof parsed.furtherReading === 'object'
+        ? {
+            resources: parsed.furtherReading.resources || [],
+            pubmedSearchTerms: parsed.furtherReading.pubmedSearchTerms || [],
+          }
+        : null,
+    };
   }
 
   static async getGenePhenotypes(geneSymbol) {
