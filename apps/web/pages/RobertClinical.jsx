@@ -321,7 +321,11 @@ export default function RobertClinicalPage() {
                           variant="outline"
                           size="sm"
                           onClick={() => {
-                            setAnalysisTargets([...analysisTargets, {
+                            // Functional update: reading `analysisTargets` from
+                            // the closure dropped a selection when two chips
+                            // were clicked in quick succession (both handlers
+                            // saw the same stale array).
+                            setAnalysisTargets(prev => [...prev, {
                               type: 'gene',
                               value: gene,
                               id: Date.now() + Math.random()
@@ -344,7 +348,7 @@ export default function RobertClinicalPage() {
                           variant="outline"
                           size="sm"
                           onClick={() => {
-                            setAnalysisTargets([...analysisTargets, {
+                            setAnalysisTargets(prev => [...prev, {
                               type: 'disease',
                               value: disease,
                               id: Date.now() + Math.random()
