@@ -16,7 +16,7 @@ import { createPageUrl } from "@/utils";
 
 import SearchForm from "../components/search/SearchForm";
 import GeneResults from "../components/search/GeneResults";
-import LoadingSpinner from "../components/search/LoadingSpinner";
+import AiThinkingIndicator from "@/components/AiThinkingIndicator";
 const GeneComparison = lazy(() => import("../components/search/GeneComparison"));
 const GeneInputForm = lazy(() => import("../components/search/GeneInputForm"));
 const GeneSetComparison = lazy(() => import("../components/search/GeneSetComparison"));
@@ -217,8 +217,8 @@ export default function SearchPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-4 sm:p-6">
-      <div className="max-w-7xl mx-auto">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-4 sm:p-6 overflow-x-hidden">
+      <div className="max-w-7xl mx-auto min-w-0">
         <div className="text-center mb-6 sm:mb-8">
           <div className="flex justify-center mb-4">
             <div className="w-12 h-12 sm:w-16 sm:h-16 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-2xl flex items-center justify-center shadow-lg">
@@ -307,7 +307,12 @@ export default function SearchPage() {
               </Alert>
             )}
 
-            {isLoading && <LoadingSpinner query={searchQuery || "your genes"} />}
+            {isLoading && (
+              <AiThinkingIndicator
+                label={`Searching genes for "${searchQuery || 'your query'}"…`}
+                hint="Analyzing the query, finding associated genes, and enriching each one. This usually takes 10–25 seconds."
+              />
+            )}
 
             {/* Gene Set Comparison Results */}
             {geneSetComparison && !isLoading && (

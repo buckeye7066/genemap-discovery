@@ -1,21 +1,22 @@
 import React from 'react';
 import ReactMarkdown from 'react-markdown';
 import { BookOpen } from 'lucide-react';
+import AiThinkingIndicator from '@/components/AiThinkingIndicator';
 
 export default function AdaptiveExplanation({ content, loading, level }) {
   if (loading) {
+    // Pulse skeleton PLUS a live progress indicator so a 10-25s generation
+    // doesn't read as a hung page.
     return (
-      <div className="space-y-3 animate-pulse p-1">
-        <div className="h-5 bg-gradient-to-r from-slate-200 to-slate-100 rounded-lg w-1/3" />
-        <div className="h-3.5 bg-slate-100 rounded w-full" />
-        <div className="h-3.5 bg-slate-100 rounded w-5/6" />
-        <div className="h-3.5 bg-slate-100 rounded w-full" />
-        <div className="h-3.5 bg-slate-100 rounded w-2/3" />
-        <div className="h-8 mt-3" />
-        <div className="h-5 bg-gradient-to-r from-slate-200 to-slate-100 rounded-lg w-1/4" />
-        <div className="h-3.5 bg-slate-100 rounded w-full" />
-        <div className="h-3.5 bg-slate-100 rounded w-4/5" />
-        <div className="h-3.5 bg-slate-100 rounded w-full" />
+      <div className="p-1">
+        <AiThinkingIndicator label="Writing your explanation…" />
+        <div className="space-y-3 animate-pulse mt-2" aria-hidden="true">
+          <div className="h-5 bg-gradient-to-r from-slate-200 to-slate-100 rounded-lg w-1/3" />
+          <div className="h-3.5 bg-slate-100 rounded w-full" />
+          <div className="h-3.5 bg-slate-100 rounded w-5/6" />
+          <div className="h-3.5 bg-slate-100 rounded w-full" />
+          <div className="h-3.5 bg-slate-100 rounded w-2/3" />
+        </div>
       </div>
     );
   }
