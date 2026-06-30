@@ -32,11 +32,28 @@ export class PhenotypeSearchService {
    */
   static async findCandidates(phenotypeQuery, isPremium = false) {
     try {
-      const { isAdmin, userPreferences } = await this.getUserContext();
+      // Two independent round-trips run CONCURRENTLY:
+      //  - getUserContext() (a /auth/me call) — needed only for the premium flag
+      //    and the LATER per-gene enrichment, NOT for candidate discovery.
+      //  - analyzeAndFindCandidates() — a single FUSED LLM call that both
+      //    classifies the query and returns candidate genes.
+      // Candidate discovery doesn't read the user profile, so there's no reason
+      // to wait for getMe() before starting the (slow) LLM call — overlap them.
+      const [{ isAdmin, userPreferences }, fused] = await Promise.all([
+        this.getUserContext(),
+        this.analyzeAndFindCandidates(phenotypeQuery),
+      ]);
       const effectivePremium = isPremium || isAdmin;
 
-      const phenotypeAnalysis = await this.analyzePhenotype(phenotypeQuery);
-      const candidateGenes = await this.findCandidateGenes(phenotypeAnalysis, effectivePremium, phenotypeQuery);
+      let { analysis, candidateGenes } = fused;
+
+      // Reliability net: if the single fused call came back without genes (sparse
+      // or unparseable JSON), fall back to the original two-step path so the
+      // speedup never costs us a result.
+      if (!candidateGenes.length) {
+        analysis = await this.analyzePhenotype(phenotypeQuery);
+        candidateGenes = await this.findCandidateGenes(analysis, effectivePremium, phenotypeQuery);
+      }
 
       const symbols = candidateGenes.map((g) => g.symbol).filter(Boolean);
       const { genes: authGenes } = await this.safeEnrich(symbols, []);
@@ -57,8 +74,8 @@ export class PhenotypeSearchService {
         query: phenotypeQuery,
         candidateGenes: baseGenes,
         isPremium: effectivePremium,
-        hpoTerms: phenotypeAnalysis.hpoTerms || [],
-        queryType: phenotypeAnalysis.queryType || 'phenotype',
+        hpoTerms: analysis.hpoTerms || [],
+        queryType: analysis.queryType || 'phenotype',
         userPreferences,
         enriched: false,
       };
@@ -66,6 +83,74 @@ export class PhenotypeSearchService {
       log.error("Search (find candidates) error:", error);
       throw new Error(getErrorMessage(error) || "Failed to search for genes. Please try again.");
     }
+  }
+
+  /**
+   * FUSED classification + candidate discovery in a SINGLE LLM round-trip.
+   *
+   * Previously this was two sequential calls — analyzePhenotype() then
+   * findCandidateGenes() — and the second consumed the first's classification
+   * (isDisease / diseaseName / inheritancePattern), so they were a hard
+   * dependency chain that could never run in parallel. Folding them into one
+   * structured response removes a full slow round-trip from the blocking phase,
+   * roughly halving time-to-first-card. Returns the same { analysis,
+   * candidateGenes } shape the two-step path produced, so callers (and the
+   * fallback) are unchanged. parseLLMJson tolerates fences/prose; a sparse reply
+   * yields an empty gene list, which findCandidates() handles by falling back.
+   */
+  static async analyzeAndFindCandidates(query) {
+    const prompt = `
+You are a genomics assistant. For the query below, do BOTH steps in ONE response.
+
+Query: "${query}"
+
+STEP 1 — Classify the query:
+- Is it a disease name (e.g. "Rheumatoid Arthritis", "Trisomy 21", "Cystic Fibrosis")?
+- Is it a phenotype description (e.g. "polydactyly", "intellectual disability")?
+- Is it an HPO term (starts with "HP:")?
+- Identify its main phenotypic features, related HPO terms, synonyms, and — if it is a
+  Mendelian disorder — the inheritance pattern.
+
+STEP 2 — Find candidate genes for that query:
+- If it is a DISEASE: identify ALL associated genes — primary causative (monogenic),
+  risk factors (polygenic / GWAS susceptibility loci), modifier genes, and key pathway
+  genes. Return 5-15 genes ranked by evidence strength and clinical significance.
+- If it is a PHENOTYPE or HPO term: find candidate genes associated with these features.
+  Return 3-8 genes ranked by evidence strength.
+- For EACH gene provide: symbol, full name, Entrez ID and Ensembl ID (if known),
+  chromosomal location (chromosome + approximate start/end), a confidence score (0-1),
+  the association type (causative, risk factor, GWAS, pathway), and a brief explanation.
+
+Ground everything in OMIM, ClinVar, GWAS Catalog, DisGeNET, UniProt, HPO, and the
+literature. Anchor the gene list on the ORIGINAL query "${query}" — do NOT fall back to
+generic famous genes (BRCA1 / TP53 / APOE) unless they are genuinely relevant.
+`;
+
+    const response = await apiClient.invokeLLM(
+      prompt +
+        '\n\nReturn ONLY a JSON object with keys: queryType (string), isDisease (boolean), ' +
+        'diseaseName (string|null), isHPOTerm (boolean), mainFeatures (array of strings), ' +
+        'hpoTerms (array of strings), synonyms (array of strings), inheritancePattern ' +
+        '(string|null), and candidateGenes (array of objects with: symbol, name, entrezId, ' +
+        'ensemblId, chromosome, start, end, score, associationType, explanation).',
+      { add_context_from_internet: true, maxTokens: 4096 }
+    );
+
+    const parsed = parseLLMJson(response, {});
+    const candidateGenes = (Array.isArray(parsed.candidateGenes) ? parsed.candidateGenes : []).filter(
+      (g) => g && g.symbol
+    );
+    const analysis = {
+      queryType: parsed.queryType || (parsed.isDisease ? 'disease' : 'phenotype'),
+      isDisease: Boolean(parsed.isDisease),
+      diseaseName: parsed.diseaseName || null,
+      isHPOTerm: Boolean(parsed.isHPOTerm),
+      mainFeatures: Array.isArray(parsed.mainFeatures) ? parsed.mainFeatures : [],
+      hpoTerms: Array.isArray(parsed.hpoTerms) ? parsed.hpoTerms : [],
+      synonyms: Array.isArray(parsed.synonyms) ? parsed.synonyms : [],
+      inheritancePattern: parsed.inheritancePattern || null,
+    };
+    return { analysis, candidateGenes };
   }
 
   /**

@@ -1,4 +1,5 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { apiClient } from '@genemap/shared';
 import { PhenotypeSearchService } from '../PhenotypeSearchService';
 
 // applyAuthoritativeData() is the merge that overlays real (MyGene.info/HPO)
@@ -84,6 +85,51 @@ describe('PhenotypeSearchService.finalizeEnriched', () => {
     expect(b.sources).toEqual(['AI-suggested']);
     // validation ran (authHpo non-empty) but no match → drop fabricated id
     expect(b.phenotypes[0].hpoId).toBeNull();
+  });
+});
+
+// findCandidates() now classifies the query AND finds genes in a SINGLE fused
+// LLM round-trip (down from two sequential calls), with user-context fetched
+// concurrently and a two-step fallback when the fused call yields no genes.
+describe('PhenotypeSearchService.findCandidates (fused analyze+find)', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  const json = (obj) => ({ result: JSON.stringify(obj) });
+
+  it('uses ONE LLM call on the happy path and returns the genes', async () => {
+    const invoke = vi.spyOn(apiClient, 'invokeLLM').mockResolvedValue(
+      json({
+        queryType: 'disease',
+        isDisease: true,
+        diseaseName: 'Cystic Fibrosis',
+        hpoTerms: ['HP:0006528'],
+        candidateGenes: [{ symbol: 'CFTR', name: 'CF transmembrane regulator', chromosome: '7' }],
+      })
+    );
+    vi.spyOn(apiClient, 'getMe').mockResolvedValue({ role: 'user' });
+    vi.spyOn(apiClient, 'enrichGenomicData').mockResolvedValue({ genes: {}, phenotypes: {} });
+
+    const base = await PhenotypeSearchService.findCandidates('Cystic Fibrosis', false);
+
+    expect(base.candidateGenes.map((g) => g.symbol)).toContain('CFTR');
+    expect(base.hpoTerms).toContain('HP:0006528');
+    // The fusion: a single /llm/invoke, not the previous analyze + find pair.
+    expect(invoke).toHaveBeenCalledTimes(1);
+  });
+
+  it('falls back to the two-step path when the fused call returns no genes', async () => {
+    const invoke = vi
+      .spyOn(apiClient, 'invokeLLM')
+      .mockResolvedValueOnce(json({ queryType: 'phenotype', candidateGenes: [] })) // fused → empty
+      .mockResolvedValueOnce(json({ isDisease: false, mainFeatures: ['tall stature'] })) // analyzePhenotype
+      .mockResolvedValueOnce(json({ candidateGenes: [{ symbol: 'FBN1' }] })); // findCandidateGenes
+    vi.spyOn(apiClient, 'getMe').mockResolvedValue({});
+    vi.spyOn(apiClient, 'enrichGenomicData').mockResolvedValue({ genes: {}, phenotypes: {} });
+
+    const base = await PhenotypeSearchService.findCandidates('tall stature', false);
+
+    expect(base.candidateGenes.map((g) => g.symbol)).toContain('FBN1');
+    expect(invoke).toHaveBeenCalledTimes(3); // fused (empty) + analyze + find
   });
 });
 
