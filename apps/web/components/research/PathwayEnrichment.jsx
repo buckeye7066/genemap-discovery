@@ -17,6 +17,18 @@ function getEducationContext(level) {
   return "research scientists - provide comprehensive molecular biology details";
 }
 
+// Strip the model's "let me / we will delve into / we'll simulate…" preamble and
+// any capability disclaimers that leaked into the user-facing report when the
+// response wasn't valid JSON. Belt-and-suspenders to the prompt constraints.
+function stripLLMPreamble(text) {
+  if (typeof text !== 'string') return '';
+  return text
+    .replace(/^\s*(?:in this|as an? ai|let me|i'?ll|i will|here'?s|to (?:provide|analyze|begin)|we(?:'| wi)ll|first,|note:|disclaimer:).*?(?:\n\n|\n(?=[#*-])|$)/gis, '')
+    .replace(/^[\s\S]*?\bsimulat\w+\b[^\n]*\n+/i, '') // drop a leading "we'll simulate…" line entirely
+    .replace(/^\s*#+\s*$/gm, '')
+    .trim();
+}
+
 function PathwayTooltipContent({ payload }) {
   if (payload && payload.length > 0) {
     const data = payload[0].payload;
@@ -52,6 +64,11 @@ ${genes.join(', ')}
 
 **Audience:** ${educationContext}
 
+**Critical constraints (read first):**
+- Ground everything in established, curated knowledge (KEGG, Reactome, GO, STRING, etc.). Do NOT invent, simulate, or fabricate statistics.
+- If you cannot ground a precise p-value in known data, give a qualitative confidence (high / moderate / low) instead of a made-up number. Never present a guessed number as a computed result.
+- Output ONLY the analysis itself. Do NOT include any preamble, meta-commentary, or disclaimers about your capabilities — never write phrases like "we will delve into", "let me", or "we'll simulate some statistical data". Start directly with the findings.
+
 **Your Task - Comprehensive Pathway Enrichment Analysis:**
 
 1. **Enriched Biological Pathways**
@@ -61,8 +78,8 @@ ${genes.join(', ')}
      * Pathway name
      * Number of genes from list in pathway
      * Total genes in pathway
-     * P-value (simulated if needed)
-     * FDR-adjusted p-value
+     * P-value — only if grounded in curated knowledge; otherwise state confidence (high/moderate/low). Do not fabricate.
+     * FDR-adjusted p-value (same rule)
    - Biological interpretation
 
 2. **Gene Ontology Enrichment**
@@ -115,11 +132,11 @@ ${genes.join(', ')}
       ...
     ]
 
-Return comprehensive analysis with specific pathways and statistical measures.`;
+Return the analysis directly, with no preamble or meta-commentary.`;
 
       const { result: raw } = await apiClient.invokeLLM(prompt);
-      const response = typeof raw === 'string' ? (() => { try { return JSON.parse(raw.match(/\{[\s\S]*\}/)?.[0] || '{}'); } catch { return { analysis: raw, enriched_pathways: [] }; } })() : raw;
-      if (!response.analysis && typeof raw === 'string') { response.analysis = raw; }
+      const response = typeof raw === 'string' ? (() => { try { return JSON.parse(raw.match(/\{[\s\S]*\}/)?.[0] || '{}'); } catch { return { analysis: stripLLMPreamble(raw), enriched_pathways: [] }; } })() : raw;
+      if (!response.analysis && typeof raw === 'string') { response.analysis = stripLLMPreamble(raw); }
       if (!response.enriched_pathways) { response.enriched_pathways = []; }
 
       setResults({
@@ -190,6 +207,16 @@ Return comprehensive analysis with specific pathways and statistical measures.`;
 
       {results && (
         <>
+          <Alert className="bg-amber-50 border-amber-200">
+            <Info className="h-4 w-4 text-amber-600" />
+            <AlertDescription className="text-amber-900 text-sm">
+              <strong>AI-generated, knowledge-based estimates.</strong> Pathways and any
+              significance values come from the model's curated knowledge — they are
+              <strong> not computed</strong> from a live enrichment test over your gene list.
+              Use them to guide hypotheses, and validate with a dedicated tool
+              (KEGG, Reactome, g:Profiler, Enrichr) before reporting.
+            </AlertDescription>
+          </Alert>
           {/* Pathway Chart */}
           {results.pathways.length > 0 && (
             <Card className="shadow-lg">

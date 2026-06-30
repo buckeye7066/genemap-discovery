@@ -39,6 +39,7 @@ export default function AdminAnalytics() {
   // useState(null) that nothing ever set, so isAdminUser(user) was always
   // false and every visitor — super_admin included — saw "Admin access required".
   const { user, isLoadingAuth } = useAuth();
+  const [stats, setStats] = useState({});
   const [activities, setActivities] = useState([]);
   const [searches, setSearches] = useState([]);
   const [medicalRecords, setMedicalRecords] = useState([]);
@@ -61,12 +62,22 @@ export default function AdminAnalytics() {
       }
 
       const analytics = await apiClient.getAdminAnalytics();
-      const { stats = {}, recentActivity = {} } = analytics;
+      // Backend shape: { stats:{ total* counts }, recentActivity:[], recentSearches:[], recentConversations:[] }.
+      // The old code read recentActivity.activities/.searches (object props that
+      // never existed on the array), so every list was [] and every card read 0.
+      const {
+        stats: statCounts = {},
+        recentActivity = [],
+        recentSearches = [],
+        recentConversations = [],
+      } = analytics;
 
-      setActivities(recentActivity.activities || stats.activities || []);
-      setSearches(recentActivity.searches || stats.searches || []);
-      setMedicalRecords(recentActivity.medicalRecords || stats.medicalRecords || []);
-      setAiConversations(recentActivity.aiConversations || stats.aiConversations || []);
+      setStats(statCounts);
+      setActivities(Array.isArray(recentActivity) ? recentActivity : []);
+      setSearches(Array.isArray(recentSearches) ? recentSearches : []);
+      // Medical records are exposed as a COUNT only (no PHI listing).
+      setMedicalRecords([]);
+      setAiConversations(Array.isArray(recentConversations) ? recentConversations : []);
     } catch (err) {
       console.error('Error loading analytics:', err);
       setError(err.message || 'Failed to load analytics');
@@ -78,7 +89,7 @@ export default function AdminAnalytics() {
   const activityTypeDistribution = useMemo(() => {
     const counts = {};
     activities.forEach(activity => {
-      const type = activity.activity_type || 'unknown';
+      const type = activity.activityType || 'unknown';
       counts[type] = (counts[type] || 0) + 1;
     });
     return Object.entries(counts).map(([name, value]) => ({ name, value }));
@@ -87,8 +98,12 @@ export default function AdminAnalytics() {
   const popularGenes = useMemo(() => {
     const geneCounts = {};
     activities.forEach(activity => {
-      if (activity.gene_symbol) {
-        geneCounts[activity.gene_symbol] = (geneCounts[activity.gene_symbol] || 0) + 1;
+      // Gene views record the symbol in entityId (entityType === 'gene').
+      const symbol = (activity.entityType === 'gene' || activity.activityType === 'gene_view')
+        ? activity.entityId
+        : null;
+      if (symbol) {
+        geneCounts[symbol] = (geneCounts[symbol] || 0) + 1;
       }
     });
     return Object.entries(geneCounts)
@@ -100,7 +115,7 @@ export default function AdminAnalytics() {
   const popularSearches = useMemo(() => {
     const searchCounts = {};
     searches.forEach(search => {
-      const query = search.phenotype_query || 'Unknown';
+      const query = search.query || 'Unknown';
       searchCounts[query] = (searchCounts[query] || 0) + 1;
     });
     return Object.entries(searchCounts)
@@ -117,8 +132,9 @@ export default function AdminAnalytics() {
       last7Days.push(date.toISOString().split('T')[0]);
     }
     return last7Days.map(date => {
-      const dayActivities = activities.filter(a => a.created_date?.startsWith(date)).length;
-      const daySearches = searches.filter(s => s.created_date?.startsWith(date)).length;
+      const onDay = (ts) => typeof ts === 'string' ? ts.startsWith(date) : new Date(ts).toISOString().startsWith(date);
+      const dayActivities = activities.filter(a => a.createdAt && onDay(a.createdAt)).length;
+      const daySearches = searches.filter(s => s.createdAt && onDay(s.createdAt)).length;
       return {
         date: new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
         activities: dayActivities,
@@ -141,8 +157,8 @@ export default function AdminAnalytics() {
   }, [medicalRecords]);
 
   const aiUsageStats = useMemo(() => {
-    const robertCount = aiConversations.filter(c => c.assistant_type === 'robert').length;
-    const anastasiaCount = aiConversations.filter(c => c.assistant_type === 'anastasia').length;
+    const robertCount = aiConversations.filter(c => c.assistantType === 'robert').length;
+    const anastasiaCount = aiConversations.filter(c => c.assistantType === 'anastasia').length;
     return [
       { name: 'Robert (Clinical)', value: robertCount },
       { name: 'Anastasia (Counselor)', value: anastasiaCount }
@@ -150,12 +166,15 @@ export default function AdminAnalytics() {
   }, [aiConversations]);
 
   const searchTypeDistribution = useMemo(() => {
-    const premiumCount = searches.filter(s => s.search_type === 'premium').length;
-    const freeCount = searches.filter(s => s.search_type === 'free').length;
-    return [
-      { name: 'Premium', value: premiumCount },
-      { name: 'Free', value: freeCount }
-    ];
+    // SearchHistory records queryType (disease / free_text / hpo_term), not a
+    // premium/free flag — so report the real query-type mix.
+    const labels = { disease: 'Disease', free_text: 'Free Text', hpo_term: 'HPO Term' };
+    const counts = {};
+    searches.forEach(s => {
+      const key = labels[s.queryType] || s.queryType || 'Other';
+      counts[key] = (counts[key] || 0) + 1;
+    });
+    return Object.entries(counts).map(([name, value]) => ({ name, value }));
   }, [searches]);
 
   const COLORS = ['#3b82f6', '#8b5cf6', '#ec4899', '#10b981', '#f59e0b', '#ef4444', '#06b6d4', '#84cc16'];
@@ -212,7 +231,7 @@ export default function AdminAnalytics() {
                   <Activity className="w-6 h-6 text-blue-600" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-slate-900">{activities.length}</p>
+                  <p className="text-2xl font-bold text-slate-900">{stats.totalActivities ?? activities.length}</p>
                   <p className="text-xs text-slate-600">Total Activities</p>
                 </div>
               </div>
@@ -226,7 +245,7 @@ export default function AdminAnalytics() {
                   <Search className="w-6 h-6 text-purple-600" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-slate-900">{searches.length}</p>
+                  <p className="text-2xl font-bold text-slate-900">{stats.totalSearches ?? searches.length}</p>
                   <p className="text-xs text-slate-600">Searches</p>
                 </div>
               </div>
@@ -240,7 +259,7 @@ export default function AdminAnalytics() {
                   <FileText className="w-6 h-6 text-green-600" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-slate-900">{medicalRecords.length}</p>
+                  <p className="text-2xl font-bold text-slate-900">{stats.totalMedicalRecords ?? medicalRecords.length}</p>
                   <p className="text-xs text-slate-600">Medical Records</p>
                 </div>
               </div>
@@ -254,7 +273,7 @@ export default function AdminAnalytics() {
                   <MessageSquare className="w-6 h-6 text-amber-600" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-slate-900">{aiConversations.length}</p>
+                  <p className="text-2xl font-bold text-slate-900">{stats.totalConversations ?? aiConversations.length}</p>
                   <p className="text-xs text-slate-600">AI Chats</p>
                 </div>
               </div>
@@ -477,13 +496,13 @@ export default function AdminAnalytics() {
 
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-lg">Premium Usage</CardTitle>
+                  <CardTitle className="text-lg">Active Subscriptions</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <p className="text-3xl font-bold text-amber-600">
-                    {((searches.filter(s => s.search_type === 'premium').length / searches.length) * 100).toFixed(0)}%
+                    {stats.activeSubscriptions ?? 0}
                   </p>
-                  <p className="text-sm text-slate-600 mt-2">of searches use premium</p>
+                  <p className="text-sm text-slate-600 mt-2">premium subscribers</p>
                 </CardContent>
               </Card>
             </div>

@@ -527,7 +527,8 @@ export default async function adminRoutes(fastify) {
   fastify.get('/analytics', async () => {
     const [
       totalUsers, activeSubscriptions, totalSearches,
-      totalConversations, totalMedicalRecords, totalGeneSets,
+      totalConversations, totalMedicalRecords, totalGeneSets, totalActivities,
+      recentActivity, recentSearches, recentConversations,
     ] = await Promise.all([
       prisma.user.count(),
       prisma.subscription.count({ where: { status: 'active' } }),
@@ -535,20 +536,35 @@ export default async function adminRoutes(fastify) {
       prisma.aIConversation.count(),
       prisma.medicalData.count(),
       prisma.geneSet.count(),
+      prisma.userActivity.count(),
+      prisma.userActivity.findMany({
+        orderBy: { createdAt: 'desc' },
+        take: 200,
+        include: { user: { select: { email: true, displayName: true } } },
+      }),
+      // The dashboard's distribution charts need the rows, not just counts.
+      // Keep these lean (no PII beyond what the chart aggregates). Medical
+      // records are deliberately NOT listed here — only their count is exposed.
+      prisma.searchHistory.findMany({
+        orderBy: { createdAt: 'desc' },
+        take: 500,
+        select: { id: true, query: true, queryType: true, createdAt: true },
+      }),
+      prisma.aIConversation.findMany({
+        orderBy: { createdAt: 'desc' },
+        take: 500,
+        select: { id: true, assistantType: true, createdAt: true },
+      }),
     ]);
-
-    const recentActivity = await prisma.userActivity.findMany({
-      orderBy: { createdAt: 'desc' },
-      take: 100,
-      include: { user: { select: { email: true, displayName: true } } },
-    });
 
     return {
       stats: {
         totalUsers, activeSubscriptions, totalSearches,
-        totalConversations, totalMedicalRecords, totalGeneSets,
+        totalConversations, totalMedicalRecords, totalGeneSets, totalActivities,
       },
       recentActivity,
+      recentSearches,
+      recentConversations,
     };
   });
 

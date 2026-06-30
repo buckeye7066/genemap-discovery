@@ -96,7 +96,7 @@ ${geneSymbols}
   ]
 }
 
-Keep the JSON compact and within budget: return at most the top 8 pathways, the top 5 GO terms per category, and the top 6 disease associations. Return ONLY the JSON object, no prose or markdown fences.`;
+Keep the JSON compact and within budget: return at most the top 8 pathways, the top 5 GO terms per category, and the top 6 disease associations. Ground every pathway/term in established curated knowledge (KEGG, Reactome, GO); do NOT fabricate or simulate statistics, and do NOT put preamble, meta-commentary, or capability disclaimers inside any field. Return ONLY the JSON object, no prose or markdown fences.`;
 
       // GSEA returns a large structured object; request the full token budget so
       // the JSON isn't truncated mid-object (which parsed to nothing → "No
@@ -183,12 +183,23 @@ Keep the JSON compact and within budget: return at most the top 8 pathways, the 
 
         {/* Results Section */}
         {enrichmentData && (
-          <EnrichmentResults
-            data={enrichmentData}
-            geneList={geneList}
-            onReset={handleReset}
-            userEducationLevel={user?.education_level}
-          />
+          <>
+            <Alert className="mb-6 bg-amber-50 border-amber-200">
+              <Info className="h-4 w-4 text-amber-600" />
+              <AlertDescription className="text-amber-900 text-sm">
+                <strong>AI-generated, knowledge-based estimates.</strong> Pathways, GO terms and any
+                p-values come from the model's curated knowledge — they are <strong>not computed</strong> from
+                a live enrichment test over your gene set. Validate with a dedicated tool
+                (g:Profiler, Enrichr, GSEA/MSigDB) before reporting.
+              </AlertDescription>
+            </Alert>
+            <EnrichmentResults
+              data={enrichmentData}
+              geneList={geneList}
+              onReset={handleReset}
+              userEducationLevel={user?.education_level}
+            />
+          </>
         )}
 
         {/* Loading State */}
