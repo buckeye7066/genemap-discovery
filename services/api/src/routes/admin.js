@@ -6,6 +6,62 @@ function normalizeEmail(email) {
   return String(email || '').trim().toLowerCase();
 }
 
+/**
+ * Serialize a Prisma user row to the snake_case contract the web app renders.
+ *
+ * The entire frontend (and /auth/me) speaks snake_case — a Base44 legacy
+ * convention. The /admin/* routes historically leaked Prisma's camelCase
+ * straight to the client, so every admin user card showed a blank name, no
+ * ban reason, and no dates. Normalizing here is the single, permanent point
+ * where the API user shape is committed to, so the UI never has to guess.
+ */
+function serializeAdminUser(u) {
+  if (!u) return u;
+  return {
+    id: u.id,
+    email: u.email ?? null,
+    role: u.role ?? 'user',
+    banned: u.banned ?? false,
+    ban_reason: u.banReason ?? null,
+    banned_date: u.bannedDate ?? null,
+    banned_by: u.bannedBy ?? null,
+    full_name: u.fullName ?? null,
+    display_name: u.displayName ?? null,
+    phone_number: u.phoneNumber ?? null,
+    education_level: u.educationLevel ?? null,
+    demographics_collected: u.demographicsCollected ?? null,
+    mailing_list_opt_in: u.mailingListOptIn ?? null,
+    created_date: u.createdAt ?? null,
+    last_active: u.lastActiveAt ?? null,
+    pre_banned: false,
+  };
+}
+
+/**
+ * Serialize a preBannedUser row into the SAME snake_case user shape, flagged
+ * pre_banned. The Ban Management page renders pre-bans and real bans from one
+ * list and splits them on `pre_banned`; emitting a uniform shape (rather than a
+ * separate array the page has to special-case) is what makes the pre-ban list
+ * actually populate.
+ */
+function serializePreBannedUser(p) {
+  if (!p) return p;
+  return {
+    id: p.id,
+    email: p.email || null,
+    role: 'user',
+    banned: true,
+    ban_reason: p.reason ?? null,
+    banned_date: p.createdAt ?? null,
+    banned_by: p.bannedBy ?? null,
+    full_name: p.fullName ?? null,
+    display_name: null,
+    phone_number: p.phoneNumber ?? null,
+    created_date: p.createdAt ?? null,
+    pre_banned: true,
+  };
+}
+
 // Complimentary access windows an admin can grant. Kept as whole days so the
 // expiry is unambiguous regardless of the hour the grant is issued.
 const FREE_PERIOD_DAYS = { week: 7, month: 30 };
@@ -199,10 +255,9 @@ export default async function adminRoutes(fastify) {
       lastActivity = [];
     }
     const lastActiveByUser = new Map((lastActivity || []).map((r) => [r.userId, r._max?.createdAt]));
-    const usersWithActivity = users.map((u) => ({
-      ...u,
-      lastActiveAt: lastActiveByUser.get(u.id) || null,
-    }));
+    const usersWithActivity = users.map((u) =>
+      serializeAdminUser({ ...u, lastActiveAt: lastActiveByUser.get(u.id) || null })
+    );
 
     return { users: usersWithActivity, total, page: Number(page), limit: Number(limit) };
   });
@@ -222,12 +277,12 @@ export default async function adminRoutes(fastify) {
       },
       select: {
         id: true, email: true, displayName: true, fullName: true,
-        role: true, banned: true, createdAt: true,
+        phoneNumber: true, role: true, banned: true, createdAt: true,
       },
       take: 50,
     });
 
-    return { users };
+    return { users: users.map(serializeAdminUser) };
   });
 
   fastify.get('/banned', async () => {
@@ -236,13 +291,24 @@ export default async function adminRoutes(fastify) {
         where: { banned: true },
         select: {
           id: true, email: true, displayName: true, fullName: true,
-          banReason: true, bannedDate: true, bannedBy: true,
+          phoneNumber: true, role: true, banReason: true, bannedDate: true, bannedBy: true,
         },
       }),
       prisma.preBannedUser.findMany({ where: { status: 'active' } }),
     ]);
 
-    return { bannedUsers, preBannedUsers };
+    // Return ONE combined list in the snake_case shape the page renders, with
+    // pre-bans flagged. The UI splits real bans from pre-bans on `pre_banned`,
+    // so emitting them together (instead of a separate array it ignored) is
+    // what finally makes the "Pre-Banned Users" list populate. The raw
+    // `preBannedUsers` array is kept for any other consumer / back-compat.
+    return {
+      bannedUsers: [
+        ...bannedUsers.map(serializeAdminUser),
+        ...preBannedUsers.map(serializePreBannedUser),
+      ],
+      preBannedUsers,
+    };
   });
 
   fastify.post('/ban', async (request) => {

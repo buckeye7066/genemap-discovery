@@ -283,9 +283,9 @@ describe('GET /admin/analytics', () => {
 // ─── GET /admin/banned ──────────────────────────────────────────────────────
 
 describe('GET /admin/banned', () => {
-  it('should return banned and pre-banned users', async () => {
+  it('should return real bans and active pre-bans in one snake_case list', async () => {
     prisma._store.user.push(
-      { id: 'u-1', email: 'banned@test.com', banned: true, banReason: 'Spam', bannedDate: new Date() },
+      { id: 'u-1', email: 'banned@test.com', banned: true, banReason: 'Spam', bannedDate: new Date(), fullName: 'Bad Actor' },
       { id: 'u-2', email: 'good@test.com', banned: false },
     );
     prisma._store.preBannedUser.push(
@@ -301,8 +301,24 @@ describe('GET /admin/banned', () => {
 
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body);
-    expect(body.bannedUsers).toHaveLength(1);
-    expect(body.bannedUsers[0].email).toBe('banned@test.com');
+
+    // The page renders real bans + active pre-bans from one list, split on
+    // `pre_banned`. Only the active pre-ban (pb-1) is included; pb-2 is triggered.
+    expect(body.bannedUsers).toHaveLength(2);
+
+    const real = body.bannedUsers.find((u) => u.email === 'banned@test.com');
+    expect(real).toBeDefined();
+    expect(real.pre_banned).toBe(false);
+    // snake_case contract — the whole web app (and /auth/me) reads these keys.
+    expect(real.ban_reason).toBe('Spam');
+    expect(real.full_name).toBe('Bad Actor');
+
+    const pre = body.bannedUsers.find((u) => u.email === 'future@test.com');
+    expect(pre).toBeDefined();
+    expect(pre.pre_banned).toBe(true);
+    expect(pre.ban_reason).toBe('Known abuser');
+
+    // Raw array kept for back-compat; only the active pre-ban appears.
     expect(body.preBannedUsers).toHaveLength(1);
     expect(body.preBannedUsers[0].email).toBe('future@test.com');
   });

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { apiClient } from "@genemap/shared";
 import { useAuth } from "../lib/AuthContext";
 import { isAdminUser } from "../lib/roles";
+import { normalizeAdminUser, normalizePreBannedUser } from "../lib/normalizeUser";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -59,7 +60,25 @@ export default function BannedUsersPage() {
       }
 
       const response = await apiClient.getBannedUsers();
-      setBannedUsers(response.bannedUsers || []);
+
+      // The API may return camelCase (older API) or snake_case (current), and
+      // pre-banned users arrive either merged into `bannedUsers` (current API)
+      // or in a separate `preBannedUsers` array (older API). Normalize both,
+      // split real bans from pre-bans, and dedup by id so the page renders
+      // correctly regardless of which API version is live.
+      const raw = response.bannedUsers || [];
+      const realBanned = raw
+        .filter((u) => !(u.pre_banned ?? u.preBanned))
+        .map(normalizeAdminUser);
+      const preFromList = raw
+        .filter((u) => u.pre_banned ?? u.preBanned)
+        .map(normalizePreBannedUser);
+      const preFromArray = (response.preBannedUsers || []).map(normalizePreBannedUser);
+
+      const preById = new Map();
+      [...preFromList, ...preFromArray].forEach((u) => preById.set(u.id, u));
+
+      setBannedUsers([...realBanned, ...preById.values()]);
     } catch (err) {
       console.error("Error loading data:", err);
       setError("Failed to load banned users");
@@ -84,7 +103,7 @@ export default function BannedUsersPage() {
       if (response.error) {
         setError(response.error);
       } else {
-        setSearchResults(response.users || []);
+        setSearchResults((response.users || []).map(normalizeAdminUser));
         if ((response.users || []).length === 0) {
           setError("No users found matching your search (excluding already banned users)");
         }

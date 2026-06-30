@@ -5,6 +5,7 @@ import {
   generateAccessToken,
   generateRefreshToken,
   hashRefreshToken,
+  verifyAccessToken,
   verifyRefreshToken,
   verifyRefreshTokenHash,
 } from '../utils/auth.js';
@@ -37,8 +38,81 @@ const loginSchema = z.object({
   password: z.string(),
 });
 
+/**
+ * Find the (unexpired) session row whose stored hash matches this refresh
+ * token. The token itself isn't stored — only a bcrypt hash per session — so
+ * we must compare against each candidate. Shared by /refresh and the /auth/me
+ * refresh-fallback so both honor the exact same session-binding rules.
+ */
+async function findMatchingSession(prisma, userId, refreshToken) {
+  const sessions = await prisma.session.findMany({
+    where: { userId, expiresAt: { gt: new Date() } },
+  });
+  for (const s of sessions) {
+    if (await verifyRefreshTokenHash(refreshToken, s.refreshTokenHash)) {
+      return s;
+    }
+  }
+  return null;
+}
+
 export default async function authRoutes(fastify) {
   const prisma = fastify.prisma;
+
+  /**
+   * preHandler for /auth/me. Authenticates on the access token like the normal
+   * middleware, BUT when the access token is missing or expired it transparently
+   * falls back to a still-valid, session-matched refresh token and mints a fresh
+   * access-token cookie inline.
+   *
+   * Why: access tokens live 15 min, refresh tokens 7 days. Without this, the
+   * first /auth/me after the access token lapses always 401s — the SPA then
+   * silently refreshes and retries, but the browser still logs a spurious
+   * `401 ()` on every return visit. Honoring the refresh token here removes that
+   * error at the source and saves the client a round-trip. Security is identical
+   * to /refresh (valid HMAC/JWT, session-bound, not banned); we deliberately do
+   * NOT rotate the refresh token so a GET stays idempotent and never races the
+   * client's own /refresh.
+   */
+  const authenticateOrRefresh = async (request, reply) => {
+    const accessToken = request.cookies?.accessToken;
+    const accessPayload = accessToken ? verifyAccessToken(accessToken) : null;
+
+    let userId = accessPayload?.userId || null;
+
+    if (!userId) {
+      const refreshToken = request.cookies?.refreshToken;
+      const refreshPayload = refreshToken ? verifyRefreshToken(refreshToken) : null;
+      if (!refreshPayload?.userId) {
+        throw new UnauthorizedError('Authentication required');
+      }
+      const matched = await findMatchingSession(prisma, refreshPayload.userId, refreshToken);
+      if (!matched) {
+        throw new UnauthorizedError('Authentication required');
+      }
+      userId = refreshPayload.userId;
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, email: true, role: true, banned: true },
+    });
+    if (!user) {
+      throw new UnauthorizedError('Account not found');
+    }
+    if (user.banned) {
+      throw new UnauthorizedError('Account has been suspended');
+    }
+
+    // Came in on the refresh path — issue a new short-lived access token so the
+    // rest of this session's requests authenticate normally.
+    if (!accessPayload?.userId) {
+      const newAccess = generateAccessToken({ userId: user.id, email: user.email, role: user.role });
+      reply.setCookie('accessToken', newAccess, getAuthCookieOptions({ maxAge: 15 * 60 }));
+    }
+
+    request.user = { userId: user.id, email: user.email, role: user.role };
+  };
 
   fastify.post('/register', async (request, reply) => {
     const parsed = registerSchema.parse(request.body);
@@ -218,16 +292,7 @@ export default async function authRoutes(fastify) {
       throw new UnauthorizedError('Invalid refresh token');
     }
 
-    const sessions = await prisma.session.findMany({
-      where: { userId: payload.userId, expiresAt: { gt: new Date() } },
-    });
-    let matched = null;
-    for (const s of sessions) {
-      if (await verifyRefreshTokenHash(refreshToken, s.refreshTokenHash)) {
-        matched = s;
-        break;
-      }
-    }
+    const matched = await findMatchingSession(prisma, payload.userId, refreshToken);
     if (!matched) {
       reply
         .clearCookie('accessToken', getClearCookieOptions())
@@ -258,7 +323,7 @@ export default async function authRoutes(fastify) {
       .send({ ok: true, csrfToken });
   });
 
-  fastify.get('/me', { preHandler: authenticate }, async (request, reply) => {
+  fastify.get('/me', { preHandler: authenticateOrRefresh }, async (request, reply) => {
     const [user, licenseAssignment] = await Promise.all([
       prisma.user.findUnique({
         where: { id: request.user.userId },

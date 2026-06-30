@@ -431,14 +431,23 @@ export interface AdminAnalytics {
   recentActivity: unknown[];
 }
 
+// The admin API emits the same snake_case contract as /auth/me (a Base44
+// legacy convention the whole web app is built on). Pre-banned records are
+// returned in this same shape, flagged `pre_banned`.
 export interface BannedUser {
   id: string;
-  email: string;
-  displayName?: string | null;
-  fullName?: string | null;
-  banReason?: string | null;
-  bannedDate?: string | null;
-  bannedBy?: string | null;
+  email: string | null;
+  role?: string;
+  banned?: boolean;
+  display_name?: string | null;
+  full_name?: string | null;
+  phone_number?: string | null;
+  ban_reason?: string | null;
+  banned_date?: string | null;
+  banned_by?: string | null;
+  created_date?: string | null;
+  last_active?: string | null;
+  pre_banned?: boolean;
 }
 
 export interface PreBanRequest {

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { apiClient } from "@genemap/shared";
 import { useAuth } from "../lib/AuthContext";
 import { isAdminUser, isSuperAdmin } from "../lib/roles";
+import { normalizeAdminUser } from "../lib/normalizeUser";
 import { log } from "../components/shared/logger";
 import { getErrorMessage } from "../components/shared/errorUtils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -69,7 +70,9 @@ export default function UsersLogPage() {
       if (data.error) {
         setError(data.error);
       } else {
-        const usersList = data.users || [];
+        // Normalize to snake_case so phone/join-date/last-active render whether
+        // the API emits camelCase (older) or snake_case (current).
+        const usersList = (data.users || []).map(normalizeAdminUser);
         setUsers(usersList);
         setFilteredUsers(usersList);
       }
@@ -118,7 +121,7 @@ export default function UsersLogPage() {
       user.phoneNumber || user.phone_number || "",
       user.role || "user",
       user.banned ? "Banned" : "Active",
-      user.createdAt ? format(new Date(user.createdAt), "yyyy-MM-dd") : "",
+      user.created_date ? format(new Date(user.created_date), "yyyy-MM-dd") : "",
       isSuperAdmin(user) ? "Yes" : "No"
     ]);
 

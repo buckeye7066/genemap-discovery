@@ -1,6 +1,25 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 import { buildTestApp, createPrismaMock, authCookie } from './setup.js';
-import { hashPassword } from '../utils/auth.js';
+import { hashPassword, generateRefreshToken, hashRefreshToken } from '../utils/auth.js';
+
+/**
+ * Seed a valid, session-matched refresh token for a user and return a cookie
+ * string carrying ONLY that refresh token (no access token) — simulating the
+ * common case where the 15-min access token has expired but the 7-day refresh
+ * token is still good.
+ */
+async function refreshOnlyCookie(prisma, userId) {
+  const refreshToken = generateRefreshToken({ userId });
+  const refreshTokenHash = await hashRefreshToken(refreshToken);
+  prisma._store.session.push({
+    id: 'sess-1',
+    userId,
+    refreshTokenHash,
+    expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+    createdAt: new Date(),
+  });
+  return `refreshToken=${refreshToken}`;
+}
 
 let app;
 let prisma;
@@ -243,6 +262,46 @@ describe('GET /auth/me', () => {
     const res = await app.inject({
       method: 'GET',
       url: '/auth/me',
+    });
+
+    expect(res.statusCode).toBe(401);
+  });
+
+  it('falls back to a valid refresh token when the access token is absent/expired', async () => {
+    // No access cookie, only a session-matched refresh token. The old behavior
+    // 401'd here (the SPA then silently refreshed + retried, logging a spurious
+    // `401 ()` on every return visit). /auth/me now mints a fresh access token
+    // inline and returns 200 — killing the console error at the source.
+    prisma.user.findUnique = vi.fn(async ({ where }) => {
+      const u = prisma._store.user.find((r) => r.id === where.id) || null;
+      return u ? { ...u, subscriptions: [] } : null;
+    });
+    prisma.licenseAssignment.findFirst = vi.fn(async () => null);
+
+    const cookie = await refreshOnlyCookie(prisma, 'user-1');
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/auth/me',
+      headers: { cookie },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.email).toBe('alice@example.com');
+
+    // A fresh access-token cookie is issued so subsequent requests authenticate
+    // normally without another refresh round-trip.
+    const accessCookie = res.cookies.find((c) => c.name === 'accessToken');
+    expect(accessCookie).toBeDefined();
+    expect(accessCookie.value).toBeTruthy();
+  });
+
+  it('still 401s when neither a valid access nor refresh token is present', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/auth/me',
+      headers: { cookie: 'refreshToken=garbage.not.valid' },
     });
 
     expect(res.statusCode).toBe(401);
