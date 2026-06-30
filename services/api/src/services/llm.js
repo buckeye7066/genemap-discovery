@@ -108,7 +108,12 @@ function isRetryableProviderError(error) {
 function sanitizeProviderError(error, host, attempts) {
   const status = error?.status ?? error?.statusCode;
   const statusText = typeof status === 'number' ? ` HTTP ${status}` : '';
-  return new Error(`LLM provider ${host} failed${statusText} after ${attempts} attempt(s)`);
+  const sanitized = new Error(`LLM provider ${host} failed${statusText} after ${attempts} attempt(s)`);
+  // Preserve the status so callers can distinguish a permanent config problem
+  // (e.g. 400/403/404 model-access) from a transient outage without seeing the
+  // raw upstream details.
+  if (typeof status === 'number') sanitized.status = status;
+  return sanitized;
 }
 
 async function sleep(ms) {

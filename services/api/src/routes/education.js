@@ -231,10 +231,16 @@ export default async function educationRoutes(fastify) {
     try {
       result = await llm.generateImage(imagePrompt, { timeoutMs: 40_000 });
     } catch (err) {
-      request.log.warn({ err: err?.message }, 'education image generation failed');
+      request.log.warn({ err: err?.message, status: err?.status }, 'education image generation failed');
+      // A 4xx means the AI key can't use any image model (it returns "model
+      // does not exist") — that's a server config problem the user can't retry
+      // away, so say so honestly instead of "try again in a moment".
+      const isConfig = err?.status === 400 || err?.status === 403 || err?.status === 404;
       throw new AppError(
-        'Image generation is temporarily unavailable. Please try again in a moment.',
-        503
+        isConfig
+          ? 'Image generation isn\'t enabled on this server — the configured AI key has no access to an image model. (Other AI features still work.)'
+          : 'Image generation is temporarily unavailable. Please try again in a moment.',
+        isConfig ? 501 : 503
       );
     }
     if (!result?.url) {
