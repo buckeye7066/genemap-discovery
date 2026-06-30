@@ -33,6 +33,8 @@ const TopicExplorer = lazyWithRetry(() => import('./pages/TopicExplorer'));
 const QuizMode = lazyWithRetry(() => import('./pages/QuizMode'));
 const LearningPath = lazyWithRetry(() => import('./pages/LearningPath'));
 const Login = lazyWithRetry(() => import('./pages/Login'));
+const PrivacyPolicy = lazyWithRetry(() => import('./pages/PrivacyPolicy'));
+const TermsOfService = lazyWithRetry(() => import('./pages/TermsOfService'));
 
 export const PAGES = {
     "Login": Login,
@@ -67,7 +69,18 @@ export const PAGES = {
     "Home": Home,
     "AdminFunctionTester": AdminFunctionTester,
     "FunctionReviewer": FunctionReviewer,
+    "PrivacyPolicy": PrivacyPolicy,
+    "TermsOfService": TermsOfService,
 }
+
+// Legal/info pages reachable in BOTH auth states (logged-out visitors must be
+// able to read them before signing up; logged-in users via the footer). They
+// are deliberately NOT in publicPages (which redirect to "/" once authed) nor
+// adminPages.
+export const openPages = [
+    "PrivacyPolicy",
+    "TermsOfService",
+];
 
 // Owner/super-admin tooling. Each of these pages already self-guards and every
 // /admin/* API route enforces requireRole on the server, but listing them here
@@ -100,6 +113,7 @@ export const pagesConfig = {
     publicPages: ["Login"],
     adminPages,
     superAdminPages,
+    openPages,
     Pages: PAGES,
     Layout: __Layout,
 };

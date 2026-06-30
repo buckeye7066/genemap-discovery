@@ -2,6 +2,7 @@ import Fastify from 'fastify';
 import compress from '@fastify/compress';
 import cors from '@fastify/cors';
 import cookie from '@fastify/cookie';
+import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
 import { PrismaClient } from '@prisma/client';
 import { loadEnv } from './config/env.js';
@@ -35,6 +36,22 @@ const fastify = Fastify({
 
 fastify.decorate('prisma', prisma);
 fastify.decorate('env', env);
+
+// Security headers on every API response. This is a JSON API on its own origin
+// (the web app is served from Vercel with its own headers), so we keep the
+// browser-page protections minimal and focus on transport + sniffing:
+//  - HSTS: force HTTPS for a year incl. subdomains (the API is HTTPS-only on
+//    Railway). Harmless if a proxy already sets it.
+//  - nosniff + frameguard(deny) + no-referrer: defense in depth.
+//  - CSP/COEP are disabled: they govern HTML documents, and this origin never
+//    serves one — enabling CSP here only risks breaking JSON clients.
+//  - x-powered-by is removed so we don't advertise the framework.
+await fastify.register(helmet, {
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false,
+  hsts: { maxAge: 31536000, includeSubDomains: true, preload: true },
+  referrerPolicy: { policy: 'no-referrer' },
+});
 
 await fastify.register(compress, { global: true });
 

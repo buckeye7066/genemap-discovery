@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, Link } from "react-router-dom";
 import { Dna, Loader2, LogIn, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -156,6 +156,13 @@ export default function Login() {
             </form>
           </CardContent>
         </Card>
+
+        <p className="text-center text-xs text-slate-400 mt-6">
+          By continuing you agree to our{" "}
+          <Link to="/termsofservice" className="text-blue-500 hover:underline">Terms of Service</Link>{" "}
+          and{" "}
+          <Link to="/privacypolicy" className="text-blue-500 hover:underline">Privacy Policy</Link>.
+        </p>
       </div>
     </div>
   );

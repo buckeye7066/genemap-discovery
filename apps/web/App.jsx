@@ -18,12 +18,13 @@ const VisualEditAgent = import.meta.env.DEV
   ? lazyWithRetry(() => import('@/lib/VisualEditAgent'))
   : () => null;
 
-const { Pages, Layout, mainPage, publicPages = [], adminPages = [], superAdminPages = [] } = pagesConfig;
+const { Pages, Layout, mainPage, publicPages = [], adminPages = [], superAdminPages = [], openPages = [] } = pagesConfig;
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
 const MainPage = mainPageKey ? Pages[mainPageKey] : () => null;
 const publicPageKeys = new Set(publicPages);
 const adminPageKeys = new Set(adminPages);
 const superAdminPageKeys = new Set(superAdminPages);
+const openPageKeys = new Set(openPages);
 
 const LayoutWrapper = ({ children, currentPageName }) => Layout ?
   <Layout currentPageName={currentPageName}>{children}</Layout>
@@ -50,7 +51,7 @@ const AuthenticatedApp = () => {
       <Suspense fallback={<LoadingSpinner />}>
         <Routes>
           {Object.entries(Pages)
-            .filter(([path]) => publicPageKeys.has(path))
+            .filter(([path]) => publicPageKeys.has(path) || openPageKeys.has(path))
             .map(([path, Page]) => (
               <Route
                 key={path}

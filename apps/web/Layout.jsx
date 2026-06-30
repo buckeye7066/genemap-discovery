@@ -296,6 +296,15 @@ export default function Layout({ children, currentPageName }) {
             </div>
             
             {children}
+
+            <footer className="border-t border-slate-200/70 mt-8 py-4 px-6 text-xs text-slate-400 flex flex-wrap items-center justify-center gap-x-4 gap-y-1">
+              <span>© {new Date().getFullYear()} GeneMap · Axiom Biolabs</span>
+              <span className="hidden sm:inline text-slate-300">·</span>
+              <span>Educational &amp; research use — not medical advice</span>
+              <span className="hidden sm:inline text-slate-300">·</span>
+              <Link to="/privacypolicy" className="hover:text-slate-600 hover:underline">Privacy</Link>
+              <Link to="/termsofservice" className="hover:text-slate-600 hover:underline">Terms</Link>
+            </footer>
           </div>
         </main>
       </div>

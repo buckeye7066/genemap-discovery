@@ -56,6 +56,24 @@ jobs:
           grep -Fi "access-control-allow-origin: $WEB_URL" "$headers"
           grep -Fi "access-control-allow-credentials: true" "$headers"
 
+      - name: Check API security headers
+        run: |
+          headers="$(mktemp)"
+          curl --fail --silent --show-error --max-time 15 \
+            --output /dev/null --dump-header "$headers" "$API_URL/healthz"
+          # helmet should set these on every API response.
+          grep -Fi "strict-transport-security:" "$headers"
+          grep -Fi "x-content-type-options: nosniff" "$headers"
+          grep -Fi "x-frame-options:" "$headers"
+
+      - name: Check web security headers
+        run: |
+          headers="$(mktemp)"
+          curl --fail --silent --show-error --location --max-time 20 \
+            --output /dev/null --dump-header "$headers" "$WEB_URL"
+          grep -Fi "strict-transport-security:" "$headers"
+          grep -Fi "x-content-type-options: nosniff" "$headers"
+
       - name: Check web app shell
         run: |
           html="$(curl --fail --silent --show-error --location --max-time 20 "$WEB_URL")"
