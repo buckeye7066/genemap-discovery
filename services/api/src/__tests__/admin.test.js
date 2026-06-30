@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { buildTestApp, createPrismaMock, authCookie, seedAuthUser } from './setup.js';
 
 let app;
@@ -309,9 +309,9 @@ describe('GET /admin/banned', () => {
     const real = body.bannedUsers.find((u) => u.email === 'banned@test.com');
     expect(real).toBeDefined();
     expect(real.pre_banned).toBe(false);
-    // snake_case contract — the whole web app (and /auth/me) reads these keys.
-    expect(real.ban_reason).toBe('Spam');
-    expect(real.full_name).toBe('Bad Actor');
+    // Real user rows keep Prisma camelCase; the web app normalizes at the edge.
+    expect(real.banReason).toBe('Spam');
+    expect(real.fullName).toBe('Bad Actor');
 
     const pre = body.bannedUsers.find((u) => u.email === 'future@test.com');
     expect(pre).toBeDefined();
@@ -321,6 +321,112 @@ describe('GET /admin/banned', () => {
     // Raw array kept for back-compat; only the active pre-ban appears.
     expect(body.preBannedUsers).toHaveLength(1);
     expect(body.preBannedUsers[0].email).toBe('future@test.com');
+  });
+});
+
+// ─── GET /admin/messages ──────────────────────────────────────────────────────
+
+describe('GET /admin/messages', () => {
+  let originalFindMany;
+
+  beforeEach(() => {
+    originalFindMany = prisma.message.findMany;
+    // The route uses `include: { sender }`; the generic mock ignores relations,
+    // so wrap it to attach the sender the route reads for `created_by`.
+    prisma.message.findMany = async (args) => {
+      const rows = await originalFindMany(args);
+      return rows.map((m) => ({
+        ...m,
+        sender: m.senderId === 'sender-1'
+          ? { email: 'user@example.com', displayName: 'A User' }
+          : null,
+      }));
+    };
+  });
+
+  afterEach(() => {
+    prisma.message.findMany = originalFindMany;
+  });
+
+  it('serializes to the inbox shape, maps replied→responded, and attaches the reply', async () => {
+    prisma._store.message.push(
+      {
+        id: 'm-1', senderId: 'sender-1', subject: 'Help', body: 'It is broken',
+        category: 'support', status: 'replied', parentId: null, createdAt: new Date(),
+      },
+      // Admin reply — a child row that must NOT appear as its own inbox card.
+      {
+        id: 'r-1', senderId: 'admin-1', subject: 'Re: Help', body: 'We fixed it',
+        category: 'support', status: 'open', parentId: 'm-1', createdAt: new Date(),
+      },
+    );
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/admin/messages',
+      headers: { cookie: adminCookie },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const { messages } = JSON.parse(res.body);
+    // Only the top-level message, not the reply row.
+    expect(messages).toHaveLength(1);
+    const m = messages[0];
+    expect(m.message).toBe('It is broken');     // body → message
+    expect(m.created_by).toBe('user@example.com');
+    expect(m.created_date).toBeTruthy();          // not undefined → no crash
+    expect(m.status).toBe('responded');           // replied → responded
+    expect(m.response).toBe('We fixed it');       // reply attached
+    expect(m.response_date).toBeTruthy();
+  });
+});
+
+// ─── POST /admin/pre-ban ─────────────────────────────────────────────────────
+
+describe('POST /admin/pre-ban', () => {
+  it('creates a pre-ban and returns a human-readable success message', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/admin/pre-ban',
+      headers: { cookie: adminCookie },
+      payload: { email: 'future-bad@example.com', reason: 'Known abuser' },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.success).toBe(true);
+    expect(body.type).toBe('pre_ban');
+    // The page shows `response.message`; without it the success alert was blank.
+    expect(typeof body.message).toBe('string');
+    expect(body.message.length).toBeGreaterThan(0);
+  });
+
+  it('immediately bans an already-registered user and says so', async () => {
+    prisma._store.user.push({
+      id: 'existing-bad', email: 'existing-bad@example.com', role: 'user', banned: false,
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/admin/pre-ban',
+      headers: { cookie: adminCookie },
+      payload: { email: 'existing-bad@example.com', reason: 'TOS' },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.type).toBe('immediate_ban');
+    expect(body.message).toMatch(/banned immediately/i);
+  });
+
+  it('rejects when no identifier is provided', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/admin/pre-ban',
+      headers: { cookie: adminCookie },
+      payload: { reason: 'no identifier' },
+    });
+    expect(res.statusCode).toBe(400);
   });
 });
 
