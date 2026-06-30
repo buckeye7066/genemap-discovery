@@ -26,6 +26,7 @@
     "@fastify/rate-limit": "^10.1.1",
     "@genemap/shared": "workspace:*",
     "@prisma/client": "^6.2.0",
+    "@sentry/node": "^10.62.0",
     "bcrypt": "^5.1.1",
     "fastify": "^5.8.1",
     "jsonwebtoken": "^9.0.2",

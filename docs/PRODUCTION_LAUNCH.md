@@ -42,22 +42,34 @@ See `docs/BACKUP.md` for backup and restore procedures.
 
 ## 3. Configure Monitoring and Alerting
 
-Before launch, configure:
+Error tracking is **wired and ready** — it just needs a DSN to activate:
 
-- Error tracking for API and web runtime exceptions.
-- Log aggregation for Railway API logs and Vercel web logs.
-- Alerts for API 5xx spikes, `/readyz` failures, database connection failures,
-  Stripe webhook failures, high auth error rates, and unusual LLM error/cost
-  spikes.
-- A dashboard URL and an on-call escalation path.
+- **API:** set `SENTRY_DSN` in Railway (`@sentry/node` is initialized in
+  `services/api/src/config/sentry.js` and captures every 5xx via the error
+  handler). No DSN = no-op, so the app is unaffected until you opt in.
+- **Web:** set `VITE_SENTRY_DSN` in the Vercel project (`@sentry/react` is
+  initialized in `apps/web/lib/sentry.js`; the ErrorBoundary also reports React
+  render errors). Rebuild/redeploy so Vercel bakes the value in.
+- Errors are **also** emailed to the owner via the existing client-error ingest
+  + `reportErrorToOwner` pipeline, independent of Sentry.
 
-Record the dashboard URL and escalation path in the launch evidence file.
+Still configure: log aggregation (Railway API + Vercel web logs); alerts for API
+5xx spikes, `/readyz` failures, DB connection failures, Stripe webhook failures,
+high auth error rates, and unusual LLM error/cost spikes; a dashboard URL and an
+on-call escalation path. Record the dashboard URL and escalation path in the
+launch evidence file.
 
-This repo also includes `.github/workflows/production-smoke.yml`, a scheduled
-and manually runnable live smoke check for the production web URL, API
-`/healthz`, API `/readyz`, `medicalEncryption=true`, and production CORS. Treat
-that workflow as a basic uptime signal only; it does not replace dedicated error
-tracking, log aggregation, alert routing, or backup/restore evidence.
+Monitoring coverage in this repo:
+
+- `.github/workflows/production-smoke.yml` — scheduled + manual live checks for
+  the web shell, API `/healthz` and `/readyz` (incl. `medicalEncryption=true`),
+  production CORS, **API and web security headers**, and a **Chromium e2e** of
+  the public/auth surface (login, legal pages, redirects).
+- Per-PR gates in `.github/workflows/ci.yml` (lint, typecheck, unit + Postgres
+  integration tests, migration diff, Docker build, dependency audit).
+
+These are strong signals but do not replace dedicated error tracking (Sentry,
+above), log aggregation, alert routing, or backup/restore evidence.
 
 ## 4. Configure Stripe Live Webhooks
 

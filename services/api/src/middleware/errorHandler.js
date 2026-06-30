@@ -1,6 +1,7 @@
 import { ZodError } from 'zod';
 import { AppError, sanitizeError } from '../utils/errors.js';
 import { reportErrorToOwner } from '../services/errorReporter.js';
+import { captureException } from '../config/sentry.js';
 
 /**
  * Detect operational app errors regardless of cross-realm prototype chains
@@ -58,6 +59,14 @@ export function errorHandler(error, request, reply) {
       method: request.method,
       requestId,
       statusCode: resolvedStatus,
+    });
+    // Also send to Sentry when configured (no-op otherwise). Minimal,
+    // non-PII context — never the request body.
+    captureException(error, {
+      requestId,
+      route: request.routerPath || request.url,
+      method: request.method,
+      userId: request.user?.userId,
     });
   }
 

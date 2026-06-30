@@ -6,6 +6,7 @@ import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
 import { PrismaClient } from '@prisma/client';
 import { loadEnv } from './config/env.js';
+import { initSentry } from './config/sentry.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { requireCsrf } from './middleware/csrf.js';
 import authRoutes from './routes/auth.js';
@@ -21,6 +22,9 @@ import clientErrorRoutes from './routes/clientError.js';
 // Load + validate env BEFORE constructing anything that depends on it.
 // loadEnv() throws in production if required secrets are missing.
 const env = loadEnv();
+
+// Initialize error tracking as early as possible (no-op unless SENTRY_DSN set).
+const sentryEnabled = initSentry(env);
 
 const prisma = new PrismaClient({
   log: env.isDevelopment ? ['query', 'warn', 'error'] : ['error'],
@@ -138,7 +142,10 @@ fastify.get('/health', async () => ({ status: 'ok', timestamp: new Date().toISOS
 const start = async () => {
   try {
     await fastify.listen({ port: env.PORT, host: env.HOST });
-    fastify.log.info({ port: env.PORT, host: env.HOST, env: env.NODE_ENV }, 'API listening');
+    fastify.log.info(
+      { port: env.PORT, host: env.HOST, env: env.NODE_ENV, sentry: sentryEnabled },
+      'API listening'
+    );
   } catch (err) {
     fastify.log.error(err);
     process.exit(1);

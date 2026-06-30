@@ -84,3 +84,27 @@ jobs:
               exit 1
               ;;
           esac
+
+  # Browser-level smoke: renders the deployed app in Chromium and asserts the
+  # public/auth surface (login form, legal pages, redirects, headers) actually
+  # works for a logged-out visitor — things a curl shell check can't see.
+  e2e:
+    name: E2E (public surface, Chromium)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: 'pnpm'
+      - name: Install (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+      - name: Install Chromium
+        run: pnpm --filter @genemap/web exec playwright install --with-deps chromium
+      - name: Run public-surface e2e against production
+        run: pnpm --filter @genemap/web e2e
+        env:
+          CI: 'true'
+          PLAYWRIGHT_BASE_URL: ${{ env.WEB_URL }}

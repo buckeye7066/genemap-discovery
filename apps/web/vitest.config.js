@@ -1,5 +1,5 @@
 import react from '@vitejs/plugin-react';
-import { defineConfig } from 'vitest/config';
+import { defineConfig, configDefaults } from 'vitest/config';
 import path from 'path';
 
 // Test runner config for @genemap/web. Mirrors the Vite alias map so component
@@ -21,5 +21,8 @@ export default defineConfig({
     globals: true,
     setupFiles: ['./test-setup.js'],
     include: ['**/__tests__/**/*.{test,spec}.{js,jsx}', '**/*.{test,spec}.{js,jsx}'],
+    // Playwright e2e specs (tests/e2e) use @playwright/test, not vitest — keep
+    // the two runners from picking up each other's files.
+    exclude: [...configDefaults.exclude, 'tests/e2e/**'],
   },
 });

@@ -3,6 +3,11 @@ import ReactDOM from 'react-dom/client'
 import App from '@/App.jsx'
 import '@/index.css'
 import { reportClientError } from '@/lib/reportClientError.js'
+import { initSentry } from '@/lib/sentry.js'
+
+// Optional Sentry (no-op unless VITE_SENTRY_DSN is set). Init before render so
+// it can capture errors thrown during the first paint.
+initSentry()
 
 // Capture uncaught errors and unhandled promise rejections once, at bootstrap,
 // and report them to the backend (which emails the owner for non-admin users).
