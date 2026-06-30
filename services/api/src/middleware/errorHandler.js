@@ -1,5 +1,6 @@
 import { ZodError } from 'zod';
 import { AppError, sanitizeError } from '../utils/errors.js';
+import { reportErrorToOwner } from '../services/errorReporter.js';
 
 /**
  * Detect operational app errors regardless of cross-realm prototype chains
@@ -42,6 +43,23 @@ export function errorHandler(error, request, reply) {
     },
     'request failed'
   );
+
+  // Resolve the status code we are about to return so the owner is only
+  // notified about genuine server-side failures (>=500), not client/validation
+  // errors. Fire-and-forget; never awaited and never throws. The reporter
+  // itself excludes admin/owner users.
+  const resolvedStatus = error instanceof ZodError ? 400 : isAppError(error) ? error.statusCode : 500;
+  if (resolvedStatus >= 500) {
+    reportErrorToOwner({
+      error,
+      source: 'backend',
+      user: request.user,
+      route: request.routerPath || request.url,
+      method: request.method,
+      requestId,
+      statusCode: resolvedStatus,
+    });
+  }
 
   if (error instanceof ZodError) {
     return reply.status(400).send({

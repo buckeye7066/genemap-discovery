@@ -15,6 +15,7 @@ import adminRoutes from './routes/admin.js';
 import entityRoutes from './routes/entities.js';
 import genomicsRoutes from './routes/genomics.js';
 import clinicalTrialRoutes from './routes/clinicalTrials.js';
+import clientErrorRoutes from './routes/clientError.js';
 
 // Load + validate env BEFORE constructing anything that depends on it.
 // loadEnv() throws in production if required secrets are missing.
@@ -89,6 +90,10 @@ await fastify.register(adminRoutes, { prefix: '/admin' });
 await fastify.register(entityRoutes, { prefix: '/entities' });
 await fastify.register(genomicsRoutes, { prefix: '/genomics' });
 await fastify.register(clinicalTrialRoutes, { prefix: '/clinical-trials' });
+
+// Frontend error ingest (auth optional). Registered at root so the web app can
+// POST uncaught errors to `/report-client-error`.
+await fastify.register(clientErrorRoutes);
 
 // Liveness — process is up. Cheap, never touches the DB.
 fastify.get('/healthz', async () => ({ status: 'ok', uptime: process.uptime() }));

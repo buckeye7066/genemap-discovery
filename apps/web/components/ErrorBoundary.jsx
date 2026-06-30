@@ -1,6 +1,7 @@
 import React from "react";
 import { AlertTriangle, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { reportClientError } from "@/lib/reportClientError.js";
 
 export class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -14,6 +15,7 @@ export class ErrorBoundary extends React.Component {
 
   componentDidCatch(error, errorInfo) {
     console.error(`[ErrorBoundary${this.props.name ? `: ${this.props.name}` : ''}]`, error, errorInfo);
+    reportClientError(error, { componentStack: errorInfo?.componentStack });
   }
 
   render() {
