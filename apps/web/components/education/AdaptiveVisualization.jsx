@@ -1,20 +1,21 @@
-import React, { Suspense, lazy } from 'react';
+import React, { Suspense } from 'react';
+import { lazyWithRetry } from '@/lib/lazyWithRetry';
 import { useEducationLevel } from '@/lib/EducationLevelContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { getComplexitySettings } from '@/lib/adaptiveContent';
 
 const VISUALIZATION_MAP = {
-  chromosome: lazy(() => import('@/components/visualizations/ChromosomeView')),
-  proteinStructure: lazy(() => import('@/components/visualizations/ProteinStructure')),
-  proteinDomains: lazy(() => import('@/components/visualizations/ProteinDomains')),
-  geneExpression: lazy(() => import('@/components/visualizations/GeneExpressionChart')),
-  proteinInteractions: lazy(() => import('@/components/visualizations/ProteinInteractions')),
-  phenotypeNetwork: lazy(() => import('@/components/visualizations/PhenotypeNetwork')),
-  manhattanPlot: lazy(() => import('@/components/visualizations/ManhattanPlot')),
-  expressionHeatmap: lazy(() => import('@/components/visualizations/ExpressionHeatmap')),
-  circosPlot: lazy(() => import('@/components/visualizations/CircosPlot')),
-  pathwayEnrichment: lazy(() => import('@/components/visualizations/PathwayEnrichmentViz')),
+  chromosome: lazyWithRetry(() => import('@/components/visualizations/ChromosomeView')),
+  proteinStructure: lazyWithRetry(() => import('@/components/visualizations/ProteinStructure')),
+  proteinDomains: lazyWithRetry(() => import('@/components/visualizations/ProteinDomains')),
+  geneExpression: lazyWithRetry(() => import('@/components/visualizations/GeneExpressionChart')),
+  proteinInteractions: lazyWithRetry(() => import('@/components/visualizations/ProteinInteractions')),
+  phenotypeNetwork: lazyWithRetry(() => import('@/components/visualizations/PhenotypeNetwork')),
+  manhattanPlot: lazyWithRetry(() => import('@/components/visualizations/ManhattanPlot')),
+  expressionHeatmap: lazyWithRetry(() => import('@/components/visualizations/ExpressionHeatmap')),
+  circosPlot: lazyWithRetry(() => import('@/components/visualizations/CircosPlot')),
+  pathwayEnrichment: lazyWithRetry(() => import('@/components/visualizations/PathwayEnrichmentViz')),
 };
 
 const LEVEL_DESCRIPTIONS = {

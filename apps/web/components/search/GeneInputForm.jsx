@@ -14,12 +14,25 @@ const exampleGeneSets = [
 
 export default function GeneInputForm({ onGenesSubmit, isLoading, initialGenes = [] }) {
   const [geneInput, setGeneInput] = useState("");
+  const [bulkText, setBulkText] = useState("");
   const [genes, setGenes] = useState(initialGenes);
   const inputRef = useRef(null);
 
   React.useEffect(() => {
     setGenes(initialGenes);
   }, [initialGenes]);
+
+  const parseGeneList = (text) =>
+    String(text || '')
+      .split(/[\s,\n]+/)
+      .map((g) => g.trim().toUpperCase())
+      .filter(Boolean);
+
+  const mergeGenes = (prev, additions) => {
+    const merged = [...prev];
+    for (const g of additions) if (!merged.includes(g)) merged.push(g);
+    return merged;
+  };
 
   const handleAddGene = () => {
     const newGene = geneInput.trim().toUpperCase();
@@ -34,14 +47,9 @@ export default function GeneInputForm({ onGenesSubmit, isLoading, initialGenes =
   };
 
   const handleBulkAdd = (text) => {
-    // Parse genes from comma, space, or newline separated text
-    const newGenes = text
-      .split(/[\s,\n]+/)
-      .map(g => g.trim().toUpperCase())
-      .filter(g => g && !genes.includes(g));
-    
-    if (newGenes.length > 0) {
-      setGenes([...genes, ...newGenes]);
+    const parsed = parseGeneList(text);
+    if (parsed.length > 0) {
+      setGenes((prev) => mergeGenes(prev, parsed));
     }
   };
 
@@ -51,14 +59,23 @@ export default function GeneInputForm({ onGenesSubmit, isLoading, initialGenes =
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (genes.length > 0) {
-      onGenesSubmit(genes);
+    // Flush any text still in the bulk box (pasted then "Search" clicked
+    // without blurring) so the genes aren't lost.
+    let finalGenes = genes;
+    if (bulkText.trim()) {
+      finalGenes = mergeGenes(genes, parseGeneList(bulkText));
+      setGenes(finalGenes);
+      setBulkText("");
+    }
+    if (finalGenes.length > 0) {
+      onGenesSubmit(finalGenes);
     }
   };
 
   const handleClear = () => {
     setGenes([]);
     setGeneInput("");
+    setBulkText("");
     onGenesSubmit([]);
   };
 
@@ -102,10 +119,15 @@ export default function GeneInputForm({ onGenesSubmit, isLoading, initialGenes =
           id="bulk-input"
           placeholder="Paste genes separated by commas, spaces, or new lines"
           className="h-20 font-mono text-sm"
-          onChange={(e) => {
-            if (e.target.value.trim()) {
-              handleBulkAdd(e.target.value);
-              e.target.value = "";
+          value={bulkText}
+          onChange={(e) => setBulkText(e.target.value)}
+          onBlur={() => {
+            // Parse on blur, NOT on every keystroke. The old onChange handler
+            // ran handleBulkAdd on each character and cleared the field, so
+            // typing "TP53 BRCA1" produced single-character "genes" (T, P, 5…).
+            if (bulkText.trim()) {
+              handleBulkAdd(bulkText);
+              setBulkText("");
             }
           }}
           disabled={isLoading}

@@ -1,4 +1,5 @@
-import { Suspense, lazy } from 'react';
+import { Suspense } from 'react';
+import { lazyWithRetry } from '@/lib/lazyWithRetry';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Toaster } from "@/components/ui/toaster"
 import { QueryClientProvider } from '@tanstack/react-query'
@@ -14,7 +15,7 @@ import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import LoadingSpinner from '@/components/LoadingSpinner';
 
 const VisualEditAgent = import.meta.env.DEV
-  ? lazy(() => import('@/lib/VisualEditAgent'))
+  ? lazyWithRetry(() => import('@/lib/VisualEditAgent'))
   : () => null;
 
 const { Pages, Layout, mainPage, publicPages = [], adminPages = [] } = pagesConfig;

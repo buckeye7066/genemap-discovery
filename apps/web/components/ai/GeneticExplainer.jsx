@@ -1,4 +1,5 @@
-import React, { useState, lazy, Suspense } from "react";
+import React, { useState, Suspense } from "react";
+import { lazyWithRetry } from "@/lib/lazyWithRetry";
 import { apiClient } from "@genemap/shared";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -22,8 +23,8 @@ import {
 } from "@/components/ui/tabs";
 import ReactMarkdown from "react-markdown";
 
-const VCFParser = lazy(() => import("../medical/VCFParser"));
-const ClinicalTrialMatcher = lazy(() => import("../clinical/ClinicalTrialMatcher"));
+const VCFParser = lazyWithRetry(() => import("../medical/VCFParser"));
+const ClinicalTrialMatcher = lazyWithRetry(() => import("../clinical/ClinicalTrialMatcher"));
 
 const AUDIENCE_LEVELS = {
   child: "5-year-old child",

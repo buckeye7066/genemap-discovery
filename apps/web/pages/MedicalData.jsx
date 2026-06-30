@@ -1,5 +1,6 @@
 
-import React, { useState, useEffect, lazy, Suspense } from "react";
+import React, { useState, useEffect, Suspense } from "react";
+import { lazyWithRetry } from "@/lib/lazyWithRetry";
 import { apiClient } from "@genemap/shared";
 import { useAuth } from "../lib/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -45,10 +46,10 @@ import {
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-const MedicalDataComparison = lazy(() => import("../components/medical/MedicalDataComparison"));
-const VCFParser = lazy(() => import("../components/medical/VCFParser"));
-const FHIRExporter = lazy(() => import("../components/medical/FHIRExporter"));
-const ClinicalTrialFinder = lazy(() => import("../components/clinical/ClinicalTrialFinder"));
+const MedicalDataComparison = lazyWithRetry(() => import("../components/medical/MedicalDataComparison"));
+const VCFParser = lazyWithRetry(() => import("../components/medical/VCFParser"));
+const FHIRExporter = lazyWithRetry(() => import("../components/medical/FHIRExporter"));
+const ClinicalTrialFinder = lazyWithRetry(() => import("../components/clinical/ClinicalTrialFinder"));
 
 export default function MedicalDataPage() {
   const { user } = useAuth();
