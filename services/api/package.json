@@ -36,8 +36,8 @@
   "devDependencies": {
     "@types/bcrypt": "^5.0.2",
     "@types/jsonwebtoken": "^9.0.7",
-    "@types/node": "^22.13.5",
-    "prisma": "^6.2.0",
-    "vitest": "^3.0.0"
+    "@types/node": "^26.0.1",
+    "prisma": "^7.8.0",
+    "vitest": "^4.1.9"
   }
 }
