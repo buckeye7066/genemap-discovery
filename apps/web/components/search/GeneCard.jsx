@@ -1,4 +1,5 @@
-import React, { useState, memo, lazy, Suspense } from "react";
+import React, { useState, memo, Suspense } from "react";
+import { lazyWithRetry } from "@/lib/lazyWithRetry";
 import { apiClient } from "@genemap/shared";
 import { useAuth } from '../../lib/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -35,13 +36,13 @@ import {
   AlertCircle // Added for variant analysis
 } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
-const GeneExpressionChart = lazy(() => import("../visualizations/GeneExpressionChart"));
-const ChromosomeView = lazy(() => import("../visualizations/ChromosomeView"));
-const PhenotypeNetwork = lazy(() => import("../visualizations/PhenotypeNetwork"));
-const ProteinDomains = lazy(() => import("../visualizations/ProteinDomains"));
-const ProteinStructure = lazy(() => import("../visualizations/ProteinStructure"));
-const ProteinInteractions = lazy(() => import("../visualizations/ProteinInteractions"));
-const GenomeBrowser = lazy(() => import("../visualizations/GenomeBrowser"));
+const GeneExpressionChart = lazyWithRetry(() => import("../visualizations/GeneExpressionChart"));
+const ChromosomeView = lazyWithRetry(() => import("../visualizations/ChromosomeView"));
+const PhenotypeNetwork = lazyWithRetry(() => import("../visualizations/PhenotypeNetwork"));
+const ProteinDomains = lazyWithRetry(() => import("../visualizations/ProteinDomains"));
+const ProteinStructure = lazyWithRetry(() => import("../visualizations/ProteinStructure"));
+const ProteinInteractions = lazyWithRetry(() => import("../visualizations/ProteinInteractions"));
+const GenomeBrowser = lazyWithRetry(() => import("../visualizations/GenomeBrowser"));
 import RobertClinicalSupport from "../clinical/RobertClinicalSupport";
 import ClinicalTrialFinder from "../clinical/ClinicalTrialFinder"; // Added
 import ReactMarkdown from 'react-markdown';
@@ -51,7 +52,13 @@ import { Label } from "@/components/ui/label"; // Added
 import { Alert, AlertDescription } from "@/components/ui/alert"; // Added
 import FHIRExporter from "../medical/FHIRExporter";
 import { exportGeneReport, exportJSON, copyShareableLink } from "../../lib/exportUtils";
+import { getClinicalRecordsCached } from "../../lib/medicalContextCache";
 import { Download, Share, Copy, Printer } from "lucide-react";
+
+// Session-scoped set of gene views already logged, so a (re)mount doesn't
+// re-POST the same gene_view activity. Module-level on purpose: shared across
+// every GeneCard instance.
+const loggedGeneViews = new Set();
 
 function GeneCard({ gene, rank, isPremium, isSelected = false, onSelect = null }) {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -77,6 +84,11 @@ function GeneCard({ gene, rank, isPremium, isSelected = false, onSelect = null }
   }, [gene?.symbol, user?.email]);
 
   const trackGeneView = async (geneSymbol) => {
+    // De-dupe within the session: the same gene_view was being POSTed on every
+    // (re)mount, contributing to the activity flood. Log each gene once.
+    const viewKey = `${user?.email || 'anon'}:${geneSymbol}`;
+    if (loggedGeneViews.has(viewKey)) return;
+    loggedGeneViews.add(viewKey);
     try {
       await apiClient.logActivity({
         // Backend contract is camelCase activityType + entityType/entityId; the
@@ -111,8 +123,10 @@ function GeneCard({ gene, rank, isPremium, isSelected = false, onSelect = null }
   const loadMedicalContext = async () => {
     if (!user?.email) return;
     try {
-      const records = await apiClient.getMedicalData('clinical_records');
-      
+      // Shared cache: one clinical_records fetch for the whole result set
+      // instead of one per GeneCard (see lib/medicalContextCache.js).
+      const records = await getClinicalRecordsCached(user.email);
+
       if (records && records.length > 0) {
         const context = {
           hasGeneticTests: records.some(r => r.file_type === 'genetic_test'),

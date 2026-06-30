@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef, lazy, Suspense } from "react";
+import React, { useState, useEffect, useRef, Suspense } from "react";
+import { lazyWithRetry } from "@/lib/lazyWithRetry";
 import { apiClient } from "@genemap/shared";
 import { useAuth } from "../lib/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -22,10 +23,10 @@ import {
   BookOpen,
   Network
 } from "lucide-react";
-const ReactMarkdown = lazy(() => import('react-markdown'));
-const ResearchSuggester = lazy(() => import("../components/ai/ResearchSuggester"));
-const GeneticExplainer = lazy(() => import("../components/ai/GeneticExplainer"));
-const PathwayPredictor = lazy(() => import("../components/ai/PathwayPredictor"));
+const ReactMarkdown = lazyWithRetry(() => import('react-markdown'));
+const ResearchSuggester = lazyWithRetry(() => import("../components/ai/ResearchSuggester"));
+const GeneticExplainer = lazyWithRetry(() => import("../components/ai/GeneticExplainer"));
+const PathwayPredictor = lazyWithRetry(() => import("../components/ai/PathwayPredictor"));
 
 export default function AIAssistantsPage() {
   const { user } = useAuth();

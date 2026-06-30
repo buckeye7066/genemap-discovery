@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef, lazy, Suspense } from "react";
+import React, { useState, useEffect, useRef, Suspense } from "react";
+import { lazyWithRetry } from "@/lib/lazyWithRetry";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { apiClient } from "@genemap/shared";
 import { useAuth } from "../lib/AuthContext";
@@ -34,16 +35,16 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 
-const GeneExpressionChart = lazy(() => import("../components/visualizations/GeneExpressionChart"));
-const ProteinDomains = lazy(() => import("../components/visualizations/ProteinDomains"));
-const ProteinInteractions = lazy(() => import("../components/visualizations/ProteinInteractions"));
-const ChromosomeView = lazy(() => import("../components/visualizations/ChromosomeView"));
-const PhenotypeNetwork = lazy(() => import("../components/visualizations/PhenotypeNetwork"));
-const ManhattanPlot = lazy(() => import("../components/visualizations/ManhattanPlot"));
-const ExpressionHeatmap = lazy(() => import("../components/visualizations/ExpressionHeatmap"));
-const CircosPlot = lazy(() => import("../components/visualizations/CircosPlot"));
-const PathwayEnrichmentViz = lazy(() => import("../components/visualizations/PathwayEnrichmentViz"));
-const ComparativePathwayViz = lazy(() => import("../components/visualizations/ComparativePathwayViz"));
+const GeneExpressionChart = lazyWithRetry(() => import("../components/visualizations/GeneExpressionChart"));
+const ProteinDomains = lazyWithRetry(() => import("../components/visualizations/ProteinDomains"));
+const ProteinInteractions = lazyWithRetry(() => import("../components/visualizations/ProteinInteractions"));
+const ChromosomeView = lazyWithRetry(() => import("../components/visualizations/ChromosomeView"));
+const PhenotypeNetwork = lazyWithRetry(() => import("../components/visualizations/PhenotypeNetwork"));
+const ManhattanPlot = lazyWithRetry(() => import("../components/visualizations/ManhattanPlot"));
+const ExpressionHeatmap = lazyWithRetry(() => import("../components/visualizations/ExpressionHeatmap"));
+const CircosPlot = lazyWithRetry(() => import("../components/visualizations/CircosPlot"));
+const PathwayEnrichmentViz = lazyWithRetry(() => import("../components/visualizations/PathwayEnrichmentViz"));
+const ComparativePathwayViz = lazyWithRetry(() => import("../components/visualizations/ComparativePathwayViz"));
 import { PhenotypeSearchService } from "../components/search/PhenotypeSearchService";
 
 export default function VisualizationHub() {
