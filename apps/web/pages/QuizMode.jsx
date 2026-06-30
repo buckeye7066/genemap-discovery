@@ -180,18 +180,22 @@ export default function QuizMode() {
 
             <div className="space-y-2.5">
               {(current.options || []).map((option, i) => {
-                const optionColors = ['border-l-blue-400', 'border-l-purple-400', 'border-l-emerald-400', 'border-l-amber-400'];
+                // Use a NEUTRAL left border before the answer is revealed. The
+                // old per-index palette put a green (emerald) border on option
+                // index 2, which looked exactly like a "this is the correct
+                // answer" hint whenever correctIndex was 2. Colors must only
+                // convey correctness AFTER the user answers.
                 let className = 'w-full text-left p-3.5 rounded-xl border-2 border-l-4 transition-all duration-200 text-sm ';
                 if (!showResult) {
                   className += selectedAnswer === i
-                    ? 'border-blue-500 bg-blue-50/80 ' + optionColors[i % 4]
-                    : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50/80 hover:shadow-sm ' + optionColors[i % 4];
+                    ? 'border-blue-500 bg-blue-50/80 border-l-blue-500'
+                    : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50/80 hover:shadow-sm border-l-slate-300';
                 } else if (i === current.correctIndex) {
                   className += 'border-emerald-500 bg-emerald-50 text-emerald-800 border-l-emerald-500';
                 } else if (i === selectedAnswer) {
                   className += 'border-red-400 bg-red-50 text-red-800 border-l-red-400';
                 } else {
-                  className += 'border-slate-100 opacity-40 ' + optionColors[i % 4];
+                  className += 'border-slate-100 opacity-40 border-l-slate-300';
                 }
 
                 return (

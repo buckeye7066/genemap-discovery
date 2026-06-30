@@ -2,6 +2,7 @@ import React, { useState, lazy, Suspense } from "react";
 import { apiClient } from "@genemap/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../lib/AuthContext";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { log } from "../components/shared/logger";
 import { SAVE_SUCCESS_DELAY_MS } from "../components/shared/constants";
 import { getErrorMessage } from "../components/shared/errorUtils";
@@ -316,9 +317,12 @@ export default function SearchPage() {
               />
             )}
 
-            {/* Standard Search Results */}
+            {/* Standard Search Results — isolated in its own ErrorBoundary so a
+                render error in one gene card surfaces a visible, retryable
+                message in the results area instead of silently blanking the
+                panel (the reported "search completes but nothing appears"). */}
             {searchResults && !isLoading && !geneSetComparison && (
-              <>
+              <ErrorBoundary name="Search results">
                 <GeneResults
                   results={searchResults}
                   selectedGenes={selectedGenes}
@@ -336,7 +340,7 @@ export default function SearchPage() {
                     />
                   </div>
                 )}
-              </>
+              </ErrorBoundary>
             )}
 
             {!searchResults && !isLoading && !geneSetComparison && (
