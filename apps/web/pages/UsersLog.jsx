@@ -396,10 +396,10 @@ export default function UsersLogPage() {
                                 Joined {format(new Date(user.created_date), "MMM d, yyyy")}
                               </div>
                             )}
-                            {user.last_active ? (
+                            {(user.lastActiveAt || user.last_active) ? (
                               <div className="flex items-center gap-2 text-green-600">
                                 <UserCheck className="w-4 h-4" />
-                                Last active {formatEST(user.last_active)}
+                                Last active {formatEST(user.lastActiveAt || user.last_active)}
                               </div>
                             ) : (
                               <div className="flex items-center gap-2 text-slate-400">
