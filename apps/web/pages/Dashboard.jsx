@@ -89,13 +89,6 @@ export default function Dashboard() {
         return;
       }
 
-      // Onboarding completion is persisted as `demographicsCollected`. The old
-      // `onboarding_completed` field doesn't exist, so the tour reappeared on
-      // every visit.
-      if (!user.demographicsCollected) {
-        setShowOnboarding(true);
-      }
-
       const userEmail = user.email;
 
       const [activities, searches, userProjects, records, sets, conversations] = await Promise.all([
@@ -113,6 +106,20 @@ export default function Dashboard() {
       setMedicalRecords(records);
       setGeneSets(sets);
       setAiConversations(conversations);
+
+      // Onboarding completion is persisted as `demographicsCollected`. Only show
+      // the first-run tour to genuinely new accounts: an established user (e.g. a
+      // seeded/promoted super-admin who never ran onboarding but has plenty of
+      // activity) shouldn't be greeted with a "welcome, get started" tour.
+      if (
+        !user.demographicsCollected &&
+        activities.length === 0 &&
+        searches.length === 0 &&
+        sets.length === 0 &&
+        conversations.length === 0
+      ) {
+        setShowOnboarding(true);
+      }
 
       // Generate personalized insights
       if (activities.length > 0 || records.length > 0 || searches.length > 0) {

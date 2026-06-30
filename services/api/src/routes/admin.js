@@ -181,7 +181,30 @@ export default async function adminRoutes(fastify) {
       prisma.user.count({ where }),
     ]);
 
-    return { users, total, page: Number(page), limit: Number(limit) };
+    // Derive "last active" from the most recent activity row per user. There is
+    // no lastActiveAt column on the user, so the Users Log previously always
+    // showed "Never active" even for users with hundreds of activity rows.
+    const userIds = users.map((u) => u.id);
+    let lastActivity = [];
+    try {
+      if (userIds.length) {
+        lastActivity = await prisma.userActivity.groupBy({
+          by: ['userId'],
+          where: { userId: { in: userIds } },
+          _max: { createdAt: true },
+        });
+      }
+    } catch {
+      // last-active is a non-critical decoration; never fail the user list over it.
+      lastActivity = [];
+    }
+    const lastActiveByUser = new Map((lastActivity || []).map((r) => [r.userId, r._max?.createdAt]));
+    const usersWithActivity = users.map((u) => ({
+      ...u,
+      lastActiveAt: lastActiveByUser.get(u.id) || null,
+    }));
+
+    return { users: usersWithActivity, total, page: Number(page), limit: Number(limit) };
   });
 
   fastify.post('/search-users', async (request) => {
