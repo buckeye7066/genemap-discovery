@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { ArrowLeft, BookOpen, Image, MessageSquare, HelpCircle, RefreshCw, Send } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
 
 export default function TopicExplorer() {
   const [searchParams] = useSearchParams();
@@ -185,7 +186,16 @@ export default function TopicExplorer() {
                         ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-500/20'
                         : 'bg-white border border-slate-200 text-slate-700 shadow-sm'
                     }`}>
-                      {msg.content}
+                      {msg.role === 'assistant' ? (
+                        // Render the tutor's markdown (bold, lists, etc.) like the
+                        // Robert assistant does — otherwise **Purines** showed as
+                        // literal asterisks.
+                        <div className="prose prose-sm max-w-none prose-p:my-1 prose-li:my-0">
+                          <ReactMarkdown>{msg.content}</ReactMarkdown>
+                        </div>
+                      ) : (
+                        msg.content
+                      )}
                     </div>
                   </div>
                 ))}

@@ -416,7 +416,10 @@ export class ApiClient {
     usage: unknown;
     tier: string;
   }> {
-    return this.request('/education/image', { method: 'POST', body: JSON.stringify(data) });
+    // Image generation (DALL·E, plus a possible dall-e-2 fallback) is slower
+    // than a text call and can exceed the default request timeout — give it a
+    // longer budget so the browser doesn't abort a still-running generation.
+    return this.request('/education/image', { method: 'POST', body: JSON.stringify(data), timeoutMs: 90_000 });
   }
   generateQuiz(data: QuizRequest): Promise<{
     questions: unknown[];

@@ -129,7 +129,7 @@ export default function GeneResults({ results, selectedGenes = [], onGeneSelect 
             </Badge>
             <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
               <Star className="w-3 h-3 mr-1" />
-              Robert Insights
+              AI Insights
             </Badge>
             {onGeneSelect && (
               <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">

@@ -222,7 +222,7 @@ export default function SearchForm({ onSearch, isLoading, initialQuery = "" }) {
         <div className="flex items-start gap-2">
           <Sparkles className="w-5 h-5 text-blue-600 mt-0.5" />
           <div>
-            <h4 className="font-medium text-blue-900">Robert-Powered Insights</h4>
+            <h4 className="font-medium text-blue-900">AI-Powered Insights</h4>
             <p className="text-sm text-blue-700">
               Search by disease name (e.g., "Rheumatoid Arthritis", "Trisomy 21") to discover all associated genes with personalized explanations
             </p>
