@@ -147,7 +147,13 @@ export default async function educationRoutes(fastify) {
 
   fastify.get('/topics', async (request, reply) => {
     reply.header('Cache-Control', 'public, max-age=3600, s-maxage=86400');
-    reply.send({ categories: TOPICS_CATALOG });
+    // Must `return` (not a bare reply.send) inside an async handler: with
+    // @fastify/compress global mode, a bare reply.send() races the handler's
+    // undefined return and the gzip stream is finalized with Content-Length: 0
+    // — an empty body. This is why every sizable /education/* response (topics,
+    // explanations, quizzes) came back blank in the browser while curl with
+    // `Accept-Encoding: identity` returned the full payload.
+    return { categories: TOPICS_CATALOG };
   });
 
   fastify.post('/explain', { preHandler: [authenticate, checkEducationEntitlement, enforceUsageLimit] }, async (request) => {
@@ -300,7 +306,7 @@ export default async function educationRoutes(fastify) {
       }),
     ]);
 
-    reply.send({ sessions, progress });
+    return { sessions, progress };
   });
 
   fastify.post('/progress', { preHandler: authenticate }, async (request, reply) => {
@@ -319,7 +325,7 @@ export default async function educationRoutes(fastify) {
           lastAttemptAt: new Date(),
         },
       });
-      reply.send(updated);
+      return updated;
     } else {
       const created = await prisma.learningProgress.create({
         data: {
@@ -331,7 +337,7 @@ export default async function educationRoutes(fastify) {
           lastAttemptAt: new Date(),
         },
       });
-      reply.send(created);
+      return created;
     }
   });
 
@@ -356,12 +362,12 @@ export default async function educationRoutes(fastify) {
       }
     }
 
-    reply.send({
+    return {
       tier: request.entitlements.tier,
       isPremium: request.entitlements.isPremium,
       isInstitutional: request.entitlements.isInstitutional,
       limits: request.entitlements.limits,
       todayUsage,
-    });
+    };
   });
 }

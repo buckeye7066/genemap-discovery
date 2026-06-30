@@ -162,7 +162,7 @@ export default async function billingRoutes(fastify) {
       metadata: { sessionId: session.id, plan: body.plan },
     });
 
-    reply.send({ url: session.url, sessionId: session.id });
+    return reply.send({ url: session.url, sessionId: session.id });
   });
 
   fastify.post('/portal-session', { preHandler: authenticate }, async (request, reply) => {
@@ -193,7 +193,7 @@ export default async function billingRoutes(fastify) {
       entityType: 'subscription',
     });
 
-    reply.send({ url: session.url });
+    return reply.send({ url: session.url });
   });
 
   fastify.post('/institutional-checkout', { preHandler: authenticate }, async (request, reply) => {
@@ -245,7 +245,7 @@ export default async function billingRoutes(fastify) {
       },
     });
 
-    reply.send({ url: session.url, sessionId: session.id });
+    return reply.send({ url: session.url, sessionId: session.id });
   });
 
   fastify.post('/webhook', async (request, reply) => {
@@ -414,6 +414,6 @@ export default async function billingRoutes(fastify) {
       return reply.status(500).send({ error: 'Webhook processing failed' });
     }
 
-    reply.send({ received: true });
+    return reply.send({ received: true });
   });
 }
