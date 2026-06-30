@@ -26,7 +26,7 @@ export class PhenotypeSearchService {
       const effectivePremium = isPremium || isAdmin;
 
       const phenotypeAnalysis = await this.analyzePhenotype(phenotypeQuery);
-      const candidateGenes = await this.findCandidateGenes(phenotypeAnalysis, effectivePremium);
+      const candidateGenes = await this.findCandidateGenes(phenotypeAnalysis, effectivePremium, phenotypeQuery);
       const enrichedGenes = await this.enrichGeneData(candidateGenes, effectivePremium, userPreferences);
       
       return {
@@ -101,17 +101,26 @@ Provide a comprehensive analysis for gene discovery.
     return parseLLMJson(response, {});
   }
 
-  static async findCandidateGenes(phenotypeAnalysis, isPremium) {
+  static async findCandidateGenes(phenotypeAnalysis, isPremium, originalQuery = "") {
     const searchTerms = [
       phenotypeAnalysis.mainFeatures,
       phenotypeAnalysis.synonyms
-    ].flat().join(", ");
+    ].flat().filter(Boolean).join(", ");
+
+    // If analyzePhenotype returned sparse/unparseable JSON, searchTerms and
+    // diseaseName can be empty — which previously produced an EMPTY prompt
+    // ("Based on the phenotype features: ") and made the model fall back to
+    // generic "famous" genes (BRCA1/TP53/APOE) unrelated to the query. Always
+    // anchor on the user's original query so e.g. "Cystic Fibrosis" still
+    // searches for cystic fibrosis genes (CFTR) even when analysis is thin.
+    const diseaseTarget = phenotypeAnalysis.diseaseName || originalQuery || searchTerms;
+    const phenotypeTarget = searchTerms || originalQuery;
 
     let prompt = "";
-    
-    if (phenotypeAnalysis.isDisease) {
+
+    if (phenotypeAnalysis.isDisease || (!searchTerms && originalQuery)) {
       prompt = `
-Find ALL genes associated with the disease: ${phenotypeAnalysis.diseaseName || searchTerms}
+Find ALL genes associated with the disease/condition: ${diseaseTarget}
 
 **Comprehensive Gene Discovery Required:**
 1. Primary causative genes (monogenic forms)
@@ -136,9 +145,9 @@ ${phenotypeAnalysis.inheritancePattern ? `\nNote: Inheritance pattern is ${pheno
 `;
     } else {
       prompt = `
-Based on the phenotype features: ${searchTerms}
+Based on the phenotype features: ${phenotypeTarget}
 
-Find candidate genes that could be associated with these phenotypes. 
+Find candidate genes that could be associated with these phenotypes.
 Use your knowledge of genetics and genomics databases like OMIM, ClinVar, HPO, UniProt, HPA (Human Protein Atlas), and GTEx (Genotype-Tissue Expression).
 
 For each gene, provide:
