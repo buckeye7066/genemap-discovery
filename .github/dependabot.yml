@@ -8,15 +8,38 @@ updates:
       time: "09:00"
       timezone: America/New_York
     open-pull-requests-limit: 10
+    # Group minor + patch bumps so weekly PRs are small, green, and mergeable.
+    # Major bumps are intentionally ignored below — they are breaking changes
+    # (e.g. React 19, Tailwind 4, Stripe 22) and must be done deliberately,
+    # one stack at a time, not auto-grouped into an unmergeable mega-PR.
     groups:
       npm-production:
         dependency-type: production
+        update-types:
+          - minor
+          - patch
         patterns:
           - "*"
       npm-development:
         dependency-type: development
+        update-types:
+          - minor
+          - patch
         patterns:
           - "*"
+    ignore:
+      # Do not propose ANY major-version jumps automatically.
+      - dependency-name: "*"
+        update-types:
+          - "version-update:semver-major"
+      # Hold Prisma on v6 until the v7 driver-adapter migration is done by hand
+      # (v7 drops datasource `url` and requires prisma.config.ts + @prisma/adapter-pg).
+      - dependency-name: "prisma"
+        versions:
+          - ">=7.0.0"
+      - dependency-name: "@prisma/client"
+        versions:
+          - ">=7.0.0"
 
   - package-ecosystem: github-actions
     directory: /
