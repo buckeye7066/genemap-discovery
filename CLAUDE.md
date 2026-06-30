@@ -4,7 +4,7 @@ Genomic analysis platform. pnpm-workspaces monorepo migrated off Base44.
 
 ## Tech Stack
 
-React 18 + Vite + Tailwind + Radix (`apps/web`), Electron (`apps/desktop`), Fastify 5.8 + Prisma 6.2 + PostgreSQL 16 (`services/api`), shared TypeScript package (`packages/shared`), Anthropic/OpenAI wrappers, Stripe, JWT access/refresh tokens, bcrypt, and HTTP-only cookies.
+React 18 + Vite + Tailwind + Radix (`apps/web`), Electron (`apps/desktop`), Fastify 5.8 + Prisma 6.2 + PostgreSQL 18 (prod on Railway; CI tests against postgres:18) (`services/api`), shared TypeScript package (`packages/shared`), Anthropic/OpenAI wrappers, Stripe, JWT access/refresh tokens, bcrypt, and HTTP-only cookies.
 
 ## Run / Build / Test
 

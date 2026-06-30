@@ -66,16 +66,31 @@ $env:DRIVE_DIR="D:\CloudStorage"; .\scripts\backup-snapshot.ps1
 
 ### Using pg_dump (Railway)
 
+> **Two gotchas, both verified the hard way:**
+> 1. The API's `DATABASE_URL` points at the **private** host
+>    `postgres.railway.internal`, which is **not reachable** from a laptop/CI —
+>    `pg_dump` fails with *"could not translate host name"*. For an off-platform
+>    dump use the **public** URL from the Postgres service
+>    (`DATABASE_PUBLIC_URL`, exposed via Railway's TCP proxy).
+> 2. Production runs **PostgreSQL 18**, and `pg_dump` must be **>= the server
+>    major version**. A `pg_dump` 16 against an 18 server aborts with
+>    *"server version mismatch"*. Install a 18+ client (e.g. `postgresql-client-18`).
+
 ```bash
-# Get DATABASE_URL from Railway
-railway variables
+# Off-platform dump via the PUBLIC proxy URL (runs the command with the
+# Postgres service's env injected, so $DATABASE_PUBLIC_URL resolves):
+railway run --service Postgres sh -c 'pg_dump "$DATABASE_PUBLIC_URL"' > backup-$(date +%Y%m%d-%H%M%S).sql
 
-# Backup to file
-pg_dump $DATABASE_URL > backup-$(date +%Y%m%d-%H%M%S).sql
+# Compressed:
+railway run --service Postgres sh -c 'pg_dump "$DATABASE_PUBLIC_URL"' | gzip > backup-$(date +%Y%m%d-%H%M%S).sql.gz
 
-# Backup with compression
-pg_dump $DATABASE_URL | gzip > backup-$(date +%Y%m%d-%H%M%S).sql.gz
+# Schema only (small, safe sanity check that backups work — no data leaves the host):
+railway run --service Postgres sh -c 'pg_dump --schema-only "$DATABASE_PUBLIC_URL"' > schema-$(date +%Y%m%d).sql
 ```
+
+> NOTE: a full dump contains application data. Medical/genomic fields are stored
+> encrypted at rest (AES-256-GCM), so a dump holds ciphertext, not plaintext —
+> but still treat backup files as sensitive and store them encrypted.
 
 ### Using Prisma Studio
 
