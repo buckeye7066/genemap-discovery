@@ -102,6 +102,40 @@ railway run pnpm db:studio
 # (Limited to small datasets)
 ```
 
+## Verified Restore Drill (PG18, Docker — no local Postgres install)
+
+This exact procedure was run against production and **passed** (24/24 tables
+restored with identical row counts). It needs only Docker, because the pg18
+client + a throwaway target both come from the `postgres:18` image — no need to
+install a matching `pg_dump` locally.
+
+```bash
+# 1. Get the PUBLIC connection string into an env var (never printed):
+export DBPUB="$(railway run --service Postgres sh -c 'printf %s "$DATABASE_PUBLIC_URL"')"
+
+# 2. Dump production with a pg18 client (must be >= server major):
+docker run --rm postgres:18 pg_dump --no-owner --no-privileges "$DBPUB" > prod-dump.sql
+
+# 3. Start a throwaway pg18 target and restore into it:
+docker run -d --name pg18-drill -e POSTGRES_PASSWORD=drill -e POSTGRES_DB=restoretest postgres:18
+# (wait a few seconds for it to accept connections)
+docker exec -i pg18-drill psql -U postgres -d restoretest -v ON_ERROR_STOP=1 < prod-dump.sql
+
+# 4. Verify row-count parity for every table (prints "MISMATCH" if any differ):
+CQ="SELECT table_name, (xpath('/row/c/text()', query_to_xml(format('SELECT count(*) AS c FROM %I.%I', table_schema, table_name), false, true, '')))[1]::text::int FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE' ORDER BY 1;"
+docker run --rm postgres:18 psql "$DBPUB" -tA -F'|' -c "$CQ" | sort > src.txt
+docker exec pg18-drill psql -U postgres -d restoretest -tA -F'|' -c "$CQ" | sort > tgt.txt
+diff src.txt tgt.txt && echo "RESTORE OK — all tables match" || echo "MISMATCH — investigate"
+
+# 5. CLEAN UP — the dump contains real PII; destroy it and the container:
+docker rm -f pg18-drill
+rm -f prod-dump.sql src.txt tgt.txt
+```
+
+The drill **reads** production only (pg_dump); it never writes to prod. Treat
+the dump file as sensitive (it contains user PII; medical fields are ciphertext)
+and delete it when done.
+
 ## Recovery Procedures
 
 ### Restore from Local Backup
