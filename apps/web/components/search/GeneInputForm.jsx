@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -15,6 +15,7 @@ const exampleGeneSets = [
 export default function GeneInputForm({ onGenesSubmit, isLoading, initialGenes = [] }) {
   const [geneInput, setGeneInput] = useState("");
   const [genes, setGenes] = useState(initialGenes);
+  const inputRef = useRef(null);
 
   React.useEffect(() => {
     setGenes(initialGenes);
@@ -22,10 +23,14 @@ export default function GeneInputForm({ onGenesSubmit, isLoading, initialGenes =
 
   const handleAddGene = () => {
     const newGene = geneInput.trim().toUpperCase();
-    if (newGene && !genes.includes(newGene)) {
-      setGenes([...genes, newGene]);
-      setGeneInput("");
-    }
+    if (!newGene) return;
+    // Functional update (never read the array from a stale closure) + keep
+    // focus in the input. Clicking the "+" button moves focus to the button,
+    // so without this refocus the user's next keystrokes went nowhere and the
+    // second consecutive add silently did nothing.
+    setGenes((prev) => (prev.includes(newGene) ? prev : [...prev, newGene]));
+    setGeneInput("");
+    inputRef.current?.focus();
   };
 
   const handleBulkAdd = (text) => {
@@ -63,6 +68,7 @@ export default function GeneInputForm({ onGenesSubmit, isLoading, initialGenes =
         <Label htmlFor="gene-input">Gene Symbols</Label>
         <div className="flex gap-2">
           <Input
+            ref={inputRef}
             id="gene-input"
             placeholder="e.g., BRCA1, TP53, CFTR"
             value={geneInput}
@@ -156,7 +162,7 @@ export default function GeneInputForm({ onGenesSubmit, isLoading, initialGenes =
           className="flex-1 bg-blue-600 hover:bg-blue-700"
         >
           <Sparkles className="w-4 h-4 mr-2" />
-          Analyze with Robert
+          Analyze with AI
         </Button>
         {genes.length > 0 && (
           <Button

@@ -59,6 +59,7 @@ export default function VisualizationHub() {
   // dropped TP53.
   const [loadingGenes, setLoadingGenes] = useState([]);
   const inFlightGenes = useRef(new Set());
+  const geneInputRef = useRef(null);
   const [error, setError] = useState(null);
   const [activeVisualizations, setActiveVisualizations] = useState([
     'expression',
@@ -165,7 +166,11 @@ export default function VisualizationHub() {
       inFlightGenes.current.delete(gene);
       setLoadingGenes(prev => prev.filter(g => g !== gene));
       // Only clear the global spinner once nothing is in flight.
-      if (inFlightGenes.current.size === 0) setIsLoading(false);
+      if (inFlightGenes.current.size === 0) {
+        setIsLoading(false);
+        // Return focus to the input so the next gene can be typed right away.
+        geneInputRef.current?.focus();
+      }
     }
   };
 
@@ -445,6 +450,7 @@ export default function VisualizationHub() {
           <CardContent className="space-y-6">
             <div className="flex flex-col sm:flex-row gap-2">
               <Input
+                ref={geneInputRef}
                 placeholder="Enter gene symbol (e.g., BRCA1, TP53)"
                 value={geneInput}
                 onChange={(e) => setGeneInput(e.target.value)}

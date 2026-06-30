@@ -689,7 +689,7 @@ Provide comprehensive, evidence-based analysis formatted with clear sections.`;
           <div className="flex items-start gap-2">
             <Lightbulb className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
             <div className="flex-1">
-              <h4 className="font-medium text-blue-900 mb-2">Robert Insights</h4>
+              <h4 className="font-medium text-blue-900 mb-2">AI Insights</h4>
               <p className="text-blue-800 text-sm leading-relaxed mb-3">
                 {gene.aiSummary}
               </p>

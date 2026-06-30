@@ -229,7 +229,7 @@ export default async function educationRoutes(fastify) {
     // error so the client renders an actionable message.
     let result;
     try {
-      result = await llm.generateImage(imagePrompt);
+      result = await llm.generateImage(imagePrompt, { timeoutMs: 40_000 });
     } catch (err) {
       request.log.warn({ err: err?.message }, 'education image generation failed');
       throw new AppError(

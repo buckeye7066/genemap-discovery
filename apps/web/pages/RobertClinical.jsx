@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useAuth } from "../lib/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -41,9 +41,11 @@ export default function RobertClinicalPage() {
   const isLoading = isLoadingAuth;
 
 
+  const inputRef = useRef(null);
+
   const handleAddTarget = useCallback((type) => {
     if (!searchInput.trim()) return;
-    
+
     const newTarget = {
       type,
       value: searchInput.trim(),
@@ -52,6 +54,10 @@ export default function RobertClinicalPage() {
 
     setAnalysisTargets(prev => [...prev, newTarget]);
     setSearchInput("");
+    // Keep focus in the field so the next gene/disease can be typed immediately
+    // (the +Gene / +Disease buttons otherwise steal focus and the next entry
+    // silently went nowhere).
+    inputRef.current?.focus();
   }, [searchInput]);
 
   const handleRemoveTarget = useCallback((id) => {
@@ -210,6 +216,7 @@ export default function RobertClinicalPage() {
                   </Label>
                   <div className="flex flex-col sm:flex-row gap-2">
                     <Input
+                      ref={inputRef}
                       id="search-input"
                       placeholder="e.g., BRCA1, Type 2 Diabetes, CYP2D6"
                       value={searchInput}
