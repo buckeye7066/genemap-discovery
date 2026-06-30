@@ -740,7 +740,9 @@ Provide comprehensive, evidence-based analysis formatted with clear sections.`;
             <div className="flex-1">
               <h4 className="font-medium text-blue-900 mb-2">AI Insights</h4>
               <p className="text-blue-800 text-sm leading-relaxed mb-3">
-                {gene.aiSummary}
+                {gene.aiSummary || (gene.detailsPending
+                  ? <span className="italic text-blue-500">Generating a detailed summary for {gene.symbol}…</span>
+                  : null)}
               </p>
               
               {gene.keyTakeaways && gene.keyTakeaways.length > 0 && (

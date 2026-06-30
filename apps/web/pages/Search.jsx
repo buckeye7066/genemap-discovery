@@ -1,4 +1,4 @@
-import React, { useState, lazy, Suspense } from "react";
+import React, { useState, useRef, lazy, Suspense } from "react";
 import { apiClient } from "@genemap/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../lib/AuthContext";
@@ -31,7 +31,12 @@ export default function SearchPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isEnriching, setIsEnriching] = useState(false);
   const [error, setError] = useState(null);
+  // Monotonic token so an older, slower search can never overwrite the results
+  // of a newer one (the user clicked a second example before the first
+  // finished). Only the latest search applies state.
+  const searchTokenRef = useRef(0);
   const [searchType, setSearchType] = useState("free");
   const [selectedGenes, setSelectedGenes] = useState([]);
   const [showComparison, setShowComparison] = useState(false);
@@ -56,8 +61,13 @@ export default function SearchPage() {
       return;
     }
 
+    const token = ++searchTokenRef.current;
+    const isCurrent = () => token === searchTokenRef.current;
+
     setIsLoading(true);
+    setIsEnriching(false);
     setError(null);
+    setSearchResults(null);
     setSearchQuery(query);
     setSearchType(isPremium ? "premium" : "free");
     setSelectedGenes([]); // Clear selection on new search
@@ -66,17 +76,30 @@ export default function SearchPage() {
     setGeneSetComparison(null); // Clear gene set comparison on new phenotype search
 
     try {
-      const results = await PhenotypeSearchService.searchGenes(query, isPremium);
-      setSearchResults(results);
+      // FAST: render candidate genes (with authoritative coordinates) as soon as
+      // they're found, then drop the blocking spinner. The slow per-gene LLM
+      // enrichment happens after this, in the background.
+      const base = await PhenotypeSearchService.findCandidates(query, isPremium);
+      if (!isCurrent()) return;
+      setSearchResults(base);
+      setIsLoading(false);
+      setIsEnriching(true);
 
-      // If user has input genes, compare them
+      // BACKGROUND: fill in summaries, phenotypes, takeaways. Failure here keeps
+      // the candidates on screen (enrichCandidates returns them unchanged).
+      const enriched = await PhenotypeSearchService.enrichCandidates(base);
+      if (!isCurrent()) return;
+      setSearchResults(enriched);
+      setIsEnriching(false);
+
       if (userInputGenes.length > 0) {
         const comparison = await PhenotypeSearchService.compareGeneSets(
           userInputGenes,
-          results.candidateGenes.map(g => g.symbol),
+          enriched.candidateGenes.map(g => g.symbol),
           query,
           isPremium
         );
+        if (!isCurrent()) return;
         setGeneSetComparison(comparison);
       }
 
@@ -88,9 +111,9 @@ export default function SearchPage() {
           query,
           queryType: isPremium ? "premium" : "free",
           results: {
-            hpoTerm: results.hpoTerms?.[0] || null,
-            candidateGenes: results.candidateGenes.map(g => g.symbol),
-            count: results.candidateGenes.length,
+            hpoTerm: enriched.hpoTerms?.[0] || null,
+            candidateGenes: enriched.candidateGenes.map(g => g.symbol),
+            count: enriched.candidateGenes.length,
           },
         });
       } catch (historyError) {
@@ -98,10 +121,15 @@ export default function SearchPage() {
       }
 
     } catch (err) {
-      setError(getErrorMessage(err) || "Search failed. Please try again.");
-      log.error("Search error:", err);
+      if (isCurrent()) {
+        setError(getErrorMessage(err) || "Search failed. Please try again.");
+        log.error("Search error:", err);
+      }
     } finally {
-      setIsLoading(false);
+      if (isCurrent()) {
+        setIsLoading(false);
+        setIsEnriching(false);
+      }
     }
   };
 
@@ -309,9 +337,19 @@ export default function SearchPage() {
 
             {isLoading && (
               <AiThinkingIndicator
-                label={`Searching genes for "${searchQuery || 'your query'}"…`}
-                hint="Analyzing the query, finding associated genes, and enriching each one. This usually takes 10–25 seconds."
+                label={`Finding genes for "${searchQuery || 'your query'}"…`}
+                hint="Identifying candidate genes and verifying their coordinates. Results appear in ~15 seconds, then details fill in."
               />
+            )}
+
+            {/* Results are on screen; details are still streaming in. */}
+            {isEnriching && !isLoading && (
+              <Alert className="mb-4 bg-blue-50 border-blue-200">
+                <Brain className="h-4 w-4 text-blue-600 animate-pulse" />
+                <AlertDescription className="text-blue-900">
+                  Genes found — adding summaries, phenotypes, and tissue expression…
+                </AlertDescription>
+              </Alert>
             )}
 
             {/* Gene Set Comparison Results */}

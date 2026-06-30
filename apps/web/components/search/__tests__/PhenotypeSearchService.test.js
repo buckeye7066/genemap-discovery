@@ -71,6 +71,22 @@ describe('PhenotypeSearchService.applyAuthoritativeData', () => {
   });
 });
 
+describe('PhenotypeSearchService.finalizeEnriched', () => {
+  it('restores honest sources from coordinatesVerified and validates HPO', () => {
+    const enriched = [
+      { symbol: 'A', coordinatesVerified: true, sources: ['AI-suggested'], phenotypes: [{ name: 'Seizure', hpoId: 'HP:FAKE' }] },
+      { symbol: 'B', coordinatesVerified: false, sources: ['AI-suggested'], phenotypes: [{ name: 'Nope', hpoId: 'HP:FAKE' }] },
+    ];
+    const authHpo = { seizure: { hpoId: 'HP:0001250', verified: true } , nope: { hpoId: null, verified: false } };
+    const [a, b] = PhenotypeSearchService.finalizeEnriched(enriched, authHpo);
+    expect(a.sources).toContain('Ensembl/NCBI (verified)');
+    expect(a.phenotypes[0]).toMatchObject({ hpoId: 'HP:0001250', hpoVerified: true });
+    expect(b.sources).toEqual(['AI-suggested']);
+    // validation ran (authHpo non-empty) but no match → drop fabricated id
+    expect(b.phenotypes[0].hpoId).toBeNull();
+  });
+});
+
 describe('PhenotypeSearchService.collectPhenotypeNames', () => {
   it('dedupes, caps per gene, and bounds the total', () => {
     const genes = [

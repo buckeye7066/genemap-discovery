@@ -171,7 +171,7 @@ So, what's on your mind today?`;
 - Precise, scientific, and evidence-based
 - Use technical terminology appropriate for PhD-level discourse
 - Provide mechanistic explanations and molecular details
-- Always cite sources (e.g., "According to ClinVar...", "PMID: 12345678")
+- Attribute claims to sources by NAME only (e.g., "ClinVar", "OMIM", "ACMG/AMP guidelines", "CPIC"). Do NOT fabricate PMIDs, DOIs, or accession numbers.
 - Include statistical measures and confidence intervals where relevant
 - Reference specific databases, studies, and guidelines
 - Maintain professional, scholarly tone
@@ -260,10 +260,20 @@ Be the genetic counselor everyone wishes they had - knowledgeable, kind, and abl
 
     const prompt = `${systemPrompt}
 
+**CITATION INTEGRITY (critical):**
+- NEVER invent citation identifiers. Do not output a PMID, DOI, accession, or
+  URL unless you are certain it is real. A fabricated reference is worse than no
+  reference. Placeholder-looking numbers (e.g. 12345678) are forbidden.
+- When you cannot recall a specific verifiable reference, attribute to the
+  source by name only (e.g. "per ClinVar", "OMIM", "ACMG/AMP 2015 guidelines")
+  or say the claim reflects general consensus — never manufacture a number.
+- This is educational/research information, not medical advice or a diagnosis;
+  encourage confirmation with a qualified clinician or genetic counselor.
+
 **User Question:**
 ${userMessage}
 
-${medicalRecords.length > 0 && activeAssistant === 'robert' 
+${medicalRecords.length > 0 && activeAssistant === 'robert'
   ? `\n**Available Medical Data Summary:**\n${medicalRecords.map((r, i) => `Record ${i+1}: ${r.file_type} - ${r.summary || 'No summary'}`).join('\n')}`
   : ''}
 
@@ -377,6 +387,17 @@ Please provide a comprehensive response.`;
             </Tabs>
           </CardContent>
         </Card>
+
+        {/* Educational/clinical disclaimer — shown above every assistant chat. */}
+        <Alert className="mb-6 bg-amber-50 border-amber-200">
+          <Info className="h-4 w-4 text-amber-600" />
+          <AlertDescription className="text-amber-900 text-sm">
+            <strong>Educational &amp; research use only — not medical advice.</strong> Responses are
+            AI-generated and may be incomplete or wrong. Always confirm with a qualified clinician or
+            genetic counselor, and verify any cited source before relying on it. Do not make medical
+            decisions based on this chat.
+          </AlertDescription>
+        </Alert>
 
         <div className="grid lg:grid-cols-3 gap-6">
           {/* Chat Interface */}

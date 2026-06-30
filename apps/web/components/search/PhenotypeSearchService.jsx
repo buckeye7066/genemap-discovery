@@ -5,57 +5,117 @@ import { GENE_ENRICHMENT_CONCURRENCY } from "../shared/constants";
 import { parseLLMJson } from "../shared/llmJson";
 
 export class PhenotypeSearchService {
-  static async searchGenes(phenotypeQuery, isPremium = false) {
+  static async getUserContext() {
+    let isAdmin = false;
+    let userPreferences = null;
     try {
-      // Check for admin access and get user preferences
-      let isAdmin = false;
-      let userPreferences = null;
-      try {
-        const user = await apiClient.getMe();
-        isAdmin = user?.role === "admin" || user?.role === "super_admin" || user?.entitlements?.isAdmin === true;
-        userPreferences = {
-          age: user?.age,
-          education_level: user?.education_level,
-          field_of_study: user?.field_of_study
-        };
-      } catch (err) {
-        isAdmin = false;
-      }
+      const user = await apiClient.getMe();
+      isAdmin = user?.role === "admin" || user?.role === "super_admin" || user?.entitlements?.isAdmin === true;
+      userPreferences = {
+        age: user?.age,
+        education_level: user?.education_level,
+        field_of_study: user?.field_of_study,
+      };
+    } catch (err) {
+      isAdmin = false;
+    }
+    return { isAdmin, userPreferences };
+  }
 
-      // Grant premium access to admin
+  /**
+   * FAST phase. Identify candidate genes and attach AUTHORITATIVE coordinates
+   * (MyGene.info → Ensembl/NCBI). This is 2 LLM calls + 1 batched DB lookup, so
+   * the UI can render gene cards in ~15-20s instead of blocking the full
+   * per-gene enrichment (which used to keep "Searching…" on screen for 40-100s
+   * with nothing rendered). Per-gene detail is filled in later by
+   * enrichCandidates(). Each returned gene carries `detailsPending: true`.
+   */
+  static async findCandidates(phenotypeQuery, isPremium = false) {
+    try {
+      const { isAdmin, userPreferences } = await this.getUserContext();
       const effectivePremium = isPremium || isAdmin;
 
       const phenotypeAnalysis = await this.analyzePhenotype(phenotypeQuery);
       const candidateGenes = await this.findCandidateGenes(phenotypeAnalysis, effectivePremium, phenotypeQuery);
 
-      // Kick off the authoritative gene lookup (MyGene.info → Ensembl/NCBI) in
-      // PARALLEL with the slow LLM enrichment, so verified coordinates/IDs are
-      // usually ready by the time results render — no added perceived latency.
       const symbols = candidateGenes.map((g) => g.symbol).filter(Boolean);
-      const authoritativeGenesPromise = this.safeEnrich(symbols, []);
+      const { genes: authGenes } = await this.safeEnrich(symbols, []);
 
-      const enrichedGenes = await this.enrichGeneData(candidateGenes, effectivePremium, userPreferences);
-
-      const { genes: authGenes } = await authoritativeGenesPromise;
-      // The LLM-produced phenotype names are only known now — validate them
-      // against HPO so we never show a fabricated HP: id.
-      const phenotypeNames = this.collectPhenotypeNames(enrichedGenes);
-      const { phenotypes: authHpo } = await this.safeEnrich([], phenotypeNames);
-
-      const verifiedGenes = this.applyAuthoritativeData(enrichedGenes, authGenes, authHpo);
+      const baseGenes = this.applyAuthoritativeData(
+        candidateGenes.map((g) => ({
+          ...g,
+          genomeBuild: 'GRCh38',
+          sources: ['AI-suggested'],
+          phenotypes: [],
+          detailsPending: true,
+        })),
+        authGenes,
+        {}
+      );
 
       return {
         query: phenotypeQuery,
-        candidateGenes: verifiedGenes,
+        candidateGenes: baseGenes,
         isPremium: effectivePremium,
         hpoTerms: phenotypeAnalysis.hpoTerms || [],
-        queryType: phenotypeAnalysis.queryType || 'phenotype'
+        queryType: phenotypeAnalysis.queryType || 'phenotype',
+        userPreferences,
+        enriched: false,
       };
-
     } catch (error) {
-      log.error("Search error:", error);
+      log.error("Search (find candidates) error:", error);
       throw new Error(getErrorMessage(error) || "Failed to search for genes. Please try again.");
     }
+  }
+
+  /**
+   * SLOW phase. Per-gene LLM detail (summary, phenotypes, takeaways, expression)
+   * + HPO validation. Runs AFTER the candidate cards are already on screen, so
+   * its latency is never blocking. A failure here returns the candidates
+   * unchanged rather than wiping the already-rendered results.
+   */
+  static async enrichCandidates(base) {
+    try {
+      const enrichedGenes = await this.enrichGeneData(base.candidateGenes, base.isPremium, base.userPreferences);
+      const phenotypeNames = this.collectPhenotypeNames(enrichedGenes);
+      const { phenotypes: authHpo } = await this.safeEnrich([], phenotypeNames);
+      const finalGenes = this.finalizeEnriched(enrichedGenes, authHpo).map((g) => ({ ...g, detailsPending: false }));
+      return { ...base, candidateGenes: finalGenes, enriched: true };
+    } catch (error) {
+      log.error("Search (enrich) error:", error);
+      return {
+        ...base,
+        candidateGenes: (base.candidateGenes || []).map((g) => ({ ...g, detailsPending: false })),
+        enriched: true,
+      };
+    }
+  }
+
+  // Backward-compatible one-shot: candidates then enrichment in one await.
+  static async searchGenes(phenotypeQuery, isPremium = false) {
+    const base = await this.findCandidates(phenotypeQuery, isPremium);
+    return this.enrichCandidates(base);
+  }
+
+  // After enrichGeneData (which re-stamps `sources` and adds LLM phenotypes),
+  // restore honest provenance from the already-applied coordinate verification
+  // and validate HPO ids. Coordinates were verified in findCandidates and are
+  // preserved through enrichGeneData's spread.
+  static finalizeEnriched(genes, authHpo = {}) {
+    const hpoChecked = Object.keys(authHpo).length > 0;
+    return (genes || []).map((g) => {
+      const merged = { ...g, sources: this.honestSources(Boolean(g.coordinatesVerified)) };
+      if (Array.isArray(merged.phenotypes)) {
+        merged.hpoChecked = hpoChecked;
+        merged.phenotypes = merged.phenotypes.map((p) => {
+          if (!p || typeof p.name !== 'string') return p;
+          const v = authHpo[p.name.trim().toLowerCase()];
+          if (v && v.verified) return { ...p, hpoId: v.hpoId, hpoVerified: true };
+          return { ...p, hpoId: hpoChecked ? null : p.hpoId, hpoVerified: false };
+        });
+      }
+      return merged;
+    });
   }
 
   // Call the authoritative-enrichment endpoint, never throwing: if it's slow or
