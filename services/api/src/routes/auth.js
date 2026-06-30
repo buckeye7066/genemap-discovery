@@ -310,7 +310,7 @@ export default async function authRoutes(fastify) {
 
     const csrfToken = ensureCsrfCookie(request, reply);
 
-    reply.send({
+    return reply.send({
       id: user.id,
       email: user.email,
       role: user.role,
@@ -387,7 +387,7 @@ export default async function authRoutes(fastify) {
       metadata: { fields: Object.keys(data) },
     });
 
-    reply.send({
+    return reply.send({
       id: user.id,
       email: user.email,
       role: user.role,
