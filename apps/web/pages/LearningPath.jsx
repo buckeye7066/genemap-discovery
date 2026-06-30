@@ -9,84 +9,56 @@ import { Progress } from '@/components/ui/progress';
 import LevelPicker from '@/components/education/LevelPicker';
 import { CheckCircle2, Circle, Lock, ArrowRight, GraduationCap, BookOpen, Trophy } from 'lucide-react';
 
-const CURRICULUM = [
-  {
-    module: 'Foundations',
-    description: 'The building blocks of genetics',
-    topics: [
-      { id: 'what-is-dna', title: 'What is DNA?' },
-      { id: 'dna-structure', title: 'DNA Structure' },
-      { id: 'genes-and-chromosomes', title: 'Genes & Chromosomes' },
-    ],
-  },
-  {
-    module: 'From Gene to Protein',
-    description: 'How genetic information flows',
-    topics: [
-      { id: 'dna-replication', title: 'DNA Replication' },
-      { id: 'transcription', title: 'Transcription' },
-      { id: 'translation', title: 'Translation' },
-      { id: 'gene-expression', title: 'Gene Expression' },
-    ],
-  },
-  {
-    module: 'Inheritance Patterns',
-    description: 'How traits pass between generations',
-    topics: [
-      { id: 'mendelian-genetics', title: 'Mendelian Genetics' },
-      { id: 'punnett-squares', title: 'Punnett Squares' },
-      { id: 'sex-linked-traits', title: 'Sex-Linked Traits' },
-      { id: 'complex-inheritance', title: 'Complex Inheritance' },
-    ],
-  },
-  {
-    module: 'Variation & Mutation',
-    description: 'What makes us different',
-    topics: [
-      { id: 'what-are-mutations', title: 'What Are Mutations?' },
-      { id: 'types-of-mutations', title: 'Types of Mutations' },
-      { id: 'genetic-variation', title: 'Genetic Variation' },
-      { id: 'snps-and-polymorphisms', title: 'SNPs & Polymorphisms' },
-    ],
-  },
-  {
-    module: 'Modern Genomics',
-    description: 'Technology and the future of genetics',
-    topics: [
-      { id: 'human-genome-project', title: 'The Human Genome Project' },
-      { id: 'dna-sequencing', title: 'DNA Sequencing' },
-      { id: 'crispr', title: 'CRISPR Gene Editing' },
-      { id: 'gene-therapy', title: 'Gene Therapy' },
-    ],
-  },
-  {
-    module: 'Genetics & Health',
-    description: 'Genes in medicine',
-    topics: [
-      { id: 'genetic-diseases', title: 'Genetic Diseases' },
-      { id: 'cancer-genetics', title: 'Cancer Genetics' },
-      { id: 'pharmacogenomics', title: 'Pharmacogenomics' },
-      { id: 'genetic-testing', title: 'Genetic Testing' },
-    ],
-  },
-];
+// One-line blurb per catalog category. The topic LIST itself is NOT defined
+// here — it comes from the canonical catalog the API serves (GET
+// /education/topics), the SAME source LearnGenetics and Premium use. Previously
+// this file hardcoded its own 23-topic curriculum, silently dropping 9 of the
+// 32 catalog topics (Gene Regulation, Epigenetics, Phylogenetics, Natural
+// Selection, Synthetic Biology, …). Deriving from the API makes drift impossible.
+const CATEGORY_BLURBS = {
+  'DNA Basics': 'The building blocks of genetics',
+  'How Genes Work': 'How genetic information flows',
+  'Inheritance': 'How traits pass between generations',
+  'Mutations & Variation': 'What makes us different',
+  'Genomics & Technology': 'Technology and the future of genetics',
+  'Genetics & Health': 'Genes in medicine',
+  'Evolution & Population Genetics': 'Genes across populations and time',
+  'Advanced Topics': 'Frontiers of modern genetics',
+};
 
 export default function LearningPath() {
   const { level, levelConfig, needsOnboarding } = useEducationLevel();
   const navigate = useNavigate();
   const [progress, setProgress] = useState([]);
+  const [curriculum, setCurriculum] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadProgress();
+    loadData();
   }, []);
 
-  const loadProgress = async () => {
+  const loadData = async () => {
     try {
-      const res = await apiClient.getLearningProgress();
-      setProgress(res.progress || []);
-    } catch {
-      // OK if fails
+      // Pull the curriculum from the canonical topic catalog (same source as
+      // Learn Genetics) so every catalog topic is included — no hardcoded subset.
+      const [topicsRes, progressRes] = await Promise.allSettled([
+        apiClient.getTopics(),
+        apiClient.getLearningProgress(),
+      ]);
+
+      if (topicsRes.status === 'fulfilled') {
+        const categories = topicsRes.value || [];
+        setCurriculum(
+          categories.map((c) => ({
+            module: c.category,
+            description: CATEGORY_BLURBS[c.category] || 'Core genetics topics',
+            topics: (c.topics || []).map((t) => ({ id: t.id, title: t.title })),
+          }))
+        );
+      }
+      if (progressRes.status === 'fulfilled') {
+        setProgress(progressRes.value?.progress || []);
+      }
     } finally {
       setLoading(false);
     }
@@ -100,7 +72,7 @@ export default function LearningPath() {
     return 'not_started';
   };
 
-  const allTopics = CURRICULUM.flatMap(m => m.topics);
+  const allTopics = curriculum.flatMap(m => m.topics);
   const completedCount = allTopics.filter(t => getTopicStatus(t.id) === 'mastered').length;
   const totalCount = allTopics.length;
   const overallProgress = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
@@ -162,7 +134,7 @@ export default function LearningPath() {
         </div>
       ) : (
         <div className="space-y-5">
-          {CURRICULUM.map((module, moduleIndex) => {
+          {curriculum.map((module, moduleIndex) => {
             const moduleTopics = module.topics;
             const moduleMastered = moduleTopics.filter(t => getTopicStatus(t.id) === 'mastered').length;
             const moduleProgress = moduleTopics.length > 0 ? Math.round((moduleMastered / moduleTopics.length) * 100) : 0;

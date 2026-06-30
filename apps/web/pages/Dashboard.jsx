@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import ReactMarkdown from "react-markdown";
 import { apiClient } from "@genemap/shared";
 import { useAuth } from "../lib/AuthContext";
 import { Link, useNavigate } from "react-router-dom";
@@ -193,7 +194,11 @@ Keep each insight under 50 words, practical, and personalized.`;
   // The activity feed holds many activity types; "Recently Viewed Genes" should
   // only show gene_view rows, with the symbol read from entityId.
   const geneViews = recentGenes.filter((a) => a.activityType === "gene_view");
-  const normalizedSearches = recentSearches.map(normalizeSearchHistoryEntry);
+  // Collapse consecutive identical queries so the recent-searches list doesn't
+  // show the same term repeated back-to-back (e.g. several "Cystic Fibrosis").
+  const normalizedSearches = recentSearches
+    .map(normalizeSearchHistoryEntry)
+    .filter((s, i, arr) => i === 0 || (s.query || '').toLowerCase() !== (arr[i - 1].query || '').toLowerCase());
 
   if (isLoading) {
     return (
@@ -606,8 +611,20 @@ Keep each insight under 50 words, practical, and personalized.`;
                     Personalized Insights
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-3 text-sm text-slate-800 leading-relaxed whitespace-pre-line">
-                  {personalizedInsights}
+                <CardContent className="text-sm text-slate-800 leading-relaxed">
+                  {/* Render markdown so bold and lists in the AI text are
+                      formatted instead of showing literal asterisks. */}
+                  <ReactMarkdown
+                    components={{
+                      p: ({ children }) => <p className="mb-3">{children}</p>,
+                      strong: ({ children }) => <strong className="font-semibold text-indigo-900">{children}</strong>,
+                      ul: ({ children }) => <ul className="list-disc ml-5 mb-3 space-y-1">{children}</ul>,
+                      ol: ({ children }) => <ol className="list-decimal ml-5 mb-3 space-y-1">{children}</ol>,
+                      li: ({ children }) => <li>{children}</li>,
+                    }}
+                  >
+                    {personalizedInsights}
+                  </ReactMarkdown>
                 </CardContent>
               </Card>
             )}

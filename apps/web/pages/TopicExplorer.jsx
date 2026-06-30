@@ -14,6 +14,33 @@ import { Badge } from '@/components/ui/badge';
 import { ArrowLeft, BookOpen, Image, MessageSquare, HelpCircle, RefreshCw, Send } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 
+/**
+ * Memoized chat bubble. ReactMarkdown parsing is synchronous and runs on the
+ * main thread; rendering every message's markdown on each parent re-render
+ * (e.g. on every keystroke in the chat input) blocked the thread and caused the
+ * renderer timeouts. Memoizing on `msg` means a bubble only re-parses when its
+ * own content changes.
+ */
+const ChatBubble = React.memo(function ChatBubble({ msg }) {
+  return (
+    <div className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-slide-up`}>
+      <div className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
+        msg.role === 'user'
+          ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-500/20'
+          : 'bg-white border border-slate-200 text-slate-700 shadow-sm'
+      }`}>
+        {msg.role === 'assistant' ? (
+          <div className="prose prose-sm max-w-none prose-p:my-1 prose-li:my-0">
+            <ReactMarkdown>{msg.content}</ReactMarkdown>
+          </div>
+        ) : (
+          msg.content
+        )}
+      </div>
+    </div>
+  );
+});
+
 export default function TopicExplorer() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -180,24 +207,7 @@ export default function TopicExplorer() {
                   </div>
                 )}
                 {chatMessages.map((msg, i) => (
-                  <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-slide-up`}>
-                    <div className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
-                      msg.role === 'user'
-                        ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-500/20'
-                        : 'bg-white border border-slate-200 text-slate-700 shadow-sm'
-                    }`}>
-                      {msg.role === 'assistant' ? (
-                        // Render the tutor's markdown (bold, lists, etc.) like the
-                        // Robert assistant does — otherwise **Purines** showed as
-                        // literal asterisks.
-                        <div className="prose prose-sm max-w-none prose-p:my-1 prose-li:my-0">
-                          <ReactMarkdown>{msg.content}</ReactMarkdown>
-                        </div>
-                      ) : (
-                        msg.content
-                      )}
-                    </div>
-                  </div>
+                  <ChatBubble key={i} msg={msg} />
                 ))}
                 {loading.chat && (
                   <div className="flex justify-start animate-fade-in">

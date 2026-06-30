@@ -252,6 +252,11 @@ export default function PathwayEnrichmentViz({ genes = [], userEducationLevel = 
   };
 
   const handleWheel = (e) => {
+    // Only hijack the wheel to zoom when the user explicitly holds Ctrl/Cmd.
+    // Previously this always called preventDefault(), so a plain scroll over the
+    // canvas was swallowed and the (~16,000px tall) page couldn't scroll past
+    // the first chart. A bare wheel now falls through to normal page scrolling.
+    if (!e.ctrlKey && !e.metaKey) return;
     e.preventDefault();
     const delta = e.deltaY > 0 ? 0.9 : 1.1;
     setZoom(prev => Math.max(0.5, Math.min(3, prev * delta)));
@@ -382,7 +387,13 @@ export default function PathwayEnrichmentViz({ genes = [], userEducationLevel = 
                 onMouseLeave={() => { handleMouseUp(); setHoveredPathway(null); }}
                 onWheel={handleWheel}
               />
-              
+
+              {/* Discoverability hint: wheel now scrolls the page, so tell users
+                  how to zoom (buttons below also work). */}
+              <div className="absolute top-2 left-2 bg-white/80 backdrop-blur px-2 py-1 rounded text-[11px] text-slate-500 border border-slate-200 pointer-events-none">
+                Ctrl/⌘ + scroll to zoom · drag to pan
+              </div>
+
               {/* Tooltip */}
               {hoveredData && (
                 <div className="absolute top-2 right-2 bg-white p-3 rounded-lg shadow-xl border-2 border-purple-300 max-w-sm z-10">

@@ -8,7 +8,7 @@ import MelissaBanner from "./components/MelissaBanner";
 import PlatformCompatibility from "./components/PlatformCompatibility";
 import UniversalLinkHandler from "./components/UniversalLinkHandler";
 import { getBrowserEnvironment } from "./components/shared/safeNavigate";
-import { Search, User, Crown, History, Home, FileText, Heart, Shield, BarChart3, Microscope, LayoutDashboard, MessageSquare, Building2, ShieldOff, Mail, Crown as CrownIcon, Users, Sparkles, Server, Code2, BookOpen, GraduationCap, HelpCircle, Route } from "lucide-react";
+import { Search, User, Crown, History, FileText, Heart, Shield, BarChart3, Microscope, LayoutDashboard, MessageSquare, Building2, ShieldOff, Mail, Crown as CrownIcon, Users, Sparkles, Server, Code2, BookOpen, GraduationCap, HelpCircle, Route } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -44,8 +44,9 @@ const learnNav = [
 ];
 
 // "I want to find genes / ask questions."
+// (No "Home" entry — /home only redirects to /dashboard, which already has its
+// own nav item under Research; two links to one page was just confusing.)
 const discoverNav = [
-  { title: "Home", url: createPageUrl("Home"), icon: Home },
   { title: "Gene Search", url: createPageUrl("Search"), icon: Search },
   { title: "AI Assistants", url: createPageUrl("AIAssistants"), icon: MessageSquare },
   { title: "Study Tutor", url: createPageUrl("Anastasia"), icon: Heart },
@@ -70,6 +71,10 @@ const myDataNav = [
 const accountNav = [
   { title: "Profile", url: createPageUrl("Profile"), icon: User },
   { title: "Premium", url: createPageUrl("Premium"), icon: Crown },
+  // Institutional licensing is gated on owning a license, not on the admin role
+  // (see pages.config.js), so it belongs here — discoverable by actual license
+  // owners — not mislabeled as an admin "Teams" tool in the admin section.
+  { title: "Institutional Licensing", url: createPageUrl("InstitutionalAdmin"), icon: Building2 },
   { title: "Contact Support", url: createPageUrl("ContactSupport"), icon: Mail },
 ];
 
@@ -77,15 +82,16 @@ const accountNav = [
 // NOTE: hiding nav is UX sugar only; the backend (requireRole / requireSuperAdmin)
 // is the real authorization boundary. See services/api/src/routes/admin.js.
 const adminNav = [
-  { title: "License Manager", url: createPageUrl("InstitutionalAdmin"), icon: Building2, badge: "Teams" },
   { title: "Analytics", url: createPageUrl("AdminAnalytics"), icon: BarChart3 },
   { title: "Users Log", url: createPageUrl("UsersLog"), icon: Users },
   { title: "User Messages", url: createPageUrl("AdminMessages"), icon: MessageSquare },
   { title: "Banned Users", url: createPageUrl("BannedUsers"), icon: ShieldOff },
   { title: "Newsletter Subs", url: createPageUrl("AxiomNewsletter"), icon: Mail },
-  { title: "Function Tester", url: createPageUrl("AdminFunctionTester"), icon: Server },
-  { title: "Function Reviewer", url: createPageUrl("FunctionReviewer"), icon: Code2 },
-  { title: "Access Grants", url: createPageUrl("SuperAdminSetup"), icon: Crown },
+  // Developer diagnostics that enumerate the API surface + privilege/access
+  // management — super_admin only (matches superAdminPages routing in App.jsx).
+  { title: "Function Tester", url: createPageUrl("AdminFunctionTester"), icon: Server, superAdminOnly: true },
+  { title: "Function Reviewer", url: createPageUrl("FunctionReviewer"), icon: Code2, superAdminOnly: true },
+  { title: "Access Grants", url: createPageUrl("SuperAdminSetup"), icon: Crown, superAdminOnly: true },
 ];
 
 const ACCENT_COLORS = {

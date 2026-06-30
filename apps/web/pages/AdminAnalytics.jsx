@@ -179,6 +179,17 @@ export default function AdminAnalytics() {
 
   const COLORS = ['#3b82f6', '#8b5cf6', '#ec4899', '#10b981', '#f59e0b', '#ef4444', '#06b6d4', '#84cc16'];
 
+  // A degenerate dataset (empty, or a bar chart of all-zeros) renders as an
+  // empty box or a flat collapsed line that reads as "broken". Show an explicit
+  // empty-state instead so the chart area always communicates clearly.
+  const ChartEmpty = ({ label = 'No data yet' }) => (
+    <div className="h-[300px] flex flex-col items-center justify-center text-slate-400">
+      <BarChart3 className="w-10 h-10 mb-2 text-slate-300" />
+      <p className="text-sm">{label}</p>
+    </div>
+  );
+  const hasValues = (rows) => Array.isArray(rows) && rows.some((r) => (r?.value || 0) > 0);
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-6">
@@ -325,6 +336,7 @@ export default function AdminAnalytics() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
+                  {hasValues(activityTypeDistribution) ? (
                   <ResponsiveContainer width="100%" height={300}>
                     <PieChart>
                       <Pie
@@ -344,6 +356,7 @@ export default function AdminAnalytics() {
                       <Tooltip />
                     </PieChart>
                   </ResponsiveContainer>
+                  ) : <ChartEmpty label="No activity recorded yet" />}
                 </CardContent>
               </Card>
 
@@ -356,6 +369,7 @@ export default function AdminAnalytics() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
+                  {hasValues(searchTypeDistribution) ? (
                   <ResponsiveContainer width="100%" height={300}>
                     <PieChart>
                       <Pie
@@ -368,12 +382,14 @@ export default function AdminAnalytics() {
                         fill="#8884d8"
                         dataKey="value"
                       >
-                        <Cell fill="#10b981" />
-                        <Cell fill="#3b82f6" />
+                        {searchTypeDistribution.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                        ))}
                       </Pie>
                       <Tooltip />
                     </PieChart>
                   </ResponsiveContainer>
+                  ) : <ChartEmpty label="No searches recorded yet" />}
                 </CardContent>
               </Card>
 
@@ -386,15 +402,17 @@ export default function AdminAnalytics() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
+                  {hasValues(aiUsageStats) ? (
                   <ResponsiveContainer width="100%" height={300}>
                     <BarChart data={aiUsageStats}>
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="name" />
-                      <YAxis />
+                      <YAxis allowDecimals={false} />
                       <Tooltip />
                       <Bar dataKey="value" fill="#6366f1" />
                     </BarChart>
                   </ResponsiveContainer>
+                  ) : <ChartEmpty label="No AI chats recorded yet" />}
                 </CardContent>
               </Card>
             </div>

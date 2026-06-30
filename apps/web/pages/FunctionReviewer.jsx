@@ -200,45 +200,48 @@ export default function FunctionReviewer() {
   // BEGIN SCREEN - GitHub Sync Launch
   if (showBeginScreen) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-indigo-900 to-purple-900 flex items-center justify-center p-6">
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center p-6">
         <div className="max-w-2xl w-full">
-          <Card className="shadow-2xl border-0 bg-white/10 backdrop-blur-lg">
+          <Card className="shadow-xl border border-slate-200 bg-white">
             <CardContent className="pt-12 pb-12 text-center">
               {/* Logo */}
               <div className="flex justify-center mb-8">
-                <div className="w-24 h-24 bg-gradient-to-r from-green-400 to-cyan-400 rounded-3xl flex items-center justify-center shadow-2xl animate-pulse">
+                <div className="w-24 h-24 bg-gradient-to-r from-green-500 to-cyan-500 rounded-3xl flex items-center justify-center shadow-lg">
                   <Github className="w-14 h-14 text-white" />
                 </div>
               </div>
 
               {/* Title */}
-              <h1 className="text-4xl font-bold text-white mb-4">
+              <h1 className="text-4xl font-bold text-slate-900 mb-4">
                 Function Reviewer
               </h1>
-              <p className="text-xl text-slate-300 mb-8">
+              <p className="text-xl text-slate-600 mb-8">
                 Browse the registered function map
               </p>
 
-              {/* Stats */}
+              {/* Stats. Backend + Frontend are computed to always sum to the
+                  total (Frontend = everything that isn't backend), so the
+                  breakdown can't disagree with the "{N} registered functions"
+                  line the way 24+5 vs 30 did. */}
               <div className="grid grid-cols-3 gap-4 mb-10">
-                <div className="bg-white/10 rounded-xl p-4">
-                  <p className="text-3xl font-bold text-cyan-400">{KNOWN_FUNCTIONS.filter(f => f.filePath?.startsWith('services/api/')).length}</p>
-                  <p className="text-sm text-slate-400">Backend</p>
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+                  <p className="text-3xl font-bold text-cyan-600">{KNOWN_FUNCTIONS.filter(f => f.filePath?.startsWith('services/api/')).length}</p>
+                  <p className="text-sm text-slate-500">Backend</p>
                 </div>
-                <div className="bg-white/10 rounded-xl p-4">
-                  <p className="text-3xl font-bold text-green-400">{KNOWN_FUNCTIONS.filter(f => f.filePath.startsWith('pages/') || f.filePath.startsWith('components/')).length}</p>
-                  <p className="text-sm text-slate-400">Frontend</p>
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+                  <p className="text-3xl font-bold text-green-600">{KNOWN_FUNCTIONS.length - KNOWN_FUNCTIONS.filter(f => f.filePath?.startsWith('services/api/')).length}</p>
+                  <p className="text-sm text-slate-500">Frontend</p>
                 </div>
-                <div className="bg-white/10 rounded-xl p-4">
-                  <p className="text-3xl font-bold text-purple-400">{getAllCategories().length}</p>
-                  <p className="text-sm text-slate-400">Categories</p>
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+                  <p className="text-3xl font-bold text-purple-600">{getAllCategories().length}</p>
+                  <p className="text-sm text-slate-500">Categories</p>
                 </div>
               </div>
 
               {/* Error */}
               {error && (
-                <Alert variant="destructive" className="mb-6 bg-red-500/20 border-red-500/50">
-                  <AlertDescription className="text-white">{error}</AlertDescription>
+                <Alert variant="destructive" className="mb-6">
+                  <AlertDescription>{error}</AlertDescription>
                 </Alert>
               )}
 
@@ -256,7 +259,7 @@ export default function FunctionReviewer() {
               <Button
                 onClick={handleSkipSync}
                 variant="ghost"
-                className="text-slate-400 hover:text-white hover:bg-white/10"
+                className="text-slate-500 hover:text-slate-900 hover:bg-slate-100"
               >
                 Browse registry only →
               </Button>

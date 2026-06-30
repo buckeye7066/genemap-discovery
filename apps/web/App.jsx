@@ -9,7 +9,7 @@ import { pagesConfig } from './pages.config'
 import { BrowserRouter as Router, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import PageNotFound from './lib/PageNotFound';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
-import { isAdminUser } from '@/lib/roles';
+import { isAdminUser, isSuperAdmin } from '@/lib/roles';
 import { EducationLevelProvider } from '@/lib/EducationLevelContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import LoadingSpinner from '@/components/LoadingSpinner';
@@ -18,11 +18,12 @@ const VisualEditAgent = import.meta.env.DEV
   ? lazyWithRetry(() => import('@/lib/VisualEditAgent'))
   : () => null;
 
-const { Pages, Layout, mainPage, publicPages = [], adminPages = [] } = pagesConfig;
+const { Pages, Layout, mainPage, publicPages = [], adminPages = [], superAdminPages = [] } = pagesConfig;
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
 const MainPage = mainPageKey ? Pages[mainPageKey] : () => null;
 const publicPageKeys = new Set(publicPages);
 const adminPageKeys = new Set(adminPages);
+const superAdminPageKeys = new Set(superAdminPages);
 
 const LayoutWrapper = ({ children, currentPageName }) => Layout ?
   <Layout currentPageName={currentPageName}>{children}</Layout>
@@ -32,6 +33,7 @@ const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, isAuthenticated, user } = useAuth();
   const location = useLocation();
   const userIsAdmin = isAdminUser(user);
+  const userIsSuperAdmin = isSuperAdmin(user);
 
   if (isLoadingPublicSettings || isLoadingAuth) {
     return <LoadingSpinner />;
@@ -86,7 +88,8 @@ const AuthenticatedApp = () => {
             key={path}
             path={`/${path.toLowerCase()}`}
             element={
-              adminPageKeys.has(path) && !userIsAdmin ? (
+              (adminPageKeys.has(path) && !userIsAdmin) ||
+              (superAdminPageKeys.has(path) && !userIsSuperAdmin) ? (
                 <Navigate to="/" replace />
               ) : (
                 <LayoutWrapper currentPageName={path}>

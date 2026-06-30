@@ -6,8 +6,10 @@ let prisma;
 
 const ADMIN = { userId: 'admin-1', email: 'admin@example.com', role: 'admin' };
 const REGULAR = { userId: 'user-1', email: 'user@example.com', role: 'user' };
+const SUPER = { userId: 'super-admin-1', email: 'superadmin@example.com', role: 'super_admin' };
 const adminCookie = authCookie(ADMIN);
 const userCookie = authCookie(REGULAR);
+const superCookie = authCookie(SUPER);
 
 beforeAll(async () => {
   prisma = createPrismaMock();
@@ -25,6 +27,7 @@ beforeEach(() => {
   // existing assertions on user counts still hold while routing works.
   seedAuthUser(prisma, ADMIN);
   seedAuthUser(prisma, REGULAR);
+  seedAuthUser(prisma, SUPER);
 });
 
 // ─── Access Control ──────────────────────────────────────────────────────────
@@ -78,9 +81,9 @@ describe('GET /admin/users', () => {
 
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body);
-    // 2 pushed + 2 auth-seeded baseline (admin-1 + user-1).
-    expect(body.users).toHaveLength(4);
-    expect(body.total).toBe(4);
+    // 2 pushed + 3 auth-seeded baseline (admin-1 + user-1 + super-admin-1).
+    expect(body.users).toHaveLength(5);
+    expect(body.total).toBe(5);
   });
 });
 
@@ -263,8 +266,8 @@ describe('GET /admin/analytics', () => {
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body);
     expect(body.stats).toBeDefined();
-    // 2 pushed + 2 auth-seeded baseline (admin-1 + user-1).
-    expect(body.stats.totalUsers).toBe(4);
+    // 2 pushed + 3 auth-seeded baseline (admin-1 + user-1 + super-admin-1).
+    expect(body.stats.totalUsers).toBe(5);
     expect(body.stats.activeSubscriptions).toBe(1);
     expect(body.recentActivity).toBeDefined();
   });
@@ -433,6 +436,21 @@ describe('POST /admin/pre-ban', () => {
 // ─── POST /admin/grant-premium ──────────────────────────────────────────────
 
 describe('POST /admin/grant-premium', () => {
+  // Granting premium is a revenue bypass — now super_admin-only. The existing
+  // success tests are written against `adminCookie`; shadow it with the super
+  // cookie so they exercise the authorized path without per-test edits.
+  const adminCookie = superCookie;
+
+  it('denies a plain admin (403) — revenue bypass is super_admin-only', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/admin/grant-premium',
+      headers: { cookie: authCookie(ADMIN) },
+      payload: { userId: 'target-user' },
+    });
+    expect(res.statusCode).toBe(403);
+  });
+
   it('should create a subscription for the target user', async () => {
     const res = await app.inject({
       method: 'POST',
@@ -469,6 +487,7 @@ describe('POST /admin/grant-premium', () => {
 
 describe('POST /admin/grant-free-period', () => {
   const DAY = 24 * 60 * 60 * 1000;
+  const adminCookie = superCookie; // comp grants are super_admin-only now
 
   beforeEach(() => {
     prisma._store.user.push({ id: 'comp-target', email: 'comp@test.com', role: 'user' });
@@ -614,6 +633,7 @@ describe('POST /admin/grant-free-period', () => {
 
 describe('POST /admin/revoke-free-period', () => {
   const DAY = 24 * 60 * 60 * 1000;
+  const adminCookie = superCookie; // comp revokes are super_admin-only now
 
   it('cancels a single user\'s comp but leaves a paid sub intact', async () => {
     prisma._store.user.push({ id: 'rev-target', email: 'rev@test.com', role: 'user' });

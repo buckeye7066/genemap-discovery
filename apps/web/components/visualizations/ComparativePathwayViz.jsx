@@ -298,6 +298,10 @@ export default function ComparativePathwayViz({ geneSet1 = [], geneSet2 = [], la
   };
 
   const handleWheel = (e) => {
+    // Zoom only when Ctrl/Cmd is held; a plain wheel must scroll the page.
+    // See PathwayEnrichmentViz: an unconditional preventDefault() trapped the
+    // page scroll on this very tall hub.
+    if (!e.ctrlKey && !e.metaKey) return;
     e.preventDefault();
     const delta = e.deltaY > 0 ? 0.9 : 1.1;
     setZoom(prev => Math.max(0.5, Math.min(3, prev * delta)));
@@ -421,6 +425,10 @@ export default function ComparativePathwayViz({ geneSet1 = [], geneSet2 = [], la
                 onMouseLeave={() => { handleMouseUp(); setHoveredSection(null); }}
                 onWheel={handleWheel}
               />
+
+              <div className="absolute top-2 left-2 bg-white/80 backdrop-blur px-2 py-1 rounded text-[11px] text-slate-500 border border-slate-200 pointer-events-none">
+                Ctrl/⌘ + scroll to zoom · drag to pan
+              </div>
 
               {/* Tooltip */}
               {tooltipContent && (

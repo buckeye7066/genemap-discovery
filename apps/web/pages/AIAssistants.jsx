@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, Suspense } from "react";
 import { lazyWithRetry } from "@/lib/lazyWithRetry";
 import { apiClient } from "@genemap/shared";
 import { useAuth } from "../lib/AuthContext";
+import { usePersistConversation } from "../lib/usePersistConversation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -49,6 +50,16 @@ export default function AIAssistantsPage() {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // Persist each chat so it's counted in admin analytics (AI Chats / AI
+  // Assistant Usage) and resumable. Keyed by the active assistant so Robert and
+  // Anastasia chats are recorded under the right type.
+  const persistConversation = usePersistConversation(activeAssistant);
+  useEffect(() => {
+    if (messages.length >= 2 && messages[messages.length - 1]?.role === 'assistant') {
+      persistConversation(messages);
+    }
+  }, [messages, persistConversation]);
 
   useEffect(() => {
     // Reset messages when switching assistants
@@ -382,9 +393,11 @@ Please provide a comprehensive response.`;
                 Conversation with {activeAssistant === 'robert' ? 'Robert' : 'Anastasia'}
               </CardTitle>
             </CardHeader>
-            <CardContent className="p-0">
+            {/* Bounded flex column: scrollable message list + pinned input, so
+                the input and the latest message are always both visible. */}
+            <CardContent className="p-0 flex flex-col h-[600px]">
               {/* Messages */}
-              <div className="h-[500px] overflow-y-auto p-4 space-y-4">
+              <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4">
                 {messages.map((message, idx) => (
                   <div
                     key={idx}
@@ -488,7 +501,7 @@ Please provide a comprehensive response.`;
 
               {/* Quick Prompts */}
               {messages.length <= 1 && !isLoading && (
-                <div className="p-4 border-t bg-slate-50">
+                <div className="p-4 border-t bg-slate-50 flex-shrink-0">
                   <p className="text-xs text-slate-600 mb-2">
                     {activeAssistant === 'robert' ? 'Research questions:' : 'Try asking:'}
                   </p>
@@ -511,7 +524,7 @@ Please provide a comprehensive response.`;
               )}
 
               {/* Input */}
-              <form onSubmit={handleSendMessage} className="p-4 border-t">
+              <form onSubmit={handleSendMessage} className="p-4 border-t flex-shrink-0">
                 <div className="flex gap-2">
                   <Input
                     value={inputMessage}

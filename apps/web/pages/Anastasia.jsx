@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, memo } from "react";
 import { apiClient } from "@genemap/shared";
 import { useAuth } from "../lib/AuthContext";
+import { usePersistConversation } from "../lib/usePersistConversation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -149,6 +150,15 @@ export default function AnastasiaPage() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  // Persist the conversation after each assistant reply so it's counted in
+  // admin analytics (AI Chats / AI Assistant Usage) and can be resumed.
+  const persistConversation = usePersistConversation('anastasia');
+  useEffect(() => {
+    if (messages.length >= 2 && messages[messages.length - 1]?.role === 'assistant') {
+      persistConversation(messages);
+    }
+  }, [messages, persistConversation]);
 
   const systemPromptBase = useMemo(() => `You are Anastasia, a warm, witty, and incredibly knowledgeable genetic counseling AI with PhD-level expertise but a special gift for making genetics understandable and even fun!
 
@@ -408,8 +418,11 @@ ${userMessage}
                 Chat with Anastasia
               </CardTitle>
             </CardHeader>
-            <CardContent className="p-0">
-              <div className="h-[500px] overflow-y-auto p-4 space-y-4">
+            {/* Bounded flex column: messages scroll in the middle, the input is
+                pinned at the bottom so you never have to scroll between the
+                latest message and the input box. */}
+            <CardContent className="p-0 flex flex-col h-[600px]">
+              <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4">
                 {messages.map((message, idx) => (
                   <ChatMessage key={idx} message={message} />
                 ))}
@@ -429,7 +442,7 @@ ${userMessage}
               </div>
 
               {messages.length <= 1 && !isLoading && (
-                <div className="p-4 border-t bg-slate-50">
+                <div className="p-4 border-t bg-slate-50 flex-shrink-0">
                   <p className="text-xs text-slate-600 mb-2">Try asking:</p>
                   <div className="flex flex-wrap gap-2">
                     {QUICK_PROMPTS.map((prompt, idx) => (
@@ -447,7 +460,7 @@ ${userMessage}
                 </div>
               )}
 
-              <form onSubmit={handleSendMessage} className="p-4 border-t">
+              <form onSubmit={handleSendMessage} className="p-4 border-t flex-shrink-0">
                 <div className="flex gap-2">
                   <Input
                     value={inputMessage}

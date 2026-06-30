@@ -76,20 +76,30 @@ export const PAGES = {
 // still can't leak admin UI. (InstitutionalAdmin is intentionally excluded: it
 // gates on owning an institutional license, not on the admin role.)
 export const adminPages = [
-    "SuperAdminSetup",
     "UsersLog",
     "AdminAnalytics",
     "AdminMessages",
     "BannedUsers",
+    "AxiomNewsletter",
+];
+
+// Super-admin ONLY. These either change access controls / grant privileges
+// (SuperAdminSetup) or are developer diagnostics that enumerate the backend
+// API surface (Function Tester/Reviewer) and must not ship to plain admins.
+// Gated to super_admin in the router (App.jsx) and hidden from a plain admin's
+// nav (Layout.jsx `superAdminOnly`). A page here is intentionally NOT in
+// adminPages, so the only gate that applies is the stricter super_admin one.
+export const superAdminPages = [
+    "SuperAdminSetup",
     "AdminFunctionTester",
     "FunctionReviewer",
-    "AxiomNewsletter",
 ];
 
 export const pagesConfig = {
     mainPage: "LearnGenetics",
     publicPages: ["Login"],
     adminPages,
+    superAdminPages,
     Pages: PAGES,
     Layout: __Layout,
 };

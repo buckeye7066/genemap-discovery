@@ -367,7 +367,7 @@ export default function UsersLogPage() {
                         <div className="flex-1">
                           <div className="flex items-center gap-2 mb-2">
                             <span className="font-semibold text-slate-900">
-                              {user.fullName || user.full_name || "No name"}
+                              {user.fullName || user.full_name || user.email?.split("@")[0] || "Unnamed user"}
                             </span>
                             <Badge variant={user.role === "admin" ? "default" : "secondary"}>
                               {user.role || "user"}
@@ -399,15 +399,19 @@ export default function UsersLogPage() {
                                 Joined {format(new Date(user.created_date), "MMM d, yyyy")}
                               </div>
                             )}
+                            {/* "Last seen" describes usage activity; it's distinct
+                                from the account-status badge above ("Active" = not
+                                banned). Previously this said "Never active", which
+                                read as a contradiction next to an "Active" badge. */}
                             {(user.lastActiveAt || user.last_active) ? (
                               <div className="flex items-center gap-2 text-green-600">
                                 <UserCheck className="w-4 h-4" />
-                                Last active {formatEST(user.lastActiveAt || user.last_active)}
+                                Last seen {formatEST(user.lastActiveAt || user.last_active)}
                               </div>
                             ) : (
                               <div className="flex items-center gap-2 text-slate-400">
                                 <UserX className="w-4 h-4" />
-                                Never active
+                                No activity yet
                               </div>
                             )}
                           </div>

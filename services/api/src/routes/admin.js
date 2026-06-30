@@ -432,9 +432,11 @@ export default async function adminRoutes(fastify) {
     };
   });
 
-  // Granting premium access does not change role boundaries — keep accessible
-  // to admin and super_admin, but audit it as a security-relevant change.
-  fastify.post('/grant-premium', async (request) => {
+  // Granting premium = a revenue bypass ("grant yourself premium without
+  // payment"), so reserve it to super_admin — same boundary as grant-admin.
+  // The Access Grants UI that calls this is itself super_admin-only now, but the
+  // server is the real gate.
+  fastify.post('/grant-premium', { preHandler: requireSuperAdmin }, async (request) => {
     const { userId } = request.body || {};
     if (!userId) throw new ValidationError('userId is required');
 
@@ -467,7 +469,7 @@ export default async function adminRoutes(fastify) {
   // time, and it never touches a Stripe-owned subscription (those are driven by
   // webhooks). Expiry is enforced by checkEducationEntitlement honoring
   // currentPeriodEnd.
-  fastify.post('/grant-free-period', async (request) => {
+  fastify.post('/grant-free-period', { preHandler: requireSuperAdmin }, async (request) => {
     const { userId, period, scope } = request.body || {};
 
     const days = FREE_PERIOD_DAYS[period];
@@ -538,7 +540,7 @@ export default async function adminRoutes(fastify) {
   // End a complimentary period early — for one user, or all users at once.
   // Only admin-granted comps are canceled; paid Stripe subscriptions are
   // untouched and continue to be driven by webhooks.
-  fastify.post('/revoke-free-period', async (request) => {
+  fastify.post('/revoke-free-period', { preHandler: requireSuperAdmin }, async (request) => {
     const { userId, scope } = request.body || {};
 
     if (scope === 'all') {

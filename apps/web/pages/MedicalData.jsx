@@ -565,6 +565,20 @@ Return structured analysis with all sections.`;
           </p>
         </div>
 
+        {/* Privacy & consent notice — sensitive health data. Shown above the
+            fold (before any upload control) to match the VCF page's standard
+            and set expectations before a user uploads PHI. */}
+        <Alert className="mb-6 bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200">
+          <Shield className="h-4 w-4 text-blue-600" />
+          <AlertDescription className="text-blue-900">
+            <strong>Your privacy & how this works:</strong> Files are encrypted at rest and visible only to you.
+            Uploaded content is analyzed by AI to generate a summary and is <strong>not</strong> shared or sold.
+            GeneMap is for <strong>research and education only</strong> — AI summaries are not a medical diagnosis and
+            are not a substitute for professional medical advice. Do not upload another person's records without their
+            consent. By uploading, you consent to AI analysis of the file; you can delete any record at any time.
+          </AlertDescription>
+        </Alert>
+
         {error && (
           <Alert variant="destructive" className="mb-6">
             <AlertCircle className="h-4 w-4" />

@@ -424,11 +424,14 @@ export interface AdminAnalyticsStats {
   totalConversations: number;
   totalMedicalRecords: number;
   totalGeneSets: number;
+  totalActivities: number;
 }
 
 export interface AdminAnalytics {
   stats: AdminAnalyticsStats;
   recentActivity: unknown[];
+  recentSearches: unknown[];
+  recentConversations: unknown[];
 }
 
 // The admin API emits the same snake_case contract as /auth/me (a Base44
