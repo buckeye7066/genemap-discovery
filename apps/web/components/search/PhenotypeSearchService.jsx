@@ -27,20 +27,104 @@ export class PhenotypeSearchService {
 
       const phenotypeAnalysis = await this.analyzePhenotype(phenotypeQuery);
       const candidateGenes = await this.findCandidateGenes(phenotypeAnalysis, effectivePremium, phenotypeQuery);
+
+      // Kick off the authoritative gene lookup (MyGene.info → Ensembl/NCBI) in
+      // PARALLEL with the slow LLM enrichment, so verified coordinates/IDs are
+      // usually ready by the time results render — no added perceived latency.
+      const symbols = candidateGenes.map((g) => g.symbol).filter(Boolean);
+      const authoritativeGenesPromise = this.safeEnrich(symbols, []);
+
       const enrichedGenes = await this.enrichGeneData(candidateGenes, effectivePremium, userPreferences);
-      
+
+      const { genes: authGenes } = await authoritativeGenesPromise;
+      // The LLM-produced phenotype names are only known now — validate them
+      // against HPO so we never show a fabricated HP: id.
+      const phenotypeNames = this.collectPhenotypeNames(enrichedGenes);
+      const { phenotypes: authHpo } = await this.safeEnrich([], phenotypeNames);
+
+      const verifiedGenes = this.applyAuthoritativeData(enrichedGenes, authGenes, authHpo);
+
       return {
         query: phenotypeQuery,
-        candidateGenes: enrichedGenes,
+        candidateGenes: verifiedGenes,
         isPremium: effectivePremium,
         hpoTerms: phenotypeAnalysis.hpoTerms || [],
         queryType: phenotypeAnalysis.queryType || 'phenotype'
       };
-      
+
     } catch (error) {
       log.error("Search error:", error);
       throw new Error(getErrorMessage(error) || "Failed to search for genes. Please try again.");
     }
+  }
+
+  // Call the authoritative-enrichment endpoint, never throwing: if it's slow or
+  // unavailable, the search proceeds with the (clearly-labeled) AI data.
+  static async safeEnrich(symbols, phenotypes) {
+    if ((!symbols || symbols.length === 0) && (!phenotypes || phenotypes.length === 0)) {
+      return { genes: {}, phenotypes: {} };
+    }
+    try {
+      const res = await apiClient.enrichGenomicData(symbols, phenotypes);
+      return { genes: res?.genes || {}, phenotypes: res?.phenotypes || {} };
+    } catch (err) {
+      log.debug('Authoritative enrichment unavailable:', err?.message);
+      return { genes: {}, phenotypes: {} };
+    }
+  }
+
+  // Unique phenotype names worth validating (top few per gene; bounded overall).
+  static collectPhenotypeNames(genes) {
+    const names = new Set();
+    for (const g of genes || []) {
+      for (const p of (g.phenotypes || []).slice(0, 6)) {
+        if (p && typeof p.name === 'string' && p.name.trim()) names.add(p.name.trim());
+      }
+    }
+    return [...names].slice(0, 60);
+  }
+
+  static honestSources(verified) {
+    return verified ? ['Ensembl/NCBI (verified)', 'AI-suggested'] : ['AI-suggested'];
+  }
+
+  // Overlay authoritative gene records + validated HPO ids onto the AI results,
+  // tagging provenance so the UI can show what's verified vs AI-estimated.
+  static applyAuthoritativeData(genes, authGenes = {}, authHpo = {}) {
+    const hpoChecked = Object.keys(authHpo).length > 0;
+    return (genes || []).map((g) => {
+      const rec = authGenes[g.symbol];
+      const verified = Boolean(rec && rec.verified);
+      const merged = {
+        ...g,
+        coordinatesVerified: verified,
+        verifiedSource: verified ? rec.source : null,
+        sources: this.honestSources(verified),
+      };
+      if (verified) {
+        merged.chromosome = rec.chromosome ?? merged.chromosome;
+        merged.start = rec.start ?? merged.start;
+        merged.end = rec.end ?? merged.end;
+        merged.ensemblId = rec.ensemblId ?? merged.ensemblId;
+        merged.entrezId = rec.entrezId ?? merged.entrezId;
+        merged.name = rec.name || merged.name;
+        merged.genomeBuild = rec.genomeBuild || merged.genomeBuild;
+        merged.mapLocation = rec.mapLocation || merged.mapLocation;
+      }
+      if (Array.isArray(merged.phenotypes)) {
+        merged.hpoChecked = hpoChecked;
+        merged.phenotypes = merged.phenotypes.map((p) => {
+          if (!p || typeof p.name !== 'string') return p;
+          const v = authHpo[p.name.trim().toLowerCase()];
+          if (v && v.verified) return { ...p, hpoId: v.hpoId, hpoVerified: true };
+          // Validation ran but found no match → drop the unverified AI id rather
+          // than present a possibly-fabricated one. If validation didn't run at
+          // all (endpoint unavailable), keep the AI id as-is (still labeled).
+          return { ...p, hpoId: hpoChecked ? null : p.hpoId, hpoVerified: false };
+        });
+      }
+      return merged;
+    });
   }
 
   static getEducationContext(userPreferences) {
@@ -202,7 +286,9 @@ Return 3-8 most relevant candidate genes ranked by evidence strength.
               ...gene,
               genomeBuild: "GRCh38",
               ...enriched,
-              sources: ["MyGene.info", "Ensembl", "HPO", "GWAS", "UniProt", "HPA", "GTEx"],
+              // Honest default; applyAuthoritativeData() upgrades this to
+              // "Ensembl/NCBI (verified)" once real coordinates are resolved.
+              sources: ["AI-suggested"],
               ...premiumData
             };
           } catch (error) {
@@ -215,7 +301,7 @@ Return 3-8 most relevant candidate genes ranked by evidence strength.
               keyTakeaways: [],
               furtherReading: null,
               expressionData: [],
-              sources: ["Literature Review"]
+              sources: ["AI-suggested"]
             };
           }
         })

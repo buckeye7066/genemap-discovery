@@ -271,3 +271,142 @@ export async function searchPhenotypes(query) {
     return { terms: [] };
   }
 }
+
+// ─── Authoritative gene records (MyGene.info → Ensembl/NCBI) ──────────────────
+//
+// Gene-search candidate genes come from an LLM, which can hallucinate
+// coordinates and identifiers. These functions fetch the AUTHORITATIVE record
+// for a symbol from MyGene.info (which aggregates Ensembl + NCBI/Entrez), so the
+// UI can replace AI guesses with real data and label provenance. Everything is
+// cached, batched, and fails soft: a missing/unreachable record yields `null`
+// and the caller keeps the (clearly-labeled) AI value.
+
+const MYGENE_FIELDS = 'symbol,name,entrezgene,ensembl.gene,genomic_pos,map_location,summary';
+const MAX_ENRICH_SYMBOLS = 50;
+
+function firstOf(value) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function toGeneRecord(querySymbol, hit) {
+  const pos = firstOf(hit.genomic_pos) || {};
+  const ensembl = firstOf(hit.ensembl) || {};
+  const chromosome = pos.chr != null && pos.chr !== '' ? String(pos.chr) : null;
+  const start = Number.isFinite(pos.start) ? pos.start : null;
+  const end = Number.isFinite(pos.end) ? pos.end : null;
+  return {
+    symbol: hit.symbol || querySymbol,
+    name: typeof hit.name === 'string' ? hit.name : null,
+    entrezId: hit.entrezgene != null ? String(hit.entrezgene) : null,
+    ensemblId: ensembl.gene || null,
+    chromosome,
+    start,
+    end,
+    genomeBuild: 'GRCh38',
+    mapLocation: typeof hit.map_location === 'string' ? hit.map_location : null,
+    summary: typeof hit.summary === 'string' ? hit.summary : null,
+    source: 'MyGene.info',
+    // "verified" means we actually resolved authoritative coordinates.
+    verified: chromosome != null && start != null && end != null,
+  };
+}
+
+/**
+ * Resolve authoritative gene records for a list of symbols. Returns a map of
+ * the ORIGINAL symbol → record (or null if unresolved). One batched MyGene.info
+ * request for all uncached symbols; per-symbol results (including misses) are
+ * cached so repeat searches are instant.
+ */
+export async function enrichGenes(symbols) {
+  const clean = [
+    ...new Set(
+      (symbols || [])
+        .map((s) => String(s ?? '').trim())
+        .filter(Boolean)
+    ),
+  ].slice(0, MAX_ENRICH_SYMBOLS);
+
+  const result = {};
+  if (clean.length === 0) return result;
+
+  const toFetch = [];
+  for (const sym of clean) {
+    const cached = cache.get(`generec:${sym.toLowerCase()}`);
+    if (cached !== undefined) result[sym] = cached;
+    else toFetch.push(sym);
+  }
+
+  if (toFetch.length > 0) {
+    try {
+      const body = new URLSearchParams({
+        q: toFetch.join(','),
+        scopes: 'symbol',
+        species: 'human',
+        fields: MYGENE_FIELDS,
+      }).toString();
+      const hits = await fetchJSON('https://mygene.info/v3/query', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body,
+      });
+
+      // MyGene returns one entry per query term, in order; a missed term has
+      // `notfound: true`. Keep the first (best-scoring) hit per query symbol.
+      const byQuery = new Map();
+      for (const h of Array.isArray(hits) ? hits : []) {
+        const key = String(h?.query ?? '').toLowerCase();
+        if (key && !h.notfound && !byQuery.has(key)) byQuery.set(key, h);
+      }
+
+      for (const sym of toFetch) {
+        const hit = byQuery.get(sym.toLowerCase());
+        const record = hit ? toGeneRecord(sym, hit) : null;
+        cache.set(`generec:${sym.toLowerCase()}`, record);
+        result[sym] = record;
+      }
+    } catch (err) {
+      console.error('[genomicDatabases] enrichGenes failed:', err.message);
+      // Fail soft: leave unresolved symbols as null so the caller keeps AI data.
+      for (const sym of toFetch) if (!(sym in result)) result[sym] = null;
+    }
+  }
+
+  return result;
+}
+
+const MAX_HPO_TERMS = 80;
+const HPO_CONCURRENCY = 5;
+
+/**
+ * Validate phenotype names against the Human Phenotype Ontology, returning a map
+ * of normalized name → { hpoId, name, verified }. Uses the cached HPO search;
+ * bounded concurrency keeps us well under the public API's rate limits. An
+ * unmatched or failed term yields `verified: false` (the UI then omits the
+ * unverified AI HPO id rather than presenting a fabricated one).
+ */
+export async function validateHpoTerms(names) {
+  const clean = [
+    ...new Set((names || []).map((n) => normalizeQuery(n)).filter(Boolean)),
+  ].slice(0, MAX_HPO_TERMS);
+
+  const out = {};
+  for (let i = 0; i < clean.length; i += HPO_CONCURRENCY) {
+    const batch = clean.slice(i, i + HPO_CONCURRENCY);
+    const settled = await Promise.all(
+      batch.map(async (name) => {
+        const cacheKey = `hpoterm:${name}`;
+        const cached = cache.get(cacheKey);
+        if (cached !== undefined) return [name, cached];
+        const data = await searchPhenotypes(name); // cached + fails soft to { terms: [] }
+        const top = (data?.terms || [])[0];
+        const rec = top && typeof top.id === 'string'
+          ? { hpoId: top.id, name: top.name || name, verified: true }
+          : { hpoId: null, name, verified: false };
+        cache.set(cacheKey, rec);
+        return [name, rec];
+      })
+    );
+    for (const [name, rec] of settled) out[name] = rec;
+  }
+  return out;
+}

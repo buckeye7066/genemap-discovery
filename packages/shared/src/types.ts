@@ -453,6 +453,24 @@ export interface BannedUser {
   pre_banned?: boolean;
 }
 
+// Authoritative gene record resolved from MyGene.info (Ensembl/NCBI) by
+// POST /genomics/enrich. `verified` is true only when real coordinates were
+// resolved; the gene-search UI replaces LLM guesses with these and labels them.
+export interface AuthoritativeGeneRecord {
+  symbol: string;
+  name: string | null;
+  entrezId: string | null;
+  ensemblId: string | null;
+  chromosome: string | null;
+  start: number | null;
+  end: number | null;
+  genomeBuild: string;
+  mapLocation: string | null;
+  summary: string | null;
+  source: string;
+  verified: boolean;
+}
+
 export interface PreBanRequest {
   email?: string;
   phoneNumber?: string;

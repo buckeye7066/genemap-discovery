@@ -47,6 +47,7 @@ import type {
   BannedUser,
   PreBanRequest,
   UnbanOptions,
+  AuthoritativeGeneRecord,
 } from './types.js';
 
 /**
@@ -711,6 +712,25 @@ export class ApiClient {
   }
   lookupGene(symbol: string): Promise<GeneInfo> {
     return this.request(`/genomics/gene/${encodeURIComponent(symbol)}`);
+  }
+  /**
+   * Resolve authoritative gene records (MyGene.info → Ensembl/NCBI) and validate
+   * phenotype names against HPO. Used by gene search to replace LLM-guessed
+   * coordinates/IDs/HPO ids with real data. Fails soft on the server, so a slow
+   * upstream can't hang the search — give it a bounded timeout here too.
+   */
+  enrichGenomicData(
+    symbols: string[],
+    phenotypes: string[] = []
+  ): Promise<{
+    genes: Record<string, AuthoritativeGeneRecord | null>;
+    phenotypes: Record<string, { hpoId: string | null; name: string; verified: boolean }>;
+  }> {
+    return this.request('/genomics/enrich', {
+      method: 'POST',
+      body: JSON.stringify({ symbols, phenotypes }),
+      timeoutMs: 25_000,
+    });
   }
   searchClinVar(query: string): Promise<{ esearchresult?: { idlist?: string[] } } | ClinVarResult[]> {
     return this.request(`/genomics/clinvar/search?q=${encodeURIComponent(query)}`);

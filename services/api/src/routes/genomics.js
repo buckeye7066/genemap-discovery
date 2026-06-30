@@ -6,6 +6,8 @@ import {
   lookupGene,
   searchClinVar,
   searchPhenotypes,
+  enrichGenes,
+  validateHpoTerms,
 } from '../services/genomicDatabases.js';
 import { parseVcfText, enrichVcfVariants, VCF_LIMITS } from '../services/vcf.js';
 import { ValidationError, NotFoundError } from '../utils/errors.js';
@@ -23,6 +25,11 @@ const vcfVariantSchema = z.object({
 
 const vcfEnrichSchema = z.object({
   variants: z.array(vcfVariantSchema).min(1).max(50),
+});
+
+const enrichSchema = z.object({
+  symbols: z.array(z.string().trim().min(1).max(64)).max(50).optional(),
+  phenotypes: z.array(z.string().trim().min(1).max(256)).max(100).optional(),
 });
 
 export default async function genomicsRoutes(fastify) {
@@ -112,5 +119,20 @@ export default async function genomicsRoutes(fastify) {
     if (!q) throw new ValidationError('Query parameter q is required');
     const data = await searchPhenotypes(q);
     return data;
+  });
+
+  // ─── Authoritative enrichment ──────────────────────────────────
+  // Replaces LLM-guessed gene coordinates/IDs with authoritative records
+  // (MyGene.info → Ensembl/NCBI) and validates phenotype names against HPO.
+  // Both inputs are optional so callers can resolve just genes, just HPO
+  // terms, or both in one round trip. Always fails soft (unresolved → null/
+  // unverified) so it can never break the gene search that calls it.
+  fastify.post('/enrich', async (request) => {
+    const { symbols = [], phenotypes = [] } = enrichSchema.parse(request.body || {});
+    const [genes, hpo] = await Promise.all([
+      symbols.length ? enrichGenes(symbols) : Promise.resolve({}),
+      phenotypes.length ? validateHpoTerms(phenotypes) : Promise.resolve({}),
+    ]);
+    return { genes, phenotypes: hpo };
   });
 }
