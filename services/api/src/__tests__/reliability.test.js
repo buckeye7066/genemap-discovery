@@ -3,6 +3,28 @@ import { buildTestApp, createPrismaMock, authCookie } from './setup.js';
 import { parseJsonFromLLM } from '../services/llm.js';
 import { normalizeQuery } from '../services/genomicDatabases.js';
 import { __test as llmInternals } from '../routes/llm.js';
+import { routeLabel } from '../middleware/errorHandler.js';
+
+// ─── routeLabel (no PII to logs / Sentry / owner email) ──────────────────────
+describe('routeLabel', () => {
+  it('prefers the route pattern, which carries no user values', () => {
+    const req = { routeOptions: { url: '/genomics/gene/:symbol' }, url: '/genomics/gene/BRCA1?token=secret' };
+    expect(routeLabel(req)).toBe('/genomics/gene/:symbol');
+  });
+
+  it('strips the query string when no route pattern is available (e.g. 404s)', () => {
+    // request.routerPath was removed in Fastify v5; without routeOptions.url the
+    // old code logged the FULL url incl. query — which can be PII on a medical app.
+    const req = { url: '/genomics/variant/search?q=patient%20phenotype&token=abc' };
+    expect(routeLabel(req)).toBe('/genomics/variant/search');
+    expect(routeLabel(req)).not.toContain('?');
+    expect(routeLabel(req)).not.toContain('phenotype');
+  });
+
+  it('is safe when url is missing', () => {
+    expect(routeLabel({})).toBe('');
+  });
+});
 
 // ─── parseJsonFromLLM ────────────────────────────────────────────────────────
 describe('parseJsonFromLLM', () => {

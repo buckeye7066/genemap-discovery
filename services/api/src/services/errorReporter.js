@@ -8,6 +8,7 @@
 
 import { sendEmail } from './email.js';
 import * as llm from './llm.js';
+import { sanitizeError } from '../utils/errors.js';
 
 // Recipient + admin exclusion ---------------------------------------------
 const OWNER_EMAIL = process.env.ERROR_REPORT_EMAIL || 'dr.johnwhite@axiombiolabs.org';
@@ -261,7 +262,16 @@ export function reportErrorToOwner({ error, source, user, route, method, request
       // NEVER email when the admin/owner is the logged-in user.
       if (userEmail && isAdminEmail(userEmail)) return;
 
-      const err = error || new Error('Unknown error');
+      const rawErr = error || new Error('Unknown error');
+      // Mask secret-bearing tokens in the message BEFORE it flows anywhere
+      // external (the LLM triage prompt and the owner email via Resend). The
+      // stack is kept for debugging — it carries code paths, not user PII, and
+      // the message (the usual secret/PII carrier) is now sanitized.
+      const err = {
+        name: rawErr.name || 'Error',
+        message: sanitizeError(rawErr),
+        stack: rawErr.stack,
+      };
       const now = Date.now();
       const signature = buildSignature(source, route, err);
 

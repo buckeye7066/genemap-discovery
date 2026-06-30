@@ -20,6 +20,21 @@ function isAppError(error) {
   );
 }
 
+/**
+ * A stable route label for logs / owner email / Sentry that NEVER carries user
+ * values. Prefer the route PATTERN (e.g. "/genomics/gene/:symbol"); fall back to
+ * the path with the query string stripped so query params — which can be PII on
+ * a medical app (e.g. ?q=<phenotype>) — never reach the log pipeline or external
+ * error tracking.
+ *
+ * NOTE: `request.routerPath` was REMOVED in Fastify v5; `routeOptions.url` is
+ * the replacement. The old `request.routerPath || request.url` therefore always
+ * fell back to the full URL (incl. query string) on every error.
+ */
+export function routeLabel(request) {
+  return request.routeOptions?.url || String(request.url || '').split('?')[0];
+}
+
 export function errorHandler(error, request, reply) {
   const requestId = request.id;
   const isProd = request.server?.env?.isProduction ?? process.env.NODE_ENV === 'production';
@@ -39,7 +54,7 @@ export function errorHandler(error, request, reply) {
         // layout in production logs that get aggregated to third parties.
         stack: isProd ? undefined : error.stack,
       },
-      route: request.routerPath || request.url,
+      route: routeLabel(request),
       method: request.method,
     },
     'request failed'
@@ -55,16 +70,16 @@ export function errorHandler(error, request, reply) {
       error,
       source: 'backend',
       user: request.user,
-      route: request.routerPath || request.url,
+      route: routeLabel(request),
       method: request.method,
       requestId,
       statusCode: resolvedStatus,
     });
     // Also send to Sentry when configured (no-op otherwise). Minimal,
-    // non-PII context — never the request body.
+    // non-PII context — route PATTERN only, never the URL/query or request body.
     captureException(error, {
       requestId,
-      route: request.routerPath || request.url,
+      route: routeLabel(request),
       method: request.method,
       userId: request.user?.userId,
     });
