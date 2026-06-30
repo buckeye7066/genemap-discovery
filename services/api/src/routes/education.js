@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { authenticate } from '../middleware/auth.js';
 import { checkEducationEntitlement, enforceUsageLimit } from '../middleware/entitlements.js';
 import * as llm from '../services/llm.js';
+import { AppError } from '../utils/errors.js';
 
 const TOPICS_CATALOG = [
   {
@@ -221,7 +222,24 @@ export default async function educationRoutes(fastify) {
     const style = styleMap[level] || styleMap.undergraduate;
     const imagePrompt = `Create an educational genetics illustration about: ${topic}. ${style} The image should be clear, accurate, and educational. Do not include any text or labels in the image.`;
 
-    const result = await llm.generateImage(imagePrompt);
+    // Image generation depends on an external model (DALL·E) that can fail for
+    // reasons the user can act on (slow/unavailable, content policy). Without
+    // this catch the raw provider error fell through to the generic 500
+    // "Internal server error" the tester saw. Turn it into a clear, operational
+    // error so the client renders an actionable message.
+    let result;
+    try {
+      result = await llm.generateImage(imagePrompt);
+    } catch (err) {
+      request.log.warn({ err: err?.message }, 'education image generation failed');
+      throw new AppError(
+        'Image generation is temporarily unavailable. Please try again in a moment.',
+        503
+      );
+    }
+    if (!result?.url) {
+      throw new AppError('The image could not be generated for this topic. Please try a different topic.', 502);
+    }
     if (request.user?.userId) {
       try {
         await prisma.learningSession.create({

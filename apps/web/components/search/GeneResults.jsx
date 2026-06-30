@@ -33,7 +33,7 @@ export default function GeneResults({ results, selectedGenes = [], onGeneSelect 
 
   // Apply filters to gene results
   const filteredGenes = useMemo(() => {
-    return candidateGenes.filter((gene) => {
+    return (candidateGenes || []).filter((gene) => {
       // Symbol filter
       if (filters.symbol && !gene.symbol?.toLowerCase().includes(filters.symbol.toLowerCase())) {
         return false;
@@ -52,11 +52,15 @@ export default function GeneResults({ results, selectedGenes = [], onGeneSelect 
         }
       }
 
-      // Phenotype filter
-      if (filters.phenotype && gene.phenotypes) {
-        const phenotypeMatch = gene.phenotypes.some(p =>
-          p.toLowerCase().includes(filters.phenotype.toLowerCase())
-        );
+      // Phenotype filter. phenotypes is an array of { name, hpoId } OBJECTS, so
+      // calling .toLowerCase() directly on each element threw a TypeError and
+      // crashed the whole results panel the moment a phenotype filter was used.
+      if (filters.phenotype && Array.isArray(gene.phenotypes)) {
+        const needle = filters.phenotype.toLowerCase();
+        const phenotypeMatch = gene.phenotypes.some((p) => {
+          const label = typeof p === 'string' ? p : p?.name;
+          return label?.toLowerCase().includes(needle);
+        });
         if (!phenotypeMatch) {
           return false;
         }
@@ -105,7 +109,7 @@ export default function GeneResults({ results, selectedGenes = [], onGeneSelect 
                 {getQueryTypeLabel()}
               </CardTitle>
               <p className="text-slate-600 mt-1">
-                Found {candidateGenes.length} {queryType === 'disease' ? 'associated' : 'candidate'} genes for "{query}"
+                Found {(candidateGenes || []).length} {queryType === 'disease' ? 'associated' : 'candidate'} genes for "{query}"
               </p>
             </div>
 

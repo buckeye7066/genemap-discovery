@@ -1,4 +1,4 @@
-import React, { useState, useEffect, lazy, Suspense } from "react";
+import React, { useState, useEffect, useRef, lazy, Suspense } from "react";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { apiClient } from "@genemap/shared";
 import { useAuth } from "../lib/AuthContext";
@@ -52,6 +52,13 @@ export default function VisualizationHub() {
   const [selectedGenes, setSelectedGenes] = useState([]);
   const [geneData, setGeneData] = useState({});
   const [isLoading, setIsLoading] = useState(false);
+  // Per-gene in-flight tracking so two different Quick Add chips can load at the
+  // same time. The ref makes the duplicate check race-safe (synchronous), while
+  // the state drives the disabled UI. Previously a single isLoading flag
+  // disabled EVERY chip during a load, so clicking BRCA1 then TP53 quickly
+  // dropped TP53.
+  const [loadingGenes, setLoadingGenes] = useState([]);
+  const inFlightGenes = useRef(new Set());
   const [error, setError] = useState(null);
   const [activeVisualizations, setActiveVisualizations] = useState([
     'expression',
@@ -96,10 +103,14 @@ export default function VisualizationHub() {
     // handler had already cleared the input by the time the second ran.
     const source = typeof geneArg === 'string' ? geneArg : geneInput;
     const gene = source.trim().toUpperCase();
-    if (!gene || selectedGenes.some(g => g.symbol === gene)) {
+    // Synchronous duplicate guard (ref) so a double-click on the same chip can't
+    // start two loads before state updates.
+    if (!gene || selectedGenes.some(g => g.symbol === gene) || inFlightGenes.current.has(gene)) {
       return;
     }
 
+    inFlightGenes.current.add(gene);
+    setLoadingGenes(prev => [...prev, gene]);
     setIsLoading(true);
     setError(null);
 
@@ -151,7 +162,10 @@ export default function VisualizationHub() {
       console.error("Error loading gene:", err);
       setError(`Failed to load gene "${gene}". ${err.message || 'Please try again.'}`);
     } finally {
-      setIsLoading(false);
+      inFlightGenes.current.delete(gene);
+      setLoadingGenes(prev => prev.filter(g => g !== gene));
+      // Only clear the global spinner once nothing is in flight.
+      if (inFlightGenes.current.size === 0) setIsLoading(false);
     }
   };
 
@@ -472,7 +486,7 @@ export default function VisualizationHub() {
                     variant="outline"
                     size="sm"
                     onClick={() => handleAddGene(gene)}
-                    disabled={selectedGenes.some(g => g.symbol === gene) || isLoading}
+                    disabled={selectedGenes.some(g => g.symbol === gene) || loadingGenes.includes(gene)}
                     className="min-h-[36px]"
                   >
                     {gene}
