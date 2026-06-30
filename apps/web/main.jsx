@@ -2,6 +2,23 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from '@/App.jsx'
 import '@/index.css'
+import { reportClientError } from '@/lib/reportClientError.js'
+
+// Capture uncaught errors and unhandled promise rejections once, at bootstrap,
+// and report them to the backend (which emails the owner for non-admin users).
+if (typeof window !== 'undefined') {
+  window.addEventListener('error', (event) => {
+    reportClientError(event?.error || new Error(event?.message || 'Unknown error'))
+  })
+  window.addEventListener('unhandledrejection', (event) => {
+    const reason = event?.reason
+    const err =
+      reason instanceof Error
+        ? reason
+        : new Error(typeof reason === 'string' ? reason : 'Unhandled promise rejection')
+    reportClientError(err)
+  })
+}
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
