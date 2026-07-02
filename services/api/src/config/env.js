@@ -33,6 +33,10 @@ const baseSchema = z.object({
   // Database
   DATABASE_URL: z.string().min(1).optional(),
 
+  // Redis (optional) — shared rate-limit store for horizontal scaling.
+  // Unset = per-instance in-memory rate limiting (fine for a single replica).
+  REDIS_URL: z.string().min(1).optional(),
+
   // Auth secrets (length-checked further below for production)
   JWT_SECRET: z.string().min(1).optional(),
   JWT_REFRESH_SECRET: z.string().min(1).optional(),
