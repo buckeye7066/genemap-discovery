@@ -9,6 +9,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
 import { Loader2, Upload, FileStack, Download, AlertTriangle, CheckCircle2, Info } from "lucide-react";
 import ReactMarkdown from 'react-markdown';
+import { parseVcfFile, summarizeCohort } from "@/lib/vcfCohort";
 
 export default function BulkVCFAnalysis({ userEducationLevel }) {
   const [files, setFiles] = useState([]);
@@ -34,95 +35,64 @@ export default function BulkVCFAnalysis({ userEducationLevel }) {
     setProgress(0);
 
     try {
-      // TODO: UploadFile needs API implementation - using file names for now
-      setProgress(20);
-      const uploadedFiles = [];
+      // Parse each VCF's real contents in the browser. Raw variants never leave
+      // the device — only the aggregate counts below are sent to the LLM.
+      const perFile = [];
       for (let i = 0; i < files.length; i++) {
-        uploadedFiles.push({
-          name: files[i].name,
-          url: "pending-upload"
+        const base = (i / files.length) * 80;
+        const span = (1 / files.length) * 80;
+        const parsed = await parseVcfFile(files[i], {
+          onProgress: (frac) => setProgress(Math.round(base + span * frac)),
         });
-        setProgress(20 + (30 * (i + 1) / files.length));
+        perFile.push(parsed);
+        setProgress(Math.round(base + span));
       }
 
-      // Analyze cohort
-      setProgress(50);
+      const stats = summarizeCohort(perFile);
+      if (stats.totalVariants === 0) {
+        setError(
+          "No variants were found in the selected files. Confirm these are valid VCF files (a header line beginning with #CHROM followed by variant rows)."
+        );
+        return;
+      }
+
+      setProgress(85);
       const educationContext = getEducationContext(userEducationLevel);
-      
-      const prompt = `You are a genomic researcher analyzing a cohort of ${files.length} VCF files for study "${cohortName}".
+      const typeLines = Object.entries(stats.variantTypes)
+        .sort((a, b) => b[1] - a[1])
+        .map(([type, count]) => `- ${type}: ${count.toLocaleString()}`)
+        .join('\n');
+      const perSampleLines = stats.perSample
+        .map((s, i) => `${i + 1}. ${s.name}: ${s.variantCount.toLocaleString()} variants${s.keysTruncated ? ' (large file — shared-variant sampling truncated)' : ''}`)
+        .join('\n');
+      const sharedNote = stats.sharedApproximate ? ' (approximate — at least this many; some large files were sampled)' : '';
 
-**Files Uploaded:**
-${uploadedFiles.map((f, i) => `${i + 1}. ${f.name}`).join('\n')}
+      // The model interprets ONLY these measured numbers; it is explicitly told
+      // not to invent per-variant or per-gene findings it cannot see.
+      const prompt = `You are a genomics research advisor interpreting REAL, measured cohort statistics for study "${cohortName}". These numbers were computed by parsing the actual uploaded VCF files in the researcher's browser. Do not invent additional per-variant, per-gene, or per-sample findings — you only have the aggregate statistics below.
 
-**Your Task - Cohort-Level Variant Analysis:**
+**Measured cohort statistics:**
+- Samples analyzed: ${stats.sampleCount}
+- Total variant calls across cohort: ${stats.totalVariants.toLocaleString()}
+- Mean variants per sample: ${stats.meanVariantsPerSample.toLocaleString()}
+- Distinct variants observed (within sampled set): ${stats.distinctVariants.toLocaleString()}
+- Variants shared by 2+ samples: ${stats.sharedByTwoOrMore.toLocaleString()}${sharedNote}
+- Variants present in all ${stats.sampleCount} samples: ${stats.sharedAcrossAll.toLocaleString()}${sharedNote}
 
-Provide a comprehensive research-grade analysis adapted for ${educationContext}.
+**Variant type distribution:**
+${typeLines}
 
-1. **Cohort Overview**
-   - Number of samples: ${files.length}
-   - Study name: ${cohortName}
-   - Recommended quality control steps
-   - Sample size power analysis
+**Per-sample variant counts:**
+${perSampleLines}
 
-2. **Variant Statistics Across Cohort**
-   - Expected total variants per sample
-   - Common vs. rare variant distribution
-   - Variant types (SNV, indel, CNV)
-   - Quality metrics to check
+Write a research-grade interpretation adapted for ${educationContext}. Cover:
+1. What these specific numbers suggest about cohort quality and composition (flag any samples whose counts are outliers relative to the cohort mean).
+2. Quality-control steps warranted given the observed variant-type distribution and per-sample counts.
+3. How to follow up on the shared-variant signal (recommended annotation with VEP/ANNOVAR, filtering against gnomAD, ClinVar/ClinGen review) — describe the workflow; do not claim clinical significance you cannot see.
+4. Appropriate statistical approach for this sample size (power considerations, multiple-testing correction, case-control vs. family-based design).
+5. Concrete next steps and tools.
 
-3. **Population Genetics Analysis**
-   - Expected allele frequency distribution
-   - Hardy-Weinberg equilibrium considerations
-   - Population stratification concerns
-   - Ancestry analysis recommendations
-
-4. **Shared Variants Analysis**
-   - How to identify variants present in multiple samples
-   - Criteria for pathogenic variant screening
-   - Filtering strategies for cohort analysis
-   - Recommended annotation tools (VEP, ANNOVAR)
-
-5. **Recommended Analytical Pipeline**
-   Step-by-step workflow:
-   - Quality control (GATK best practices)
-   - Variant calling standardization
-   - Annotation and filtering
-   - Statistical association testing
-   - Pathway enrichment analysis
-   - Data visualization
-
-6. **Statistical Considerations**
-   - Multiple testing correction (Bonferroni, FDR)
-   - Case-control analysis strategies
-   - Family-based analysis if applicable
-   - Power calculations
-
-7. **Research Database Integration**
-   - ClinVar for clinical significance
-   - gnomAD for population frequencies
-   - ClinGen for gene-disease validity
-   - COSMIC for cancer variants
-   - dbGaP for research data
-
-8. **Hypothesis Generation from Cohort**
-   - What patterns to look for
-   - Gene-level association testing
-   - Pathway-level enrichment
-   - Genotype-phenotype correlations
-
-9. **Publication & Reporting**
-   - Key figures to generate
-   - Statistical tests to report
-   - Supplementary data organization
-   - Repository submission (dbGaP, EGA)
-
-10. **Next Steps & Tools**
-    - Recommended bioinformatics tools
-    - Cloud computing resources
-    - Collaboration opportunities
-    - Data sharing guidelines
-
-Provide practical, actionable research guidance.`;
+Ground every statement in the measured numbers above. Where deeper analysis is needed, say what tool or step would produce it rather than estimating a result.`;
 
       const { result: analysis } = await apiClient.invokeLLM(prompt);
 
@@ -130,13 +100,13 @@ Provide practical, actionable research guidance.`;
       setResults({
         cohort_name: cohortName,
         file_count: files.length,
-        analysis: analysis,
-        files: uploadedFiles
+        stats,
+        analysis,
       });
 
     } catch (err) {
       console.error("Error analyzing cohort:", err);
-      setError("Failed to analyze cohort. Please try again.");
+      setError(err?.message ? `Failed to analyze cohort: ${err.message}` : "Failed to analyze cohort. Please try again.");
     } finally {
       setIsAnalyzing(false);
     }
@@ -159,8 +129,9 @@ Provide practical, actionable research guidance.`;
       cohort_name: results.cohort_name,
       file_count: results.file_count,
       analysis_date: new Date().toISOString(),
+      statistics: results.stats,
       analysis: results.analysis,
-      files: results.files.map(f => f.name)
+      files: results.stats?.perSample?.map(s => s.name) ?? []
     };
 
     const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
@@ -292,6 +263,47 @@ Provide practical, actionable research guidance.`;
             </div>
           </CardHeader>
           <CardContent>
+            {results.stats && (
+              <div className="mb-6 space-y-4">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
+                    <p className="text-xs text-slate-500">Samples</p>
+                    <p className="text-2xl font-bold text-slate-900">{results.stats.sampleCount}</p>
+                  </div>
+                  <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
+                    <p className="text-xs text-slate-500">Total variants</p>
+                    <p className="text-2xl font-bold text-slate-900">{results.stats.totalVariants.toLocaleString()}</p>
+                  </div>
+                  <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
+                    <p className="text-xs text-slate-500">Mean / sample</p>
+                    <p className="text-2xl font-bold text-slate-900">{results.stats.meanVariantsPerSample.toLocaleString()}</p>
+                  </div>
+                  <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
+                    <p className="text-xs text-slate-500">Shared by 2+{results.stats.sharedApproximate ? '*' : ''}</p>
+                    <p className="text-2xl font-bold text-slate-900">{results.stats.sharedByTwoOrMore.toLocaleString()}</p>
+                  </div>
+                </div>
+
+                <div className="bg-white p-3 rounded-lg border border-slate-200">
+                  <p className="text-xs font-semibold text-slate-700 mb-2">Variant types (measured across cohort):</p>
+                  <div className="flex flex-wrap gap-2">
+                    {Object.entries(results.stats.variantTypes)
+                      .sort((a, b) => b[1] - a[1])
+                      .map(([type, count]) => (
+                        <Badge key={type} variant="outline">{type}: {count.toLocaleString()}</Badge>
+                      ))}
+                  </div>
+                </div>
+
+                <Alert className="bg-slate-50 border-slate-200">
+                  <Info className="h-4 w-4 text-slate-600" />
+                  <AlertDescription className="text-slate-700 text-xs">
+                    These figures were computed by parsing your actual VCF file contents in your browser — the raw genomic data was not uploaded. The narrative below is an AI interpretation of these measured numbers, not an independent analysis of individual variants.
+                    {results.stats.sharedApproximate && ' *Shared-variant counts are a floor: some files were large enough that shared-variant sampling was truncated.'}
+                  </AlertDescription>
+                </Alert>
+              </div>
+            )}
             <div className="prose prose-sm max-w-none">
               <ReactMarkdown
                 components={{

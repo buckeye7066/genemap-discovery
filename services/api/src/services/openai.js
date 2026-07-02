@@ -86,7 +86,6 @@ export async function generateImage(
       lastErr = err;
       const detail = err?.error?.message || err?.message || String(err);
       const status = err?.status ?? err?.statusCode;
-      // eslint-disable-next-line no-console
       console.error(`[openai.generateImage] ${model} failed (status ${status}): ${detail}`);
     }
   }

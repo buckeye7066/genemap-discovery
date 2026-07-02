@@ -29,8 +29,9 @@ backups/
 *.sql.gz
 
 # Production launch evidence can name internal owners, vendors, dashboards, and
-# operational decisions. Commit the example in docs/, not the filled evidence.
+# operational decisions. Commit the example template, not the filled evidence.
 ops/production-launch-evidence*.json
+!ops/production-launch-evidence.example.json
 
 # Editor directories and files
 .vscode/*

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, Suspense } from "react";
+import React, { useState, useEffect, useRef, useMemo, Suspense } from "react";
 import { lazyWithRetry } from "@/lib/lazyWithRetry";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { apiClient } from "@genemap/shared";
@@ -264,17 +264,18 @@ export default function VisualizationHub() {
     }
   };
 
-  // Generate mock GWAS data for Manhattan plot
-  const generateMockGWASData = () => {
+  // Illustrative-only datasets. GeneMap does not ingest GWAS summary statistics
+  // or per-sample expression matrices, so these plots demonstrate the *format*
+  // of the analysis using synthetic values — they are clearly labeled as such
+  // in the UI below and must never be read as real results for the selected
+  // genes. Memoized on the gene selection so the example stays stable across
+  // re-renders instead of reshuffling on every keystroke.
+  const manhattanData = useMemo(() => {
     const data = [];
-    // const chromosomes = ['chr1', 'chr2', 'chr3', 'chr4', 'chr5', 'chr6', 'chr7', 'chr8', 'chr9', 'chr10'];
-    
     selectedGenes.forEach((gene) => {
-      // Generate some significant hits near this gene
       for (let i = 0; i < 50; i++) {
         const position = (gene.start || 1000000) + (Math.random() - 0.5) * 10000000;
         const pvalue = Math.random() < 0.1 ? Math.random() * 1e-8 : Math.random() * 0.01;
-        
         data.push({
           snp: `rs${Math.floor(Math.random() * 10000000)}`,
           chromosome: gene.chromosome || 'chr1',
@@ -285,22 +286,18 @@ export default function VisualizationHub() {
         });
       }
     });
-    
     return data.sort((a, b) => {
       const chrA = a.chromosome.replace('chr', '');
       const chrB = b.chromosome.replace('chr', '');
       return (parseInt(chrA, 10) || chrA.charCodeAt(0)) - (parseInt(chrB, 10) || chrB.charCodeAt(0)) || a.position - b.position;
     });
-  };
+  }, [selectedGenes]);
 
-  // Generate expression data for heatmap
-  const generateExpressionMatrix = () => {
+  const expressionExample = useMemo(() => {
     const samples = ['Sample 1', 'Sample 2', 'Sample 3', 'Sample 4', 'Sample 5', 'Sample 6'];
-    const matrix = selectedGenes.map(gene => 
-      samples.map(() => Math.random() * 100)
-    );
+    const matrix = selectedGenes.map(() => samples.map(() => Math.random() * 100));
     return { samples, matrix };
-  };
+  }, [selectedGenes]);
 
   const quickGenes = ["BRCA1", "BRCA2", "TP53", "CFTR", "APOE"];
 
@@ -858,10 +855,20 @@ export default function VisualizationHub() {
               <div>
                 <h2 className="text-2xl font-bold text-slate-900 mb-4 flex items-center gap-2">
                   <TrendingUp className="w-6 h-6 text-red-600" />
-                  Manhattan Plot - GWAS Visualization
+                  Manhattan Plot — GWAS Visualization
+                  <Badge variant="outline" className="ml-1 border-amber-300 bg-amber-50 text-amber-700">Illustrative example</Badge>
                 </h2>
+                <Alert className="mb-4 bg-amber-50 border-amber-200">
+                  <Info className="h-4 w-4 text-amber-600" />
+                  <AlertDescription className="text-amber-900 text-sm">
+                    This Manhattan plot uses <strong>synthetic data</strong> to demonstrate how genome-wide
+                    association results are visualized. GeneMap does not ingest GWAS summary statistics, so the
+                    points shown are <strong>not real association results</strong> for your selected genes. To
+                    plot real data, run a GWAS in a dedicated tool and load the summary statistics there.
+                  </AlertDescription>
+                </Alert>
                 <ManhattanPlot
-                  gwasData={generateMockGWASData()}
+                  gwasData={manhattanData}
                   userEducationLevel={user?.education_level}
                   highlightedGene={highlightedGene}
                   onGeneClick={handleGeneHighlight}
@@ -875,21 +882,26 @@ export default function VisualizationHub() {
               <div>
                 <h2 className="text-2xl font-bold text-slate-900 mb-4 flex items-center gap-2">
                   <BarChart3 className="w-6 h-6 text-purple-600" />
-                  Expression Heatmap - Multi-Sample Analysis
+                  Expression Heatmap — Multi-Sample Analysis
+                  <Badge variant="outline" className="ml-1 border-amber-300 bg-amber-50 text-amber-700">Illustrative example</Badge>
                 </h2>
-                {(() => {
-                  const { samples, matrix } = generateExpressionMatrix();
-                  return (
-                    <ExpressionHeatmap
-                      genes={selectedGenes.map(g => g.symbol)}
-                      samples={samples}
-                      expressionData={matrix}
-                      userEducationLevel={user?.education_level}
-                      highlightedGene={highlightedGene}
-                      onGeneClick={handleGeneHighlight}
-                    />
-                  );
-                })()}
+                <Alert className="mb-4 bg-amber-50 border-amber-200">
+                  <Info className="h-4 w-4 text-amber-600" />
+                  <AlertDescription className="text-amber-900 text-sm">
+                    This heatmap uses <strong>synthetic sample values</strong> to illustrate the multi-sample
+                    expression format. GeneMap does not hold per-sample expression matrices, so these cells are
+                    <strong> not measured expression</strong>. For real per-tissue expression of a single gene, use
+                    the Gene Expression chart, which is sourced from public reference data.
+                  </AlertDescription>
+                </Alert>
+                <ExpressionHeatmap
+                  genes={selectedGenes.map(g => g.symbol)}
+                  samples={expressionExample.samples}
+                  expressionData={expressionExample.matrix}
+                  userEducationLevel={user?.education_level}
+                  highlightedGene={highlightedGene}
+                  onGeneClick={handleGeneHighlight}
+                />
               </div>
             )}
 
