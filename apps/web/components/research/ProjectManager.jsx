@@ -24,16 +24,18 @@ import {
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
-  Beaker, 
-  Plus, 
-  Edit2, 
+  Beaker,
+  Plus,
+  Edit2,
   Trash2,
   Share2,
   Download,
   FileJson,
   Loader2,
   Info,
-  CheckCircle
+  CheckCircle,
+  AlertCircle,
+  Users
 } from "lucide-react";
 import ProjectCollaboration from "./ProjectCollaboration";
 import ProjectVersionControl from "./ProjectVersionControl";
@@ -183,6 +185,8 @@ export default function ProjectManager() {
   const [isLoading, setIsLoading] = useState(true);
   const [selectedProject, setSelectedProject] = useState(null);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [createError, setCreateError] = useState("");
+  const [isCreating, setIsCreating] = useState(false);
   const { user } = useAuth();
   const [newProject, setNewProject] = useState({
     name: "",
@@ -208,7 +212,14 @@ export default function ProjectManager() {
   };
 
   const handleCreateProject = async () => {
-    if (!newProject.name.trim()) return;
+    if (!newProject.name.trim()) {
+      // Give explicit feedback instead of silently doing nothing when the
+      // required name is blank.
+      setCreateError("Please enter a project name to continue.");
+      return;
+    }
+    setCreateError("");
+    setIsCreating(true);
 
     try {
       const projectData = {
@@ -221,15 +232,17 @@ export default function ProjectManager() {
         current_version: 1
       };
 
-      const created = await apiClient.createProject(projectData);
+      await apiClient.createProject(projectData);
 
       setNewProject({ name: "", description: "", genes: "", phenotypes: "", tags: "" });
       setCreateDialogOpen(false);
       await loadProjects();
-      
+
     } catch (err) {
       console.error("Error creating project:", err);
-      alert("Failed to create project. Please try again.");
+      setCreateError(err?.message || "Failed to create project. Please try again.");
+    } finally {
+      setIsCreating(false);
     }
   };
 
@@ -305,7 +318,7 @@ export default function ProjectManager() {
               <Beaker className="w-5 h-5 text-green-600" />
               Research Projects
             </CardTitle>
-            <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
+            <Dialog open={createDialogOpen} onOpenChange={(open) => { setCreateDialogOpen(open); if (!open) setCreateError(""); }}>
               <DialogTrigger asChild>
                 <Button className="bg-green-600 hover:bg-green-700 gap-2">
                   <Plus className="w-4 h-4" />
@@ -323,8 +336,12 @@ export default function ProjectManager() {
                       id="project-name"
                       placeholder="e.g., BRCA1 Variant Study"
                       value={newProject.name}
-                      onChange={(e) => setNewProject({ ...newProject, name: e.target.value })}
-                      className="mt-1"
+                      onChange={(e) => {
+                        setNewProject({ ...newProject, name: e.target.value });
+                        if (createError) setCreateError("");
+                      }}
+                      aria-invalid={!!createError && !newProject.name.trim()}
+                      className={`mt-1 ${createError && !newProject.name.trim() ? 'border-red-400 focus-visible:ring-red-400' : ''}`}
                     />
                   </div>
 
@@ -372,11 +389,19 @@ export default function ProjectManager() {
                     />
                   </div>
 
+                  {createError && (
+                    <Alert variant="destructive">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription>{createError}</AlertDescription>
+                    </Alert>
+                  )}
+
                   <Button
                     onClick={handleCreateProject}
-                    disabled={!newProject.name.trim()}
-                    className="w-full bg-green-600 hover:bg-green-700"
+                    disabled={isCreating}
+                    className="w-full bg-green-600 hover:bg-green-700 gap-2"
                   >
+                    {isCreating && <Loader2 className="w-4 h-4 animate-spin" />}
                     Create Project
                   </Button>
                 </div>

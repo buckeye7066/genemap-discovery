@@ -32,7 +32,7 @@ export default function GeneSetInput({ onSubmit, isLoading }) {
       <button
         type="submit"
         className="inline-flex items-center px-4 py-2 rounded-md bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
-        disabled={isLoading || text.trim().length === 0}
+        disabled={isLoading}
       >
         {isLoading ? 'Running…' : 'Run enrichment'}
       </button>

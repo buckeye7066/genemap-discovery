@@ -25,6 +25,17 @@ const PathwayEnrichment = lazy(() => import("../components/research/PathwayEnric
 const HypothesisGenerator = lazy(() => import("../components/research/HypothesisGenerator"));
 const ProjectManager = lazy(() => import("../components/research/ProjectManager"));
 
+// Contained fallback for the lazy tab panels. Without a local Suspense
+// boundary these lazy imports suspended up to App.jsx's top-level Suspense,
+// which blanked the WHOLE page with a full-screen spinner while the chunk
+// loaded. Keeping the fallback here confines the loader to the tab content.
+const TabLoading = () => (
+  <div className="flex flex-col items-center justify-center py-16 text-slate-500">
+    <div className="w-10 h-10 border-4 border-indigo-100 border-t-indigo-600 rounded-full animate-spin mb-3" />
+    <p className="text-sm">Loading research tools…</p>
+  </div>
+);
+
 export default function ResearchMode() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -181,24 +192,34 @@ export default function ResearchMode() {
           </TabsList>
 
           <TabsContent value="bulk-vcf">
-            <BulkVCFAnalysis userEducationLevel={user?.education_level} />
+            <Suspense fallback={<TabLoading />}>
+              <BulkVCFAnalysis userEducationLevel={user?.education_level} />
+            </Suspense>
           </TabsContent>
 
           <TabsContent value="databases">
-            <ExternalDatabaseIntegration userEducationLevel={user?.education_level} />
+            <Suspense fallback={<TabLoading />}>
+              <ExternalDatabaseIntegration userEducationLevel={user?.education_level} />
+            </Suspense>
           </TabsContent>
 
           <TabsContent value="pathways">
-            <PathwayEnrichment userEducationLevel={user?.education_level} />
+            <Suspense fallback={<TabLoading />}>
+              <PathwayEnrichment userEducationLevel={user?.education_level} />
+            </Suspense>
           </TabsContent>
 
           <TabsContent value="hypothesis">
-            <HypothesisGenerator userEducationLevel={user?.education_level} />
+            <Suspense fallback={<TabLoading />}>
+              <HypothesisGenerator userEducationLevel={user?.education_level} />
+            </Suspense>
           </TabsContent>
 
           {/* Added new TabsContent for Projects */}
           <TabsContent value="projects">
-            <ProjectManager />
+            <Suspense fallback={<TabLoading />}>
+              <ProjectManager />
+            </Suspense>
           </TabsContent>
         </Tabs>
       </div>

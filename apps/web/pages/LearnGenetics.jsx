@@ -174,7 +174,7 @@ export default function LearnGenetics() {
                 <h2 className="text-xl font-bold text-slate-900 tracking-tight">
                   {category.category}
                 </h2>
-                <Badge variant="secondary" className="text-xs font-medium">{category.topics.length} topics</Badge>
+                <Badge variant="secondary" className="text-xs font-medium">{category.topics.length} {category.topics.length === 1 ? 'topic' : 'topics'}</Badge>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                 {category.topics.map((topic) => {

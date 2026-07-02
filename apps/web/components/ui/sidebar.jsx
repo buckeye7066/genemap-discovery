@@ -13,7 +13,7 @@ export function SidebarProvider({ children, defaultOpen = true }) {
   const value = React.useMemo(() => ({ open, setOpen }), [open]);
   return (
     <SidebarContext.Provider value={value}>
-      <div className="flex min-h-screen w-full">{children}</div>
+      <div className="flex h-screen w-full overflow-hidden">{children}</div>
     </SidebarContext.Provider>
   );
 }
