@@ -6,14 +6,88 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { ArrowLeft, CheckCircle2, XCircle, Trophy, RefreshCw, ArrowRight } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, XCircle, Trophy, RefreshCw, ArrowRight, HelpCircle, Sparkles } from 'lucide-react';
+
+// Shown when the user reaches /quizmode without choosing a topic (e.g. the
+// sidebar "Take a Quiz" link). Without this, the page silently defaulted to a
+// hidden "what-is-dna / Genetics" quiz, so the user never knew what subject
+// they were being tested on until questions appeared.
+function QuizTopicPicker({ onSelect, levelConfig }) {
+  const [categories, setCategories] = useState(null);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    let active = true;
+    apiClient.getTopics()
+      .then((cats) => { if (active) setCategories(Array.isArray(cats) ? cats : []); })
+      .catch((err) => { if (active) setError(err.message || 'Could not load topics'); });
+    return () => { active = false; };
+  }, []);
+
+  return (
+    <div className="p-4 md:p-6 max-w-3xl mx-auto space-y-6 dna-bg min-h-screen">
+      <div className="text-center space-y-2 animate-slide-up">
+        <div className="w-14 h-14 mx-auto rounded-2xl bg-gradient-to-br from-purple-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-purple-500/20">
+          <HelpCircle className="w-7 h-7 text-white" />
+        </div>
+        <h1 className="text-2xl font-bold text-slate-900">Take a Quiz</h1>
+        <p className="text-sm text-slate-500">
+          Choose a topic and we'll generate 5 questions{levelConfig?.label ? ` at ${levelConfig.label} level` : ''}.
+        </p>
+      </div>
+
+      <Card className="animate-slide-up delay-100">
+        <CardContent className="p-5">
+          <button
+            onClick={() => onSelect({ id: 'general-genetics', title: 'General Genetics' })}
+            className="w-full flex items-center gap-3 p-3.5 mb-4 rounded-xl border-2 border-purple-200 bg-purple-50/60 hover:bg-purple-50 hover:border-purple-300 transition-all text-left"
+          >
+            <Sparkles className="w-5 h-5 text-purple-600 flex-shrink-0" />
+            <div>
+              <p className="font-semibold text-slate-900 text-sm">Surprise me</p>
+              <p className="text-xs text-slate-500">A mixed quiz on general genetics</p>
+            </div>
+          </button>
+
+          {error && <p className="text-sm text-red-500 py-4 text-center">{error}</p>}
+          {!categories && !error && (
+            <p className="text-sm text-slate-400 py-4 text-center">Loading topics…</p>
+          )}
+          {categories && categories.length === 0 && !error && (
+            <p className="text-sm text-slate-400 py-4 text-center">No topics available right now.</p>
+          )}
+
+          <div className="space-y-5">
+            {(categories || []).map((cat) => (
+              <div key={cat.category}>
+                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">{cat.category}</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {(cat.topics || []).map((topic) => (
+                    <button
+                      key={topic.id}
+                      onClick={() => onSelect(topic)}
+                      className="text-left p-3 rounded-lg border border-slate-200 hover:border-purple-300 hover:bg-purple-50/50 transition-all text-sm font-medium text-slate-700"
+                    >
+                      {topic.title}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
 
 export default function QuizMode() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { level, levelConfig } = useEducationLevel();
 
-  const topicId = searchParams.get('topic') || 'what-is-dna';
+  const topicParam = searchParams.get('topic');
+  const topicId = topicParam || 'what-is-dna';
   const topicTitle = searchParams.get('title') || 'Genetics';
 
   const [questions, setQuestions] = useState([]);
@@ -22,12 +96,25 @@ export default function QuizMode() {
   const [showResult, setShowResult] = useState(false);
   const [score, setScore] = useState(0);
   const [finished, setFinished] = useState(false);
-  const [loading, setLoading] = useState(true);
+  // Only auto-load a quiz when a topic was explicitly chosen; otherwise the
+  // picker below is shown first.
+  const [loading, setLoading] = useState(!!topicParam);
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    loadQuiz();
-  }, [topicTitle, level]);
+    if (topicParam) loadQuiz();
+  }, [topicParam, topicTitle, level]);
+
+  if (!topicParam) {
+    return (
+      <QuizTopicPicker
+        levelConfig={levelConfig}
+        onSelect={(topic) =>
+          navigate(`/quizmode?topic=${encodeURIComponent(topic.id)}&title=${encodeURIComponent(topic.title)}`)
+        }
+      />
+    );
+  }
 
   const loadQuiz = async () => {
     setLoading(true);

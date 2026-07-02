@@ -41,6 +41,76 @@ const ChatBubble = React.memo(function ChatBubble({ msg }) {
   );
 });
 
+// Landing view for /topicexplorer with no ?topic — lets the user browse and
+// pick a topic without having to detour through the Learn Genetics page.
+function TopicBrowser({ navigate, levelConfig }) {
+  const [categories, setCategories] = useState(null);
+  const [error, setError] = useState(null);
+  const [query, setQuery] = useState('');
+
+  useEffect(() => {
+    let active = true;
+    apiClient.getTopics()
+      .then((cats) => { if (active) setCategories(Array.isArray(cats) ? cats : []); })
+      .catch((err) => { if (active) setError(err.message || 'Could not load topics'); });
+    return () => { active = false; };
+  }, []);
+
+  const q = query.trim().toLowerCase();
+  const filtered = (categories || [])
+    .map((cat) => ({
+      ...cat,
+      topics: (cat.topics || []).filter((t) => !q || (t.title || '').toLowerCase().includes(q)),
+    }))
+    .filter((cat) => cat.topics.length > 0);
+
+  return (
+    <div className="p-4 md:p-6 max-w-5xl mx-auto space-y-6 dna-bg min-h-screen">
+      <div className="flex items-center gap-3 animate-slide-up">
+        <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
+          <BookOpen className="w-6 h-6 text-white" />
+        </div>
+        <div>
+          <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Topic Explorer</h1>
+          <p className="text-sm text-slate-500">Pick a topic to explore{levelConfig?.label ? ` at ${levelConfig.label} level` : ''}.</p>
+        </div>
+      </div>
+
+      <Input
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder="Search topics..."
+        className="h-11 bg-white/80 animate-slide-up delay-100"
+      />
+
+      {error && <p className="text-sm text-red-500 py-4">{error}</p>}
+      {!categories && !error && <p className="text-sm text-slate-400 py-4">Loading topics…</p>}
+      {categories && filtered.length === 0 && !error && (
+        <p className="text-sm text-slate-400 py-4">No topics match "{query}".</p>
+      )}
+
+      <div className="space-y-6">
+        {filtered.map((cat) => (
+          <div key={cat.category} className="animate-slide-up">
+            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">{cat.category}</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+              {cat.topics.map((topic) => (
+                <button
+                  key={topic.id}
+                  onClick={() => navigate(`/topicexplorer?topic=${encodeURIComponent(topic.id)}&title=${encodeURIComponent(topic.title)}`)}
+                  className="text-left p-3 rounded-lg border border-slate-200 bg-white/70 hover:border-blue-300 hover:bg-blue-50/50 transition-all text-sm font-medium text-slate-700"
+                >
+                  {topic.title}
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function TopicExplorer() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -55,6 +125,17 @@ export default function TopicExplorer() {
   const [chatInput, setChatInput] = useState('');
   const [loading, setLoading] = useState({ explanation: false, image: false, chat: false });
 
+  // Reset per-topic state whenever the topic changes. Without this, switching
+  // topics (or returning to /topicexplorer with no topic) left the previous
+  // topic's explanation, generated image, and chat transcript on screen because
+  // the component never unmounts across query-param changes.
+  useEffect(() => {
+    setImageData(null);
+    setChatMessages([]);
+    setChatInput('');
+    setExplanation('');
+  }, [topicId]);
+
   useEffect(() => {
     // Load as soon as we have a topic. The level only tunes the prompt persona
     // and defaults server-side, so we no longer block the explanation on the
@@ -62,8 +143,14 @@ export default function TopicExplorer() {
     if (topicTitle) {
       loadExplanation();
     }
-     
+
   }, [topicTitle, level]);
+
+  // No topic selected (e.g. the sidebar "Topic Explorer" link) → show a clean
+  // topic browser instead of whatever topic was last open.
+  if (!topicId) {
+    return <TopicBrowser navigate={navigate} levelConfig={levelConfig} />;
+  }
 
   const loadExplanation = async () => {
     if (!topicTitle) {

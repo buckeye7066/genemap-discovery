@@ -214,7 +214,7 @@ export default function Layout({ children, currentPageName }) {
         <UniversalLinkHandler />
         <MelissaBanner />
         <SidebarProvider>
-          <div className="min-h-screen flex w-full bg-gradient-to-br from-slate-50 to-blue-50" style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}>
+          <div className="h-full flex w-full overflow-hidden bg-gradient-to-br from-slate-50 to-blue-50" style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}>
         <Sidebar className="border-r border-slate-200/50">
           <SidebarHeader className="border-b border-slate-100 p-4">
             <div className="flex items-center gap-3">
@@ -277,11 +277,11 @@ export default function Layout({ children, currentPageName }) {
           </SidebarFooter>
         </Sidebar>
 
-        <main className="flex-1 flex flex-col overflow-hidden">
-          <header className="bg-white/80 backdrop-blur-sm border-b border-slate-200/50 px-6 py-4 md:hidden">
+        <main className="flex-1 flex flex-col overflow-hidden min-h-0">
+          <header className="bg-white/80 backdrop-blur-sm border-b border-slate-200/50 px-6 py-3">
             <div className="flex items-center gap-4">
               <SidebarTrigger className="hover:bg-slate-100 p-3 rounded-lg transition-colors duration-200 touch-manipulation min-h-[48px] min-w-[48px] flex items-center justify-center" />
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 md:hidden">
                 <div className="w-8 h-8 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-lg flex items-center justify-center">
                   <DnaIcon className="w-5 h-5 text-white" />
                 </div>
@@ -290,7 +290,7 @@ export default function Layout({ children, currentPageName }) {
             </div>
           </header>
 
-          <div className="flex-1 overflow-auto">
+          <div className="flex-1 overflow-auto min-h-0">
             <div className="block sm:hidden p-4">
               <MobileOptimization />
             </div>

@@ -62,6 +62,7 @@ export default function VisualizationHub() {
   const inFlightGenes = useRef(new Set());
   const geneInputRef = useRef(null);
   const [error, setError] = useState(null);
+  const [successMessage, setSuccessMessage] = useState(null);
   const [activeVisualizations, setActiveVisualizations] = useState([
     'expression',
     'domains',
@@ -215,11 +216,15 @@ export default function VisualizationHub() {
       existing.push(newConfig);
       localStorage.setItem('genemap_viz_configs', JSON.stringify(existing));
 
+      const savedName = configName;
       setConfigName("");
       setConfigDescription("");
       setSaveDialogOpen(false);
       await loadSavedConfigs();
-      
+      setError(null);
+      setSuccessMessage(`Configuration "${savedName}" saved.`);
+      setTimeout(() => setSuccessMessage(null), 3000);
+
     } catch (err) {
       console.error("Error saving configuration:", err);
       setError(`Failed to save configuration: ${err.message || 'Unknown error'}`);
@@ -477,6 +482,12 @@ export default function VisualizationHub() {
             {error && (
               <Alert variant="destructive">
                 <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+
+            {successMessage && (
+              <Alert className="bg-green-50 border-green-200">
+                <AlertDescription className="text-green-800">{successMessage}</AlertDescription>
               </Alert>
             )}
 
