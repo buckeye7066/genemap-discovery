@@ -52,8 +52,9 @@ Owner actions that still require a real answer before flipping to `true`:
 - **`backups.automaticBackupsEnabled` + `retentionDays`** — confirm/enable the
   Railway Postgres automated-snapshot schedule and set retention ≥ 7 days
   (dashboard-only setting), then record `lastSuccessfulBackupAt`.
-- **`dataRetention.policyDocument`** — author `docs/DATA_RETENTION.md` and set
-  `policyApproved` once approved.
+- **`dataRetention.policyDocument`** — `docs/DATA_RETENTION.md` exists and is
+  reconciled with the implemented deletion/consent behavior; a launch reviewer
+  should confirm it matches the business terms, then keep `policyApproved` true.
 - **`legalCompliance.*`** — record the reviewing attorney / compliance owner and
   the review date. `baaStatus` is `not_required` for the consumer-education use
   case; change to `signed` if GeneMap is ever offered to a covered entity that

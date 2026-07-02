@@ -17,8 +17,9 @@ records, backups, and deletion requests stored by GeneMap Discovery.
 | --- | --- | --- |
 | User profile and account data | While the account is active | Deleted or anonymized after a verified deletion request unless retention is legally required. |
 | Medical and genomic data | User-controlled while the account is active | Stored encrypted in production. Raw VCF content is not sent to LLM routes by default. |
-| AI conversations | 365 days from last update, unless user deletes sooner | Shorter retention is preferred when product needs allow it. |
-| Search history and learning sessions | 365 days | Used for user history, limits, and learning progress. |
+| AI conversations | Until the user requests deletion | Removed immediately on a data-deletion request (see below). A 365-day automatic purge is a target, not yet enforced by a scheduled job. |
+| Search history | Until the user requests deletion | Removed immediately on a data-deletion request. Same 365-day auto-purge target as above. |
+| Learning sessions and progress | While the account is active | Used for learning history and progress; cascade-deleted with the account. |
 | Consent records | 6 years | Retained to prove consent state and version at the time of processing. |
 | Audit and security logs | 6 years | Retained for abuse investigation, access review, and compliance evidence. |
 | Stripe billing metadata | 7 years | Retained for accounting, tax, chargeback, and subscription support needs. |
@@ -37,6 +38,22 @@ flow is:
 4. Preserve only records required for legal, tax, fraud prevention, security,
    or compliance evidence.
 5. Mark the request completed with `completedAt` and the deleted data types.
+
+### As implemented
+
+An authenticated user's self-service request runs **immediately** and is not
+queued: `POST /entities/data-deletion-request`
+(`services/api/src/routes/entities.js` → `processDeletionRequest`) deletes that
+user's `medical_data`, `ai_conversations`, and `search_history` in a single
+transaction, then marks the request `completed` with `completedAt` and
+`deletedTypes`. The `audit_log`, `consent_records`, and the
+`data_deletion_requests` row itself are intentionally retained as the
+compliance record of who requested deletion and when. Full **account closure**
+(removing the `users` row and its remaining cascade-linked profile, learning,
+and research data) is handled on verified request within the 30-day SLA.
+Storing medical/genomic data is gated by an active consent record
+(`requireConsent`, `medical_data_storage` v1.0), so a `403` is returned if
+consent is missing.
 
 Backups are not rewritten for individual deletion requests. Deleted data ages
 out of backups through the retention window. Restore procedures must re-apply
