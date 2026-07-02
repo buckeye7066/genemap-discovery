@@ -134,6 +134,16 @@ const chatSchema = z.object({
   level: z.string().min(1),
 });
 
+// Validate quiz-progress writes. Without this, a missing `topicId` made Prisma
+// drop the filter (`where: { userId, topicId: undefined }`) so findFirst matched
+// an UNRELATED topic's row and updated the wrong progress record; a non-numeric
+// `score` wrote NaN into an Int column (a 500). Bounding the input closes both.
+const progressSchema = z.object({
+  topicId: z.string().min(1).max(200),
+  score: z.coerce.number().int().min(0).max(1_000_000),
+  totalQuestions: z.coerce.number().int().min(0).max(1_000_000).optional().default(0),
+});
+
 const LEVEL_PROMPTS = {
   elementary: 'Explain like you are talking to a 7-year-old. Use very simple words, fun comparisons to everyday things. Avoid all scientific jargon. Keep sentences short and fun.',
   middle_school: 'Explain for a middle school science class. Introduce basic scientific terms but always define them. Use relatable analogies.',
@@ -334,7 +344,7 @@ export default async function educationRoutes(fastify) {
   });
 
   fastify.post('/progress', { preHandler: authenticate }, async (request, reply) => {
-    const { topicId, score, totalQuestions } = request.body;
+    const { topicId, score, totalQuestions } = progressSchema.parse(request.body);
 
     const existing = await prisma.learningProgress.findFirst({
       where: { userId: request.user.userId, topicId },

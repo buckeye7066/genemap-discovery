@@ -18,9 +18,17 @@ node_modules
 # Build output
 dist
 dist-ssr
+dist-electron
 build
 .next
 *.local
+
+# Stray npm lockfiles — this is a pnpm workspace; pnpm-lock.yaml is canonical.
+# A package-lock.json triggers accidental `npm install` runs that pollute
+# node_modules with an npm-style tree (orphaned transitive deps), breaking
+# pnpm's resolution locally.
+package-lock.json
+apps/*/package-lock.json
 
 # Backups
 backups/
