@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import LevelPicker from '@/components/education/LevelPicker';
+import { getTopicStatus as getStatus } from '@/lib/learningProgress';
 import { CheckCircle2, Circle, Lock, ArrowRight, GraduationCap, BookOpen, Trophy } from 'lucide-react';
 
 // One-line blurb per catalog category. The topic LIST itself is NOT defined
@@ -64,13 +65,7 @@ export default function LearningPath() {
     }
   };
 
-  const getTopicStatus = (topicId) => {
-    const p = progress.find(pr => pr.topicId === topicId);
-    if (!p) return 'not_started';
-    if (p.bestScore >= p.totalQuestions * 0.8) return 'mastered';
-    if (p.attempts > 0) return 'in_progress';
-    return 'not_started';
-  };
+  const getTopicStatus = (topicId) => getStatus(progress, topicId);
 
   const allTopics = curriculum.flatMap(m => m.topics);
   const completedCount = allTopics.filter(t => getTopicStatus(t.id) === 'mastered').length;

@@ -5,6 +5,7 @@ import LevelPicker from '@/components/education/LevelPicker';
 import TopicCard from '@/components/education/TopicCard';
 import LearningProgressBar from '@/components/education/LearningProgressBar';
 import UsageBanner from '@/components/education/UsageBanner';
+import { countMastered } from '@/lib/learningProgress';
 import { apiClient } from '@genemap/shared';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -63,7 +64,9 @@ export default function LearnGenetics() {
     ),
   })).filter(cat => cat.topics.length > 0);
 
-  const completedTopics = progress.filter(p => p.bestScore > 0).length;
+  // "Mastered" uses the same 80%-quiz-score definition as the Learning Path
+  // page (see lib/learningProgress.js) so the two never show conflicting counts.
+  const masteredTopics = countMastered(progress);
   const totalTopics = categories.reduce((sum, cat) => sum + cat.topics.length, 0);
 
   if (needsOnboarding) {
@@ -96,15 +99,19 @@ export default function LearnGenetics() {
       <UsageBanner />
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 animate-slide-up delay-100">
-        <Card className="bg-gradient-to-br from-blue-500 to-indigo-600 text-white border-0 shadow-lg shadow-blue-500/20 topic-card-hover">
+        <Card
+          className="bg-gradient-to-br from-blue-500 to-indigo-600 text-white border-0 shadow-lg shadow-blue-500/20 topic-card-hover"
+          title="Topics where you've scored 80% or higher on a quiz"
+        >
           <CardContent className="p-5">
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center">
                 <Trophy className="w-6 h-6" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{completedTopics}/{totalTopics}</p>
-                <p className="text-blue-100 text-sm">Topics Explored</p>
+                <p className="text-2xl font-bold">{masteredTopics}/{totalTopics}</p>
+                <p className="text-blue-100 text-sm">Topics Mastered</p>
+                <p className="text-blue-200 text-[11px] mt-0.5">Score 80%+ on a quiz</p>
               </div>
             </div>
           </CardContent>

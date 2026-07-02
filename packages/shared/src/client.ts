@@ -457,7 +457,11 @@ export class ApiClient {
     return this.request('/llm/chat', { method: 'POST', body: JSON.stringify({ messages, options }) });
   }
   llmImage(prompt: string, options: LLMOptions = {}): Promise<LLMImageResponse> {
-    return this.request('/llm/image', { method: 'POST', body: JSON.stringify({ prompt, options }) });
+    // Image generation is slower than a text call and can exceed the 40s
+    // default; give it the same 90s budget as generateImage() so the browser
+    // doesn't abort a still-running generation. (Without this, generic image
+    // generation was cut off at 40s while /education/image was not.)
+    return this.request('/llm/image', { method: 'POST', body: JSON.stringify({ prompt, options }), timeoutMs: 90_000 });
   }
 
   // ─── Admin ───────────────────────────────────────────────
