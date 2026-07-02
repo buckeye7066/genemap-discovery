@@ -220,6 +220,7 @@ export function createPrismaMock() {
     consentRecord: createModel('consentRecord'),
     dataDeletionRequest: createModel('dataDeletionRequest'),
     learningSession: createModel('learningSession'),
+    learningProgress: createModel('learningProgress'),
     stripeEvent: createModel('stripeEvent'),
     projectAnnotation: createModel('projectAnnotation'),
     $queryRaw: vi.fn(async () => [{ '?column?': 1 }]),
@@ -258,7 +259,7 @@ export function createPrismaMock() {
     'projectVersion', 'projectCollaborator', 'message', 'subscription',
     'preBannedUser', 'institutionalLicense', 'licenseAssignment',
     'licenseUsageLog', 'consentRecord', 'dataDeletionRequest',
-    'learningSession', 'stripeEvent', 'projectAnnotation',
+    'learningSession', 'learningProgress', 'stripeEvent', 'projectAnnotation',
   ];
   for (const k of PRE_INIT) getStore(k);
 
@@ -410,6 +411,10 @@ export async function buildTestApp(prismaMock, opts = {}) {
   if (opts.includeGenomics) {
     const { default: genomicsRoutes } = await import('../routes/genomics.js');
     await app.register(genomicsRoutes, { prefix: '/genomics' });
+  }
+  if (opts.includeEducation) {
+    const { default: educationRoutes } = await import('../routes/education.js');
+    await app.register(educationRoutes, { prefix: '/education' });
   }
 
   await app.ready();
