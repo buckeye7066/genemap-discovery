@@ -7,6 +7,11 @@ import rateLimit from '@fastify/rate-limit';
 import { PrismaClient } from '@prisma/client';
 import { loadEnv } from './config/env.js';
 import { initSentry } from './config/sentry.js';
+import {
+  createRateLimitRedis,
+  rateLimitStoreOptions,
+  rateLimitStoreStatus,
+} from './config/rateLimitStore.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { requireCsrf } from './middleware/csrf.js';
 import authRoutes from './routes/auth.js';
@@ -75,9 +80,15 @@ await fastify.register(cookie, {
   secret: env.COOKIE_SECRET,
 });
 
+// Rate limiting: Redis-backed (shared across instances) when REDIS_URL is
+// set; otherwise the plugin's default per-process in-memory store. Redis
+// failures fail OPEN (skipOnError) — an outage never breaks requests.
+const rateLimitRedis = createRateLimitRedis(env, { logger: fastify.log });
+
 await fastify.register(rateLimit, {
   max: 100,
   timeWindow: '15 minutes',
+  ...rateLimitStoreOptions(rateLimitRedis),
 });
 
 // Global CSRF guard for state-changing requests on cookie-authenticated paths.
@@ -100,6 +111,9 @@ await fastify.register(async (authScope) => {
   await authScope.register(rateLimit, {
     max: 10,
     timeWindow: '15 minutes',
+    // Distinct namespace: without it the auth counters would share Redis keys
+    // with the global limiter (both key on nameSpace + ip).
+    ...rateLimitStoreOptions(rateLimitRedis, 'auth'),
   });
   await authScope.register(authRoutes, { prefix: '/auth' });
 });
@@ -132,6 +146,9 @@ fastify.get('/readyz', async (request, reply) => {
   return {
     status: 'ready',
     medicalEncryption: env.hasMedicalEncryption(),
+    // Informational only — Redis is NOT a hard dependency (rate limiting
+    // fails open to per-instance limits), so it never gates readiness.
+    rateLimitStore: rateLimitStoreStatus(rateLimitRedis),
     timestamp: new Date().toISOString(),
   };
 });
@@ -162,6 +179,11 @@ const gracefulShutdown = async (signal) => {
   fastify.log.info(`Received ${signal}, shutting down gracefully...`);
   await fastify.close();
   await prisma.$disconnect();
+  if (rateLimitRedis) {
+    // quit() rejects when the connection never came up; that must not block
+    // shutdown.
+    await rateLimitRedis.quit().catch(() => rateLimitRedis.disconnect());
+  }
   process.exit(0);
 };
 
