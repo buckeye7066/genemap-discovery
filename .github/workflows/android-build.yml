@@ -1,0 +1,75 @@
+name: Android build
+
+# Builds Android binaries on every push to main and uploads them as
+# Actions artifacts, where App Store Publisher's "From GitHub" tab can
+# list and fetch them:
+#   genemap-debug-apk   — debug-signed, installable for testing
+#   genemap-release-aab — upload-key-signed .aab, ready for Play Store
+# Release signing uses the ANDROID_KEYSTORE_* repo secrets (upload
+# keystore lives at ~/.android-keystores/genemap-upload.jks locally).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/web/**'
+      - 'packages/**'
+      - '.github/workflows/android-build.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    name: Build APK + AAB
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'pnpm'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      # Inside Capacitor the origin is https://localhost, so the API base
+      # must be baked in at build time (client.ts falls back to origin).
+      - name: Build web app
+        run: pnpm --filter @genemap/shared build && pnpm --filter @genemap/web build
+        env:
+          VITE_API_URL: https://genemap-api-production.up.railway.app
+      # npx (isolated install), NOT pnpm exec: the repo's hoisted node_modules
+      # pairs CJS wrap-ansi with an ESM string-width and the in-repo Capacitor
+      # CLI crashes with "stringWidth is not a function".
+      - name: Sync Capacitor
+        run: npx -y @capacitor/cli@8.4.1 sync android
+        working-directory: apps/web
+      - run: ./gradlew assembleDebug --no-daemon
+        working-directory: apps/web/android
+      - name: Decode upload keystore
+        run: echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/upload.jks"
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      - name: Build signed release bundle
+        run: ./gradlew bundleRelease --no-daemon
+        working-directory: apps/web/android
+        env:
+          ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/upload.jks
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: genemap-debug-apk
+          path: apps/web/android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: genemap-release-aab
+          path: apps/web/android/app/build/outputs/bundle/release/app-release.aab
+          if-no-files-found: error
