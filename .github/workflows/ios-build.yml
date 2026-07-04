@@ -1,0 +1,54 @@
+name: iOS build
+
+# Manual trigger only — macOS runners bill at 10x, and the unsigned build
+# is only needed on demand. Produces genemap-unsigned-ipa: an UNSIGNED
+# .ipa proving the iOS build works end-to-end. App Store submission
+# additionally needs Apple Developer signing (Distribution certificate +
+# provisioning profile added as secrets, and a signed archive step).
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ios:
+    name: Build unsigned IPA
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'pnpm'
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      # Inside Capacitor the origin is capacitor://localhost, so the API
+      # base must be baked in at build time.
+      - name: Build web app
+        run: pnpm --filter @genemap/shared build && pnpm --filter @genemap/web build
+        env:
+          VITE_API_URL: https://genemap-api-production.up.railway.app
+      # npx (isolated install), NOT pnpm exec: the repo's hoisted node_modules
+      # breaks the in-repo Capacitor CLI (CJS wrap-ansi + ESM string-width).
+      - name: Sync Capacitor
+        run: npx -y @capacitor/cli@8.4.1 sync ios
+        working-directory: apps/web
+      - name: Archive (unsigned)
+        run: |
+          xcodebuild -workspace apps/web/ios/App/App.xcworkspace -scheme App \
+            -configuration Release -sdk iphoneos \
+            -archivePath "$RUNNER_TEMP/App.xcarchive" archive \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
+      - name: Package unsigned IPA
+        run: |
+          mkdir -p "$RUNNER_TEMP/Payload"
+          cp -R "$RUNNER_TEMP/App.xcarchive/Products/Applications/App.app" "$RUNNER_TEMP/Payload/"
+          cd "$RUNNER_TEMP" && zip -qry GeneMap-unsigned.ipa Payload
+      - uses: actions/upload-artifact@v4
+        with:
+          name: genemap-unsigned-ipa
+          path: ${{ runner.temp }}/GeneMap-unsigned.ipa
+          if-no-files-found: error
