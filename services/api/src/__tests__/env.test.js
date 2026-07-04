@@ -33,7 +33,8 @@ describe('loadEnv (production)', () => {
     const env = loadEnv({ source: prodEnv() });
     expect(env.isProduction).toBe(true);
     expect(env.hasMedicalEncryption()).toBe(true);
-    expect(env.corsAllowList()).toEqual(['https://app.example.com']);
+    // Capacitor mobile origins are always appended (see corsAllowList).
+    expect(env.corsAllowList()).toEqual(['https://app.example.com', 'https://localhost', 'capacitor://localhost']);
   });
 
   it.each([
