@@ -129,7 +129,14 @@ export function validateLaunchEnv(source = process.env) {
     checks.push(fail('env.NODE_ENV', `NODE_ENV must be production, got ${env.NODE_ENV}`));
   }
 
+  // The Capacitor mobile app's bundled-frontend origins are always appended
+  // by corsAllowList() — expected in production, not a misconfiguration.
+  const capacitorOrigins = new Set(['https://localhost', 'capacitor://localhost']);
   for (const origin of env.corsAllowList()) {
+    if (capacitorOrigins.has(origin)) {
+      checks.push(pass(`env.CORS_ORIGINS.${origin}`, 'Capacitor mobile app origin (expected)'));
+      continue;
+    }
     checks.push(checkUrl(`env.CORS_ORIGINS.${origin}`, origin, { requireHttps: true }));
   }
   if (env.corsAllowList().includes('*')) {
