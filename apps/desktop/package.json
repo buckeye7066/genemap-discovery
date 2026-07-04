@@ -2,18 +2,21 @@
   "name": "@genemap/desktop",
   "version": "1.0.0",
   "private": true,
+  "description": "GeneMap Discovery desktop app",
+  "author": "GeneMap Discovery",
   "main": "main.js",
   "scripts": {
     "dev": "electron .",
     "build:icons": "node scripts/generate-icons.mjs",
-    "build": "node scripts/generate-icons.mjs && electron-builder",
-    "build:win": "node scripts/generate-icons.mjs && electron-builder --win",
-    "build:mac": "node scripts/generate-icons.mjs && electron-builder --mac",
-    "build:linux": "node scripts/generate-icons.mjs && electron-builder --linux"
+    "build": "node scripts/generate-icons.mjs && node scripts/electron-build.mjs",
+    "build:win": "node scripts/generate-icons.mjs && node scripts/electron-build.mjs --win",
+    "build:mac": "node scripts/generate-icons.mjs && node scripts/electron-build.mjs --mac",
+    "build:linux": "node scripts/generate-icons.mjs && node scripts/electron-build.mjs --linux"
   },
   "build": {
     "appId": "com.genemap.discovery",
     "productName": "GeneMap Discovery",
+    "publish": null,
     "directories": {
       "output": "dist-electron"
     },
