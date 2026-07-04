@@ -241,10 +241,19 @@ export function loadEnv(opts = {}) {
 
     corsAllowList() {
       const raw = env.CORS_ORIGINS || (isProd ? '' : 'http://localhost:5173');
-      return raw
+      const list = raw
         .split(',')
         .map((s) => s.trim())
         .filter(Boolean);
+      // Capacitor mobile app (com.genemap.discovery) origins — always
+      // allowed, in code so a CORS_ORIGINS env edit can't silently break
+      // mobile login. Cookies already honor CROSS_ORIGIN_COOKIES
+      // (SameSite=None; Secure) and CSRF is token-based (HMAC double-submit),
+      // so no new CSRF surface is opened by trusting these origins.
+      for (const o of ['https://localhost', 'capacitor://localhost']) {
+        if (!list.includes(o)) list.push(o);
+      }
+      return list;
     },
 
     adminEmails() {
