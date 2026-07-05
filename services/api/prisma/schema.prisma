@@ -30,6 +30,11 @@ model User {
   linkedinUrl           String?   @map("linkedin_url")
   orcidId               String?   @map("orcid_id")
   profilePicture        String?   @map("profile_picture")
+  // Stamped on every successful sign-in (login or registration auto-login).
+  // NULL means the user has never signed in — the NULL→set transition fires
+  // the one-time "new user first login" owner notification. The migration
+  // backfills existing users so they never read as "new".
+  lastLoginAt           DateTime? @map("last_login_at")
   createdAt             DateTime  @default(now()) @map("created_at")
   updatedAt             DateTime  @updatedAt @map("updated_at")
 

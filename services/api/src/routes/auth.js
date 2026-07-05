@@ -13,6 +13,7 @@ import { authenticate } from '../middleware/auth.js';
 import { ensureCsrfCookie } from '../middleware/csrf.js';
 import { ValidationError, UnauthorizedError } from '../utils/errors.js';
 import { createAuditLog } from '../utils/audit.js';
+import { recordSuccessfulLogin } from '../services/firstLoginNotifier.js';
 import { getAuthCookieOptions, getClearCookieOptions } from '../utils/cookies.js';
 
 /**
@@ -143,6 +144,11 @@ export default async function authRoutes(fastify) {
       entityId: user.id,
     });
 
+    // Registration issues a session immediately, so it IS the first sign-in.
+    // Fire-and-forget: stamping last_login_at / notifying the owner must never
+    // affect the response.
+    void recordSuccessfulLogin({ prisma, user, method: 'register' });
+
     const accessToken = generateAccessToken({ userId: user.id, email: user.email, role: user.role });
     const refreshToken = generateRefreshToken({ userId: user.id });
 
@@ -225,6 +231,10 @@ export default async function authRoutes(fastify) {
       entityType: 'user',
       entityId: user.id,
     });
+
+    // Fire-and-forget: stamp last_login_at; a NULL→set transition (first ever
+    // sign-in) emails the owner. Never affects the login response.
+    void recordSuccessfulLogin({ prisma, user, method: 'login' });
 
     const accessToken = generateAccessToken({ userId: user.id, email: user.email, role: user.role });
     const refreshToken = generateRefreshToken({ userId: user.id });
