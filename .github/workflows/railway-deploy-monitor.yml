@@ -1,0 +1,49 @@
+name: Railway Deploy Monitor
+
+# Detects the exact failure mode from 2026-07-05: genemap-api's Railway
+# service silently lost its GitHub source connection, so merges to main
+# stopped auto-deploying with no visible signal anywhere in git. This job
+# fails loudly (red check on the main branch) if a push doesn't result in
+# a new successful Railway deployment within a reasonable window.
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  verify-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Wait for a fresh successful deployment
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          set -uo pipefail
+          SERVICE="genemap-api"
+          START_EPOCH=$(date -u +%s)
+          echo "Watching for a new $SERVICE deployment created at/after $(date -u -d "@$START_EPOCH")"
+
+          for i in $(seq 1 40); do
+            LATEST_LINE=$(railway deployment list --service "$SERVICE" 2>/dev/null | sed -n '2p')
+            STATUS=$(echo "$LATEST_LINE" | awk -F'|' '{print $2}' | xargs)
+            CREATED=$(echo "$LATEST_LINE" | awk -F'|' '{print $3}' | xargs)
+            CREATED_EPOCH=$(date -u -d "$CREATED" +%s 2>/dev/null || echo 0)
+
+            if [ "$CREATED_EPOCH" -ge "$START_EPOCH" ]; then
+              if [ "$STATUS" = "SUCCESS" ]; then
+                echo "New deployment confirmed: $LATEST_LINE"
+                exit 0
+              elif [ "$STATUS" = "FAILED" ] || [ "$STATUS" = "CRASHED" ]; then
+                echo "::error::New deployment for $SERVICE failed: $LATEST_LINE"
+                exit 1
+              fi
+              echo "Deployment in progress ($STATUS), waiting..."
+            fi
+            sleep 15
+          done
+
+          echo "::error::No new successful Railway deployment for $SERVICE landed within 10 minutes of this push (last seen: $LATEST_LINE). Auto-deploy may be broken again — check 'railway status --json' for a null source.repo, same root cause as 2026-07-05."
+          exit 1
