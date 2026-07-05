@@ -58,3 +58,4 @@ pnpm db:studio
 - API baseURL fallback in `client.ts`: `VITE_API_URL` -> localhost API in local browser -> same-origin proxy.
 - Medical data encryption requires a 64-character hex `MEDICAL_DATA_ENCRYPTION_KEY` in production.
 - Stripe price IDs must come from server env; do not trust client-supplied price IDs.
+- `genemap-api`'s Railway service had no GitHub source connected until 2026-07-05 (`source.repo` was null) — every "deploy" was actually a manual `railway up` after merging to main. Reconnected via Railway's GraphQL `serviceConnect` mutation (repo `buckeye7066/genemap-discovery`, branch `main`) and confirmed a real auto-triggered deployment fired within seconds of a merge. Should now auto-deploy on merge like a normal Railway+GitHub setup, but verify with `railway status --json` (`source.repo`) or deployment timestamps after any high-stakes merge, since this had silently regressed before.
