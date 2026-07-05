@@ -144,7 +144,15 @@ runIfPostgres('Postgres integration smoke', () => {
     });
     const subscriptionResponses = await Promise.all([postWebhook(), postWebhook()]);
     expect(subscriptionResponses.map((res) => res.statusCode)).toEqual([200, 200]);
-    await expect(prisma.subscription.count()).resolves.toBe(1);
+    // Scoped to the Stripe-driven row itself (not a bare total count): every
+    // new registration also gets its own always-on signup-trial comp
+    // (planType 'admin_granted', see utils/signupTrial.js), so the buyer now
+    // legitimately has 2 subscription rows. What this test actually verifies —
+    // that concurrent webhook delivery for the SAME Stripe subscription is
+    // deduplicated into one row — is unaffected.
+    await expect(
+      prisma.subscription.count({ where: { stripeSubscriptionId: 'sub_pg_1' } })
+    ).resolves.toBe(1);
     await expect(prisma.stripeEvent.count({ where: { stripeEventId: 'evt_pg_subscription' } })).resolves.toBe(1);
 
     Stripe.__setNextEvent({
