@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from 'vitest';
 import { buildTestApp, createPrismaMock, authCookie } from './setup.js';
 import { hashPassword, generateRefreshToken, hashRefreshToken } from '../utils/auth.js';
 
@@ -105,6 +105,95 @@ describe('POST /auth/register', () => {
     });
 
     expect(res.statusCode).toBe(400);
+  });
+});
+
+// ─── POST /auth/register — always-on new-signup free trial ─────────────────
+
+describe('POST /auth/register — signup free trial', () => {
+  const DAY = 24 * 60 * 60 * 1000;
+  const originalEnv = { ...process.env };
+
+  afterEach(() => {
+    process.env = { ...originalEnv };
+  });
+
+  it('stamps a fresh admin_granted subscription (the trial) for a new user by default', async () => {
+    const before = Date.now();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/auth/register',
+      payload: { email: 'trial-user@example.com', password: 'StrongPass1!' },
+    });
+    expect(res.statusCode).toBe(200);
+    const userId = JSON.parse(res.body).user.id;
+
+    const sub = prisma._store.subscription.find((s) => s.userId === userId);
+    expect(sub).toBeDefined();
+    expect(sub).toMatchObject({ status: 'active', planType: 'admin_granted' });
+
+    const end = new Date(sub.currentPeriodEnd).getTime();
+    expect(end).toBeGreaterThan(before + 7 * DAY - 5000);
+    expect(end).toBeLessThan(before + 7 * DAY + 5000);
+  });
+
+  it('stamps the trial per-user — two different signups get two independent grants', async () => {
+    const res1 = await app.inject({
+      method: 'POST',
+      url: '/auth/register',
+      payload: { email: 'trial-a@example.com', password: 'StrongPass1!' },
+    });
+    const res2 = await app.inject({
+      method: 'POST',
+      url: '/auth/register',
+      payload: { email: 'trial-b@example.com', password: 'StrongPass1!' },
+    });
+    const userIdA = JSON.parse(res1.body).user.id;
+    const userIdB = JSON.parse(res2.body).user.id;
+
+    const subA = prisma._store.subscription.find((s) => s.userId === userIdA);
+    const subB = prisma._store.subscription.find((s) => s.userId === userIdB);
+    expect(subA).toBeDefined();
+    expect(subB).toBeDefined();
+    expect(subA.id).not.toBe(subB.id);
+    expect(subA.userId).not.toBe(subB.userId);
+  });
+
+  it('grants 30 days when SIGNUP_TRIAL_PERIOD=month', async () => {
+    process.env.SIGNUP_TRIAL_PERIOD = 'month';
+    const before = Date.now();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/auth/register',
+      payload: { email: 'trial-month@example.com', password: 'StrongPass1!' },
+    });
+    const userId = JSON.parse(res.body).user.id;
+    const sub = prisma._store.subscription.find((s) => s.userId === userId);
+    const end = new Date(sub.currentPeriodEnd).getTime();
+    expect(end).toBeGreaterThan(before + 30 * DAY - 5000);
+    expect(end).toBeLessThan(before + 30 * DAY + 5000);
+  });
+
+  it('grants no subscription when SIGNUP_TRIAL_ENABLED=false', async () => {
+    process.env.SIGNUP_TRIAL_ENABLED = 'false';
+    const res = await app.inject({
+      method: 'POST',
+      url: '/auth/register',
+      payload: { email: 'trial-disabled@example.com', password: 'StrongPass1!' },
+    });
+    const userId = JSON.parse(res.body).user.id;
+    const sub = prisma._store.subscription.find((s) => s.userId === userId);
+    expect(sub).toBeUndefined();
+  });
+
+  it('still registers the user successfully even if the trial grant is disabled', async () => {
+    process.env.SIGNUP_TRIAL_PERIOD = 'none';
+    const res = await app.inject({
+      method: 'POST',
+      url: '/auth/register',
+      payload: { email: 'trial-none@example.com', password: 'StrongPass1!' },
+    });
+    expect(res.statusCode).toBe(200);
   });
 });
 
