@@ -15,6 +15,8 @@ import { ValidationError, UnauthorizedError } from '../utils/errors.js';
 import { createAuditLog } from '../utils/audit.js';
 import { recordSuccessfulLogin } from '../services/firstLoginNotifier.js';
 import { getAuthCookieOptions, getClearCookieOptions } from '../utils/cookies.js';
+import { signupTrialGrant } from '../utils/signupTrial.js';
+import { grantOrExtendFreePeriod, FREE_PERIOD_DAYS } from '../utils/freePeriod.js';
 
 /**
  * Lower-case + trim the email before any DB lookup or write so the same
@@ -143,6 +145,22 @@ export default async function authRoutes(fastify) {
       entityType: 'user',
       entityId: user.id,
     });
+
+    // Always-on new-signup free trial: every newly-created user gets their OWN
+    // free period starting now, via the SAME admin_granted Subscription row the
+    // admin "grant free period" feature uses (utils/freePeriod.js), so a later
+    // admin grant EXTENDS this window instead of double-stacking a second row.
+    // ON by default (SIGNUP_TRIAL_ENABLED) — a fresh deploy grants every new
+    // user 7 free days with no env configuration required. Best-effort: never
+    // fail registration because the comp write fails.
+    const trial = signupTrialGrant(process.env);
+    if (trial) {
+      try {
+        await grantOrExtendFreePeriod(prisma, user.id, FREE_PERIOD_DAYS[trial.period]);
+      } catch (err) {
+        request.log?.warn?.({ err: err?.message, userId: user.id }, 'signup trial grant failed');
+      }
+    }
 
     // Registration issues a session immediately, so it IS the first sign-in.
     // Fire-and-forget: stamping last_login_at / notifying the owner must never

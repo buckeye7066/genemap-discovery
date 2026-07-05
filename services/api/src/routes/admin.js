@@ -1,6 +1,7 @@
 import { authenticate, requireRole } from '../middleware/auth.js';
 import { createAuditLog } from '../utils/audit.js';
 import { ValidationError, NotFoundError } from '../utils/errors.js';
+import { FREE_PERIOD_DAYS, computeFreePeriodEnd, grantOrExtendFreePeriod } from '../utils/freePeriod.js';
 
 function normalizeEmail(email) {
   return String(email || '').trim().toLowerCase();
@@ -39,24 +40,6 @@ function serializePreBannedUser(p) {
     createdAt: p.createdAt ?? null,
     pre_banned: true,
   };
-}
-
-// Complimentary access windows an admin can grant. Kept as whole days so the
-// expiry is unambiguous regardless of the hour the grant is issued.
-const FREE_PERIOD_DAYS = { week: 7, month: 30 };
-
-/**
- * Compute the new expiry for a complimentary access window.
- *
- * Never shortens an existing window: if the user already has access that runs
- * past what this grant would give, we keep the later date. Otherwise we extend
- * from whichever is later — "now" or the current end — so repeated grants stack
- * cleanly instead of overlapping.
- */
-function computeFreePeriodEnd(currentEnd, days) {
-  const now = Date.now();
-  const base = currentEnd && currentEnd.getTime() > now ? currentEnd.getTime() : now;
-  return new Date(base + days * 24 * 60 * 60 * 1000);
 }
 
 /**
@@ -497,30 +480,11 @@ export default async function adminRoutes(fastify) {
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new NotFoundError('User not found');
 
-    // Reuse an active admin-granted comp so grants stack on one row. Real Stripe
+    // Reuse an active admin-granted comp so grants stack on one row (same
+    // helper the automatic new-signup trial uses — see utils/signupTrial.js —
+    // so a user can never end up with two competing comp rows). Real Stripe
     // subscriptions (planType month/year/team_*) are deliberately left alone.
-    const existingComp = await prisma.subscription.findFirst({
-      where: { userId, status: 'active', planType: 'admin_granted' },
-      orderBy: { createdAt: 'desc' },
-    });
-
-    const newEnd = computeFreePeriodEnd(existingComp?.currentPeriodEnd ?? null, days);
-
-    if (existingComp) {
-      await prisma.subscription.update({
-        where: { id: existingComp.id },
-        data: { currentPeriodEnd: newEnd },
-      });
-    } else {
-      await prisma.subscription.create({
-        data: {
-          userId,
-          status: 'active',
-          planType: 'admin_granted',
-          currentPeriodEnd: newEnd,
-        },
-      });
-    }
+    const newEnd = await grantOrExtendFreePeriod(prisma, userId, days);
 
     await createAuditLog(
       prisma,
