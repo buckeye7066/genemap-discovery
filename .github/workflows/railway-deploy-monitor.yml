@@ -20,10 +20,15 @@ jobs:
       - name: Wait for a fresh successful deployment
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          PUSH_TIMESTAMP: ${{ github.event.head_commit.timestamp }}
         run: |
           set -uo pipefail
           SERVICE="genemap-api"
-          START_EPOCH=$(date -u +%s)
+          # Use the commit's own push timestamp, not a runner-local clock read —
+          # Railway has been observed deploying within ~2 seconds of a push, which
+          # is faster than this job even finishes installing the CLI. A 60s buffer
+          # absorbs clock skew between GitHub and Railway.
+          START_EPOCH=$(( $(date -u -d "$PUSH_TIMESTAMP" +%s) - 60 ))
           echo "Watching for a new $SERVICE deployment created at/after $(date -u -d "@$START_EPOCH")"
 
           for i in $(seq 1 40); do
