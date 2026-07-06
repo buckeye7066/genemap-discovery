@@ -56,7 +56,7 @@ export default function Login() {
 
   return (
     <div className="min-h-screen bg-slate-950 px-4 py-10 text-slate-100">
-      <div className="mx-auto flex min-h-[calc(100vh-5rem)] w-full max-w-md items-center">
+      <div className="mx-auto flex min-h-[calc(100vh-5rem)] w-full max-w-md flex-col items-center justify-center">
         <Card className="w-full border-slate-800 bg-slate-900 shadow-2xl">
           <CardHeader className="space-y-3">
             <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-cyan-500 text-slate-950">
@@ -74,7 +74,7 @@ export default function Login() {
               <Button
                 type="button"
                 variant={isRegister ? "ghost" : "default"}
-                className={isRegister ? "text-slate-300" : "bg-cyan-500 text-slate-950 hover:bg-cyan-400"}
+                className={isRegister ? "!text-slate-300" : "bg-cyan-500 text-slate-950 hover:bg-cyan-400"}
                 aria-pressed={!isRegister}
                 onClick={() => changeMode("login")}
               >
@@ -84,7 +84,7 @@ export default function Login() {
               <Button
                 type="button"
                 variant={isRegister ? "default" : "ghost"}
-                className={isRegister ? "bg-cyan-500 text-slate-950 hover:bg-cyan-400" : "text-slate-300"}
+                className={isRegister ? "bg-cyan-500 text-slate-950 hover:bg-cyan-400" : "!text-slate-300"}
                 aria-pressed={isRegister}
                 onClick={() => changeMode("register")}
               >
