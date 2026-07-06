@@ -698,36 +698,44 @@ export default async function adminRoutes(fastify) {
     return { success: true };
   });
 
-  // Hard-deleting a user cascades through every owned record. Reserve to
-  // super_admin and prefer soft deactivation (banned=true) for admins.
-  fastify.delete('/users/:id', { preHandler: requireSuperAdmin }, async (request) => {
-    const { id } = request.params;
+  // Hard-delete a user and (via onDelete: Cascade on every user-owned
+  // relation in schema.prisma) all their data. Reserved to super_admin; the
+  // UI's confirm dialog promises permanent deletion, so this must actually
+  // remove the row — the old soft-ban here left "deleted" users in the list.
+  // The param accepts a user id OR an email: the deployed web app has sent
+  // both across versions, and an unknown identifier must be a 404, not a
+  // Prisma P2025 500.
+  fastify.delete('/users/:idOrEmail', { preHandler: requireSuperAdmin }, async (request) => {
+    const { idOrEmail } = request.params;
 
-    if (id === request.user.userId) {
+    const user = idOrEmail.includes('@')
+      ? await prisma.user.findUnique({ where: { email: normalizeEmail(idOrEmail) } })
+      : await prisma.user.findUnique({ where: { id: idOrEmail } });
+    if (!user) throw new NotFoundError('User not found');
+
+    if (user.id === request.user.userId) {
       throw new ValidationError('Cannot delete your own account');
     }
+    if (user.role === 'super_admin') {
+      throw new ValidationError('Cannot delete a super admin account');
+    }
 
-    // Soft-delete by ban + reason for compliance-friendly audit trail.
-    await prisma.user.update({
-      where: { id },
-      data: {
-        banned: true,
-        banReason: 'Deleted/deactivated by super admin',
-        bannedDate: new Date(),
-        bannedBy: request.user.userId,
-      },
-    });
-
+    // Write the audit entry BEFORE the delete: AuditLog.userId references the
+    // acting admin (not the target), so it survives the cascade, but ordering
+    // it first guarantees a trace exists even if the delete itself fails.
     await createAuditLog(
       prisma,
       {
         userId: request.user.userId,
         action: 'delete_user',
         entityType: 'user',
-        entityId: id,
+        entityId: user.id,
+        metadata: { email: user.email },
       },
       { required: true }
     );
+
+    await prisma.user.delete({ where: { id: user.id } });
 
     return { success: true };
   });

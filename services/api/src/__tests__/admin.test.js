@@ -755,12 +755,12 @@ describe('DELETE /admin/users/:id', () => {
     expect(res.statusCode).toBe(403);
   });
 
-  it('should soft-delete (ban) a user when the caller is super_admin', async () => {
+  it('should hard-delete a user by id when the caller is super_admin', async () => {
     const SUPER = { userId: 'super-1', email: 'super@example.com', role: 'super_admin' };
     seedAuthUser(prisma, SUPER);
     const superCookie = authCookie(SUPER);
 
-    prisma._store.user.push({ id: 'del-1', email: 'delete@test.com', banned: false });
+    prisma._store.user.push({ id: 'del-1', email: 'delete@test.com', role: 'user' });
 
     const res = await app.inject({
       method: 'DELETE',
@@ -769,13 +769,72 @@ describe('DELETE /admin/users/:id', () => {
     });
 
     expect(res.statusCode).toBe(200);
-    // Soft-delete: user is marked banned, not removed from the store.
-    expect(prisma.user.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { id: 'del-1' },
-        data: expect.objectContaining({ banned: true }),
-      }),
-    );
+    // Hard-delete: the row is actually removed from the store.
+    expect(prisma.user.delete).toHaveBeenCalledWith({ where: { id: 'del-1' } });
+    expect(prisma._store.user.find((u) => u.id === 'del-1')).toBeUndefined();
+  });
+
+  it('should also accept an email as the identifier (stale-frontend tolerance)', async () => {
+    const SUPER = { userId: 'super-1', email: 'super@example.com', role: 'super_admin' };
+    seedAuthUser(prisma, SUPER);
+    const superCookie = authCookie(SUPER);
+
+    prisma._store.user.push({ id: 'del-2', email: 'trial-verify@example.com', role: 'user' });
+
+    const res = await app.inject({
+      method: 'DELETE',
+      url: `/admin/users/${encodeURIComponent('Trial-Verify@Example.com')}`,
+      headers: { cookie: superCookie },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(prisma._store.user.find((u) => u.id === 'del-2')).toBeUndefined();
+  });
+
+  it('should 404 (not 500) on an unknown identifier', async () => {
+    const SUPER = { userId: 'super-1', email: 'super@example.com', role: 'super_admin' };
+    seedAuthUser(prisma, SUPER);
+    const superCookie = authCookie(SUPER);
+
+    const res = await app.inject({
+      method: 'DELETE',
+      url: `/admin/users/${encodeURIComponent('nobody@example.com')}`,
+      headers: { cookie: superCookie },
+    });
+
+    expect(res.statusCode).toBe(404);
+  });
+
+  it('should refuse to delete your own account', async () => {
+    const SUPER = { userId: 'super-1', email: 'super@example.com', role: 'super_admin' };
+    seedAuthUser(prisma, SUPER);
+    const superCookie = authCookie(SUPER);
+
+    const res = await app.inject({
+      method: 'DELETE',
+      url: `/admin/users/${encodeURIComponent('super@example.com')}`,
+      headers: { cookie: superCookie },
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(prisma._store.user.find((u) => u.id === 'super-1')).toBeDefined();
+  });
+
+  it('should refuse to delete a super_admin account', async () => {
+    const SUPER = { userId: 'super-1', email: 'super@example.com', role: 'super_admin' };
+    seedAuthUser(prisma, SUPER);
+    const superCookie = authCookie(SUPER);
+
+    prisma._store.user.push({ id: 'super-2', email: 'other-super@example.com', role: 'super_admin' });
+
+    const res = await app.inject({
+      method: 'DELETE',
+      url: '/admin/users/super-2',
+      headers: { cookie: superCookie },
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(prisma._store.user.find((u) => u.id === 'super-2')).toBeDefined();
   });
 });
 
