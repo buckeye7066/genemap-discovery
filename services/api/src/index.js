@@ -158,6 +158,15 @@ fastify.get('/health', async () => ({ status: 'ok', timestamp: new Date().toISOS
 
 const start = async () => {
   try {
+    // Keep-alive race fix: Node's default keepAliveTimeout (5s; Fastify's 72s
+    // default can also sit under a proxy's idle window) is shorter than the
+    // Railway edge proxy's idle timeout, so the server can close an idle
+    // socket at the exact moment the proxy writes the next request into it —
+    // the proxy then surfaces a bodiless 502 on a healthy app. The server-side
+    // timeout must EXCEED the proxy's so the proxy always closes first;
+    // headersTimeout must exceed keepAliveTimeout.
+    fastify.server.keepAliveTimeout = Number(process.env.HTTP_KEEPALIVE_TIMEOUT_MS || 620_000);
+    fastify.server.headersTimeout = fastify.server.keepAliveTimeout + 5_000;
     await fastify.listen({ port: env.PORT, host: env.HOST });
     fastify.log.info(
       { port: env.PORT, host: env.HOST, env: env.NODE_ENV, sentry: sentryEnabled },
