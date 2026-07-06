@@ -38,6 +38,17 @@ self.addEventListener('fetch', (event) => {
         }
         return response;
       })
-      .catch(() => caches.match(event.request))
+      .catch(async () => {
+        // respondWith() rejects anything that isn't a Response — a bare
+        // caches.match() miss resolves to undefined and throws
+        // "Failed to convert value to 'Response'". Always end with a Response.
+        const cached = await caches.match(event.request);
+        if (cached) return cached;
+        if (event.request.mode === 'navigate') {
+          const shell = await caches.match('/index.html');
+          if (shell) return shell;
+        }
+        return new Response('Offline', { status: 503, statusText: 'Service Unavailable' });
+      })
   );
 });
