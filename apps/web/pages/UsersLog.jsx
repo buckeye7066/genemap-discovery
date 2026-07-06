@@ -166,14 +166,17 @@ export default function UsersLogPage() {
     return `${estString} EST`;
   };
 
-  const handleDeleteUser = async (userEmail) => {
+  // Delete by user id (the API's canonical identifier); the email is only for
+  // the confirmation dialog. Passing the email here used to 500 because the
+  // backend looked the param up as an id.
+  const handleDeleteUser = async ({ id: userId, email: userEmail }) => {
     if (!confirm(`Are you sure you want to PERMANENTLY DELETE user ${userEmail}? This will delete the user and ALL their data. This action CANNOT be undone.`)) {
       return;
     }
 
     setDeletingUser(userEmail);
     try {
-      await apiClient.deleteUser(userEmail);
+      await apiClient.deleteUser(userId);
       setError(null);
       await loadData();
       alert(`User ${userEmail} deleted successfully`);
@@ -430,7 +433,7 @@ export default function UsersLogPage() {
                           <Button
                             variant="destructive"
                             size="sm"
-                            onClick={() => handleDeleteUser(user.email)}
+                            onClick={() => handleDeleteUser(user)}
                             disabled={deletingUser === user.email || user.email === currentUser?.email}
                             className="gap-1"
                           >
