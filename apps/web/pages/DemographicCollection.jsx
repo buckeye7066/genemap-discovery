@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import DnaIcon from "../components/icons/DnaIcon";
-import { UserCircle, Phone, Mail, CheckCircle, AlertCircle, ExternalLink } from "lucide-react";
+import { UserCircle, Mail, CheckCircle, AlertCircle, ExternalLink } from "lucide-react";
 
 export default function DemographicCollectionPage() {
   const navigate = useNavigate();
@@ -58,11 +58,10 @@ export default function DemographicCollectionPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!phoneNumber.trim()) {
-      setError("Phone number is required");
-      return;
-    }
-
+    // No field is required. We save whatever the user has entered (even nothing)
+    // and mark demographics as collected so the DemographicCheck gate releases
+    // them into the app. Previously an empty phone number left the submit button
+    // disabled forever, so users who skipped it were trapped on this screen.
     setIsSaving(true);
     setError(null);
     setSuccess(false);
@@ -126,13 +125,8 @@ export default function DemographicCollectionPage() {
           <p className="text-slate-600 text-sm mt-2">
             {isEditMode
               ? "Update your contact details and preferences below."
-              : "Please provide the following information to access GeneMap"}
+              : "Tell us a little about yourself — all optional. You can continue and fill this in later."}
           </p>
-          {!isEditMode && (
-            <p className="text-red-600 text-xs mt-1 font-medium">
-              * All fields are required
-            </p>
-          )}
         </CardHeader>
         <CardContent>
           {success && (
@@ -184,24 +178,6 @@ export default function DemographicCollectionPage() {
               </div>
             </div>
 
-            {/* Phone Number Input */}
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">
-                Phone Number <span className="text-red-500">*</span>
-              </label>
-              <div className="relative">
-                <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
-                <Input
-                  type="tel"
-                  value={phoneNumber}
-                  onChange={(e) => setPhoneNumber(e.target.value)}
-                  placeholder="(555) 123-4567"
-                  className="pl-10"
-                  required
-                />
-              </div>
-            </div>
-
             {/* Mailing List Opt-in */}
             <div className="space-y-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
               <div className="flex items-start gap-3">
@@ -248,7 +224,7 @@ export default function DemographicCollectionPage() {
             <div className="flex flex-col gap-2">
               <Button
                 type="submit"
-                disabled={isSaving || !phoneNumber.trim()}
+                disabled={isSaving}
                 className="w-full bg-blue-600 hover:bg-blue-700"
               >
                 {isSaving ? (
@@ -276,7 +252,7 @@ export default function DemographicCollectionPage() {
                 </Button>
               ) : (
                 <p className="text-center text-xs text-slate-500">
-                  This information is required to access the application
+                  You can update these details anytime from your profile
                 </p>
               )}
             </div>
