@@ -49,6 +49,19 @@ function isAdminEmail(email) {
 // the "retry in N minutes" message varies, defeating the per-signature
 // throttle. We log these but never email. Genuine 5xx / TypeError alerts are
 // unaffected.
+// Transient transport failures: a dropped/reset socket ("Premature close",
+// ECONNRESET, "socket hang up", EPIPE) or a client that aborted the request
+// mid-flight. These are network events, never code bugs the owner can fix, and
+// the raw undici message ("Premature close") otherwise falls through to the
+// generic "Unclassified server error / high severity" heuristic and pages the
+// owner. Treat them like 429s: log-only, no email.
+function isTransientConnectionError(error, code) {
+  const haystack = `${code || ''} ${error?.code || ''} ${error?.message || ''}`.toLowerCase();
+  return /premature close|socket hang ?up|econnreset|epipe|econnaborted|err_stream_premature_close|und_err_socket|other side closed|request aborted|aborted\b/i.test(
+    haystack
+  );
+}
+
 function isNonActionable(error, statusCode) {
   if (statusCode === 429) return true;
   const message = String(error?.message || '').toLowerCase();
@@ -56,6 +69,8 @@ function isNonActionable(error, statusCode) {
   // Upstream LLM/provider 429 surfaced inside a wrapped error message
   // (e.g. "LLM provider api.openai.com failed HTTP 429").
   if (/\b429\b/.test(message) && /(http|provider|openai|anthropic|api\.)/i.test(message)) return true;
+  // Transient socket resets / client aborts — transport noise, not bugs.
+  if (isTransientConnectionError(error)) return true;
   return false;
 }
 
@@ -103,6 +118,13 @@ function heuristicAnalysis(error, ctx) {
       cause: 'A database/Prisma operation failed — the DB may be unreachable (ECONNREFUSED), a query referenced a missing column/relation, or a migration is out of sync.',
       fix: 'Verify DATABASE_URL and DB reachability, confirm migrations are applied (prisma migrate deploy), and check the offending query against the current schema.',
       severity: 'critical',
+    };
+  }
+  if (isTransientConnectionError(error, error?.code)) {
+    return {
+      cause: 'A network connection was reset or closed mid-request — typically a transient keep-alive socket race with an upstream provider, or the client aborting the request. Not an application logic bug.',
+      fix: 'No action usually required; these are transient. The LLM wrapper already retries connection resets on a fresh socket. If frequent, check upstream provider status and connection-pool/keep-alive settings.',
+      severity: 'low',
     };
   }
   if (lower.includes('timeout') || lower.includes('timed out') || lower.includes('etimedout') || name === 'AbortError') {
@@ -334,3 +356,10 @@ export function reportErrorToOwner({ error, source, user, route, method, request
     }
   })();
 }
+
+export const __test = {
+  isNonActionable,
+  isTransientConnectionError,
+  heuristicAnalysis,
+  buildSignature,
+};
