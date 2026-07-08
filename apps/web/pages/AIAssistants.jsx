@@ -678,10 +678,10 @@ Please provide a comprehensive response.`;
                     {medicalRecords.slice(0, 3).map((record, idx) => (
                       <div key={idx} className="p-2 bg-slate-50 rounded text-xs">
                         <p className="font-medium text-slate-900">
-                          {record.file_type === 'genetic_test' ? '🧬' : 
-                           record.file_type === 'blood_test' ? '💉' : 
+                          {record.file_type === 'genetic_test' ? '🧬' :
+                           record.file_type === 'blood_test' ? '💉' :
                            record.file_type === 'vcf_file' ? '📊' : '📄'}{' '}
-                          {record.file_type.replace('_', ' ').toUpperCase()}
+                          {(record.file_type ?? 'unknown').replace('_', ' ').toUpperCase()}
                         </p>
                         <p className="text-slate-500">
                           {new Date(record.created_date).toLocaleDateString()}

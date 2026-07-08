@@ -42,6 +42,23 @@ function isAdminEmail(email) {
   return lowered === ALWAYS_ADMIN || adminEmails().includes(lowered);
 }
 
+// Non-actionable errors --------------------------------------------------
+// Rate-limit / quota errors (our own limiter doing its job, or an upstream LLM
+// provider returning 429) are transient and expected — not code bugs. Emailing
+// the owner for each one causes alert-fatigue floods (dozens/minutes) because
+// the "retry in N minutes" message varies, defeating the per-signature
+// throttle. We log these but never email. Genuine 5xx / TypeError alerts are
+// unaffected.
+function isNonActionable(error, statusCode) {
+  if (statusCode === 429) return true;
+  const message = String(error?.message || '').toLowerCase();
+  if (/rate ?limit|retry in|too many requests|quota/i.test(message)) return true;
+  // Upstream LLM/provider 429 surfaced inside a wrapped error message
+  // (e.g. "LLM provider api.openai.com failed HTTP 429").
+  if (/\b429\b/.test(message) && /(http|provider|openai|anthropic|api\.)/i.test(message)) return true;
+  return false;
+}
+
 function buildSignature(source, route, error) {
   const name = error?.name || 'Error';
   const message = String(error?.message || '').slice(0, 120);
@@ -272,6 +289,13 @@ export function reportErrorToOwner({ error, source, user, route, method, request
         message: sanitizeError(rawErr),
         stack: rawErr.stack,
       };
+      // Skip (log-only) transient rate-limit / upstream-429 errors — these are
+      // non-actionable and cause alert-fatigue floods.
+      if (isNonActionable(err, statusCode)) {
+        console.warn(`[errorReporter] non-actionable error suppressed (no email): ${err.name}: ${String(err.message || '').slice(0, 120)}`);
+        return;
+      }
+
       const now = Date.now();
       const signature = buildSignature(source, route, err);
 

@@ -80,6 +80,16 @@ const ChatMessage = memo(function ChatMessage({ message }) {
   );
 });
 
+// Defensive: API responses may come back as a bare array, an object wrapping
+// the array under `key`, or an unexpected shape (object/Map/null). Coerce to a
+// real array before calling array methods so a shape mismatch can't crash the
+// page render (e.g. `.slice is not a function`).
+function asArray(res, key) {
+  if (Array.isArray(res)) return res;
+  if (res && Array.isArray(res[key])) return res[key];
+  return [];
+}
+
 const QUICK_PROMPTS = [
   "Explain my results like I'm 10 😊",
   "What do these genes mean for my health?",
@@ -138,11 +148,11 @@ export default function AnastasiaPage() {
         apiClient.getMedicalData().catch(() => ({ records: [] })),
       ]).then(([geneSetsRes, searchRes, projectsRes, medicalRes]) => {
         setUserContext({
-          geneSets: (geneSetsRes.sets || geneSetsRes || []).slice(0, 10),
-          recentSearches: (searchRes.entries || searchRes || []).slice(0, 10),
-          projects: (projectsRes.projects || projectsRes || []).slice(0, 5),
+          geneSets: asArray(geneSetsRes, 'sets').slice(0, 10),
+          recentSearches: asArray(searchRes, 'entries').slice(0, 10),
+          projects: asArray(projectsRes, 'projects').slice(0, 5),
         });
-        setMedicalRecords((medicalRes.records || medicalRes || []).slice(0, 20));
+        setMedicalRecords(asArray(medicalRes, 'records').slice(0, 20));
       });
     }
   }, [user]);
