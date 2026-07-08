@@ -93,9 +93,41 @@ function isTimeoutError(error) {
   return /timed?\s*out|timeout/i.test(String(error.message || ''));
 }
 
+// A dropped/reset connection ("Premature close", ECONNRESET, "socket hang up",
+// EPIPE, undici socket errors) is almost always a transient keep-alive race:
+// the pool handed us a socket the remote had already half-closed. Unlike a
+// timeout, retrying gets a FRESH connection and typically succeeds — so these
+// must be retried, not surfaced. We also match the raw message because
+// `ERR_STREAM_PREMATURE_CLOSE` can bubble out of body parsing WITHOUT the SDK
+// wrapping it (so it carries no HTTP status), which is exactly how a bare
+// "Premature close" escaped un-sanitized before this guard existed.
+const CONNECTION_RESET_CODES = new Set([
+  'ECONNRESET',
+  'EPIPE',
+  'ECONNABORTED',
+  'ERR_STREAM_PREMATURE_CLOSE',
+  'UND_ERR_SOCKET',
+  'UND_ERR_CONNECT_TIMEOUT',
+]);
+
+export function isConnectionResetError(error) {
+  if (!error) return false;
+  if (CONNECTION_RESET_CODES.has(error.code) || CONNECTION_RESET_CODES.has(error.cause?.code)) {
+    return true;
+  }
+  const haystack = `${error.message || ''} ${error.cause?.message || ''}`;
+  return /premature close|socket hang ?up|econnreset|epipe|connection reset|other side closed/i.test(
+    haystack
+  );
+}
+
 function isRetryableProviderError(error) {
   if (String(error?.message || '').includes('_API_KEY')) return false;
   if (isTimeoutError(error)) return false;
+  // Check connection resets BEFORE the status checks: an HTTP/2 body-read reset
+  // can arrive with a stale/misleading status attached, but it is still a
+  // transport failure that a fresh connection recovers from.
+  if (isConnectionResetError(error)) return true;
   if (typeof error?.status === 'number') {
     return RETRYABLE_STATUS.has(error.status);
   }

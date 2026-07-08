@@ -1,8 +1,9 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 import { buildTestApp, createPrismaMock, authCookie } from './setup.js';
-import { parseJsonFromLLM } from '../services/llm.js';
+import { parseJsonFromLLM, isConnectionResetError } from '../services/llm.js';
 import { normalizeQuery } from '../services/genomicDatabases.js';
 import { __test as llmInternals } from '../routes/llm.js';
+import { __test as reporterInternals } from '../services/errorReporter.js';
 import { routeLabel } from '../middleware/errorHandler.js';
 
 // ─── routeLabel (no PII to logs / Sentry / owner email) ──────────────────────
@@ -61,6 +62,48 @@ describe('parseJsonFromLLM', () => {
     const validator = (v) => (v && v.ok ? { success: true, data: v } : { success: false });
     expect(parseJsonFromLLM('{"ok":true}', { validate: validator })).toEqual({ ok: true });
     expect(parseJsonFromLLM('{"ok":false}', { fallback: 'X', validate: validator })).toBe('X');
+  });
+});
+
+// ─── connection-reset classification (llm retry layer) ───────────────────────
+describe('isConnectionResetError', () => {
+  it('recognizes a bare undici "Premature close" (no HTTP status)', () => {
+    expect(isConnectionResetError(new Error('Premature close'))).toBe(true);
+  });
+
+  it('recognizes reset codes on the error or its cause', () => {
+    const byCode = Object.assign(new Error('boom'), { code: 'ECONNRESET' });
+    const byCause = Object.assign(new Error('fetch failed'), {
+      cause: Object.assign(new Error('other side closed'), { code: 'UND_ERR_SOCKET' }),
+    });
+    expect(isConnectionResetError(byCode)).toBe(true);
+    expect(isConnectionResetError(byCause)).toBe(true);
+    expect(isConnectionResetError(new Error('socket hang up'))).toBe(true);
+  });
+
+  it('does not misclassify ordinary errors as connection resets', () => {
+    expect(isConnectionResetError(new Error('model does not exist'))).toBe(false);
+    expect(isConnectionResetError(null)).toBe(false);
+  });
+});
+
+// ─── error reporter: transient transport noise is non-actionable ─────────────
+describe('errorReporter transient-connection triage', () => {
+  it('classifies "Premature close" as non-actionable (log-only, no owner page)', () => {
+    expect(reporterInternals.isNonActionable({ name: 'Error', message: 'Premature close' }, 500)).toBe(true);
+    expect(reporterInternals.isNonActionable({ message: 'socket hang up' })).toBe(true);
+    expect(reporterInternals.isNonActionable({ message: 'read ECONNRESET' })).toBe(true);
+  });
+
+  it('still pages the owner for genuine server bugs', () => {
+    expect(reporterInternals.isNonActionable({ name: 'TypeError', message: "Cannot read properties of undefined (reading 'x')" }, 500)).toBe(false);
+    expect(reporterInternals.isNonActionable({ message: 'relation "users" does not exist' }, 500)).toBe(false);
+  });
+
+  it('heuristic labels a premature close as low severity, not high', () => {
+    const analysis = reporterInternals.heuristicAnalysis({ name: 'Error', message: 'Premature close' }, { statusCode: 500 });
+    expect(analysis.severity).toBe('low');
+    expect(analysis.cause).toMatch(/reset|closed/i);
   });
 });
 
