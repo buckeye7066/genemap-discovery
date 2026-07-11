@@ -115,31 +115,64 @@ export default function MedicalDataPage() {
     setUploadProgress("Uploading file...");
 
     try {
-      setUploadProgress("Analyzing file with Robert...");
+      // Read the file's text so the analysis is grounded in real content
+      // rather than hallucinated from the file name alone. Binary formats
+      // (PDF/images/DICOM) can't be read as text in the browser without extra
+      // libraries, so we degrade honestly instead of inventing findings.
+      const name = uploadForm.file.name || '';
+      const isTextReadable =
+        /\.(txt|csv|tsv|vcf|json|md)$/i.test(name) ||
+        (uploadForm.file.type || '').startsWith('text/');
 
-      // Generate AI summary for the uploaded file
-      const analysisPrompt = `Analyze this ${uploadForm.fileType} medical file and provide: a summary, key findings, relevant genes, and phenotypes identified. Return as JSON with keys: summary, key_findings (array), genes (array of gene symbols), phenotypes (array), risks (array), recommendations (array).`;
-
-      const analysisResponse = await apiClient.invokeLLM(analysisPrompt, {
-        add_context_from_internet: true
-      });
+      let fileText = '';
+      if (isTextReadable) {
+        try {
+          fileText = (await uploadForm.file.text()).slice(0, 100000);
+        } catch {
+          fileText = '';
+        }
+      }
 
       let analysisResult;
-      try {
-        const raw = analysisResponse?.result || analysisResponse;
-        analysisResult = typeof raw === 'string' ? JSON.parse(raw.match(/\{[\s\S]*\}/)?.[0] || '{}') : raw;
-      } catch {
-        analysisResult = { summary: 'File uploaded successfully.', key_findings: [], genes: [], phenotypes: [], risks: [], recommendations: [] };
+      if (fileText.trim()) {
+        setUploadProgress("Analyzing file with Robert...");
+
+        const analysisPrompt = `Analyze this ${fileTypeLabels[uploadForm.fileType] || uploadForm.fileType} file and return ONLY JSON with keys: summary (string), key_findings (array of strings), genes (array of gene symbols), phenotypes (array of strings), risks (array of strings), recommendations (array of strings). Base every field strictly on the file content below; do not invent findings.
+
+FILE NAME: ${name}
+FILE CONTENT:
+"""
+${fileText}
+"""`;
+
+        const analysisResponse = await apiClient.invokeLLM(analysisPrompt, {
+          add_context_from_internet: true
+        });
+
+        try {
+          const raw = analysisResponse?.result || analysisResponse;
+          analysisResult = typeof raw === 'string' ? JSON.parse(raw.match(/\{[\s\S]*\}/)?.[0] || '{}') : raw;
+        } catch {
+          analysisResult = { summary: `Uploaded ${name}.`, key_findings: [], genes: [], phenotypes: [], risks: [], recommendations: [] };
+        }
+      } else {
+        // No readable text — store the record without fabricated analysis.
+        analysisResult = {
+          summary: `Uploaded ${name}. Automatic text analysis isn't available for this file type — open it with Anastasia for a guided review.`,
+          key_findings: [], genes: [], phenotypes: [], risks: [], recommendations: []
+        };
       }
 
       setUploadProgress("Saving medical data...");
 
       await apiClient.saveMedicalData({
         file_type: uploadForm.fileType,
+        title: fileTypeLabels[uploadForm.fileType] || uploadForm.fileType,
         summary: analysisResult.summary || 'Medical data uploaded.',
         relevant_genes: analysisResult.genes || [],
         phenotypes_identified: analysisResult.phenotypes || [],
         notes: uploadForm.notes,
+        file_name: name,
         extracted_data: {
           key_findings: analysisResult.key_findings || [],
           risks: analysisResult.risks || [],
@@ -366,7 +399,7 @@ Return structured analysis with all sections.`;
     }
 
     try {
-      await apiClient.saveMedicalData({ id: recordId, _delete: true });
+      await apiClient.deleteMedicalData(recordId);
       setSuccess("Record deleted successfully");
       await loadData();
     } catch (err) {
@@ -454,14 +487,12 @@ Return structured analysis with all sections.`;
       // Update the record with parsed variants
       const record = medicalRecords.find(r => r.id === recordId);
       if (record) {
-        const updatedExtractedData = {
-          ...(record.extracted_data || {}),
-          vcf_variants: variants
-        };
-
+        // Persist parsed variants at the top level of the record's content
+        // (this is where the render below reads `record.vcf_variants`). The
+        // backend PUT merges this into the existing content blob.
         await apiClient.saveMedicalData({
           id: recordId,
-          extracted_data: updatedExtractedData
+          vcf_variants: variants
         });
         setSuccess("VCF variants parsed and saved successfully!");
         await loadData();

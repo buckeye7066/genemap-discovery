@@ -82,6 +82,78 @@ export function sanitizeBaseURL(raw: string | undefined | null): string {
     .replace(/\/+$/, '');
 }
 
+/**
+ * Fields that belong INSIDE the encrypted `content` blob of a medical record.
+ * Everything the Base44-era UI expects to read/write as a flat property is
+ * packed here on write and spread back out on read.
+ */
+const MEDICAL_CONTENT_KEYS = [
+  'summary',
+  'relevant_genes',
+  'phenotypes_identified',
+  'extracted_data',
+  'vcf_variants',
+  'key_findings',
+  'risks',
+  'recommendations',
+  'notes',
+  'file_name',
+] as const;
+
+/** Translate a UI-shaped medical record into the backend contract. */
+function toBackendMedicalPayload(ui: Record<string, unknown>): Record<string, unknown> {
+  const dataType = (ui.dataType ?? ui.file_type ?? 'other') as string;
+  const content: Record<string, unknown> = {};
+  for (const key of MEDICAL_CONTENT_KEYS) {
+    if (ui[key] !== undefined) content[key] = ui[key];
+  }
+  const payload: Record<string, unknown> = {
+    dataType,
+    title: (ui.title ?? null) as string | null,
+    content,
+    metadata: (ui.metadata ?? null) as unknown,
+  };
+  const fileUrl = ui.fileUrl ?? ui.file_url;
+  if (fileUrl !== undefined) payload.fileUrl = fileUrl;
+  return payload;
+}
+
+/**
+ * Translate a backend medical record into the flat shape every UI consumer
+ * (MedicalData, Anastasia, Dashboard, AIAssistants, comparison/clinical
+ * components) reads. Tolerant of legacy rows where `content` is a raw string
+ * or already-flattened.
+ */
+function normalizeMedicalRecord(rec: unknown): Record<string, unknown> {
+  const r = (rec ?? {}) as Record<string, unknown>;
+  const rawContent = r.content;
+  const content: Record<string, unknown> =
+    rawContent && typeof rawContent === 'object' && !Array.isArray(rawContent)
+      ? (rawContent as Record<string, unknown>)
+      : {};
+  const dataType = (r.dataType ?? r.file_type ?? content.file_type ?? 'other') as string;
+  return {
+    ...content,
+    id: r.id,
+    dataType,
+    file_type: dataType,
+    title: (r.title ?? content.title ?? null) as unknown,
+    file_url: (r.fileUrl ?? content.file_url ?? null) as unknown,
+    created_date: (r.createdAt ?? content.created_date ?? null) as unknown,
+    createdAt: (r.createdAt ?? null) as unknown,
+    metadata: (r.metadata ?? null) as unknown,
+    summary:
+      (content.summary as string) ??
+      (typeof rawContent === 'string' ? rawContent : '') ??
+      '',
+    relevant_genes: content.relevant_genes ?? [],
+    phenotypes_identified: content.phenotypes_identified ?? [],
+    extracted_data: content.extracted_data ?? {},
+    vcf_variants: content.vcf_variants ?? null,
+    notes: content.notes ?? '',
+  };
+}
+
 function resolveDefaultBaseURL(): string {
   // Vite injects import.meta.env at build time; guard against non-browser
   // environments (Node tests) where import.meta.env is undefined.
@@ -579,17 +651,50 @@ export class ApiClient {
   }
 
   // ─── Medical Data ─────────────────
+  //
+  // The backend `medical_data` model is deliberately minimal: `dataType`,
+  // `title`, a single encrypted `content` JSON blob, `fileUrl`, `metadata`.
+  // The UI (carried over from Base44) speaks a flatter, richer shape —
+  // `file_type`, `summary`, `relevant_genes`, `phenotypes_identified`,
+  // `extracted_data`, `vcf_variants`, `created_date`, `file_url`. Rather than
+  // rewrite every consumer page, the client is the single translation layer:
+  // it flattens `content` OUT on read and packs the rich fields back IN on
+  // write. This keeps the API contract clean while the whole app keeps working.
   async getMedicalData(dataType?: string): Promise<MedicalData[]> {
     const qs = dataType ? `?dataType=${encodeURIComponent(dataType)}` : '';
     const res = await this.request<{ records: MedicalData[] }>(`/entities/medical-data${qs}`);
-    return res.records;
+    return (res.records || []).map((r) => normalizeMedicalRecord(r)) as unknown as MedicalData[];
   }
-  async saveMedicalData(data: Omit<MedicalData, 'id'>): Promise<MedicalData> {
+  async saveMedicalData(data: Record<string, unknown>): Promise<MedicalData> {
+    // Deletion was historically overloaded onto this call with a `_delete`
+    // flag; route it to the dedicated DELETE endpoint.
+    if (data && data._delete && data.id) {
+      await this.deleteMedicalData(String(data.id));
+      return { id: String(data.id), deleted: true } as unknown as MedicalData;
+    }
+    // Record sharing has no backend model yet. Fail with a clear message
+    // instead of POSTing a payload the API rejects with a cryptic error.
+    if (data && (data._shareAction || data._revokeShareAction)) {
+      throw new Error('Sharing medical records is not available yet.');
+    }
+
+    const payload = toBackendMedicalPayload(data);
+
+    // A record `id` means "update"; PUT merges `content` server-side so a
+    // partial patch (e.g. just parsed VCF variants) won't wipe the summary.
+    if (data.id) {
+      const res = await this.request<{ record: MedicalData }>(
+        `/entities/medical-data/${data.id}`,
+        { method: 'PUT', body: JSON.stringify(payload) }
+      );
+      return normalizeMedicalRecord(res.record) as unknown as MedicalData;
+    }
+
     const res = await this.request<{ record: MedicalData }>('/entities/medical-data', {
       method: 'POST',
-      body: JSON.stringify(data),
+      body: JSON.stringify(payload),
     });
-    return res.record;
+    return normalizeMedicalRecord(res.record) as unknown as MedicalData;
   }
   deleteMedicalData(id: string): Promise<{ success: boolean }> {
     return this.request(`/entities/medical-data/${id}`, { method: 'DELETE' });

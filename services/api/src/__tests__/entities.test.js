@@ -197,6 +197,47 @@ describe('Medical Data CRUD', () => {
     expect(body.records[0].id).toBe('md-1');
   });
 
+  it('PUT /entities/medical-data/:id — should merge content, preserving existing fields', async () => {
+    prisma._store.medicalData.push({
+      id: 'md-put',
+      userId: 'user-a',
+      dataType: 'genetic_test',
+      title: 'Genetic Test Report',
+      content: { summary: 'original summary', relevant_genes: ['BRCA1'] },
+      createdAt: new Date(),
+    });
+
+    const res = await app.inject({
+      method: 'PUT',
+      url: '/entities/medical-data/md-put',
+      headers: { cookie: cookieA },
+      payload: { content: { vcf_variants: [{ gene: 'TP53' }] } },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    // Patched field is added…
+    expect(body.record.content.vcf_variants).toEqual([{ gene: 'TP53' }]);
+    // …and pre-existing fields survive the partial update.
+    expect(body.record.content.summary).toBe('original summary');
+    expect(body.record.content.relevant_genes).toEqual(['BRCA1']);
+  });
+
+  it('PUT /entities/medical-data/:id — should not update another user\'s record', async () => {
+    prisma._store.medicalData.push({
+      id: 'md-other', userId: 'user-b', dataType: 'lab', content: { summary: 'b' }, createdAt: new Date(),
+    });
+
+    const res = await app.inject({
+      method: 'PUT',
+      url: '/entities/medical-data/md-other',
+      headers: { cookie: cookieA },
+      payload: { content: { summary: 'hacked' } },
+    });
+
+    expect(res.statusCode).toBe(400);
+  });
+
   it('DELETE /entities/medical-data/:id — should delete own record', async () => {
     prisma._store.medicalData.push(
       { id: 'md-1', userId: 'user-a', dataType: 'lab', content: 'x', createdAt: new Date() },
