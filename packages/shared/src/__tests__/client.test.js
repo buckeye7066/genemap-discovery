@@ -135,6 +135,75 @@ describe('Entity methods', () => {
     expect(fetchCalls[0].method).toBe('DELETE');
   });
 
+  // ── Base44 → backend contract adapter (regression: "dataType and content
+  //    are required" upload failure) ──────────────────────────────────────
+  it('saveMedicalData() maps the UI shape (file_type + flat fields) into {dataType, content}', async () => {
+    await client.saveMedicalData({
+      file_type: 'genetic_test',
+      summary: 'A summary',
+      relevant_genes: ['BRCA1'],
+      phenotypes_identified: ['cancer'],
+      notes: 'hi',
+      file_name: 'report.txt',
+      extracted_data: { key_findings: ['f1'] },
+    });
+    expect(fetchCalls[0].method).toBe('POST');
+    const sent = JSON.parse(fetchCalls[0].body);
+    expect(sent.dataType).toBe('genetic_test'); // derived from file_type
+    expect(sent.content.summary).toBe('A summary');
+    expect(sent.content.relevant_genes).toEqual(['BRCA1']);
+    expect(sent.content.phenotypes_identified).toEqual(['cancer']);
+    expect(sent.content.extracted_data).toEqual({ key_findings: ['f1'] });
+    expect(sent.content.file_name).toBe('report.txt');
+  });
+
+  it('saveMedicalData({id}) routes to PUT for a partial update', async () => {
+    await client.saveMedicalData({ id: 'md-1', vcf_variants: [{ gene: 'TP53' }] });
+    expect(fetchCalls[0].method).toBe('PUT');
+    expect(fetchCalls[0].url).toBe('http://localhost:3000/entities/medical-data/md-1');
+    const sent = JSON.parse(fetchCalls[0].body);
+    expect(sent.content.vcf_variants).toEqual([{ gene: 'TP53' }]);
+  });
+
+  it('saveMedicalData({id, _delete}) routes to DELETE', async () => {
+    await client.saveMedicalData({ id: 'md-1', _delete: true });
+    expect(fetchCalls[0].method).toBe('DELETE');
+    expect(fetchCalls[0].url).toBe('http://localhost:3000/entities/medical-data/md-1');
+  });
+
+  it('saveMedicalData({_shareAction}) throws (no backend sharing model)', async () => {
+    await expect(client.saveMedicalData({ _shareAction: true, record_id: 'x' })).rejects.toThrow(/sharing/i);
+    expect(fetchCalls).toHaveLength(0);
+  });
+
+  it('getMedicalData() flattens content back into UI fields', async () => {
+    global.fetch = vi.fn(async (url, config) => {
+      fetchCalls.push({ url, ...config });
+      return {
+        ok: true,
+        json: async () => ({
+          records: [
+            {
+              id: 'md-1',
+              dataType: 'genetic_test',
+              title: 'Genetic Test Report',
+              createdAt: '2026-07-11T00:00:00.000Z',
+              content: { summary: 'S', relevant_genes: ['BRCA1'], phenotypes_identified: ['x'] },
+            },
+          ],
+        }),
+      };
+    });
+    const records = await client.getMedicalData();
+    expect(records).toHaveLength(1);
+    const r = records[0];
+    expect(r.file_type).toBe('genetic_test'); // UI reads file_type
+    expect(r.summary).toBe('S');
+    expect(r.relevant_genes).toEqual(['BRCA1']);
+    expect(r.phenotypes_identified).toEqual(['x']);
+    expect(r.created_date).toBe('2026-07-11T00:00:00.000Z'); // UI reads created_date
+  });
+
   it('getGeneSets() should GET /entities/gene-sets', async () => {
     await client.getGeneSets();
     expect(fetchCalls[0].url).toBe('http://localhost:3000/entities/gene-sets');

@@ -221,10 +221,11 @@ export default async function entityRoutes(fastify) {
   });
 
   fastify.post('/medical-data', { preHandler: logMedicalAccess('medical_data.write') }, async (request) => {
-    const { dataType, title, content, metadata } = request.body || {};
+    const { dataType, title, content, metadata, fileUrl } = request.body || {};
     if (!dataType || !content) throw new ValidationError('dataType and content are required');
     assertString(dataType, 'dataType', LIMIT.name);
     assertString(title, 'title', LIMIT.name);
+    assertString(fileUrl, 'fileUrl', LIMIT.text);
     assertJsonSize(content, 'content');
     assertJsonSize(metadata, 'metadata');
 
@@ -241,6 +242,7 @@ export default async function entityRoutes(fastify) {
         dataType,
         title: title || null,
         content: encryptedContent,
+        fileUrl: fileUrl || null,
         metadata: metadata || null,
       },
     });
@@ -258,6 +260,61 @@ export default async function entityRoutes(fastify) {
     );
 
     return { record: { ...record, content } };
+  });
+
+  // Partial update. `content` is shallow-merged into the existing (decrypted)
+  // content blob so a caller can patch a single field (e.g. parsed VCF
+  // variants) without having to resend the whole record and risk clobbering
+  // the AI summary / gene list produced at upload time.
+  fastify.put('/medical-data/:id', { preHandler: logMedicalAccess('medical_data.write') }, async (request) => {
+    const { id } = request.params;
+    const { dataType, title, content, metadata, fileUrl } = request.body || {};
+    assertString(dataType, 'dataType', LIMIT.name);
+    assertString(title, 'title', LIMIT.name);
+    assertString(fileUrl, 'fileUrl', LIMIT.text);
+    assertJsonSize(content, 'content');
+    assertJsonSize(metadata, 'metadata');
+
+    const existing = await prisma.medicalData.findFirst({
+      where: { id, userId: request.user.userId },
+    });
+    if (!existing) throw new ValidationError('Medical record not found');
+
+    const data = {};
+    if (dataType !== undefined) data.dataType = dataType;
+    if (title !== undefined) data.title = title || null;
+    if (fileUrl !== undefined) data.fileUrl = fileUrl || null;
+    if (metadata !== undefined) data.metadata = metadata || null;
+
+    let mergedContent = decrypt(existing.content);
+    if (content !== undefined) {
+      const current =
+        mergedContent && typeof mergedContent === 'object' && !Array.isArray(mergedContent)
+          ? mergedContent
+          : {};
+      const patch = content && typeof content === 'object' && !Array.isArray(content) ? content : {};
+      mergedContent = { ...current, ...patch };
+      data.content = encrypt(mergedContent);
+    }
+
+    const record = await prisma.medicalData.update({
+      where: { id: existing.id },
+      data,
+    });
+
+    await createAuditLog(
+      prisma,
+      {
+        userId: request.user.userId,
+        action: 'medical_data.write',
+        entityType: 'medical_data',
+        entityId: record.id,
+        metadata: { dataType: record.dataType, update: true },
+      },
+      { required: true }
+    );
+
+    return { record: { ...record, content: mergedContent } };
   });
 
   fastify.delete('/medical-data/:id', { preHandler: logMedicalAccess('medical_data.delete') }, async (request) => {
