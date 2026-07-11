@@ -39,6 +39,7 @@ import type {
   VcfParsedVariant,
   VcfParseResponse,
   VcfEnrichmentResponse,
+  VcfCohortEnrichmentResponse,
   ConsentRecord,
   DataDeletionRequest,
   DeletionRequestStatus,
@@ -752,6 +753,19 @@ export class ApiClient {
     return this.request('/genomics/vcf/enrich', {
       method: 'POST',
       body: JSON.stringify({ variants }),
+    });
+  }
+  /**
+   * Annotate the deduplicated union of variants across a study cohort in one
+   * request. Slower than a single-file enrich because it fans out over many
+   * distinct variants against public databases — give it a longer budget so a
+   * still-running batch isn't aborted at the 40s default.
+   */
+  enrichVcfCohort(variants: Partial<VcfParsedVariant>[]): Promise<VcfCohortEnrichmentResponse> {
+    return this.request('/genomics/vcf/enrich-cohort', {
+      method: 'POST',
+      body: JSON.stringify({ variants }),
+      timeoutMs: 90_000,
     });
   }
 

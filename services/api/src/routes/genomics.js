@@ -27,6 +27,10 @@ const vcfEnrichSchema = z.object({
   variants: z.array(vcfVariantSchema).min(1).max(50),
 });
 
+const vcfCohortEnrichSchema = z.object({
+  variants: z.array(vcfVariantSchema).min(1).max(VCF_LIMITS.COHORT_MAX_VARIANTS),
+});
+
 const enrichSchema = z.object({
   symbols: z.array(z.string().trim().min(1).max(64)).max(50).optional(),
   phenotypes: z.array(z.string().trim().min(1).max(256)).max(100).optional(),
@@ -80,6 +84,43 @@ export default async function genomicsRoutes(fastify) {
     );
 
     return { enrichedVariants, enriched_variants: enrichedVariants };
+  });
+
+  // Cohort annotation: run the SAME source-grounded annotation pipeline across a
+  // whole study cohort in one request instead of one VCF at a time. The client
+  // collapses every sample's variants to the distinct union (variants shared by
+  // many samples appear once) and sends that union here; the service dedups
+  // again, annotates with bounded concurrency to respect public-database rate
+  // limits, and returns results keyed by stable variant key so the client can
+  // re-join cohort prevalence to each annotation.
+  fastify.post('/vcf/enrich-cohort', async (request) => {
+    const { variants } = vcfCohortEnrichSchema.parse(request.body);
+    const enrichedVariants = await enrichVcfVariants(variants, {
+      maxVariants: VCF_LIMITS.COHORT_MAX_VARIANTS,
+      hardMax: VCF_LIMITS.COHORT_MAX_VARIANTS,
+      concurrency: VCF_LIMITS.COHORT_CONCURRENCY,
+    });
+
+    const byKey = {};
+    for (const enriched of enrichedVariants) {
+      const variant = enriched.originalVariant || {};
+      const key = variant.stableVariantKey ||
+        `${variant.chromosome}:${variant.position}:${variant.ref}>${variant.alt}`;
+      byKey[key] = enriched;
+    }
+
+    await createAuditLog(
+      fastify.prisma,
+      {
+        userId: request.user.userId,
+        action: 'vcf.enrich_cohort',
+        entityType: 'genomic_variant',
+        metadata: { variantCount: enrichedVariants.length },
+      },
+      { required: true }
+    );
+
+    return { enrichedVariants, enriched_variants: enrichedVariants, byKey };
   });
 
   // ─── Variant Lookup ────────────────────────────────────────────
