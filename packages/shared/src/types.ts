@@ -380,6 +380,13 @@ export interface VcfEnrichmentResponse {
   enriched_variants: VcfEnrichment[];
 }
 
+export interface VcfCohortEnrichmentResponse {
+  enrichedVariants: VcfEnrichment[];
+  enriched_variants: VcfEnrichment[];
+  /** Annotations keyed by stable variant key for re-joining cohort prevalence. */
+  byKey: Record<string, VcfEnrichment>;
+}
+
 // ─── Consent & HIPAA ────────────────────────────────────────────────────────
 
 export interface ConsentRecord {

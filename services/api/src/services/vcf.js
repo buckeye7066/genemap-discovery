@@ -185,62 +185,123 @@ function sourceResult(name, url, data) {
   };
 }
 
-export async function enrichVcfVariants(variants, { maxVariants = 50 } = {}) {
+async function enrichOneVariant(variant) {
+  const rsid = variant.rsid || (typeof variant.id === 'string' && variant.id.startsWith('rs') ? variant.id : null);
+  const gene = variant.gene || null;
+  const clinVarQuery = rsid || variant.stableVariantKey ||
+    `${variant.chromosome}:${variant.position} ${variant.ref || variant.referenceAllele}>${variant.alt || variant.alternateAllele}`;
+
+  const [variantData, geneData, clinVarSearch] = await Promise.all([
+    rsid ? lookupVariant(rsid) : Promise.resolve(null),
+    gene ? lookupGene(gene) : Promise.resolve(null),
+    clinVarQuery ? searchClinVar(clinVarQuery) : Promise.resolve(null),
+  ]);
+
+  const clinVarIds = clinVarSearch?.esearchresult?.idlist || [];
+  const clinVarDetails = clinVarIds.length > 0 ? await getClinVarVariant(clinVarIds[0]) : null;
+
+  return {
+    originalVariant: variant,
+    original_variant: variant,
+    annotations: {
+      myVariant: sourceResult(
+        'MyVariant.info',
+        rsid ? `https://myvariant.info/v1/variant/${encodeURIComponent(rsid)}` : 'https://myvariant.info/',
+        variantData
+      ),
+      ensemblGene: sourceResult(
+        'Ensembl REST',
+        gene ? `https://rest.ensembl.org/lookup/symbol/homo_sapiens/${encodeURIComponent(gene)}` : 'https://rest.ensembl.org/',
+        geneData
+      ),
+      clinVar: {
+        status: clinVarDetails ? 'found' : 'not_found',
+        source: source(
+          'ClinVar E-utilities',
+          `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=clinvar&term=${encodeURIComponent(clinVarQuery || '')}`,
+          { reviewStatus: clinVarDetails?.result?.[clinVarIds[0]]?.review_status || null }
+        ),
+        search: clinVarSearch || null,
+        data: clinVarDetails,
+      },
+    },
+    evidenceSummary: clinVarDetails
+      ? 'ClinVar source data returned for this query. Interpret only according to the cited source review status.'
+      : 'No ClinVar source data found for this query.',
+    clinicalConfirmationRequired: true,
+    questionsForClinician: [
+      'Does this variant match the same genome assembly and transcript used by the source annotation?',
+      'Is confirmatory testing from a certified clinical lab appropriate for this context?',
+    ],
+  };
+}
+
+/**
+ * Map `items` through async `worker` with at most `concurrency` in flight at
+ * once, preserving input order in the result. Cohort annotation fans out over
+ * many distinct variants, each of which makes several external-database calls;
+ * an unbounded Promise.all would burst past NCBI/Ensembl politeness limits and
+ * trigger 429s. A fixed worker pool keeps us under those limits while still
+ * overlapping I/O. `concurrency <= 0` falls back to unbounded (single-file path).
+ */
+async function mapWithConcurrency(items, concurrency, worker) {
+  if (!concurrency || concurrency <= 0) {
+    return Promise.all(items.map(worker));
+  }
+  const results = new Array(items.length);
+  let cursor = 0;
+  async function runner() {
+    for (;;) {
+      const index = cursor++;
+      if (index >= items.length) return;
+      results[index] = await worker(items[index]);
+    }
+  }
+  const pool = Array.from({ length: Math.min(concurrency, items.length) }, runner);
+  await Promise.all(pool);
+  return results;
+}
+
+/**
+ * Enrich VCF variants with source-grounded public-database annotations.
+ *
+ * Deduplicates by stable variant key BEFORE hitting the network so a variant
+ * shared across many cohort samples is looked up once and fanned back out to
+ * every occurrence. `hardMax` bounds the network fan-out (the single-file route
+ * keeps the historical 50 cap; the cohort route raises it) and `concurrency`
+ * bounds simultaneous external calls (0 = unbounded, used for tiny batches).
+ */
+export async function enrichVcfVariants(
+  variants,
+  { maxVariants = 50, hardMax = 50, concurrency = 0 } = {}
+) {
   if (!Array.isArray(variants)) {
     throw new ValidationError('variants must be an array');
   }
 
-  const limited = variants.slice(0, Math.min(maxVariants, 50));
-  return Promise.all(limited.map(async (variant) => {
-    const rsid = variant.rsid || (typeof variant.id === 'string' && variant.id.startsWith('rs') ? variant.id : null);
-    const gene = variant.gene || null;
-    const clinVarQuery = rsid || variant.stableVariantKey ||
-      `${variant.chromosome}:${variant.position} ${variant.ref || variant.referenceAllele}>${variant.alt || variant.alternateAllele}`;
+  const limit = Math.min(Math.max(Number(maxVariants) || 0, 0), hardMax);
+  const limited = variants.slice(0, limit);
 
-    const [variantData, geneData, clinVarSearch] = await Promise.all([
-      rsid ? lookupVariant(rsid) : Promise.resolve(null),
-      gene ? lookupGene(gene) : Promise.resolve(null),
-      clinVarQuery ? searchClinVar(clinVarQuery) : Promise.resolve(null),
-    ]);
+  // Collapse duplicate variants (same coordinates across samples) to a single
+  // network lookup, then re-expand so each caller variant gets its annotation.
+  const keyFor = (v) => v.stableVariantKey ||
+    `${v.chromosome}:${v.position}:${v.ref || v.referenceAllele}>${v.alt || v.alternateAllele}`;
+  const uniqueByKey = new Map();
+  for (const variant of limited) {
+    const key = keyFor(variant);
+    if (!uniqueByKey.has(key)) uniqueByKey.set(key, variant);
+  }
 
-    const clinVarIds = clinVarSearch?.esearchresult?.idlist || [];
-    const clinVarDetails = clinVarIds.length > 0 ? await getClinVarVariant(clinVarIds[0]) : null;
+  const uniqueVariants = [...uniqueByKey.values()];
+  const enrichedUnique = await mapWithConcurrency(uniqueVariants, concurrency, enrichOneVariant);
+  const enrichedByKey = new Map(uniqueVariants.map((v, i) => [keyFor(v), enrichedUnique[i]]));
 
-    return {
-      originalVariant: variant,
-      original_variant: variant,
-      annotations: {
-        myVariant: sourceResult(
-          'MyVariant.info',
-          rsid ? `https://myvariant.info/v1/variant/${encodeURIComponent(rsid)}` : 'https://myvariant.info/',
-          variantData
-        ),
-        ensemblGene: sourceResult(
-          'Ensembl REST',
-          gene ? `https://rest.ensembl.org/lookup/symbol/homo_sapiens/${encodeURIComponent(gene)}` : 'https://rest.ensembl.org/',
-          geneData
-        ),
-        clinVar: {
-          status: clinVarDetails ? 'found' : 'not_found',
-          source: source(
-            'ClinVar E-utilities',
-            `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=clinvar&term=${encodeURIComponent(clinVarQuery || '')}`,
-            { reviewStatus: clinVarDetails?.result?.[clinVarIds[0]]?.review_status || null }
-          ),
-          search: clinVarSearch || null,
-          data: clinVarDetails,
-        },
-      },
-      evidenceSummary: clinVarDetails
-        ? 'ClinVar source data returned for this query. Interpret only according to the cited source review status.'
-        : 'No ClinVar source data found for this query.',
-      clinicalConfirmationRequired: true,
-      questionsForClinician: [
-        'Does this variant match the same genome assembly and transcript used by the source annotation?',
-        'Is confirmatory testing from a certified clinical lab appropriate for this context?',
-      ],
-    };
-  }));
+  return limited.map((variant) => {
+    const enriched = enrichedByKey.get(keyFor(variant));
+    // Re-anchor to the caller's own variant object so per-sample metadata
+    // (e.g. cohort prevalence) rides along even when the lookup was shared.
+    return { ...enriched, originalVariant: variant, original_variant: variant };
+  });
 }
 
 export const VCF_LIMITS = {
@@ -248,4 +309,9 @@ export const VCF_LIMITS = {
   HARD_MAX_VARIANTS,
   MAX_INFO_LENGTH,
   MAX_TEXT_BYTES,
+  // Cohort annotation: one request annotates the deduplicated union of distinct
+  // variants across the cohort. Higher network cap than the single-file route,
+  // with bounded concurrency to respect public-database rate limits.
+  COHORT_MAX_VARIANTS: 150,
+  COHORT_CONCURRENCY: 3,
 };

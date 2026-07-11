@@ -3,6 +3,9 @@ import {
   classifyVariant,
   accumulateVcfLines,
   summarizeCohort,
+  extractGeneFromInfo,
+  parseVariantKey,
+  collectCohortVariants,
 } from '../vcfCohort.js';
 
 describe('classifyVariant', () => {
@@ -92,5 +95,75 @@ describe('summarizeCohort', () => {
     expect(summary.sampleCount).toBe(0);
     expect(summary.meanVariantsPerSample).toBe(0);
     expect(summary.totalVariants).toBe(0);
+  });
+});
+
+describe('extractGeneFromInfo', () => {
+  it('reads explicit gene keys', () => {
+    expect(extractGeneFromInfo('DP=44;GENE=BRCA1')).toBe('BRCA1');
+    expect(extractGeneFromInfo('SYMBOL=TP53;AF=0.1')).toBe('TP53');
+  });
+  it('reads the gene field from snpEff ANN / VEP CSQ annotations', () => {
+    expect(extractGeneFromInfo('ANN=G|missense_variant|MODERATE|BRCA2|ENSG')).toBe('BRCA2');
+    expect(extractGeneFromInfo('CSQ=G|missense|MODERATE|EGFR|ENSG')).toBe('EGFR');
+  });
+  it('returns null when no gene is present', () => {
+    expect(extractGeneFromInfo('.')).toBeNull();
+    expect(extractGeneFromInfo('DP=44;AF=0.1')).toBeNull();
+  });
+});
+
+describe('parseVariantKey', () => {
+  it('round-trips a chr:pos:ref>alt key', () => {
+    expect(parseVariantKey('chr17:43071077:A>G')).toEqual({
+      chromosome: 'chr17', position: 43071077, ref: 'A', alt: 'G',
+    });
+  });
+  it('handles indels and rejects malformed keys', () => {
+    expect(parseVariantKey('chr1:200:AT>A')).toMatchObject({ ref: 'AT', alt: 'A' });
+    expect(parseVariantKey('garbage')).toBeNull();
+  });
+});
+
+describe('collectCohortVariants', () => {
+  function fileFrom(name, lines) {
+    const acc = accumulateVcfLines(lines);
+    return {
+      name,
+      variantCount: acc.variantCount,
+      variantTypes: acc.variantTypes,
+      keys: acc.keys,
+      keyMeta: acc.keyMeta,
+      keysTruncated: acc.keysTruncated,
+    };
+  }
+
+  it('ranks distinct variants by cohort prevalence and carries rsid/gene', () => {
+    const shared = 'chr1\t100\trs99\tA\tG\t.\t.\tGENE=BRCA1';
+    const s1 = fileFrom('a.vcf', ['#CHROM', shared, 'chr1\t200\t.\tA\tT\t.\t.\t.']);
+    const s2 = fileFrom('b.vcf', ['#CHROM', shared]);
+    const s3 = fileFrom('c.vcf', ['#CHROM', shared]);
+
+    const { variants, distinctTotal, sampleCount } = collectCohortVariants([s1, s2, s3]);
+    expect(sampleCount).toBe(3);
+    expect(distinctTotal).toBe(2);
+    // Most prevalent variant ranks first.
+    expect(variants[0].stableVariantKey).toBe('chr1:100:A>G');
+    expect(variants[0].sampleCount).toBe(3);
+    expect(variants[0].cohortFraction).toBe(1);
+    expect(variants[0].rsid).toBe('rs99');
+    expect(variants[0].gene).toBe('BRCA1');
+    expect(variants[1].sampleCount).toBe(1);
+  });
+
+  it('respects the limit (top-by-prevalence)', () => {
+    const s1 = fileFrom('a.vcf', [
+      '#CHROM',
+      'chr1\t1\t.\tA\tG\t.\t.\t.',
+      'chr1\t2\t.\tA\tG\t.\t.\t.',
+      'chr1\t3\t.\tA\tG\t.\t.\t.',
+    ]);
+    const { variants } = collectCohortVariants([s1], { limit: 2 });
+    expect(variants).toHaveLength(2);
   });
 });

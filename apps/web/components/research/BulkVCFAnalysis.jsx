@@ -7,9 +7,38 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
-import { Loader2, Upload, FileStack, Download, AlertTriangle, CheckCircle2, Info } from "lucide-react";
+import { Loader2, Upload, FileStack, Download, AlertTriangle, CheckCircle2, Info, Dna, ExternalLink } from "lucide-react";
 import ReactMarkdown from 'react-markdown';
-import { parseVcfFile, summarizeCohort } from "@/lib/vcfCohort";
+import { parseVcfFile, summarizeCohort, collectCohortVariants } from "@/lib/vcfCohort";
+
+// Cohort annotation fans out over the DISTINCT variants across all samples.
+// We annotate the most prevalent variants first (those shared by the most
+// samples carry the most cohort-level signal) and cap the total so a
+// whole-genome cohort can't launch thousands of public-database lookups.
+const COHORT_ANNOTATE_LIMIT = 300;
+const COHORT_ANNOTATE_BATCH = 50;
+
+// ClinVar clinical-significance descriptions we surface as "notable" so a
+// reviewer can triage the cohort's annotated variants at a glance. This is a
+// display hint only — every finding still says confirmation is required.
+const NOTABLE_CLINVAR = /pathogenic|risk|drug|affects|association/i;
+
+function summarizeAnnotation(enriched) {
+  const clinVar = enriched?.annotations?.clinVar || {};
+  const uid = clinVar?.search?.esearchresult?.idlist?.[0];
+  const record = uid ? clinVar?.data?.result?.[uid] : null;
+  const significance = record?.clinical_significance?.description || null;
+  return {
+    gene: enriched?.originalVariant?.gene || null,
+    rsid: enriched?.originalVariant?.rsid || null,
+    clinVarStatus: clinVar.status || 'not_found',
+    clinVarSignificance: significance,
+    reviewStatus: clinVar?.source?.reviewStatus || record?.review_status || null,
+    myVariantFound: enriched?.annotations?.myVariant?.status === 'found',
+    ensemblFound: enriched?.annotations?.ensemblGene?.status === 'found',
+    notable: significance ? NOTABLE_CLINVAR.test(significance) : false,
+  };
+}
 
 export default function BulkVCFAnalysis({ userEducationLevel }) {
   const [files, setFiles] = useState([]);
@@ -18,6 +47,15 @@ export default function BulkVCFAnalysis({ userEducationLevel }) {
   const [progress, setProgress] = useState(0);
   const [results, setResults] = useState(null);
   const [error, setError] = useState(null);
+  // Cohort annotation runs as a distinct second step: aggregate stats above are
+  // cheap and local; annotating every distinct variant against public databases
+  // is a heavier, opt-in operation, so we keep the parsed per-file data around
+  // and let the researcher trigger it explicitly.
+  const [perFile, setPerFile] = useState(null);
+  const [isAnnotating, setIsAnnotating] = useState(false);
+  const [annotateProgress, setAnnotateProgress] = useState(0);
+  const [annotation, setAnnotation] = useState(null);
+  const [annotateError, setAnnotateError] = useState(null);
 
   const handleFileSelect = (e) => {
     const selectedFiles = Array.from(e.target.files);
@@ -33,6 +71,11 @@ export default function BulkVCFAnalysis({ userEducationLevel }) {
     setIsAnalyzing(true);
     setError(null);
     setProgress(0);
+    // A fresh cohort invalidates any prior annotation run.
+    setPerFile(null);
+    setAnnotation(null);
+    setAnnotateError(null);
+    setAnnotateProgress(0);
 
     try {
       // Parse each VCF's real contents in the browser. Raw variants never leave
@@ -97,6 +140,7 @@ Ground every statement in the measured numbers above. Where deeper analysis is n
       const { result: analysis } = await apiClient.invokeLLM(prompt);
 
       setProgress(100);
+      setPerFile(perFile);
       setResults({
         cohort_name: cohortName,
         file_count: files.length,
@@ -109,6 +153,65 @@ Ground every statement in the measured numbers above. Where deeper analysis is n
       setError(err?.message ? `Failed to analyze cohort: ${err.message}` : "Failed to analyze cohort. Please try again.");
     } finally {
       setIsAnalyzing(false);
+    }
+  };
+
+  const handleAnnotateCohort = async () => {
+    if (!perFile || perFile.length === 0) return;
+
+    setIsAnnotating(true);
+    setAnnotateError(null);
+    setAnnotateProgress(0);
+
+    try {
+      // Collapse every sample's variants to the distinct union, ranked by how
+      // many samples carry each one, and annotate the top slice. Shared variants
+      // are the cohort-level signal; annotating them once (not once per sample)
+      // is what makes whole-cohort annotation feasible against public databases.
+      const { variants, distinctTotal, sampleCount, truncated } = collectCohortVariants(
+        perFile,
+        { limit: COHORT_ANNOTATE_LIMIT }
+      );
+      if (variants.length === 0) {
+        setAnnotateError("No annotatable variants were found in the cohort's parsed files.");
+        return;
+      }
+
+      const byKey = {};
+      for (let i = 0; i < variants.length; i += COHORT_ANNOTATE_BATCH) {
+        const batch = variants.slice(i, i + COHORT_ANNOTATE_BATCH);
+        const payload = batch.map(({ chromosome, position, ref, alt, rsid, gene, stableVariantKey }) => ({
+          chromosome, position, ref, alt, rsid, gene, stableVariantKey,
+        }));
+        const res = await apiClient.enrichVcfCohort(payload);
+        Object.assign(byKey, res.byKey || {});
+        setAnnotateProgress(Math.round(Math.min(1, (i + batch.length) / variants.length) * 100));
+      }
+
+      const rows = variants.map((v) => ({
+        ...v,
+        summary: byKey[v.stableVariantKey] ? summarizeAnnotation(byKey[v.stableVariantKey]) : null,
+      }));
+
+      setAnnotation({
+        rows,
+        annotatedCount: rows.filter((r) => r.summary).length,
+        notableCount: rows.filter((r) => r.summary?.notable).length,
+        requested: variants.length,
+        distinctTotal,
+        sampleCount,
+        truncated,
+      });
+      setAnnotateProgress(100);
+    } catch (err) {
+      console.error("Error annotating cohort:", err);
+      setAnnotateError(
+        err?.message
+          ? `Failed to annotate cohort: ${err.message}`
+          : "Failed to annotate cohort. Please try again."
+      );
+    } finally {
+      setIsAnnotating(false);
     }
   };
 
@@ -131,7 +234,27 @@ Ground every statement in the measured numbers above. Where deeper analysis is n
       analysis_date: new Date().toISOString(),
       statistics: results.stats,
       analysis: results.analysis,
-      files: results.stats?.perSample?.map(s => s.name) ?? []
+      files: results.stats?.perSample?.map(s => s.name) ?? [],
+      cohort_annotation: annotation
+        ? {
+            samples: annotation.sampleCount,
+            distinct_variants_in_cohort: annotation.distinctTotal,
+            variants_annotated: annotation.annotatedCount,
+            variants_requested: annotation.requested,
+            prevalence_truncated: annotation.truncated,
+            variants: annotation.rows.map((r) => ({
+              variant: r.stableVariantKey,
+              gene: r.summary?.gene ?? r.gene ?? null,
+              rsid: r.summary?.rsid ?? r.rsid ?? null,
+              samples_with_variant: r.sampleCount,
+              cohort_fraction: Number(r.cohortFraction.toFixed(4)),
+              clinvar_status: r.summary?.clinVarStatus ?? 'not_annotated',
+              clinvar_significance: r.summary?.clinVarSignificance ?? null,
+              clinvar_review_status: r.summary?.reviewStatus ?? null,
+              myvariant_found: r.summary?.myVariantFound ?? false,
+            })),
+          }
+        : null,
     };
 
     const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
@@ -325,6 +448,174 @@ Ground every statement in the measured numbers above. Where deeper analysis is n
                 {results.analysis}
               </ReactMarkdown>
             </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {results && (
+        <Card className="shadow-lg">
+          <CardHeader>
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <Dna className="w-5 h-5 text-purple-600" />
+                  Cohort Variant Annotation
+                </CardTitle>
+                <p className="text-sm text-slate-600 mt-1">
+                  Run the annotation pipeline (MyVariant.info, Ensembl, ClinVar) across the
+                  whole cohort at once — the distinct variants are deduplicated and the most
+                  prevalent are annotated first.
+                </p>
+              </div>
+              {!annotation && (
+                <Button
+                  onClick={handleAnnotateCohort}
+                  disabled={isAnnotating}
+                  className="bg-purple-600 hover:bg-purple-700 gap-2"
+                >
+                  {isAnnotating ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Annotating…
+                    </>
+                  ) : (
+                    <>
+                      <Dna className="w-4 h-4" />
+                      Annotate cohort variants
+                    </>
+                  )}
+                </Button>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {annotateError && (
+              <Alert variant="destructive">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertDescription>{annotateError}</AlertDescription>
+              </Alert>
+            )}
+
+            {isAnnotating && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-slate-600">Annotating distinct cohort variants…</span>
+                  <span className="font-semibold text-slate-900">{annotateProgress}%</span>
+                </div>
+                <Progress value={annotateProgress} className="h-2" />
+              </div>
+            )}
+
+            {!annotation && !isAnnotating && (
+              <Alert className="bg-purple-50 border-purple-200">
+                <Info className="h-4 w-4 text-purple-600" />
+                <AlertDescription className="text-purple-900 text-sm">
+                  Annotates up to {COHORT_ANNOTATE_LIMIT.toLocaleString()} distinct variants
+                  (ranked by how many samples carry each). Each is looked up once and its
+                  cohort prevalence is carried alongside the source annotation. Only variant
+                  coordinates are sent to public databases — the same data the single-file
+                  tool sends. Findings are research-grade and require clinical confirmation.
+                </AlertDescription>
+              </Alert>
+            )}
+
+            {annotation && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
+                    <p className="text-xs text-slate-500">Distinct in cohort</p>
+                    <p className="text-2xl font-bold text-slate-900">{annotation.distinctTotal.toLocaleString()}</p>
+                  </div>
+                  <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
+                    <p className="text-xs text-slate-500">Variants annotated</p>
+                    <p className="text-2xl font-bold text-slate-900">{annotation.requested.toLocaleString()}</p>
+                  </div>
+                  <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
+                    <p className="text-xs text-slate-500">ClinVar hits</p>
+                    <p className="text-2xl font-bold text-slate-900">{annotation.annotatedCount.toLocaleString()}</p>
+                  </div>
+                  <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
+                    <p className="text-xs text-slate-500">Notable*</p>
+                    <p className="text-2xl font-bold text-slate-900">{annotation.notableCount.toLocaleString()}</p>
+                  </div>
+                </div>
+
+                {annotation.truncated && (
+                  <Alert className="bg-amber-50 border-amber-200">
+                    <AlertTriangle className="h-4 w-4 text-amber-600" />
+                    <AlertDescription className="text-amber-900 text-xs">
+                      Some files were large enough that per-file variant sampling was truncated,
+                      so cohort prevalence counts are a floor (at least this many samples), not exact.
+                    </AlertDescription>
+                  </Alert>
+                )}
+
+                <div className="border border-slate-200 rounded-lg overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-slate-50 text-slate-600">
+                      <tr>
+                        <th className="text-left p-2 font-medium">Variant</th>
+                        <th className="text-left p-2 font-medium">Gene</th>
+                        <th className="text-right p-2 font-medium">Samples</th>
+                        <th className="text-left p-2 font-medium">ClinVar</th>
+                        <th className="text-left p-2 font-medium">Review status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {annotation.rows.slice(0, 100).map((row) => (
+                        <tr key={row.stableVariantKey} className="border-t border-slate-100">
+                          <td className="p-2 font-mono text-xs text-slate-700 whitespace-nowrap">
+                            {row.stableVariantKey}
+                            {row.summary?.rsid && (
+                              <a
+                                href={`https://www.ncbi.nlm.nih.gov/snp/${row.summary.rsid}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="ml-2 text-blue-600 inline-flex items-center gap-0.5"
+                              >
+                                {row.summary.rsid}<ExternalLink className="w-3 h-3" />
+                              </a>
+                            )}
+                          </td>
+                          <td className="p-2 text-slate-700">{row.summary?.gene || row.gene || '—'}</td>
+                          <td className="p-2 text-right text-slate-700">
+                            {row.sampleCount.toLocaleString()}
+                            <span className="text-slate-400"> / {annotation.sampleCount}</span>
+                          </td>
+                          <td className="p-2">
+                            {row.summary?.clinVarStatus === 'found' ? (
+                              <Badge variant="outline" className={row.summary.notable ? 'border-red-300 text-red-700' : ''}>
+                                {row.summary.clinVarSignificance || 'reported'}
+                              </Badge>
+                            ) : (
+                              <span className="text-slate-400">not found</span>
+                            )}
+                          </td>
+                          <td className="p-2 text-xs text-slate-500">{row.summary?.reviewStatus || '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {annotation.rows.length > 100 && (
+                  <p className="text-xs text-slate-500">
+                    Showing the 100 most prevalent of {annotation.rows.length.toLocaleString()} annotated
+                    variants. Use Export (above) for the full table.
+                  </p>
+                )}
+
+                <Alert className="bg-slate-50 border-slate-200">
+                  <Info className="h-4 w-4 text-slate-600" />
+                  <AlertDescription className="text-slate-700 text-xs">
+                    *Notable = ClinVar significance mentioning pathogenic / risk / drug-response /
+                    association. Every annotation is source-grounded and research-grade; confirm
+                    clinically significant findings with a certified lab. Annotations join to the
+                    cohort by variant coordinates and prevalence, not by re-uploading raw genomes.
+                  </AlertDescription>
+                </Alert>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}

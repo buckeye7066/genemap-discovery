@@ -145,4 +145,73 @@ describe('VCF genomics routes', () => {
     expect(res.statusCode).toBe(400);
     expect(prisma._store.auditLog.some((row) => row.action === 'vcf.enrich')).toBe(false);
   });
+
+  it('annotates a cohort union and returns results keyed by stable variant key', async () => {
+    const variants = Array.from({ length: 60 }, (_, index) => ({
+      chromosome: 'chr17',
+      position: 43071077 + index,
+      ref: 'A',
+      alt: 'G',
+      stableVariantKey: `chr17:${43071077 + index}:A>G`,
+    }));
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/genomics/vcf/enrich-cohort',
+      headers: { cookie: cookie() },
+      payload: { variants },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    // Cohort route lifts the 50-variant single-file cap.
+    expect(body.enrichedVariants).toHaveLength(60);
+    const firstKey = 'chr17:43071077:A>G';
+    expect(body.byKey[firstKey]).toBeDefined();
+    expect(body.byKey[firstKey].annotations.clinVar.status).toBe('found');
+    expect(prisma._store.auditLog.some((row) => row.action === 'vcf.enrich_cohort')).toBe(true);
+  });
+
+  it('rejects cohort batches above the cohort lookup limit', async () => {
+    const variants = Array.from({ length: 151 }, (_, index) => ({
+      chromosome: 'chr17',
+      position: 43071077 + index,
+    }));
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/genomics/vcf/enrich-cohort',
+      headers: { cookie: cookie() },
+      payload: { variants },
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(prisma._store.auditLog.some((row) => row.action === 'vcf.enrich_cohort')).toBe(false);
+  });
+
+  it('deduplicates repeated variants so each distinct lookup runs once', async () => {
+    const db = await import('../services/genomicDatabases.js');
+    db.searchClinVar.mockClear();
+    // 40 samples all carrying the SAME variant -> a single ClinVar lookup.
+    const variants = Array.from({ length: 40 }, () => ({
+      chromosome: 'chr13',
+      position: 32340000,
+      ref: 'C',
+      alt: 'T',
+      stableVariantKey: 'chr13:32340000:C>T',
+    }));
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/genomics/vcf/enrich-cohort',
+      headers: { cookie: cookie() },
+      payload: { variants },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.enrichedVariants).toHaveLength(40);
+    // The point of cohort dedup: one network lookup, forty annotated occurrences.
+    expect(db.searchClinVar).toHaveBeenCalledTimes(1);
+  });
 });
