@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { apiClient } from '@genemap/shared';
 import { Button } from '@/components/ui/button';
 import { Crown, AlertCircle } from 'lucide-react';
+import { isNativeApp } from '@/lib/platform';
 
 export default function UsageBanner() {
   const navigate = useNavigate();
@@ -21,6 +22,8 @@ export default function UsageBanner() {
     }
   };
 
+  // The banner exists to upsell — store policy keeps it out of native builds.
+  if (isNativeApp()) return null;
   if (!entitlements || entitlements.isPremium) return null;
 
   const usage = entitlements.todayUsage || {};

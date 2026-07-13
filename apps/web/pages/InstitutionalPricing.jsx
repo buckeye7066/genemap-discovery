@@ -20,6 +20,7 @@ import {
   Loader2
 } from "lucide-react";
 import { apiClient } from '@genemap/shared';
+import { isNativeApp } from "@/lib/platform";
 
 const PRICING = {
   team: {
@@ -124,6 +125,34 @@ export default function InstitutionalPricingPage() {
       setIsProcessing(false);
     }
   };
+
+  // Store policy: no purchase flow, prices, or external-payment steering in
+  // native builds.
+  if (isNativeApp()) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-6">
+        <div className="max-w-xl mx-auto pt-16">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <Building2 className="w-6 h-6 text-blue-600" />
+                <CardTitle>Institutional Licensing</CardTitle>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-slate-700">
+                Institutional license purchases aren&apos;t available in this app.
+              </p>
+              <p className="text-sm text-slate-500">
+                Members of an organization with an existing license can simply log
+                in — institutional access works here.
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-4 sm:p-6">
