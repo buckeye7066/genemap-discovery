@@ -361,6 +361,7 @@ export default async function entityRoutes(fastify) {
     // and `metadata` are encrypted at rest — decrypt them for the owner here.
     const decrypted = conversations.map((c) => ({
       ...c,
+      title: decrypt(c.title),
       messages: decrypt(c.messages),
       metadata: decrypt(c.metadata),
     }));
@@ -379,13 +380,16 @@ export default async function entityRoutes(fastify) {
       data: {
         userId: request.user.userId,
         assistantType,
-        title: title || null,
+        // The client derives the title from the first user message (see
+        // usePersistConversation), so it can carry the same PHI as the body —
+        // encrypt it too.
+        title: title ? encrypt(title) : null,
         messages: encrypt(messages),
         metadata: metadata != null ? encrypt(metadata) : null,
       },
     });
     // Return plaintext to the caller (who just sent it) rather than ciphertext.
-    return { conversation: { ...conversation, messages, metadata: metadata ?? null } };
+    return { conversation: { ...conversation, title: title ?? null, messages, metadata: metadata ?? null } };
   });
 
   fastify.put('/conversations/:id', async (request) => {
@@ -402,7 +406,7 @@ export default async function entityRoutes(fastify) {
     const conversation = await prisma.aIConversation.update({
       where: { id },
       data: {
-        ...(title !== undefined && { title }),
+        ...(title !== undefined && { title: title ? encrypt(title) : null }),
         ...(messages !== undefined && { messages: encrypt(messages) }),
         ...(metadata !== undefined && { metadata: metadata != null ? encrypt(metadata) : null }),
       },
@@ -410,6 +414,7 @@ export default async function entityRoutes(fastify) {
     return {
       conversation: {
         ...conversation,
+        title: decrypt(conversation.title),
         messages: decrypt(conversation.messages),
         metadata: decrypt(conversation.metadata),
       },
