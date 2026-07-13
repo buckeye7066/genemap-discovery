@@ -509,6 +509,7 @@ export class ApiClient {
   chat(data: ChatRequest): Promise<{
     response: string;
     role: 'assistant';
+    sources: EducationSource[];
     usage: unknown;
     tier: string;
   }> {

@@ -160,6 +160,9 @@ const chatSchema = z.object({
     content: z.string().min(1).max(8000),
   })).min(1).max(50),
   level: z.string().min(1),
+  // Optional topic context so the tutor turn can carry the same authoritative
+  // references the explanation does. Falls back to the latest user message.
+  topic: z.string().trim().max(500).optional(),
 });
 
 // Validate quiz-progress writes. Without this, a missing `topicId` made Prisma
@@ -334,7 +337,7 @@ export default async function educationRoutes(fastify) {
   });
 
   fastify.post('/chat', { preHandler: [authenticate, checkEducationEntitlement, enforceUsageLimit] }, async (request) => {
-    const { messages, level } = chatSchema.parse(request.body);
+    const { messages, level, topic } = chatSchema.parse(request.body);
 
     const levelPrompt = LEVEL_PROMPTS[level] || LEVEL_PROMPTS.undergraduate;
     const systemMessage = honestySystemMessage(
@@ -353,7 +356,12 @@ export default async function educationRoutes(fastify) {
         });
       } catch { /* non-critical */ }
     }
-    return { response, role: 'assistant', usage: request.usageInfo || null, tier: request.entitlements?.tier || 'free' };
+    // Ground the tutor turn too: prefer an explicit topic, else fall back to
+    // the latest user message. Unknown topics still yield the general refs.
+    const lastUserMessage = [...messages].reverse().find((m) => m.role === 'user');
+    const sources = sourcesForTopic(topic || lastUserMessage?.content || '');
+
+    return { response, role: 'assistant', sources, usage: request.usageInfo || null, tier: request.entitlements?.tier || 'free' };
   });
 
   fastify.get('/progress', { preHandler: authenticate }, async (request, reply) => {

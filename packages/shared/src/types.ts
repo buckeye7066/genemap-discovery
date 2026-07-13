@@ -136,6 +136,8 @@ export interface UserChatMessage {
 export interface ChatRequest {
   messages: UserChatMessage[];
   level: EducationLevel | string;
+  /** Optional topic context so the tutor reply carries the topic's references. */
+  topic?: string;
 }
 
 export interface LearningProgress {

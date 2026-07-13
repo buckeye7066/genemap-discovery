@@ -213,6 +213,7 @@ export default function TopicExplorer() {
       const res = await apiClient.chat({
         messages: outgoing,
         level: level || 'undergraduate',
+        topic: topicTitle,
       });
       setChatMessages(prev => [...prev, { role: 'assistant', content: res.response }]);
     } catch (err) {
@@ -335,6 +336,7 @@ export default function TopicExplorer() {
                   <Send className="w-4 h-4" />
                 </Button>
               </div>
+              <SourceList sources={sources} title="References for this topic" />
             </CardContent>
           </Card>
         </TabsContent>

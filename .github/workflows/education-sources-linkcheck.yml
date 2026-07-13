@@ -1,0 +1,29 @@
+name: Education Sources Link Check
+
+# Keeps the "source-grounded" promise honest over time: the curated
+# authoritative references (services/api/src/services/educationSources.js) point
+# at institutional sites whose URLs move. A weekly probe surfaces rot before a
+# learner clicks a dead reference. Runnable on demand too.
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Mondays at 12:00 UTC.
+    - cron: '0 12 * * 1'
+
+concurrency:
+  group: education-sources-linkcheck
+  cancel-in-progress: true
+
+jobs:
+  linkcheck:
+    name: Probe curated education references
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - name: Check every curated source URL is live
+        run: node scripts/check-education-sources.mjs
