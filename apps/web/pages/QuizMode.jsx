@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { ArrowLeft, CheckCircle2, XCircle, Trophy, RefreshCw, ArrowRight, HelpCircle, Sparkles } from 'lucide-react';
+import MedicalDisclaimer from '@/components/shared/MedicalDisclaimer';
 
 // Shown when the user reaches /quizmode without choosing a topic (e.g. the
 // sidebar "Take a Quiz" link). Without this, the page silently defaulted to a
@@ -258,6 +259,8 @@ export default function QuizMode() {
       </div>
 
       <Progress value={progressPercent} className="h-2 animate-slide-up delay-100" />
+
+      <MedicalDisclaimer variant="education" compact />
 
       {current && (
         <Card className="animate-slide-up delay-200 shadow-sm overflow-hidden">

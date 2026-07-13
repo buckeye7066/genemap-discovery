@@ -5,6 +5,7 @@ import AdaptiveExplanation from '@/components/education/AdaptiveExplanation';
 import AdaptiveImage from '@/components/education/AdaptiveImage';
 import LevelPicker from '@/components/education/LevelPicker';
 import UsageBanner from '@/components/education/UsageBanner';
+import MedicalDisclaimer from '@/components/shared/MedicalDisclaimer';
 import { apiClient } from '@genemap/shared';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -230,6 +231,10 @@ export default function TopicExplorer() {
       </div>
 
       <UsageBanner />
+
+      <div className="mb-4">
+        <MedicalDisclaimer variant="education" compact />
+      </div>
 
       <Tabs defaultValue="learn" className="w-full">
         <TabsList className="grid w-full grid-cols-4">

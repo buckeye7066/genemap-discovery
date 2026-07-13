@@ -24,6 +24,7 @@ import {
   BookOpen,
   Network
 } from "lucide-react";
+import MedicalDisclaimer from "@/components/shared/MedicalDisclaimer";
 const ReactMarkdown = lazyWithRetry(() => import('react-markdown'));
 const ResearchSuggester = lazyWithRetry(() => import("../components/ai/ResearchSuggester"));
 const GeneticExplainer = lazyWithRetry(() => import("../components/ai/GeneticExplainer"));
@@ -721,6 +722,15 @@ Please provide a comprehensive response.`;
           </div>
         </div>
         </>
+        )}
+
+        {/* The chat tab renders its own disclaimer; the AI research tools did
+            not have one, so add the matching notice above each of them. */}
+        {['research', 'explainer', 'pathway'].includes(activeTab) && (
+          <MedicalDisclaimer
+            variant={activeTab === 'explainer' ? 'education' : 'research'}
+            className="mb-6"
+          />
         )}
 
         {activeTab === "research" && (
