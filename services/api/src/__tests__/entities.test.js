@@ -434,6 +434,46 @@ describe('AI Conversations CRUD', () => {
     expect(res.statusCode).toBe(400);
   });
 
+  it('POST /entities/conversations — encrypts messages + metadata at rest, decrypts on read', async () => {
+    // Robert/tutor chats routinely contain the user's genetic results, so the
+    // conversation body must not sit in the DB as plaintext.
+    const prevKey = process.env.MEDICAL_DATA_ENCRYPTION_KEY;
+    process.env.MEDICAL_DATA_ENCRYPTION_KEY = 'b'.repeat(64);
+    try {
+      const messages = [{ role: 'user', content: 'My report shows a BRCA1 variant rs80357906' }];
+      const metadata = { linkedRecordId: 'md-42' };
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/entities/conversations',
+        headers: { cookie: cookieA },
+        payload: { assistantType: 'robert', title: 'Results', messages, metadata },
+      });
+      expect(res.statusCode).toBe(200);
+
+      const stored = prisma._store.aIConversation.find((c) => c.userId === USER_A.userId);
+      expect(typeof stored.messages).toBe('string');
+      expect(typeof stored.metadata).toBe('string');
+      expect(stored.messages).not.toContain('BRCA1');
+      expect(stored.messages).not.toContain('rs80357906');
+      expect(stored.metadata).not.toContain('md-42');
+
+      // Caller gets plaintext back on write, and read decrypts.
+      expect(JSON.parse(res.body).conversation.messages).toEqual(messages);
+      const readRes = await app.inject({
+        method: 'GET',
+        url: '/entities/conversations',
+        headers: { cookie: cookieA },
+      });
+      const conv = JSON.parse(readRes.body).conversations[0];
+      expect(conv.messages).toEqual(messages);
+      expect(conv.metadata).toEqual(metadata);
+    } finally {
+      if (prevKey === undefined) delete process.env.MEDICAL_DATA_ENCRYPTION_KEY;
+      else process.env.MEDICAL_DATA_ENCRYPTION_KEY = prevKey;
+    }
+  });
+
   it('GET /entities/conversations — should return only own conversations', async () => {
     prisma._store.aIConversation.push(
       { id: 'c-1', userId: 'user-a', assistantType: 'general', messages: [], updatedAt: new Date() },

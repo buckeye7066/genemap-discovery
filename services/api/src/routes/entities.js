@@ -356,7 +356,15 @@ export default async function entityRoutes(fastify) {
       orderBy: { updatedAt: 'desc' },
       take: 50,
     });
-    return { conversations };
+    // Conversations with the genomics assistants (Robert, tutors) routinely
+    // contain the user's genetic results and clinical questions, so `messages`
+    // and `metadata` are encrypted at rest — decrypt them for the owner here.
+    const decrypted = conversations.map((c) => ({
+      ...c,
+      messages: decrypt(c.messages),
+      metadata: decrypt(c.metadata),
+    }));
+    return { conversations: decrypted };
   });
 
   fastify.post('/conversations', async (request) => {
@@ -372,11 +380,12 @@ export default async function entityRoutes(fastify) {
         userId: request.user.userId,
         assistantType,
         title: title || null,
-        messages,
-        metadata: metadata || null,
+        messages: encrypt(messages),
+        metadata: metadata != null ? encrypt(metadata) : null,
       },
     });
-    return { conversation };
+    // Return plaintext to the caller (who just sent it) rather than ciphertext.
+    return { conversation: { ...conversation, messages, metadata: metadata ?? null } };
   });
 
   fastify.put('/conversations/:id', async (request) => {
@@ -394,11 +403,17 @@ export default async function entityRoutes(fastify) {
       where: { id },
       data: {
         ...(title !== undefined && { title }),
-        ...(messages !== undefined && { messages }),
-        ...(metadata !== undefined && { metadata }),
+        ...(messages !== undefined && { messages: encrypt(messages) }),
+        ...(metadata !== undefined && { metadata: metadata != null ? encrypt(metadata) : null }),
       },
     });
-    return { conversation };
+    return {
+      conversation: {
+        ...conversation,
+        messages: decrypt(conversation.messages),
+        metadata: decrypt(conversation.metadata),
+      },
+    };
   });
 
   // ─── Gene Sets ──────────────────────────────────────────────
