@@ -45,8 +45,10 @@ export default async function genomicsRoutes(fastify) {
   // but raw public lookup access is not premium-only.
 
   // Deterministic VCF parsing. Raw VCF text is parsed by this API only; it is
-  // never forwarded to an LLM by default.
-  fastify.post('/vcf/parse', async (request) => {
+  // never forwarded to an LLM by default. Override the global 1MB body limit so
+  // real single-sample VCFs (a few MB) can actually be uploaded here; the byte
+  // cap inside parseVcfText (VCF_MAX_TEXT_BYTES) is the real bound.
+  fastify.post('/vcf/parse', { bodyLimit: 16 * 1024 * 1024 }, async (request) => {
     const { text, maxVariants } = vcfParseSchema.parse(request.body);
     const result = parseVcfText(text, { maxVariants });
 

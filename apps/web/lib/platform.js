@@ -13,7 +13,9 @@
  * Capacitor runtime injects window.Capacitor, so this is a runtime check.
  */
 export function isNativeApp() {
-  const cap = typeof window !== 'undefined' ? window.Capacitor : undefined;
+  // Bracket access: `Capacitor` is injected at runtime and absent from the
+  // typechecker's Window shape.
+  const cap = typeof window !== 'undefined' ? window['Capacitor'] : undefined;
   if (!cap) return false;
   return typeof cap.isNativePlatform === 'function' ? cap.isNativePlatform() : !!cap.isNative;
 }

@@ -114,7 +114,11 @@ export default function PathwayEnrichmentViz({ genes = [], userEducationLevel = 
   const getFilteredPathways = () => {
     if (!enrichmentData?.pathways) return [];
     return enrichmentData.pathways.filter(p => {
-      if (p.adjustedPValue > filters.minPValue) return false;
+      // Reject a missing/non-numeric adjustedPValue outright. Written as a
+      // positive test so `undefined`/NaN fail the filter (the old
+      // `undefined > minPValue` was false, letting malformed pathways through to
+      // the unguarded render below, which crashed the whole page).
+      if (!(Number(p.adjustedPValue) <= filters.minPValue)) return false;
       if (p.geneCount < filters.minGeneCount) return false;
       if (filters.category !== "all" && p.category !== filters.category) return false;
       return true;
@@ -516,10 +520,10 @@ export default function PathwayEnrichmentViz({ genes = [], userEducationLevel = 
                                 : 'bg-yellow-50 text-yellow-700 border-yellow-200'
                             }`}
                           >
-                            p = {pathway.adjustedPValue.toExponential(2)}
+                            p = {pathway.adjustedPValue != null ? Number(pathway.adjustedPValue).toExponential(2) : 'n/a'}
                           </Badge>
                           <Badge variant="secondary" className="text-xs">
-                            Score: {pathway.enrichmentScore.toFixed(2)}
+                            Score: {pathway.enrichmentScore != null ? Number(pathway.enrichmentScore).toFixed(2) : '—'}
                           </Badge>
                           <Badge variant="outline" className="text-xs">
                             {pathway.category}
@@ -527,7 +531,7 @@ export default function PathwayEnrichmentViz({ genes = [], userEducationLevel = 
                         </div>
                         {hoveredPathway === idx && (
                           <div className="mt-2 text-xs text-slate-700 font-mono">
-                            Genes: {pathway.genes.join(', ')}
+                            Genes: {(pathway.genes || []).join(', ')}
                           </div>
                         )}
                       </div>

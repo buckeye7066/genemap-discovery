@@ -269,6 +269,17 @@ Provide a comprehensive but accessible clinical analysis formatted in clear sect
 
       const { result: response } = await apiClient.invokeLLM(prompt);
 
+      // An empty model response would otherwise render a blank "Clinical
+      // Analysis" card with no error and no retry (and any future contract that
+      // returned undefined here would crash on .toLowerCase()). Fail clearly.
+      if (!response || !String(response).trim()) {
+        setAnalysis({
+          error: true,
+          message: "Robert couldn't generate an analysis for this input. Please try again.",
+        });
+        return;
+      }
+
       // Check for concerning findings or drug warnings
       const hasConcerningFindings = response.toLowerCase().includes('urgent') ||
                                   response.toLowerCase().includes('immediate') ||
@@ -305,7 +316,9 @@ Provide a comprehensive but accessible clinical analysis formatted in clear sect
       console.error("Error performing clinical analysis:", err);
       setAnalysis({
         error: true,
-        message: "Failed to complete clinical analysis. Please try again."
+        message: err?.status === 403
+          ? (err.message || "You've reached today's free analysis limit. Upgrade to Premium for unlimited clinical analyses.")
+          : "Failed to complete clinical analysis. Please try again."
       });
     } finally {
       setIsLoading(false);

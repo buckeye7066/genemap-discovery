@@ -286,9 +286,19 @@ ${userMessage}
       const response = await apiClient.invokeLLM(contextPrompt, {
         add_context_from_internet: true
       });
-      return response?.result || response || "I'm having trouble processing that right now. Could you try rephrasing?";
+      // Coerce to a guaranteed string. When the model returns an empty string,
+      // `response.result` is falsy and the old `|| response` fallback handed the
+      // whole { result, disclaimer } OBJECT to <ReactMarkdown>, which throws
+      // ("Objects are not valid as a React child") and blanks the entire chat.
+      const text = typeof response === 'string' ? response : (response?.result ?? '');
+      return text || "I'm having trouble putting that into words right now. Could you try rephrasing? 💜";
     } catch (err) {
       console.error("Anastasia LLM error:", err);
+      // A 403 is the free-tier daily limit — retrying can't fix it, so tell the
+      // user the real reason and the upgrade path instead of "try again".
+      if (err?.status === 403) {
+        return err.message || "You've reached today's free message limit. Upgrade to Premium for unlimited chats with me! 💜";
+      }
       return "Oops! I'm having a little technical hiccup right now. Mind trying that again? 😊";
     }
   }, [systemPromptBase, medicalRecords.length]);

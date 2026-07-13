@@ -54,7 +54,14 @@ Explain domains as "${educationContext}".`;
       const { result: raw } = await apiClient.invokeLLM(prompt + '\n\nReturn JSON: {"protein_length": number, "domains": [{"name": "...", "start": number, "end": number, "function": "...", "source": "..."}]}');
       const response = typeof raw === 'string' ? JSON.parse(raw.match(/\{[\s\S]*\}/)?.[0] || '{"protein_length":0,"domains":[]}') : raw;
 
-      setDomainData(response);
+      // Normalize so `domains` is ALWAYS an array. The model sometimes returns
+      // valid JSON that omits the `domains` key entirely (e.g. just
+      // {"protein_length": 500}); the downstream `domainData.domains.length`
+      // check then threw and white-screened the whole Visualization Hub.
+      setDomainData({
+        protein_length: Number(response?.protein_length) || 0,
+        domains: Array.isArray(response?.domains) ? response.domains : [],
+      });
     } catch (err) {
       console.error("Error fetching domain data:", err);
       setDomainData({ protein_length: 0, domains: [] });

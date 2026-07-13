@@ -31,7 +31,7 @@ const LayoutWrapper = ({ children, currentPageName }) => Layout ?
   : <>{children}</>;
 
 const AuthenticatedApp = () => {
-  const { isLoadingAuth, isLoadingPublicSettings, authError, isAuthenticated, user } = useAuth();
+  const { isLoadingAuth, isLoadingPublicSettings, authError, isAuthenticated, user, checkAuth } = useAuth();
   const location = useLocation();
   const userIsAdmin = isAdminUser(user);
   const userIsSuperAdmin = isSuperAdmin(user);
@@ -43,6 +43,25 @@ const AuthenticatedApp = () => {
   if (authError) {
     if (authError.type === 'user_not_registered') {
       return <UserNotRegisteredError />;
+    }
+    // A server/network error (NOT a genuine 401/403) must not be treated as
+    // "logged out": otherwise a transient API blip — e.g. a Railway cold start
+    // during a deploy — bounces a validly-authenticated user to /login. Offer a
+    // retry instead so a real session survives the hiccup.
+    if (authError.type === 'auth_error') {
+      return (
+        <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex flex-col items-center justify-center gap-4 p-6 text-center">
+          <p className="text-slate-600 max-w-md">
+            We're having trouble reaching the server. This is usually temporary.
+          </p>
+          <button
+            onClick={() => checkAuth()}
+            className="px-5 py-2.5 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 transition-colors"
+          >
+            Retry
+          </button>
+        </div>
+      );
     }
   }
 

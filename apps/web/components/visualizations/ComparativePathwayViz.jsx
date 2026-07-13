@@ -230,9 +230,14 @@ export default function ComparativePathwayViz({ geneSet1 = [], geneSet2 = [], la
         y + 15 / zoom
       );
 
-      const maxEnrichment = Math.max(pathway.enrichmentSet1, pathway.enrichmentSet2);
-      const bar1Width = (pathway.enrichmentSet1 / maxEnrichment) * (barWidth / 2);
-      const bar2Width = (pathway.enrichmentSet2 / maxEnrichment) * (barWidth / 2);
+      // Coerce to numbers with a 0 fallback: a shared pathway can be missing an
+      // enrichment value, which made Math.max/toFixed throw (or produced NaN bar
+      // widths and 0/0) inside the canvas draw and blanked the heatmap.
+      const e1 = Number(pathway.enrichmentSet1) || 0;
+      const e2 = Number(pathway.enrichmentSet2) || 0;
+      const maxEnrichment = Math.max(e1, e2) || 1;
+      const bar1Width = (e1 / maxEnrichment) * (barWidth / 2);
+      const bar2Width = (e2 / maxEnrichment) * (barWidth / 2);
 
       const isHovered = hoveredSection === idx;
       const scheme = COMPARATIVE_COLOR_SCHEMES[colorScheme];
@@ -246,8 +251,8 @@ export default function ComparativePathwayViz({ geneSet1 = [], geneSet2 = [], la
       ctx.fillStyle = '#1e293b';
       ctx.font = '10px sans-serif';
       ctx.textAlign = 'right';
-      ctx.fillText(pathway.enrichmentSet1.toFixed(2), labelWidth + bar1Width - 5 / zoom, y + 12 / zoom);
-      ctx.fillText(pathway.enrichmentSet2.toFixed(2), labelWidth + bar2Width - 5 / zoom, y + cellHeight - 8 / zoom);
+      ctx.fillText(e1.toFixed(2), labelWidth + bar1Width - 5 / zoom, y + 12 / zoom);
+      ctx.fillText(e2.toFixed(2), labelWidth + bar2Width - 5 / zoom, y + cellHeight - 8 / zoom);
     });
   };
 
