@@ -9,6 +9,8 @@ import { Loader2, Network, Sparkles, TrendingUp, AlertCircle, Info, Upload, Stet
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
 import ReactMarkdown from "react-markdown";
+import SourceList from "@/components/shared/SourceList";
+import { geneReferenceLinks } from "@/components/shared/geneReferenceLinks";
 
 const VCFParser = lazyWithRetry(() => import("../medical/VCFParser"));
 const ClinicalTrialMatcher = lazyWithRetry(() => import("../clinical/ClinicalTrialMatcher"));
@@ -374,6 +376,11 @@ Provide evidence-based predictions with clear confidence levels. Be honest about
                     <p>• <strong>GeneMANIA</strong>: https://genemania.org</p>
                   </div>
                 </div>
+
+                <SourceList
+                  sources={geneReferenceLinks(activeGenes)}
+                  title="Look up these genes in authoritative databases"
+                />
               </div>
             )}
           </>

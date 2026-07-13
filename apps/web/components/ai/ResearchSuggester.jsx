@@ -6,6 +6,8 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { BookOpen, ExternalLink, Loader2, Sparkles, FileText, Beaker } from "lucide-react";
 import ReactMarkdown from "react-markdown";
+import SourceList from "@/components/shared/SourceList";
+import { geneReferenceLinks } from "@/components/shared/geneReferenceLinks";
 
 const SUGGESTER_MD_COMPONENTS = {
   h2: ({ children }) => (
@@ -200,6 +202,13 @@ For each trial (suggest 3-5 relevant trials):
                   {suggestions}
                 </ReactMarkdown>
               </div>
+            )}
+
+            {suggestions && (
+              <SourceList
+                sources={geneReferenceLinks(genes)}
+                title="Look up these genes in authoritative databases"
+              />
             )}
           </>
         )}
