@@ -28,6 +28,7 @@ import MobileOptimization from "./components/MobileOptimization";
 import { useEducationLevel, EDUCATION_LEVELS } from "./lib/EducationLevelContext";
 import { useAuth } from "./lib/AuthContext";
 import { isAdminUser, isSuperAdmin } from "./lib/roles";
+import { isNativeApp } from "./lib/platform";
 
 // Navigation is organized around user *intent* (Learn -> Discover -> Research ->
 // My Data -> Account) rather than by internal feature area. Each group maps to a
@@ -70,7 +71,10 @@ const myDataNav = [
 
 const accountNav = [
   { title: "Profile", url: createPageUrl("Profile"), icon: User },
-  { title: "Premium", url: createPageUrl("Premium"), icon: Crown },
+  // Store policy: native builds get no upgrade entry point. The Premium page
+  // itself is also gated, so deep links stay compliant too. (isNativeApp() is
+  // constant for the app's lifetime, so module scope is safe.)
+  ...(isNativeApp() ? [] : [{ title: "Premium", url: createPageUrl("Premium"), icon: Crown }]),
   // Institutional licensing is gated on owning a license, not on the admin role
   // (see pages.config.js), so it belongs here — discoverable by actual license
   // owners — not mislabeled as an admin "Teams" tool in the admin section.

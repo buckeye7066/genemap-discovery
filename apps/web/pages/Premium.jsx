@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { apiClient } from "@genemap/shared";
 import { useAuth } from "@/lib/AuthContext";
 import { useEducationLevel } from "@/lib/EducationLevelContext";
+import { isNativeApp } from "@/lib/platform";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -125,6 +126,35 @@ export default function PremiumPage() {
         <div className="max-w-4xl mx-auto flex flex-col items-center justify-center py-20">
           <Loader2 className="w-12 h-12 animate-spin text-blue-600 mb-4" />
           <p className="text-slate-600">Loading subscription status...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Store policy: the installed app must not offer a purchase flow or point
+  // at an external one, so native builds get a neutral notice instead of
+  // plans, prices, or checkout.
+  if (isNativeApp()) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-6">
+        <div className="max-w-xl mx-auto pt-16">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <Crown className="w-6 h-6 text-blue-600" />
+                <CardTitle>Subscriptions</CardTitle>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-slate-700">
+                Subscription upgrades aren&apos;t available in this app.
+              </p>
+              <p className="text-sm text-slate-500">
+                If you already have a Premium subscription, simply log in with the
+                same account — all of your Premium features work here.
+              </p>
+            </CardContent>
+          </Card>
         </div>
       </div>
     );
