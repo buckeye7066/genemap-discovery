@@ -50,6 +50,7 @@ Toolchain floor: Node >=24 + corepack/pnpm required (root `engines`) — Node 20
 | DB schema | `services/api/prisma/schema.prisma` |
 | Env vars | `services/api/src/config/env.js` |
 | AI wrappers | `services/api/src/services/anthropic.js`, `openai.js`, `llm.js` |
+| AI honesty guard rails | `services/api/src/services/scientificHonesty.js` — one directive injected (system message / prompt prefix) into every AI path: `education.js` (explain/quiz/chat) + `llm.js` proxy (invoke/chat) |
 | Genomics | `services/api/src/routes/genomics.js`, `services/api/src/services/genomicDatabases.js`, `vcf.js` |
 | Shared client | `packages/shared/src/client.ts` |
 | Stripe webhooks | `services/api/src/routes/billing.js` |
