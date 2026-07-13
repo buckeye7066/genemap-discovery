@@ -215,6 +215,7 @@ export default async function entityRoutes(fastify) {
     const decryptedRecords = records.map((record) => ({
       ...record,
       content: decrypt(record.content),
+      metadata: decrypt(record.metadata),
     }));
 
     return { records: decryptedRecords };
@@ -235,6 +236,11 @@ export default async function entityRoutes(fastify) {
     await requireConsent(prisma, request.user.userId, 'medical_data_storage', '1.0');
 
     const encryptedContent = encrypt(content);
+    // `metadata` is a free-form blob that can carry the same genetic/clinical
+    // detail as `content`, so it must be encrypted at rest too — otherwise the
+    // "never store plaintext medical data" guarantee has a plaintext sibling.
+    // It is never used in a WHERE filter, so encrypting it costs no query path.
+    const encryptedMetadata = metadata != null ? encrypt(metadata) : null;
 
     const record = await prisma.medicalData.create({
       data: {
@@ -243,7 +249,7 @@ export default async function entityRoutes(fastify) {
         title: title || null,
         content: encryptedContent,
         fileUrl: fileUrl || null,
-        metadata: metadata || null,
+        metadata: encryptedMetadata,
       },
     });
 
@@ -259,7 +265,7 @@ export default async function entityRoutes(fastify) {
       { required: true }
     );
 
-    return { record: { ...record, content } };
+    return { record: { ...record, content, metadata: metadata ?? null } };
   });
 
   // Partial update. `content` is shallow-merged into the existing (decrypted)
@@ -284,7 +290,8 @@ export default async function entityRoutes(fastify) {
     if (dataType !== undefined) data.dataType = dataType;
     if (title !== undefined) data.title = title || null;
     if (fileUrl !== undefined) data.fileUrl = fileUrl || null;
-    if (metadata !== undefined) data.metadata = metadata || null;
+    // Encrypt metadata at rest (see POST handler); null clears it.
+    if (metadata !== undefined) data.metadata = metadata != null ? encrypt(metadata) : null;
 
     let mergedContent = decrypt(existing.content);
     if (content !== undefined) {
@@ -314,7 +321,7 @@ export default async function entityRoutes(fastify) {
       { required: true }
     );
 
-    return { record: { ...record, content: mergedContent } };
+    return { record: { ...record, content: mergedContent, metadata: decrypt(record.metadata) } };
   });
 
   fastify.delete('/medical-data/:id', { preHandler: logMedicalAccess('medical_data.delete') }, async (request) => {
