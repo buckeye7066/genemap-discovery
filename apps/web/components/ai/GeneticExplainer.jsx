@@ -22,6 +22,8 @@ import {
   TabsTrigger,
 } from "@/components/ui/tabs";
 import ReactMarkdown from "react-markdown";
+import SourceList from "@/components/shared/SourceList";
+import { geneReferenceLinks } from "@/components/shared/geneReferenceLinks";
 
 const VCFParser = lazyWithRetry(() => import("../medical/VCFParser"));
 const ClinicalTrialMatcher = lazyWithRetry(() => import("../clinical/ClinicalTrialMatcher"));
@@ -631,6 +633,11 @@ Make the explanation warm, clear, and empowering. Avoid unnecessary medical jarg
                   )}
                 </div>
               </div>
+
+              <SourceList
+                sources={geneReferenceLinks(getCurrentGenes())}
+                title="Verify in authoritative databases"
+              />
             </div>
           )}
 
