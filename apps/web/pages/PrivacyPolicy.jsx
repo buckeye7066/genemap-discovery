@@ -10,8 +10,8 @@ import { ShieldCheck, ArrowLeft } from "lucide-react";
  * providers. This is a good-faith plain-language policy; have counsel review
  * before relying on it for a regulated deployment.
  */
-const UPDATED = "June 30, 2026";
-const CONTACT = "support@axiombiolabs.org";
+const UPDATED = "July 13, 2026";
+const CONTACT = "dr.johnwhite@axiombiolabs.org";
 
 function Section({ title, children }) {
   return (
@@ -52,9 +52,20 @@ export default function PrivacyPolicy() {
             <ul className="list-disc ml-5 space-y-1">
               <li><strong>Account data:</strong> email, and any name/phone/profile details you choose to add.</li>
               <li><strong>Usage data:</strong> searches, topics viewed, quizzes, and AI conversations, used to power your dashboard, learning progress, and product analytics.</li>
-              <li><strong>Content you upload:</strong> optional medical/genetic files (e.g. VCF, lab results, reports) you submit for analysis.</li>
-              <li><strong>Billing data:</strong> handled by Stripe; we never store full card numbers.</li>
+              <li><strong>Health &amp; genetic data you upload (optional):</strong> if you choose to use the analysis features, you may upload genetic and health-related files — for example VCF/variant files, lab results, and clinical reports. This is sensitive personal information; you decide whether to provide it, and the app works for learning without it.</li>
+              <li><strong>Billing data:</strong> handled by Stripe; we never see or store full card numbers.</li>
             </ul>
+          </Section>
+
+          <Section title="How your health & genetic data is used">
+            <p>
+              Genetic and health data you upload is used <strong>only to produce your own results</strong> —
+              variant/gene analysis, summaries, and educational explanations shown back to you in your account.
+              We do <strong>not</strong> sell it, we do <strong>not</strong> use it for advertising, and we do
+              not use it to build profiles about you. There is <strong>no feature that shares your records with
+              other users</strong>: your uploads are not published, shared, or made visible to anyone else on
+              the platform.
+            </p>
           </Section>
 
           <Section title="How your data is protected">
