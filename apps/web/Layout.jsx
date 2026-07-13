@@ -203,11 +203,24 @@ export default function Layout({ children, currentPageName }) {
       document.head.appendChild(appleIcon);
     }
 
-    // Register service worker
+    // Register service worker — WEB ONLY. In the Capacitor app the assets
+    // are already local, so a SW adds nothing and a cached index.html can
+    // keep serving OLD hashed bundles after an app update (the stale-bundle
+    // class verified live in SermonSmith's APK). Native builds never
+    // register it, and any SW from a previous install is torn down.
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/service-worker.js').catch(() => {
-        // Service worker registration failed, non-critical
-      });
+      if (isNativeApp()) {
+        navigator.serviceWorker.getRegistrations()
+          .then((registrations) => registrations.forEach((r) => r.unregister()))
+          .catch(() => {});
+        if (window.caches?.keys) {
+          caches.keys().then((keys) => keys.forEach((k) => caches.delete(k))).catch(() => {});
+        }
+      } else {
+        navigator.serviceWorker.register('/service-worker.js').catch(() => {
+          // Service worker registration failed, non-critical
+        });
+      }
     }
   }, []);
 
