@@ -4,6 +4,7 @@ import { generateExplanation, generateChatResponse, generateImage } from '../ser
 import { withHonestyPrefix, honestySystemMessage } from '../services/scientificHonesty.js';
 import { createAuditLog } from '../utils/audit.js';
 import { ValidationError } from '../utils/errors.js';
+import { MAX_PROMPT_CHARS, MAX_CHAT_MESSAGES, MAX_MESSAGE_CHARS } from '../config/llmLimits.js';
 
 // Hard ceiling on tokens per call. Premium users can request up to this
 // limit; free-tier users are additionally bounded by enforceUsageLimit.
@@ -11,12 +12,9 @@ const ABSOLUTE_MAX_TOKENS = 4096;
 const DEFAULT_MAX_TOKENS = 1500;
 const PREMIUM_MAX_TOKENS = 4096;
 
-// Bound the *input* too. Token clamping only limits output; without these an
-// unbounded prompt or a 10k-message array reaches the provider, burning cost
-// (and possibly OOMing the request) before the API rejects it.
-const MAX_PROMPT_CHARS = 24_000; // ~6k tokens of input
-const MAX_CHAT_MESSAGES = 50;
-const MAX_MESSAGE_CHARS = 24_000;
+// Input-size ceilings live in ../config/llmLimits.js (env-tunable, single source
+// of truth). Token clamping only limits *output*; these bound the *input* so an
+// unbounded prompt or a huge message array can't reach the provider unchecked.
 
 const LLM_TIMEOUT_MS = Number(process.env.LLM_TIMEOUT_MS || 30_000);
 const GENOMIC_LLM_CONSENT_TYPE = 'genomic_llm_upload';

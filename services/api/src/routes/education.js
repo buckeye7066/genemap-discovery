@@ -9,6 +9,7 @@ import {
 } from '../services/scientificHonesty.js';
 import { getSources } from '../services/educationSources.js';
 import { AppError } from '../utils/errors.js';
+import { MAX_MESSAGE_CHARS } from '../config/llmLimits.js';
 
 const TOPICS_CATALOG = [
   {
@@ -137,7 +138,10 @@ const levelField = z.preprocess(
 const explainSchema = z.object({
   topic: z.string().min(1).max(500),
   level: levelField,
-  context: z.string().optional(),
+  // Bound the optional free-text context by the same shared LLM input ceiling
+  // so an enriched explanation request can't be unbounded, while still allowing
+  // the large medical/genomic context the app legitimately prepends.
+  context: z.string().max(MAX_MESSAGE_CHARS).optional(),
 });
 
 const imageSchema = z.object({
@@ -157,7 +161,7 @@ const quizSchema = z.object({
 const chatSchema = z.object({
   messages: z.array(z.object({
     role: z.enum(['user', 'assistant']),
-    content: z.string().min(1).max(8000),
+    content: z.string().min(1).max(MAX_MESSAGE_CHARS),
   })).min(1).max(50),
   level: z.string().min(1),
   // Optional topic context so the tutor turn can carry the same authoritative

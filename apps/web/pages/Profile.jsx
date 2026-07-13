@@ -71,6 +71,42 @@ export default function ProfilePage() {
     }
   }, [user]);
 
+  // Downscale + re-encode the chosen image before persisting it. The profile
+  // picture is stored inline as a base64 data URL on the user row, and the API
+  // enforces a 1MB request body limit. A raw multi-megapixel phone photo
+  // base64-inflates well past that, so the save used to fail with a confusing
+  // generic error even though the client "allowed" a 5MB file. Rendering the
+  // photo onto a small canvas guarantees the stored data URL stays tiny
+  // (typically < 100KB) regardless of the source image's size.
+  const MAX_PICTURE_DIMENSION = 400; // px, longest edge
+
+  const resizeImageToDataUrl = (file) =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const img = new Image();
+        img.onload = () => {
+          const scale = Math.min(1, MAX_PICTURE_DIMENSION / Math.max(img.width, img.height));
+          const width = Math.max(1, Math.round(img.width * scale));
+          const height = Math.max(1, Math.round(img.height * scale));
+          const canvas = document.createElement("canvas");
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) {
+            reject(new Error("Could not process this image"));
+            return;
+          }
+          ctx.drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL("image/jpeg", 0.85));
+        };
+        img.onerror = () => reject(new Error("Could not read this image file"));
+        img.src = event.target.result;
+      };
+      reader.onerror = () => reject(new Error("Could not read this image file"));
+      reader.readAsDataURL(file);
+    });
+
   const handleProfilePictureUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -80,8 +116,10 @@ export default function ProfilePage() {
       return;
     }
 
-    if (file.size > 5 * 1024 * 1024) {
-      setError('Image size must be less than 5MB');
+    // We downscale before upload, so this only guards against absurdly large
+    // source files that would be slow to read into memory in the first place.
+    if (file.size > 15 * 1024 * 1024) {
+      setError('Image size must be less than 15MB');
       return;
     }
 
@@ -89,29 +127,17 @@ export default function ProfilePage() {
     setError(null);
 
     try {
-      // Convert to base64 data URL for profile picture storage
-      const reader = new FileReader();
-      reader.onload = async (event) => {
-        try {
-          const dataUrl = event.target.result;
-          setProfilePicture(dataUrl);
-          await apiClient.updateProfile({ profilePicture: dataUrl });
-          setSuccess(true);
-          setTimeout(() => setSuccess(false), 3000);
-        } catch (err) {
-          setError(err.message || "Failed to upload profile picture");
-        } finally {
-          setIsUploadingPicture(false);
-        }
-      };
-      reader.onerror = () => {
-        setError("Failed to read image file");
-        setIsUploadingPicture(false);
-      };
-      reader.readAsDataURL(file);
-      return; // reader callback handles the rest
+      const dataUrl = await resizeImageToDataUrl(file);
+      // Persist first; only reflect the new picture in the UI once the save
+      // actually succeeds, so a rejected upload never shows a photo that was
+      // not stored.
+      await apiClient.updateProfile({ profilePicture: dataUrl });
+      setProfilePicture(dataUrl);
+      setSuccess(true);
+      setTimeout(() => setSuccess(false), 3000);
     } catch (err) {
       setError(err.message || "Failed to upload profile picture");
+    } finally {
       setIsUploadingPicture(false);
     }
   };
@@ -160,6 +186,23 @@ export default function ProfilePage() {
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-6">
         <div className="max-w-4xl mx-auto flex items-center justify-center py-20">
           <Loader2 className="w-12 h-12 animate-spin text-blue-600" />
+        </div>
+      </div>
+    );
+  }
+
+  // Auth has settled but there is no user (session expired / not signed in).
+  // The account panel below dereferences `user.email`/`user.role` directly, so
+  // rendering it with a null user would white-screen the page. Show a sign-in
+  // prompt instead.
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-6">
+        <div className="max-w-4xl mx-auto text-center py-20 space-y-4">
+          <AlertCircle className="w-12 h-12 text-slate-400 mx-auto" />
+          <p className="text-lg text-slate-600">
+            Please sign in to view and edit your profile.
+          </p>
         </div>
       </div>
     );
@@ -235,7 +278,7 @@ export default function ProfilePage() {
                   />
                 </div>
                 <p className="text-xs text-slate-500 text-center">
-                  Click camera to upload (max 5MB)
+                  Click the camera to upload — large photos are resized automatically
                 </p>
               </div>
 
