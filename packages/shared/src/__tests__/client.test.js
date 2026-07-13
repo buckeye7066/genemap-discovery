@@ -612,3 +612,79 @@ describe('401 auto-refresh interceptor', () => {
     expect(refreshCalls).toHaveLength(1);
   });
 });
+
+// ── Transient-failure retry (redeploy resilience) ────────────────────────────
+//
+// A Railway/Vercel redeploy briefly makes the API unreachable — the edge proxy
+// returns 502/503/504 or the connection is refused/reset for a few seconds.
+// Idempotent GET/HEAD requests retry through that window; writes never do.
+
+describe('Transient-failure retry', () => {
+  // retryBaseDelayMs: 0 keeps the backoff instantaneous so tests don't wait.
+  let retryClient;
+  beforeEach(() => {
+    retryClient = new ApiClient('http://localhost:3000', { maxRetries: 2, retryBaseDelayMs: 0 });
+  });
+
+  it('retries an idempotent GET through a transient 503 and then succeeds', async () => {
+    let calls = 0;
+    global.fetch = vi.fn(async () => {
+      calls += 1;
+      if (calls < 3) return { ok: false, status: 503, text: async () => '', json: async () => ({}) };
+      return { ok: true, status: 200, text: async () => JSON.stringify({ entries: [] }), json: async () => ({ entries: [] }) };
+    });
+
+    await expect(retryClient.getSearchHistory()).resolves.toEqual([]);
+    expect(global.fetch).toHaveBeenCalledTimes(3); // 503, 503, 200
+  });
+
+  it('retries an idempotent GET through a network error (connection reset) then succeeds', async () => {
+    let calls = 0;
+    global.fetch = vi.fn(async () => {
+      calls += 1;
+      if (calls < 2) throw new TypeError('Failed to fetch');
+      return { ok: true, status: 200, text: async () => JSON.stringify({ entries: [] }), json: async () => ({ entries: [] }) };
+    });
+
+    await expect(retryClient.getUserActivity()).resolves.toEqual([]);
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('gives up after maxRetries and surfaces the last gateway error', async () => {
+    global.fetch = vi.fn(async () => ({
+      ok: false,
+      status: 502,
+      text: async () => '',
+      json: async () => ({ error: 'Bad gateway' }),
+    }));
+
+    await expect(retryClient.getMe()).rejects.toThrow('Bad gateway');
+    expect(global.fetch).toHaveBeenCalledTimes(3); // initial + 2 retries
+  });
+
+  it('does NOT retry a non-idempotent POST on a transient 503 (no double-write)', async () => {
+    global.fetch = vi.fn(async () => ({
+      ok: false,
+      status: 503,
+      text: async () => '',
+      json: async () => ({ error: 'Service unavailable' }),
+    }));
+
+    await expect(
+      retryClient.saveSearchHistory({ query: 'BRCA1', results: [] }),
+    ).rejects.toThrow('Service unavailable');
+    expect(global.fetch).toHaveBeenCalledTimes(1); // exactly one write attempt
+  });
+
+  it('does NOT retry a 4xx (e.g. 404) — only network errors and 502/503/504 are transient', async () => {
+    global.fetch = vi.fn(async () => ({
+      ok: false,
+      status: 404,
+      text: async () => '',
+      json: async () => ({ error: 'Not found' }),
+    }));
+
+    await expect(retryClient.getMe()).rejects.toThrow('Not found');
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+});
