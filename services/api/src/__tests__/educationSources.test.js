@@ -106,3 +106,52 @@ describe('/education/explain attaches sources', () => {
     expect(body.sources.some((s) => s.url === 'https://medlineplus.gov/genetics/')).toBe(true);
   });
 });
+
+describe('/education/chat attaches sources', () => {
+  let app;
+  let prisma;
+  let llmService;
+  const user = { userId: 'chat-src-user', email: 'chatsrc@example.com', role: 'user' };
+
+  beforeAll(async () => {
+    prisma = createPrismaMock();
+    app = await buildTestApp(prisma, { csrf: false, includeEducation: true });
+    llmService = await import('../services/llm.js');
+  });
+  afterAll(async () => app.close());
+
+  beforeEach(() => {
+    prisma._reset();
+    vi.clearAllMocks();
+    prisma._store.user.push({
+      id: user.userId, email: user.email, role: 'user', banned: false, subscriptions: [],
+      createdAt: new Date(), updatedAt: new Date(),
+    });
+    prisma.learningSession.count = vi.fn(async () => 0);
+    prisma.licenseAssignment.findFirst = vi.fn(async () => null);
+  });
+
+  it('uses the explicit topic to ground the tutor reply', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/education/chat',
+      headers: { cookie: authCookie(user, prisma) },
+      payload: { messages: [{ role: 'user', content: 'how does it work?' }], level: 'high_school', topic: 'CRISPR' },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.sources[0].url).toContain('genome.gov/genetics-glossary/CRISPR');
+  });
+
+  it('falls back to general sources when no topic is recognized', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/education/chat',
+      headers: { cookie: authCookie(user, prisma) },
+      payload: { messages: [{ role: 'user', content: 'hello there' }], level: 'high_school' },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.sources.some((s) => s.url === 'https://medlineplus.gov/genetics/')).toBe(true);
+  });
+});
