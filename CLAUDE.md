@@ -21,7 +21,10 @@ pnpm db:push
 pnpm db:migrate
 pnpm db:migrate:deploy
 pnpm db:studio
+pnpm launch:verify    # pre-deploy gate (scripts/verify-production-launch.mjs); also baked into typecheck
 ```
+
+Toolchain floor: Node >=24 + corepack/pnpm required (root `engines`) — Node 20 fails.
 
 ## Entry Points
 
@@ -50,6 +53,8 @@ pnpm db:studio
 | Genomics | `services/api/src/routes/genomics.js`, `services/api/src/services/genomicDatabases.js`, `vcf.js` |
 | Shared client | `packages/shared/src/client.ts` |
 | Stripe webhooks | `services/api/src/routes/billing.js` |
+| Rate-limit store | `services/api/src/config/rateLimitStore.js` — optional `REDIS_URL` (ioredis) backs it; in-memory otherwise |
+| Error monitoring | Sentry (`@sentry/node`, `services/api/src/config/sentry.js`) wired into `index.js` + `middleware/errorHandler.js` |
 
 ## Gotchas
 
