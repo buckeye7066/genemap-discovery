@@ -10,6 +10,7 @@ import { Progress } from "@/components/ui/progress";
 import { Loader2, Upload, FileStack, Download, AlertTriangle, CheckCircle2, Info, Dna, ExternalLink } from "lucide-react";
 import ReactMarkdown from 'react-markdown';
 import { parseVcfFile, summarizeCohort, collectCohortVariants } from "@/lib/vcfCohort";
+import { variantReferenceLinks } from "@/components/shared/variantReferenceLinks";
 
 // Cohort annotation fans out over the DISTINCT variants across all samples.
 // We annotate the most prevalent variants first (those shared by the most
@@ -31,6 +32,7 @@ function summarizeAnnotation(enriched) {
   return {
     gene: enriched?.originalVariant?.gene || null,
     rsid: enriched?.originalVariant?.rsid || null,
+    clinVarId: uid || null,
     clinVarStatus: clinVar.status || 'not_found',
     clinVarSignificance: significance,
     reviewStatus: clinVar?.source?.reviewStatus || record?.review_status || null,
@@ -559,22 +561,27 @@ Ground every statement in the measured numbers above. Where deeper analysis is n
                         <th className="text-right p-2 font-medium">Samples</th>
                         <th className="text-left p-2 font-medium">ClinVar</th>
                         <th className="text-left p-2 font-medium">Review status</th>
+                        <th className="text-left p-2 font-medium">Verify at source</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {annotation.rows.slice(0, 100).map((row) => (
+                      {annotation.rows.slice(0, 100).map((row) => {
+                        const refs = variantReferenceLinks(
+                          {
+                            chromosome: row.chromosome,
+                            position: row.position,
+                            ref: row.ref,
+                            alt: row.alt,
+                            rsid: row.summary?.rsid || row.rsid,
+                          },
+                          { clinVar: { search: { esearchresult: { idlist: row.summary?.clinVarId ? [row.summary.clinVarId] : [] } } } },
+                        );
+                        return (
                         <tr key={row.stableVariantKey} className="border-t border-slate-100">
                           <td className="p-2 font-mono text-xs text-slate-700 whitespace-nowrap">
                             {row.stableVariantKey}
-                            {row.summary?.rsid && (
-                              <a
-                                href={`https://www.ncbi.nlm.nih.gov/snp/${row.summary.rsid}`}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="ml-2 text-blue-600 inline-flex items-center gap-0.5"
-                              >
-                                {row.summary.rsid}<ExternalLink className="w-3 h-3" />
-                              </a>
+                            {(row.summary?.rsid || row.rsid) && (
+                              <span className="ml-2 text-slate-500">{row.summary?.rsid || row.rsid}</span>
                             )}
                           </td>
                           <td className="p-2 text-slate-700">{row.summary?.gene || row.gene || '—'}</td>
@@ -592,8 +599,30 @@ Ground every statement in the measured numbers above. Where deeper analysis is n
                             )}
                           </td>
                           <td className="p-2 text-xs text-slate-500">{row.summary?.reviewStatus || '—'}</td>
+                          <td className="p-2">
+                            {refs.length > 0 ? (
+                              <div className="flex flex-wrap gap-x-2 gap-y-0.5">
+                                {refs.map((r) => (
+                                  <a
+                                    key={r.url}
+                                    href={r.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-blue-600 hover:text-blue-800 hover:underline inline-flex items-center gap-0.5 whitespace-nowrap"
+                                    title={`${r.label} — ${r.publisher}`}
+                                  >
+                                    {r.publisher.replace(/^(NCBI|Broad Institute) /, '')}
+                                    <ExternalLink className="w-3 h-3" />
+                                  </a>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="text-slate-400">—</span>
+                            )}
+                          </td>
                         </tr>
-                      ))}
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
