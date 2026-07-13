@@ -442,24 +442,31 @@ describe('AI Conversations CRUD', () => {
     try {
       const messages = [{ role: 'user', content: 'My report shows a BRCA1 variant rs80357906' }];
       const metadata = { linkedRecordId: 'md-42' };
+      // The client derives title from the first user message, so it can carry PHI.
+      const title = 'My report shows a BRCA1 variant rs80357906';
 
       const res = await app.inject({
         method: 'POST',
         url: '/entities/conversations',
         headers: { cookie: cookieA },
-        payload: { assistantType: 'robert', title: 'Results', messages, metadata },
+        payload: { assistantType: 'robert', title, messages, metadata },
       });
       expect(res.statusCode).toBe(200);
 
       const stored = prisma._store.aIConversation.find((c) => c.userId === USER_A.userId);
       expect(typeof stored.messages).toBe('string');
       expect(typeof stored.metadata).toBe('string');
+      expect(typeof stored.title).toBe('string');
       expect(stored.messages).not.toContain('BRCA1');
       expect(stored.messages).not.toContain('rs80357906');
       expect(stored.metadata).not.toContain('md-42');
+      // The PHI-derived title must not sit in the DB as plaintext.
+      expect(stored.title).not.toContain('BRCA1');
+      expect(stored.title).not.toContain('rs80357906');
 
       // Caller gets plaintext back on write, and read decrypts.
       expect(JSON.parse(res.body).conversation.messages).toEqual(messages);
+      expect(JSON.parse(res.body).conversation.title).toBe(title);
       const readRes = await app.inject({
         method: 'GET',
         url: '/entities/conversations',
@@ -468,6 +475,7 @@ describe('AI Conversations CRUD', () => {
       const conv = JSON.parse(readRes.body).conversations[0];
       expect(conv.messages).toEqual(messages);
       expect(conv.metadata).toEqual(metadata);
+      expect(conv.title).toBe(title);
     } finally {
       if (prevKey === undefined) delete process.env.MEDICAL_DATA_ENCRYPTION_KEY;
       else process.env.MEDICAL_DATA_ENCRYPTION_KEY = prevKey;
