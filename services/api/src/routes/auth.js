@@ -42,6 +42,87 @@ const loginSchema = z.object({
 });
 
 /**
+ * Build the canonical "current user" payload returned by GET and PUT /auth/me.
+ *
+ * Both endpoints MUST return the identical shape — the SPA treats this object
+ * as the single source of truth for the logged-in user (onboarding gate reads
+ * `demographics_collected`; the Premium page reads `entitlements`). When PUT
+ * returned a narrower object than GET, saving a profile silently dropped
+ * `entitlements` and made premium users look downgraded until reload. Keeping
+ * one serializer removes that drift class entirely.
+ *
+ * Returns null if the user no longer exists.
+ */
+async function serializeMe(prisma, userId, email) {
+  const [user, licenseAssignment] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        subscriptions: {
+          // Keep in lock-step with checkEducationEntitlement: premium requires
+          // an active/trialing AND unexpired subscription. currentPeriodEnd ===
+          // null is treated as no-expiry (legacy rows).
+          where: {
+            status: { in: ['active', 'trialing'] },
+            OR: [{ currentPeriodEnd: null }, { currentPeriodEnd: { gt: new Date() } }],
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+        },
+      },
+    }),
+    prisma.licenseAssignment.findFirst({
+      where: { userEmail: email, status: 'active' },
+      include: { license: true },
+    }),
+  ]);
+
+  if (!user) return null;
+
+  const isAdmin = user.role === 'admin' || user.role === 'super_admin';
+  const isPremium = Boolean(
+    isAdmin ||
+      (user.subscriptions?.length ?? 0) > 0 ||
+      (licenseAssignment && licenseAssignment.license?.status === 'active')
+  );
+
+  const entitlements = {
+    isPremium,
+    isAdmin,
+    licenseInfo: licenseAssignment
+      ? {
+          organizationName: licenseAssignment.license.organizationName,
+          licenseType: licenseAssignment.license.licenseType,
+        }
+      : null,
+  };
+
+  return {
+    id: user.id,
+    email: user.email,
+    role: user.role,
+    createdAt: user.createdAt,
+    display_name: user.displayName || null,
+    full_name: user.fullName || null,
+    phone_number: user.phoneNumber || null,
+    education_level: user.educationLevel || null,
+    demographics_collected: user.demographicsCollected,
+    mailing_list_opt_in: user.mailingListOptIn,
+    age: user.age ?? null,
+    field_of_study: user.fieldOfStudy || null,
+    research_interests: user.researchInterests || null,
+    current_projects: user.currentProjects || null,
+    publications: user.publications || null,
+    linkedin_url: user.linkedinUrl || null,
+    orcid_id: user.orcidId || null,
+    profile_picture: user.profilePicture || null,
+    banned: user.banned,
+    ban_reason: user.banReason || null,
+    entitlements,
+  };
+}
+
+/**
  * Find the (unexpired) session row whose stored hash matches this refresh
  * token. The token itself isn't stored — only a bcrypt hash per session — so
  * we must compare against each candidate. Shared by /refresh and the /auth/me
@@ -352,81 +433,13 @@ export default async function authRoutes(fastify) {
   });
 
   fastify.get('/me', { preHandler: authenticateOrRefresh }, async (request, reply) => {
-    const [user, licenseAssignment] = await Promise.all([
-      prisma.user.findUnique({
-        where: { id: request.user.userId },
-        include: {
-          subscriptions: {
-            // Keep this in lock-step with checkEducationEntitlement: premium
-            // requires an active/trialing AND unexpired subscription so the UI
-            // never shows "Premium" after an admin-granted comp lapses.
-            // currentPeriodEnd === null is treated as no-expiry (legacy rows).
-            where: {
-              status: { in: ['active', 'trialing'] },
-              OR: [{ currentPeriodEnd: null }, { currentPeriodEnd: { gt: new Date() } }],
-            },
-            orderBy: { createdAt: 'desc' },
-            take: 1,
-          },
-        },
-      }),
-      prisma.licenseAssignment.findFirst({
-        where: {
-          userEmail: request.user.email,
-          status: 'active',
-        },
-        include: { license: true },
-      }),
-    ]);
-
-    if (!user) {
+    const me = await serializeMe(prisma, request.user.userId, request.user.email);
+    if (!me) {
       throw new UnauthorizedError('User not found');
     }
 
-    const isAdmin = user.role === 'admin' || user.role === 'super_admin';
-    const isPremium = Boolean(
-      isAdmin ||
-        (user.subscriptions?.length ?? 0) > 0 ||
-        (licenseAssignment && licenseAssignment.license?.status === 'active')
-    );
-
-    const entitlements = {
-      isPremium,
-      isAdmin,
-      licenseInfo: licenseAssignment
-        ? {
-            organizationName: licenseAssignment.license.organizationName,
-            licenseType: licenseAssignment.license.licenseType,
-          }
-        : null,
-    };
-
     const csrfToken = ensureCsrfCookie(request, reply);
-
-    return reply.send({
-      id: user.id,
-      email: user.email,
-      role: user.role,
-      createdAt: user.createdAt,
-      display_name: user.displayName || null,
-      full_name: user.fullName || null,
-      phone_number: user.phoneNumber || null,
-      education_level: user.educationLevel || null,
-      demographics_collected: user.demographicsCollected,
-      mailing_list_opt_in: user.mailingListOptIn,
-      age: user.age ?? null,
-      field_of_study: user.fieldOfStudy || null,
-      research_interests: user.researchInterests || null,
-      current_projects: user.currentProjects || null,
-      publications: user.publications || null,
-      linkedin_url: user.linkedinUrl || null,
-      orcid_id: user.orcidId || null,
-      profile_picture: user.profilePicture || null,
-      banned: user.banned,
-      ban_reason: user.banReason || null,
-      entitlements,
-      csrfToken,
-    });
+    return reply.send({ ...me, csrfToken });
   });
 
   fastify.put('/me', { preHandler: authenticate }, async (request, reply) => {
@@ -468,7 +481,7 @@ export default async function authRoutes(fastify) {
     if (orcidId !== undefined) data.orcidId = orcidId;
     if (profilePicture !== undefined) data.profilePicture = profilePicture;
 
-    const user = await prisma.user.update({
+    await prisma.user.update({
       where: { id: request.user.userId },
       data,
     });
@@ -481,25 +494,14 @@ export default async function authRoutes(fastify) {
       metadata: { fields: Object.keys(data) },
     });
 
-    return reply.send({
-      id: user.id,
-      email: user.email,
-      role: user.role,
-      createdAt: user.createdAt,
-      display_name: user.displayName,
-      full_name: user.fullName,
-      phone_number: user.phoneNumber || null,
-      education_level: user.educationLevel,
-      demographics_collected: user.demographicsCollected,
-      mailing_list_opt_in: user.mailingListOptIn,
-      age: user.age ?? null,
-      field_of_study: user.fieldOfStudy || null,
-      research_interests: user.researchInterests || null,
-      current_projects: user.currentProjects || null,
-      publications: user.publications || null,
-      linkedin_url: user.linkedinUrl || null,
-      orcid_id: user.orcidId || null,
-      profile_picture: user.profilePicture || null,
-    });
+    // Return the SAME canonical shape as GET /auth/me (incl. `entitlements`).
+    // The SPA's applyUser() replaces the auth user with this payload; returning
+    // a narrower object dropped entitlements and made premium users appear
+    // downgraded until a full reload.
+    const me = await serializeMe(prisma, request.user.userId, request.user.email);
+    if (!me) {
+      throw new UnauthorizedError('User not found');
+    }
+    return reply.send(me);
   });
 }

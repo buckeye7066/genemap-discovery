@@ -330,6 +330,13 @@ export default async function educationRoutes(fastify) {
       maxTokens: 1800,
       timeoutMs: EDU_TIMEOUT_MS,
     });
+    // generateQuiz returns the raw (unparseable) string instead of an array when
+    // the model's output can't be coerced into questions. Fail BEFORE recording
+    // a learningSession so a malformed generation doesn't silently consume the
+    // free tier's daily quiz quota (that row is what enforceUsageLimit counts).
+    if (!Array.isArray(questions) || questions.length === 0) {
+      throw new AppError('The quiz could not be generated in a usable format. Please try again.', 502);
+    }
     if (request.user?.userId) {
       try {
         await prisma.learningSession.create({
