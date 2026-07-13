@@ -6,6 +6,7 @@ import AdaptiveImage from '@/components/education/AdaptiveImage';
 import LevelPicker from '@/components/education/LevelPicker';
 import UsageBanner from '@/components/education/UsageBanner';
 import MedicalDisclaimer from '@/components/shared/MedicalDisclaimer';
+import SourceList from '@/components/shared/SourceList';
 import { apiClient } from '@genemap/shared';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -121,6 +122,7 @@ export default function TopicExplorer() {
   const topicTitle = searchParams.get('title') || topicId;
 
   const [explanation, setExplanation] = useState('');
+  const [sources, setSources] = useState([]);
   const [imageData, setImageData] = useState(null);
   const [chatMessages, setChatMessages] = useState([]);
   const [chatInput, setChatInput] = useState('');
@@ -135,6 +137,7 @@ export default function TopicExplorer() {
     setChatMessages([]);
     setChatInput('');
     setExplanation('');
+    setSources([]);
   }, [topicId]);
 
   useEffect(() => {
@@ -162,8 +165,10 @@ export default function TopicExplorer() {
     try {
       const res = await apiClient.getExplanation({ topic: topicTitle, level: level || 'undergraduate' });
       setExplanation(res.explanation || '');
+      setSources(Array.isArray(res.sources) ? res.sources : []);
     } catch (err) {
       setExplanation(`Unable to load explanation: ${err.message}`);
+      setSources([]);
     } finally {
       setLoading(prev => ({ ...prev, explanation: false }));
     }
@@ -262,6 +267,7 @@ export default function TopicExplorer() {
             </CardHeader>
             <CardContent>
               <AdaptiveExplanation content={explanation} loading={loading.explanation} level={level} />
+              {!loading.explanation && explanation && <SourceList sources={sources} />}
             </CardContent>
           </Card>
         </TabsContent>

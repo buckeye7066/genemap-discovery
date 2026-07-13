@@ -11,6 +11,7 @@ import type {
   InstitutionalCheckoutRequest,
   TopicCategory,
   ExplanationRequest,
+  EducationSource,
   ImageGenerationRequest,
   QuizRequest,
   ChatRequest,
@@ -477,6 +478,7 @@ export class ApiClient {
     explanation: string;
     topic: string;
     level: string;
+    sources: EducationSource[];
     usage: unknown;
     tier: string;
   }> {
