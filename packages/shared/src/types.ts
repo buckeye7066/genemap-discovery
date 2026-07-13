@@ -100,6 +100,16 @@ export interface ExplanationRequest {
   context?: string;
 }
 
+/**
+ * A curated, authoritative reference attached to an AI explanation. These are
+ * real institutional links (verified server-side), not AI-generated citations.
+ */
+export interface EducationSource {
+  label: string;
+  url: string;
+  publisher: string;
+}
+
 export interface ImageGenerationRequest {
   topic: string;
   level: EducationLevel | string;

@@ -7,6 +7,7 @@ import {
   honestySystemMessage,
   QUIZ_HONESTY_NOTE,
 } from '../services/scientificHonesty.js';
+import { getSources } from '../services/educationSources.js';
 import { AppError } from '../utils/errors.js';
 
 const TOPICS_CATALOG = [
@@ -83,6 +84,28 @@ const TOPICS_CATALOG = [
     ],
   },
 ];
+
+// Index every catalog topic by BOTH its id and its lower-cased title, so a
+// request that passes either (the client sends the title) resolves to the
+// topic's id + category for authoritative-source lookup.
+const TOPIC_INDEX = new Map();
+for (const { category, topics } of TOPICS_CATALOG) {
+  for (const t of topics) {
+    const meta = { id: t.id, category };
+    TOPIC_INDEX.set(t.id.toLowerCase(), meta);
+    TOPIC_INDEX.set(t.title.trim().toLowerCase(), meta);
+  }
+}
+
+/**
+ * Resolve authoritative references for a requested topic. A known topic gets
+ * its glossary + category + general sources; an unknown/custom topic still gets
+ * the general NIH/NHGRI references so every explanation is source-grounded.
+ */
+function sourcesForTopic(topic) {
+  const meta = TOPIC_INDEX.get(String(topic ?? '').trim().toLowerCase());
+  return getSources({ topicId: meta?.id, category: meta?.category });
+}
 
 // A missing/blank/`null` level used to hard-fail Zod (`z.string().min(1)`),
 // surfacing to the user as a cryptic "Validation failed". The level only
@@ -217,6 +240,7 @@ export default async function educationRoutes(fastify) {
       explanation,
       topic,
       level,
+      sources: sourcesForTopic(topic),
       usage: request.usageInfo || null,
       tier: request.entitlements?.tier || 'free',
     };
