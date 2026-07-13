@@ -1,6 +1,7 @@
 import { authenticate } from '../middleware/auth.js';
 import { checkEducationEntitlement, enforceUsageLimit, recordUsage } from '../middleware/entitlements.js';
 import { generateExplanation, generateChatResponse, generateImage } from '../services/llm.js';
+import { withHonestyPrefix, honestySystemMessage } from '../services/scientificHonesty.js';
 import { createAuditLog } from '../utils/audit.js';
 import { ValidationError } from '../utils/errors.js';
 
@@ -101,7 +102,7 @@ export default async function llmRoutes(fastify) {
     const maxTokens = clampTokens(options.maxTokens, isPremium);
     const temperature = clampTemperature(options.temperature);
 
-    const result = await generateExplanation(prompt, {
+    const result = await generateExplanation(withHonestyPrefix(prompt), {
       provider: options.provider,
       maxTokens,
       temperature,
@@ -152,7 +153,10 @@ export default async function llmRoutes(fastify) {
     const maxTokens = clampTokens(options.maxTokens, isPremium);
     const temperature = clampTemperature(options.temperature);
 
-    const result = await generateChatResponse(sanitized, {
+    // The generic proxy has no persona of its own; inject only the honesty
+    // guard rails as the single leading system message. (recordUsage below
+    // still counts `sanitized.length` so the extra message is not billed.)
+    const result = await generateChatResponse([honestySystemMessage(), ...sanitized], {
       provider: options.provider,
       maxTokens,
       temperature,

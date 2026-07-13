@@ -2,6 +2,11 @@ import { z } from 'zod';
 import { authenticate } from '../middleware/auth.js';
 import { checkEducationEntitlement, enforceUsageLimit } from '../middleware/entitlements.js';
 import * as llm from '../services/llm.js';
+import {
+  withHonestyPrefix,
+  honestySystemMessage,
+  QUIZ_HONESTY_NOTE,
+} from '../services/scientificHonesty.js';
 import { AppError } from '../utils/errors.js';
 
 const TOPICS_CATALOG = [
@@ -186,7 +191,7 @@ export default async function educationRoutes(fastify) {
       '3-5 bullet points summarizing the essentials.',
     ].join('\n');
 
-    const explanation = await llm.generateExplanation(prompt, {
+    const explanation = await llm.generateExplanation(withHonestyPrefix(prompt), {
       model: EDU_TEXT_MODEL,
       maxTokens: 1400,
       timeoutMs: EDU_TIMEOUT_MS,
@@ -289,7 +294,7 @@ export default async function educationRoutes(fastify) {
       '[{"question": "...", "options": ["A", "B", "C", "D"], "correctIndex": 0, "explanation": "..."}]',
     ].join('\n');
 
-    const questions = await llm.generateQuiz(prompt, {
+    const questions = await llm.generateQuiz(withHonestyPrefix(prompt, QUIZ_HONESTY_NOTE), {
       model: EDU_TEXT_MODEL,
       maxTokens: 1800,
       timeoutMs: EDU_TIMEOUT_MS,
@@ -308,10 +313,9 @@ export default async function educationRoutes(fastify) {
     const { messages, level } = chatSchema.parse(request.body);
 
     const levelPrompt = LEVEL_PROMPTS[level] || LEVEL_PROMPTS.undergraduate;
-    const systemMessage = {
-      role: 'system',
-      content: `You are a friendly genetics tutor. ${levelPrompt} Be encouraging, ask follow-up questions to check understanding, and provide examples when helpful. If the student seems confused, try a different approach or analogy.`,
-    };
+    const systemMessage = honestySystemMessage(
+      `You are a friendly genetics tutor. ${levelPrompt} Be encouraging, ask follow-up questions to check understanding, and provide examples when helpful. If the student seems confused, try a different approach or analogy.`,
+    );
 
     const fullMessages = [systemMessage, ...messages];
     // Keep the chat on the default (higher-quality) model — tutor turns are
