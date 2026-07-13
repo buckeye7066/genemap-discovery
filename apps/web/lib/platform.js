@@ -13,7 +13,9 @@
  * Capacitor runtime injects window.Capacitor, so this is a runtime check.
  */
 export function isNativeApp() {
-  const cap = typeof window !== 'undefined' ? window.Capacitor : undefined;
+  // `Capacitor` is injected on window only by the native runtime and isn't part
+  // of the DOM lib types, so cast to any to read it under strict checkJs.
+  const cap = typeof window !== 'undefined' ? /** @type {any} */ (window).Capacitor : undefined;
   if (!cap) return false;
   return typeof cap.isNativePlatform === 'function' ? cap.isNativePlatform() : !!cap.isNative;
 }
