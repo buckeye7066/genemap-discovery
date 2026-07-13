@@ -46,6 +46,12 @@ import {
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
+// Storing/analyzing health data is gated server-side by a HIPAA consent record
+// (POST /entities/medical-data -> requireConsent). These MUST match the type +
+// version the backend checks in services/api/src/routes/entities.js exactly, or
+// the upload 403s with "Consent required: medical_data_storage v1.0".
+const MEDICAL_STORAGE_CONSENT = { type: 'medical_data_storage', version: '1.0' };
+
 const MedicalDataComparison = lazyWithRetry(() => import("../components/medical/MedicalDataComparison"));
 const VCFParser = lazyWithRetry(() => import("../components/medical/VCFParser"));
 const FHIRExporter = lazyWithRetry(() => import("../components/medical/FHIRExporter"));
@@ -75,6 +81,13 @@ export default function MedicalDataPage() {
     notes: ""
   });
 
+  // HIPAA storage consent: the backend refuses to persist medical data without
+  // a granted `medical_data_storage` v1.0 record. We surface an in-line consent
+  // checkbox the user grants themselves (no admin/onboarding path required) and
+  // record it via the API before the first upload.
+  const [hasStorageConsent, setHasStorageConsent] = useState(false);
+  const [consentChecked, setConsentChecked] = useState(false);
+
   useEffect(() => {
     loadData();
   }, []);
@@ -86,6 +99,21 @@ export default function MedicalDataPage() {
 
       // Shared records can come from the same endpoint or a dedicated one
       setSharedRecords([]);
+
+      // Determine whether the user has already granted storage consent so we
+      // can skip the checkbox on repeat visits. Non-fatal if it fails.
+      try {
+        const consents = await apiClient.getConsentRecords();
+        const granted = (consents || []).some(
+          (c) =>
+            c.consentType === MEDICAL_STORAGE_CONSENT.type &&
+            c.version === MEDICAL_STORAGE_CONSENT.version &&
+            c.granted
+        );
+        setHasStorageConsent(granted);
+      } catch (consentErr) {
+        console.error("Error loading consent records:", consentErr);
+      }
     } catch (err) {
       console.error("Error loading data:", err);
       setError("Failed to load medical records");
@@ -106,6 +134,11 @@ export default function MedicalDataPage() {
 
     if (!uploadForm.file) {
       setError("Please select a file to upload");
+      return;
+    }
+
+    if (!hasStorageConsent && !consentChecked) {
+      setError("Please check the consent box to store and analyze your health data.");
       return;
     }
 
@@ -161,6 +194,20 @@ ${fileText}
           summary: `Uploaded ${name}. Automatic text analysis isn't available for this file type — open it with Anastasia for a guided review.`,
           key_findings: [], genes: [], phenotypes: [], risks: [], recommendations: []
         };
+      }
+
+      // The backend refuses to store medical data without a granted consent
+      // record, so record it (once) BEFORE the save. Without this the save
+      // 403s with "Consent required: medical_data_storage v1.0".
+      if (!hasStorageConsent) {
+        setUploadProgress("Recording your consent...");
+        await apiClient.recordConsent({
+          consentType: MEDICAL_STORAGE_CONSENT.type,
+          version: MEDICAL_STORAGE_CONSENT.version,
+          granted: true,
+          metadata: { source: "medical_data_upload" },
+        });
+        setHasStorageConsent(true);
       }
 
       setUploadProgress("Saving medical data...");
@@ -843,9 +890,29 @@ Return structured analysis with all sections.`;
                 />
               </div>
 
+              {!hasStorageConsent && (
+                <div className="flex items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
+                  <Checkbox
+                    id="storage-consent"
+                    checked={consentChecked}
+                    onCheckedChange={(checked) => setConsentChecked(checked === true)}
+                    disabled={isUploading}
+                    className="mt-0.5"
+                  />
+                  <Label
+                    htmlFor="storage-consent"
+                    className="text-sm font-normal leading-snug text-slate-700 cursor-pointer"
+                  >
+                    I consent to GeneMap securely storing this health data (encrypted) and analyzing it
+                    with AI to generate a summary. I understand this is for research and education only,
+                    is not a medical diagnosis, and that I can delete any record at any time.
+                  </Label>
+                </div>
+              )}
+
               <Button
                 type="submit"
-                disabled={isUploading || !uploadForm.file}
+                disabled={isUploading || !uploadForm.file || (!hasStorageConsent && !consentChecked)}
                 className="w-full bg-green-600 hover:bg-green-700 py-6 text-lg"
               >
                 {isUploading ? (
