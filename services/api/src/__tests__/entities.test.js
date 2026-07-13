@@ -154,6 +154,52 @@ describe('Medical Data CRUD', () => {
     expect(body.record.content).toBe('WBC: 7.2');
   });
 
+  it('POST /entities/medical-data — encrypts BOTH content and metadata at rest, decrypts on read', async () => {
+    // With a real key, nothing sensitive may be persisted as plaintext — and
+    // metadata (a free-form blob that can hold the same genetic detail as
+    // content) must be encrypted too, not just content.
+    const prevKey = process.env.MEDICAL_DATA_ENCRYPTION_KEY;
+    process.env.MEDICAL_DATA_ENCRYPTION_KEY = 'a'.repeat(64);
+    try {
+      seedMedicalConsent(prisma, USER_A.userId);
+      const secretContent = { summary: 'BRCA1 pathogenic variant', relevant_genes: ['BRCA1'] };
+      const secretMetadata = { rsid: 'rs80357906', clinvar: 'pathogenic' };
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/entities/medical-data',
+        headers: { cookie: cookieA },
+        payload: { dataType: 'genetic_test', title: 'Report', content: secretContent, metadata: secretMetadata },
+      });
+      expect(res.statusCode).toBe(200);
+
+      // At rest: the stored row must NOT contain the plaintext values.
+      const stored = prisma._store.medicalData.find((r) => r.userId === USER_A.userId);
+      expect(typeof stored.content).toBe('string');
+      expect(typeof stored.metadata).toBe('string');
+      expect(stored.content).not.toContain('BRCA1');
+      expect(stored.metadata).not.toContain('rs80357906');
+      expect(stored.metadata).not.toContain('pathogenic');
+
+      // The caller still gets plaintext back on write.
+      const body = JSON.parse(res.body);
+      expect(body.record.metadata).toEqual(secretMetadata);
+
+      // And read decrypts both content and metadata.
+      const readRes = await app.inject({
+        method: 'GET',
+        url: '/entities/medical-data',
+        headers: { cookie: cookieA },
+      });
+      const read = JSON.parse(readRes.body).records[0];
+      expect(read.content).toEqual(secretContent);
+      expect(read.metadata).toEqual(secretMetadata);
+    } finally {
+      if (prevKey === undefined) delete process.env.MEDICAL_DATA_ENCRYPTION_KEY;
+      else process.env.MEDICAL_DATA_ENCRYPTION_KEY = prevKey;
+    }
+  });
+
   it('POST /entities/medical-data — should refuse without consent (HIPAA gate)', async () => {
     const res = await app.inject({
       method: 'POST',

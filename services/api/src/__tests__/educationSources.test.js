@@ -110,13 +110,11 @@ describe('/education/explain attaches sources', () => {
 describe('/education/chat attaches sources', () => {
   let app;
   let prisma;
-  let llmService;
   const user = { userId: 'chat-src-user', email: 'chatsrc@example.com', role: 'user' };
 
   beforeAll(async () => {
     prisma = createPrismaMock();
     app = await buildTestApp(prisma, { csrf: false, includeEducation: true });
-    llmService = await import('../services/llm.js');
   });
   afterAll(async () => app.close());
 
