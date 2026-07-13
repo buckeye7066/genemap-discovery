@@ -5,15 +5,17 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
-import { 
-  FileText, 
-  Loader2, 
-  CheckCircle, 
+import {
+  FileText,
+  Loader2,
+  CheckCircle,
   AlertCircle,
   Database,
   TrendingUp,
-  Info
+  Info,
+  ExternalLink
 } from "lucide-react";
+import { variantReferenceLinks } from "@/components/shared/variantReferenceLinks";
 
 export default function VCFParser({ fileUrl, vcfText, onVariantsParsed, onEnrichmentComplete }) {
   const [isParsing, setIsParsing] = useState(false);
@@ -306,6 +308,29 @@ export default function VCFParser({ fileUrl, vcfText, onVariantsParsed, onEnrich
                           </div>
                         )}
                       </div>
+
+                      {(() => {
+                        const refs = variantReferenceLinks(v, annotations);
+                        if (refs.length === 0) return null;
+                        return (
+                          <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                            <span className="text-slate-500">Verify at source:</span>
+                            {refs.map((r) => (
+                              <a
+                                key={r.url}
+                                href={r.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 text-blue-700 hover:text-blue-900 hover:underline"
+                                title={r.publisher}
+                              >
+                                <ExternalLink className="h-3 w-3" />
+                                {r.label}
+                              </a>
+                            ))}
+                          </div>
+                        );
+                      })()}
 
                       {ev.evidenceSummary && (
                         <Alert className="mt-3 bg-blue-50 border-blue-200">
