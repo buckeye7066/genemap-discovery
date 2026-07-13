@@ -43,6 +43,15 @@ export default function VCFParser({ fileUrl, vcfText, onVariantsParsed, onEnrich
       if (!text) {
         throw new Error("No VCF content is available to parse");
       }
+      // Keep in sync with the server's VCF_MAX_TEXT_BYTES (15MB default). Give a
+      // clear, actionable message before the request rather than surfacing a raw
+      // "payload too large" from the transport.
+      const MAX_VCF_BYTES = 15_000_000;
+      if (text.length > MAX_VCF_BYTES) {
+        throw new Error(
+          `This VCF is too large to parse here (over ${Math.round(MAX_VCF_BYTES / 1_000_000)}MB). For large or multi-sample files, use the Bulk VCF Analysis tool.`
+        );
+      }
       setParseProgress(30);
 
       setParseProgress(50);

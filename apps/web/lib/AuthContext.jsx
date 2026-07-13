@@ -53,21 +53,40 @@ export const AuthProvider = ({ children }) => {
     setAuthError(null);
   }, []);
 
+  // The /login and /register responses intentionally carry only a thin user
+  // ({ id, email, role }) for speed. But the rest of the app treats the auth
+  // user as canonical — the onboarding gate reads `demographics_collected` and
+  // the Premium page reads `entitlements`, neither of which is on the thin
+  // object. Using it directly bounced EVERY returning user to a blank
+  // "Complete Your Profile" screen (undefined demographics_collected === falsy)
+  // and, if they clicked Continue, overwrote their real name/phone with empty
+  // strings. So after authenticating we hydrate the full canonical user via
+  // getMe(), falling back to the thin object only if that call fails (login
+  // still succeeds).
+  const hydrateUser = useCallback(async (fallbackUser) => {
+    try {
+      return await apiClient.getMe();
+    } catch (err) {
+      console.error('Post-auth profile hydration failed; using minimal user:', err);
+      return fallbackUser;
+    }
+  }, []);
+
   const login = useCallback(async (credentials) => {
     const response = await apiClient.login(credentials);
-    setUser(response.user);
+    setUser(await hydrateUser(response.user));
     setIsAuthenticated(true);
     setAuthError(null);
     return response;
-  }, []);
+  }, [hydrateUser]);
 
   const register = useCallback(async (credentials) => {
     const response = await apiClient.register(credentials);
-    setUser(response.user);
+    setUser(await hydrateUser(response.user));
     setIsAuthenticated(true);
     setAuthError(null);
     return response;
-  }, []);
+  }, [hydrateUser]);
 
   const logout = useCallback(async () => {
     try {

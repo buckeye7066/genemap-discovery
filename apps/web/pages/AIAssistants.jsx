@@ -148,11 +148,17 @@ So, what's on your mind today?`;
 
     } catch (err) {
       console.error("Error getting response:", err);
+      // A 403 is the free-tier daily limit; surface the real reason + upgrade
+      // path rather than a generic "technical difficulties" the user will
+      // fruitlessly retry.
+      const limitReached = err?.status === 403;
       const errorMessage = {
         role: 'assistant',
-        content: activeAssistant === 'robert' 
-          ? "I apologize, but I'm experiencing technical difficulties processing your request. Please retry or rephrase your inquiry."
-          : "Oops! I'm having a little technical hiccup. Mind trying that again?",
+        content: limitReached
+          ? (err.message || "You've reached today's free message limit. Upgrade to Premium for unlimited access.")
+          : activeAssistant === 'robert'
+            ? "I apologize, but I'm experiencing technical difficulties processing your request. Please retry or rephrase your inquiry."
+            : "Oops! I'm having a little technical hiccup. Mind trying that again?",
         assistant: activeAssistant,
         timestamp: new Date()
       };
@@ -283,7 +289,10 @@ Please provide a comprehensive response.`;
     const response = await apiClient.invokeLLM(prompt, {
       add_context_from_internet: true
     });
-    return response?.result || response;
+    // Always return a string. An empty model output made `response.result`
+    // falsy and the old `|| response` fallback returned the whole response
+    // OBJECT, which then crashed <ReactMarkdown> and wiped the conversation.
+    return typeof response === 'string' ? response : (response?.result ?? '');
   };
 
   const quickPromptsRobert = [
