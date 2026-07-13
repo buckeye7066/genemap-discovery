@@ -9,7 +9,12 @@ import { ValidationError } from '../utils/errors.js';
 const DEFAULT_MAX_VARIANTS = 1000;
 const HARD_MAX_VARIANTS = 5000;
 const MAX_INFO_LENGTH = 8000;
-const MAX_TEXT_BYTES = 1_000_000;
+// The old 1MB cap rejected essentially every real single-sample VCF (consumer
+// exports run a few MB). Raised to 15MB by default and env-tunable; the route's
+// per-request bodyLimit in genomics.js is lifted to match. Truly huge cohort
+// WGS files still belong in the client-side Bulk VCF cohort tool (which streams
+// and never sends raw text to the server).
+const MAX_TEXT_BYTES = Number(process.env.VCF_MAX_TEXT_BYTES || 15_000_000);
 
 function parseInfo(infoText) {
   if (!infoText || infoText === '.') return {};

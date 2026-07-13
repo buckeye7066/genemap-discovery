@@ -108,7 +108,10 @@ export default function InstitutionalPricingPage() {
         organizationName,
         contactEmail,
         licenseType: selectedTier,
-        billing: billingCycle,
+        // The UI speaks "annual"/"monthly" for its price display; the API enum
+        // is "yearly"/"monthly". Translate at the boundary — sending "annual"
+        // (the default cycle) failed Zod validation and broke annual checkout.
+        billing: billingCycle === "annual" ? "yearly" : "monthly",
         seats: parseInt(seats),
         successUrl,
         cancelUrl,

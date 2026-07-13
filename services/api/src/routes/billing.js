@@ -276,6 +276,22 @@ export default async function billingRoutes(fastify) {
     }
 
     try {
+      // Pre-fetch any external Stripe data BEFORE opening the DB transaction.
+      // A network round-trip to Stripe inside an interactive transaction can
+      // exceed Prisma's default 5s transaction timeout and roll the whole thing
+      // back — so a user who just paid would never get their Subscription row
+      // and would be stuck on the free tier until Stripe's async retry. Doing
+      // the retrieve out here also keeps a DB pool connection from being held
+      // open across the round-trip. If this throws, stripeEvent.create never
+      // runs, so Stripe safely retries (idempotency preserved).
+      let prefetchedSubscription = null;
+      if (event.type === 'checkout.session.completed') {
+        const s = event.data.object;
+        if (s.metadata?.isInstitutional !== 'true' && s.metadata?.userId && s.subscription) {
+          prefetchedSubscription = await stripeClient.subscriptions.retrieve(s.subscription);
+        }
+      }
+
       await prisma.$transaction(async (tx) => {
         await tx.stripeEvent.create({
           data: { stripeEventId: event.id, type: event.type },
@@ -332,7 +348,9 @@ export default async function billingRoutes(fastify) {
             const subscriptionId = session.subscription;
             const customerId = session.customer;
 
-            const subscription = await stripeClient.subscriptions.retrieve(subscriptionId);
+            // Retrieved before the transaction opened (see prefetch above).
+            const subscription = prefetchedSubscription;
+            if (!subscription) break;
 
             await tx.subscription.create({
               data: {

@@ -17,6 +17,19 @@ const PREMIUM_MAX_TOKENS = 4096;
 // unbounded prompt or a huge message array can't reach the provider unchecked.
 
 const LLM_TIMEOUT_MS = Number(process.env.LLM_TIMEOUT_MS || 30_000);
+
+// Match the education routes' model choice. The default gpt-4o "routinely runs
+// 25-40s" on large prompts (see education.js), and Anastasia/Robert send LARGER
+// prompts than education does — so on gpt-4o they intermittently blew past
+// LLM_TIMEOUT_MS and returned the user an empty/timeout error. The faster model
+// returns comfortably inside the window with more than enough quality here.
+// Only applied when the caller doesn't pin a specific provider (so an explicit
+// provider still uses its own default model). Override via LLM_INVOKE_TEXT_MODEL.
+const INVOKE_TEXT_PROVIDER = process.env.LLM_TEXT_PROVIDER || 'openai';
+const INVOKE_TEXT_MODEL = process.env.LLM_INVOKE_TEXT_MODEL
+  || process.env.LLM_EDU_TEXT_MODEL
+  || (INVOKE_TEXT_PROVIDER === 'openai' || INVOKE_TEXT_PROVIDER === 'gpt' ? 'gpt-4o-mini' : undefined);
+
 const GENOMIC_LLM_CONSENT_TYPE = 'genomic_llm_upload';
 const GENOMIC_LLM_CONSENT_VERSION = '1.0';
 
@@ -102,6 +115,7 @@ export default async function llmRoutes(fastify) {
 
     const result = await generateExplanation(withHonestyPrefix(prompt), {
       provider: options.provider,
+      model: options.provider ? undefined : INVOKE_TEXT_MODEL,
       maxTokens,
       temperature,
       timeoutMs: LLM_TIMEOUT_MS,
@@ -156,6 +170,7 @@ export default async function llmRoutes(fastify) {
     // still counts `sanitized.length` so the extra message is not billed.)
     const result = await generateChatResponse([honestySystemMessage(), ...sanitized], {
       provider: options.provider,
+      model: options.provider ? undefined : INVOKE_TEXT_MODEL,
       maxTokens,
       temperature,
       timeoutMs: LLM_TIMEOUT_MS,

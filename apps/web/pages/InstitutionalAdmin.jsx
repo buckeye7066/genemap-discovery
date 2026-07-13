@@ -23,7 +23,6 @@ import {
   Crown,
   UserPlus,
   Mail,
-  Shield,
   AlertCircle,
   CheckCircle,
   Loader2,
@@ -65,6 +64,11 @@ export default function InstitutionalAdminPage() {
     }
   }, [selectedLicense]);
 
+  // NOTE: getMyLicenses() returns raw Prisma rows, so every field is
+  // camelCase (organizationName, maxSeats, assignedSeats, startDate, endDate,
+  // contactEmail, autoRenew, licenseType). Assignments expose userEmail /
+  // status / department / createdAt (no role, no acceptedDate); usage logs
+  // expose userEmail / action / createdAt. Read those names directly.
   const loadData = async () => {
     try {
       const licensesData = await apiClient.getMyLicenses();
@@ -111,7 +115,7 @@ export default function InstitutionalAdminPage() {
         : [inviteEmail.trim()];
 
       // Check if we have enough seats
-      const availableSeats = selectedLicense.max_seats - selectedLicense.assigned_seats;
+      const availableSeats = selectedLicense.maxSeats - selectedLicense.assignedSeats;
       if (emails.length > availableSeats) {
         throw new Error(`Not enough seats available. You have ${availableSeats} seats remaining.`);
       }
@@ -162,25 +166,25 @@ export default function InstitutionalAdminPage() {
   const exportUsageReport = () => {
     const report = {
       license: {
-        organization: selectedLicense.organization_name,
-        type: selectedLicense.license_type,
-        period: `${new Date(selectedLicense.start_date).toLocaleDateString()} - ${new Date(selectedLicense.end_date).toLocaleDateString()}`
+        organization: selectedLicense.organizationName,
+        type: selectedLicense.licenseType,
+        period: `${new Date(selectedLicense.startDate).toLocaleDateString()} - ${new Date(selectedLicense.endDate).toLocaleDateString()}`
       },
       summary: {
-        total_seats: selectedLicense.max_seats,
-        assigned_seats: selectedLicense.assigned_seats,
+        total_seats: selectedLicense.maxSeats,
+        assignedSeats: selectedLicense.assignedSeats,
         active_users: assignments.filter(a => a.status === 'active').length
       },
       users: assignments.map(a => ({
-        email: a.user_email,
+        email: a.userEmail,
         status: a.status,
         department: a.department,
-        assigned_date: a.created_date
+        assigned_date: a.createdAt
       })),
       usage: usageLogs.map(log => ({
-        user: log.user_email,
-        activity: log.activity_type,
-        timestamp: log.timestamp || log.created_date
+        user: log.userEmail,
+        activity: log.action,
+        timestamp: log.createdAt
       }))
     };
 
@@ -188,7 +192,7 @@ export default function InstitutionalAdminPage() {
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `usage-report-${selectedLicense.organization_name}-${Date.now()}.json`;
+    a.download = `usage-report-${selectedLicense.organizationName}-${Date.now()}.json`;
     document.body.appendChild(a);
     a.click();
     window.URL.revokeObjectURL(url);
@@ -211,12 +215,12 @@ export default function InstitutionalAdminPage() {
 
     const stats = {
       total_activities: usageLogs.length,
-      unique_users: new Set(usageLogs.map(log => log.user_email)).size,
+      unique_users: new Set(usageLogs.map(log => log.userEmail)).size,
       by_type: {}
     };
 
     usageLogs.forEach(log => {
-      stats.by_type[log.activity_type] = (stats.by_type[log.activity_type] || 0) + 1;
+      stats.by_type[log.action] = (stats.by_type[log.action] || 0) + 1;
     });
 
     return stats;
@@ -294,7 +298,7 @@ export default function InstitutionalAdminPage() {
                   onClick={() => setSelectedLicense(license)}
                   className="whitespace-nowrap"
                 >
-                  {license.organization_name}
+                  {license.organizationName}
                 </Button>
               ))}
             </div>
@@ -333,7 +337,7 @@ export default function InstitutionalAdminPage() {
                     </div>
                     <div>
                       <p className="text-2xl font-bold text-slate-900">
-                        {selectedLicense.assigned_seats}/{selectedLicense.max_seats}
+                        {selectedLicense.assignedSeats}/{selectedLicense.maxSeats}
                       </p>
                       <p className="text-xs text-slate-600">Seats Used</p>
                     </div>
@@ -381,7 +385,7 @@ export default function InstitutionalAdminPage() {
                     </div>
                     <div>
                       <p className="text-sm font-bold text-slate-900">
-                        {new Date(selectedLicense.end_date).toLocaleDateString()}
+                        {new Date(selectedLicense.endDate).toLocaleDateString()}
                       </p>
                       <p className="text-xs text-slate-600">Expires</p>
                     </div>
@@ -435,13 +439,13 @@ export default function InstitutionalAdminPage() {
                           </DialogTrigger>
                           <DialogContent className="max-w-2xl">
                             <DialogHeader>
-                              <DialogTitle>Invite Users to {selectedLicense.organization_name}</DialogTitle>
+                              <DialogTitle>Invite Users to {selectedLicense.organizationName}</DialogTitle>
                             </DialogHeader>
                             <div className="space-y-4 pt-4">
                               <Alert className="bg-blue-50 border-blue-200">
                                 <AlertCircle className="h-4 w-4 text-blue-600" />
                                 <AlertDescription className="text-blue-900 text-sm">
-                                  Available seats: <strong>{selectedLicense.max_seats - selectedLicense.assigned_seats}</strong> of {selectedLicense.max_seats}
+                                  Available seats: <strong>{selectedLicense.maxSeats - selectedLicense.assignedSeats}</strong> of {selectedLicense.maxSeats}
                                 </AlertDescription>
                               </Alert>
 
@@ -535,7 +539,7 @@ export default function InstitutionalAdminPage() {
                               <div className="flex items-center justify-between">
                                 <div className="flex-1">
                                   <div className="flex items-center gap-3 mb-2">
-                                    <p className="font-medium text-slate-900">{assignment.user_email}</p>
+                                    <p className="font-medium text-slate-900">{assignment.userEmail}</p>
                                     <Badge className={
                                       assignment.status === 'active' ? 'bg-green-100 text-green-800' :
                                       assignment.status === 'pending' ? 'bg-amber-100 text-amber-800' :
@@ -544,28 +548,19 @@ export default function InstitutionalAdminPage() {
                                     }>
                                       {assignment.status}
                                     </Badge>
-                                    {assignment.role === 'admin' && (
-                                      <Badge className="bg-blue-100 text-blue-800">
-                                        <Shield className="w-3 h-3 mr-1" />
-                                        License Manager
-                                      </Badge>
-                                    )}
                                   </div>
                                   <div className="flex gap-4 text-xs text-slate-600">
                                     {assignment.department && (
                                       <span>Department: {assignment.department}</span>
                                     )}
-                                    <span>Assigned: {new Date(assignment.created_date).toLocaleDateString()}</span>
-                                    {assignment.accepted_date && (
-                                      <span>Accepted: {new Date(assignment.accepted_date).toLocaleDateString()}</span>
-                                    )}
+                                    <span>Assigned: {new Date(assignment.createdAt).toLocaleDateString()}</span>
                                   </div>
                                 </div>
                                 {assignment.status !== 'revoked' && (
                                   <Button
                                     variant="ghost"
                                     size="sm"
-                                    onClick={() => handleRevokeAccess(assignment.id, assignment.user_email)}
+                                    onClick={() => handleRevokeAccess(assignment.id, assignment.userEmail)}
                                     className="text-red-600 hover:text-red-700 hover:bg-red-50"
                                   >
                                     <XCircle className="w-4 h-4" />
@@ -634,11 +629,11 @@ export default function InstitutionalAdminPage() {
                               <div key={idx} className="flex items-center justify-between p-2 text-sm border-b border-slate-200">
                                 <div className="flex items-center gap-3">
                                   <Clock className="w-4 h-4 text-slate-400" />
-                                  <span className="text-slate-700">{log.user_email}</span>
-                                  <Badge variant="outline" className="text-xs">{log.activity_type}</Badge>
+                                  <span className="text-slate-700">{log.userEmail}</span>
+                                  <Badge variant="outline" className="text-xs">{log.action}</Badge>
                                 </div>
                                 <span className="text-xs text-slate-500">
-                                  {new Date(log.timestamp || log.created_date).toLocaleString()}
+                                  {new Date(log.createdAt).toLocaleString()}
                                 </span>
                               </div>
                             ))}
@@ -664,13 +659,13 @@ export default function InstitutionalAdminPage() {
                       <div>
                         <Label className="text-sm font-medium text-slate-700">Organization</Label>
                         <p className="text-lg font-semibold text-slate-900 mt-1">
-                          {selectedLicense.organization_name}
+                          {selectedLicense.organizationName}
                         </p>
                       </div>
                       <div>
                         <Label className="text-sm font-medium text-slate-700">License Type</Label>
                         <p className="text-lg font-semibold text-slate-900 mt-1 capitalize">
-                          {selectedLicense.license_type}
+                          {selectedLicense.licenseType}
                         </p>
                       </div>
                       <div>
@@ -682,7 +677,7 @@ export default function InstitutionalAdminPage() {
                       <div>
                         <Label className="text-sm font-medium text-slate-700">Auto-Renew</Label>
                         <p className="text-lg font-semibold text-slate-900 mt-1">
-                          {selectedLicense.auto_renew ? 'Enabled' : 'Disabled'}
+                          {selectedLicense.autoRenew ? 'Enabled' : 'Disabled'}
                         </p>
                       </div>
                     </div>
@@ -693,19 +688,19 @@ export default function InstitutionalAdminPage() {
                         <div>
                           <Label className="text-xs text-slate-600">Start Date</Label>
                           <p className="text-sm font-medium text-slate-900">
-                            {new Date(selectedLicense.start_date).toLocaleDateString()}
+                            {new Date(selectedLicense.startDate).toLocaleDateString()}
                           </p>
                         </div>
                         <div>
                           <Label className="text-xs text-slate-600">End Date</Label>
                           <p className="text-sm font-medium text-slate-900">
-                            {new Date(selectedLicense.end_date).toLocaleDateString()}
+                            {new Date(selectedLicense.endDate).toLocaleDateString()}
                           </p>
                         </div>
                         <div>
                           <Label className="text-xs text-slate-600">Days Remaining</Label>
                           <p className="text-sm font-medium text-slate-900">
-                            {Math.ceil((new Date(selectedLicense.end_date) - new Date()) / (1000 * 60 * 60 * 24))} days
+                            {Math.ceil((new Date(selectedLicense.endDate) - new Date()) / (1000 * 60 * 60 * 24))} days
                           </p>
                         </div>
                       </div>
@@ -715,12 +710,8 @@ export default function InstitutionalAdminPage() {
                       <h4 className="font-semibold text-slate-900 mb-3">Contact Information</h4>
                       <div className="space-y-2">
                         <div>
-                          <Label className="text-xs text-slate-600">Primary Contact</Label>
-                          <p className="text-sm text-slate-900">{selectedLicense.contact_name || 'Not specified'}</p>
-                        </div>
-                        <div>
                           <Label className="text-xs text-slate-600">Email</Label>
-                          <p className="text-sm text-slate-900">{selectedLicense.contact_email}</p>
+                          <p className="text-sm text-slate-900">{selectedLicense.contactEmail}</p>
                         </div>
                       </div>
                     </div>

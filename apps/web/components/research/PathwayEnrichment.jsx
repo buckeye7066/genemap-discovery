@@ -35,9 +35,12 @@ function PathwayTooltipContent({ payload }) {
     return (
       <div className="bg-white p-3 border border-slate-200 rounded shadow-lg">
         <p className="font-semibold text-sm">{data.pathway}</p>
-        <p className="text-xs text-slate-600">Genes: {data.genes_in_pathway}/{data.total_genes}</p>
-        <p className="text-xs text-slate-600">P-value: {data.pvalue.toExponential(2)}</p>
-        <p className="text-xs text-slate-600">FDR: {data.fdr.toExponential(2)}</p>
+        <p className="text-xs text-slate-600">Genes: {data.genes_in_pathway ?? data.genes ?? '—'}/{data.total_genes ?? '—'}</p>
+        {/* The prompt permits a qualitative confidence ("high"/"moderate") in
+            place of a numeric p-value; a string has no .toExponential, so render
+            numbers formatted and anything else verbatim instead of crashing. */}
+        <p className="text-xs text-slate-600">P-value: {typeof data.pvalue === 'number' ? data.pvalue.toExponential(2) : (data.pvalue ?? '—')}</p>
+        <p className="text-xs text-slate-600">FDR: {typeof data.fdr === 'number' ? data.fdr.toExponential(2) : (data.fdr ?? '—')}</p>
       </div>
     );
   }
