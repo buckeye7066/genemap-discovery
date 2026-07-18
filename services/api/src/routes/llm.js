@@ -63,7 +63,7 @@ export default async function llmRoutes(fastify) {
   fastify.post('/invoke', { preHandler: guarded }, async (request) => {
     const { prompt, options = {} } = request.body || {};
     validatePrompt(prompt);
-    await assertNoRawGenomicLLM(prisma, request.user.userId, prompt);
+    const allowGenomic = await assertNoRawGenomicLLM(prisma, request.user.userId, prompt);
 
     const isPremium = Boolean(request.entitlements?.isPremium);
     const maxTokens = clampTokens(options.maxTokens, isPremium);
@@ -75,6 +75,7 @@ export default async function llmRoutes(fastify) {
       maxTokens,
       temperature,
       timeoutMs: LLM_TIMEOUT_MS,
+      allowGenomic,
     });
 
     await recordUsage(prisma, request.user.userId, 'explanation', {
@@ -100,7 +101,14 @@ export default async function llmRoutes(fastify) {
     if (messages.length > MAX_CHAT_MESSAGES) {
       throw new ValidationError(`messages must contain ${MAX_CHAT_MESSAGES} turns or fewer`);
     }
-    if (messages.some((m) => typeof m?.content === 'string' && m.content.length > MAX_MESSAGE_CHARS)) {
+    // Message content MUST be a plain string. Array/object content (e.g.
+    // [{type:'text',text:'<VCF>'}]) is not a supported input here and, if
+    // forwarded, would let a caller slip raw genomic text past a string-only
+    // check while the provider still reads every part. Reject it outright.
+    if (messages.some((m) => typeof m?.content !== 'string')) {
+      throw new ValidationError('each message content must be a string');
+    }
+    if (messages.some((m) => m.content.length > MAX_MESSAGE_CHARS)) {
       throw new ValidationError(`each message must be ${MAX_MESSAGE_CHARS} characters or fewer`);
     }
 
@@ -111,7 +119,7 @@ export default async function llmRoutes(fastify) {
     if (sanitized.length === 0) {
       throw new ValidationError('messages must contain at least one user/assistant turn');
     }
-    await assertNoRawGenomicLLM(
+    const allowGenomic = await assertNoRawGenomicLLM(
       prisma,
       request.user.userId,
       sanitized.map((message) => message.content).join('\n')
@@ -130,6 +138,7 @@ export default async function llmRoutes(fastify) {
       maxTokens,
       temperature,
       timeoutMs: LLM_TIMEOUT_MS,
+      allowGenomic,
     });
 
     await recordUsage(prisma, request.user.userId, 'chat', {
@@ -151,11 +160,13 @@ export default async function llmRoutes(fastify) {
   fastify.post('/image', { preHandler: guarded }, async (request) => {
     const { prompt, options = {} } = request.body || {};
     validatePrompt(prompt);
+    const allowGenomic = await assertNoRawGenomicLLM(prisma, request.user.userId, prompt);
 
     const result = await generateImage(prompt, {
       size: options.size || '1024x1024',
       quality: options.quality || 'standard',
       timeoutMs: LLM_TIMEOUT_MS,
+      allowGenomic,
     });
 
     await recordUsage(prisma, request.user.userId, 'image', {

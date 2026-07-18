@@ -40,6 +40,21 @@ Branch: `claude/portfolio-hardening-2026-07-18`. Local commits only — not push
 
 ---
 
+## Security / privacy — follow-up (durable chokepoint)
+
+- **Every** cloud-AI call now passes through a single guard inside
+  `services/llm.js`, so raw genomic content is blocked on all surfaces, not just
+  the two education routes. Four additional bypasses were closed:
+  - `/llm/chat` no longer accepts array-form message content that could hide a
+    VCF past a string-only check (now rejected with 400).
+  - `/education/quiz` now guards the user-supplied `topic`.
+  - `/llm/image` and `/education/image` now guard their prompt/topic.
+  - `/report-client-error` (unauthenticated) no longer forwards VCF-shaped error
+    text to the cloud LLM — it falls back to a deterministic heuristic.
+- User-visible effect: pasting raw VCF/variant-table text into any AI feature
+  returns a clean rejection and nothing is sent to OpenAI/Anthropic (unless the
+  operator opt-in + user consent flow is satisfied, unchanged).
+
 ## Compatibility / migration
 
 - **No API contract changes.** All routes, request/response shapes, and stored data are

@@ -1,5 +1,7 @@
 import * as openaiService from './openai.js';
 import * as anthropicService from './anthropic.js';
+import { looksLikeRawGenomicContent } from './genomicGuard.js';
+import { ValidationError } from '../utils/errors.js';
 
 const TEXT_PROVIDER = process.env.LLM_TEXT_PROVIDER || 'openai';
 const DEFAULT_TIMEOUT_MS = Number(process.env.LLM_TIMEOUT_MS || 30_000);
@@ -60,6 +62,44 @@ export function parseJsonFromLLM(raw, { fallback = null, validate } = {}) {
     }
   }
   return parsed;
+}
+
+// ─── No-cloud-genomic chokepoint ─────────────────────────────────────────────
+//
+// EVERY cloud-provider call in the app goes through one of the exported
+// functions below. Enforcing the raw-genomic guard HERE (not only at the route
+// layer) means no call site — present or future, authenticated or not — can
+// reach OpenAI/Anthropic with raw VCF/variant text by importing this module
+// directly or by constructing a payload shape a route-level check missed (e.g.
+// array-form message content). The guard extracts the EXACT provider-visible
+// text and refuses it unless the caller passes `allowGenomic: true`, a marker
+// only set after a successful consent check (services/genomicGuard.js).
+
+/**
+ * Recursively extract every provider-visible text fragment from a prompt string
+ * or a messages array (whose `content` may itself be a string OR an array of
+ * `{ type, text }` parts). This is the text the model actually sees.
+ */
+export function extractProviderText(input) {
+  if (typeof input === 'string') return input;
+  if (Array.isArray(input)) return input.map(extractProviderText).join('\n');
+  if (input && typeof input === 'object') {
+    if (typeof input.content === 'string') return input.content;
+    if (input.content != null) return extractProviderText(input.content);
+    if (typeof input.text === 'string') return input.text;
+  }
+  return '';
+}
+
+/**
+ * The chokepoint. Throws unless the text is clearly non-genomic or the caller
+ * has an explicit, consent-backed `allowGenomic` marker.
+ */
+export function assertProviderPayloadAllowed(payload, allowGenomic) {
+  if (allowGenomic === true) return;
+  if (looksLikeRawGenomicContent(extractProviderText(payload))) {
+    throw new ValidationError('Raw VCF/genomic file content is not allowed in LLM requests by default');
+  }
 }
 
 function getTextProvider(providerOverride) {
@@ -181,8 +221,9 @@ export async function withProviderRetry(operation, {
 
 export async function generateExplanation(
   prompt,
-  { provider, model, maxTokens = 2000, temperature = 0.7, timeoutMs = DEFAULT_TIMEOUT_MS } = {}
+  { provider, model, maxTokens = 2000, temperature = 0.7, timeoutMs = DEFAULT_TIMEOUT_MS, allowGenomic = false } = {}
 ) {
+  assertProviderPayloadAllowed(prompt, allowGenomic);
   const service = getTextProvider(provider);
   return withProviderRetry(
     () => service.generateText(prompt, { model, maxTokens, temperature, timeoutMs }),
@@ -192,8 +233,9 @@ export async function generateExplanation(
 
 export async function generateChatResponse(
   messages,
-  { provider, model, maxTokens = 2000, temperature = 0.7, timeoutMs = DEFAULT_TIMEOUT_MS } = {}
+  { provider, model, maxTokens = 2000, temperature = 0.7, timeoutMs = DEFAULT_TIMEOUT_MS, allowGenomic = false } = {}
 ) {
+  assertProviderPayloadAllowed(messages, allowGenomic);
   const service = getTextProvider(provider);
   return withProviderRetry(
     () => service.generateChatResponse(messages, { model, maxTokens, temperature, timeoutMs }),
@@ -203,15 +245,17 @@ export async function generateChatResponse(
 
 export async function generateImage(
   prompt,
-  { size = '1024x1024', quality = 'standard', timeoutMs = DEFAULT_TIMEOUT_MS } = {}
+  { size = '1024x1024', quality = 'standard', timeoutMs = DEFAULT_TIMEOUT_MS, allowGenomic = false } = {}
 ) {
+  assertProviderPayloadAllowed(prompt, allowGenomic);
   return withProviderRetry(
     () => openaiService.generateImage(prompt, { size, quality, timeoutMs }),
     { provider: 'openai' }
   );
 }
 
-export async function generateQuiz(prompt, { provider, model, maxTokens = 3000, timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
+export async function generateQuiz(prompt, { provider, model, maxTokens = 3000, timeoutMs = DEFAULT_TIMEOUT_MS, allowGenomic = false } = {}) {
+  assertProviderPayloadAllowed(prompt, allowGenomic);
   const service = getTextProvider(provider);
   const raw = await withProviderRetry(
     () => service.generateText(prompt, { model, maxTokens, temperature: 0.5, timeoutMs }),

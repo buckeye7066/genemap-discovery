@@ -49,10 +49,13 @@ export function looksLikeRawGenomicContent(text) {
  * consent record. When allowed, the upload is audit-logged (minimised: only the
  * content length is recorded, never the genomic payload itself).
  *
+ * @returns {Promise<boolean>} `true` when the text WAS raw genomic content and
+ *   was explicitly consented (caller must forward it to the provider with the
+ *   `allowGenomic` marker); `false` when the text is not genomic.
  * @throws {ValidationError} when raw genomic content is present without opt-in + consent.
  */
 export async function assertNoRawGenomicLLM(prisma, userId, text) {
-  if (!looksLikeRawGenomicContent(text)) return;
+  if (!looksLikeRawGenomicContent(text)) return false;
 
   if (process.env.ALLOW_GENOMIC_LLM_UPLOAD !== 'true') {
     throw new ValidationError('Raw VCF/genomic file content is not allowed in LLM requests by default');
@@ -84,4 +87,6 @@ export async function assertNoRawGenomicLLM(prisma, userId, text) {
     },
     { required: true }
   );
+
+  return true;
 }

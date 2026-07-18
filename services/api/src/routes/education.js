@@ -209,7 +209,7 @@ export default async function educationRoutes(fastify) {
     // The optional `context` field is prepended to the prompt sent to a cloud
     // LLM. Enforce the same no-cloud-genomic default the /llm proxy does so a
     // raw VCF can't be smuggled to OpenAI/Anthropic via the education surface.
-    await assertNoRawGenomicLLM(prisma, request.user?.userId, `${topic}\n${context || ''}`);
+    const allowGenomic = await assertNoRawGenomicLLM(prisma, request.user?.userId, `${topic}\n${context || ''}`);
 
     const levelPrompt = LEVEL_PROMPTS[level] || LEVEL_PROMPTS.undergraduate;
     const prompt = [
@@ -231,6 +231,7 @@ export default async function educationRoutes(fastify) {
       model: EDU_TEXT_MODEL,
       maxTokens: 1400,
       timeoutMs: EDU_TIMEOUT_MS,
+      allowGenomic,
     });
 
     if (request.user?.userId) {
@@ -262,6 +263,10 @@ export default async function educationRoutes(fastify) {
   fastify.post('/image', { preHandler: [authenticate, checkEducationEntitlement, enforceUsageLimit] }, async (request) => {
     const { topic, level } = imageSchema.parse(request.body);
 
+    // `topic` (up to 500 chars) is embedded in the image prompt sent to a cloud
+    // model — long enough to carry a small VCF. Guard it like every other surface.
+    const allowGenomic = await assertNoRawGenomicLLM(prisma, request.user?.userId, topic);
+
     const styleMap = {
       elementary: 'Friendly cartoon-style educational illustration with bright colors, large labels, and cute characters. Children\'s science book style.',
       middle_school: 'Clean, colorful educational diagram for a middle school science textbook. Clear labels, moderate detail.',
@@ -281,7 +286,7 @@ export default async function educationRoutes(fastify) {
     // error so the client renders an actionable message.
     let result;
     try {
-      result = await llm.generateImage(imagePrompt, { timeoutMs: 40_000 });
+      result = await llm.generateImage(imagePrompt, { timeoutMs: 40_000, allowGenomic });
     } catch (err) {
       request.log.warn({ err: err?.message, status: err?.status }, 'education image generation failed');
       // A 4xx means the AI key can't use any image model (it returns "model
@@ -311,6 +316,10 @@ export default async function educationRoutes(fastify) {
   fastify.post('/quiz', { preHandler: [authenticate, checkEducationEntitlement, enforceUsageLimit] }, async (request) => {
     const { topic, level, questionCount = 5 } = quizSchema.parse(request.body);
 
+    // `topic` (up to 500 chars) is embedded verbatim in the quiz prompt sent to
+    // a cloud LLM — guard it so a VCF header + rows can't be smuggled through.
+    const allowGenomic = await assertNoRawGenomicLLM(prisma, request.user?.userId, topic);
+
     const levelPrompt = LEVEL_PROMPTS[level] || LEVEL_PROMPTS.undergraduate;
     const difficultyMap = {
       elementary: 'very easy, multiple choice with 3 options, simple language',
@@ -335,6 +344,7 @@ export default async function educationRoutes(fastify) {
       model: EDU_TEXT_MODEL,
       maxTokens: 1800,
       timeoutMs: EDU_TIMEOUT_MS,
+      allowGenomic,
     });
     // generateQuiz returns the raw (unparseable) string instead of an array when
     // the model's output can't be coerced into questions. Fail BEFORE recording
@@ -358,7 +368,7 @@ export default async function educationRoutes(fastify) {
 
     // Tutor-chat turns also reach a cloud LLM; block a raw genomic dump pasted
     // into the conversation by default (same policy as /llm/chat).
-    await assertNoRawGenomicLLM(
+    const allowGenomic = await assertNoRawGenomicLLM(
       prisma,
       request.user?.userId,
       messages.map((m) => m.content).join('\n'),
@@ -373,7 +383,7 @@ export default async function educationRoutes(fastify) {
     // Keep the chat on the default (higher-quality) model — tutor turns are
     // short, so latency is not the problem here — but still cap the wait so a
     // stalled upstream returns a clean error instead of an empty gateway body.
-    const response = await llm.generateChatResponse(fullMessages, { timeoutMs: EDU_TIMEOUT_MS });
+    const response = await llm.generateChatResponse(fullMessages, { timeoutMs: EDU_TIMEOUT_MS, allowGenomic });
     if (request.user?.userId) {
       try {
         await prisma.learningSession.create({

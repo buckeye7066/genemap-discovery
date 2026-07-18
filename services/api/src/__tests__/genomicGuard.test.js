@@ -70,9 +70,9 @@ describe('assertNoRawGenomicLLM (enforcement)', () => {
     else process.env.ALLOW_GENOMIC_LLM_UPLOAD = OLD_ENV;
   });
 
-  it('passes through non-genomic text without touching prisma', async () => {
+  it('passes through non-genomic text (returns false) without touching prisma', async () => {
     const prisma = stubPrisma();
-    await expect(assertNoRawGenomicLLM(prisma, 'u1', 'What is a codon?')).resolves.toBeUndefined();
+    await expect(assertNoRawGenomicLLM(prisma, 'u1', 'What is a codon?')).resolves.toBe(false);
     expect(prisma.consentRecord.findFirst).not.toHaveBeenCalled();
   });
 
@@ -93,12 +93,12 @@ describe('assertNoRawGenomicLLM (enforcement)', () => {
     expect(prisma.auditLog.create).not.toHaveBeenCalled();
   });
 
-  it('allows + audit-logs (minimised) when opted in AND consent is granted', async () => {
+  it('allows (returns true) + audit-logs (minimised) when opted in AND consent is granted', async () => {
     process.env.ALLOW_GENOMIC_LLM_UPLOAD = 'true';
     const prisma = stubPrisma();
     prisma.consentRecord.findFirst = vi.fn(async () => ({ id: 'c1', granted: true }));
 
-    await expect(assertNoRawGenomicLLM(prisma, 'u1', RAW_VCF)).resolves.toBeUndefined();
+    await expect(assertNoRawGenomicLLM(prisma, 'u1', RAW_VCF)).resolves.toBe(true);
     expect(prisma.auditLog.create).toHaveBeenCalledOnce();
     const logged = prisma.auditLog.create.mock.calls[0][0].data;
     expect(logged.action).toBe('llm.genomic_upload');
@@ -166,6 +166,50 @@ describe('no-cloud-genomic default is enforced on every cloud-AI route', () => {
     });
     expect(res.statusCode).toBe(400);
     expect(llmService.generateChatResponse).not.toHaveBeenCalled();
+  });
+
+  it('/llm/chat rejects ARRAY-form content that hides a VCF (non-string-content bypass)', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/llm/chat',
+      headers: { cookie: authCookie(user, prisma) },
+      payload: { messages: [{ role: 'user', content: [{ type: 'text', text: RAW_VCF }] }] },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(llmService.generateChatResponse).not.toHaveBeenCalled();
+  });
+
+  it('/llm/image rejects a VCF prompt and never calls the provider', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/llm/image',
+      headers: { cookie: authCookie(user, prisma) },
+      payload: { prompt: RAW_VCF },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(llmService.generateImage).not.toHaveBeenCalled();
+  });
+
+  it('/education/quiz rejects a VCF smuggled via the topic field', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/education/quiz',
+      headers: { cookie: authCookie(user, prisma) },
+      payload: { topic: RAW_VCF, level: 'undergraduate' },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(llmService.generateQuiz).not.toHaveBeenCalled();
+  });
+
+  it('/education/image rejects a VCF smuggled via the topic field', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/education/image',
+      headers: { cookie: authCookie(user, prisma) },
+      payload: { topic: RAW_VCF, level: 'undergraduate' },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(llmService.generateImage).not.toHaveBeenCalled();
   });
 
   it('/education/explain rejects a VCF smuggled via the context field', async () => {

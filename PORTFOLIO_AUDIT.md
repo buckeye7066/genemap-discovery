@@ -90,6 +90,35 @@ No branch was closed, deleted, pushed, or merged.
 - `pnpm lint` — clean. `pnpm typecheck` — clean (now executes the launch self-test in-gate). `pnpm build:web` — clean, no `vendor-3d`/empty-chunk warning.
 - `git diff --check` — clean. No secrets or real genomic data added (fixtures are synthetic: `chr1 12345 rs1 A G`).
 
+## 6b. Follow-up — durable no-cloud-genomic chokepoint (2026-07-18)
+
+A second review (Codex) confirmed the initial route-level guard was **incomplete**: it covered only `/education/explain` + `/education/chat`, while **four more cloud-AI surfaces still forwarded raw genomic content**, including a bypass *inside* a guarded path and an *unauthenticated* one. The durable fix routes **every** cloud-provider call through a single guarded chokepoint so no call site can bypass it.
+
+**Chokepoint:** `services/api/src/services/llm.js` — `assertProviderPayloadAllowed()` runs at the top of **all four** provider functions (`generateExplanation`, `generateChatResponse`, `generateImage`, `generateQuiz`). It extracts the exact provider-visible text via `extractProviderText()` (recurses into array-form `content` parts) and refuses raw genomic text unless the caller passes the consent-backed `allowGenomic:true` marker. Every provider call in the app flows through these four functions (verified by grep — the only importers are `routes/llm.js`, `routes/education.js`, and `services/errorReporter.js`; no embeddings/streaming/other provider entry points exist). A new route now **physically cannot** reach OpenAI/Anthropic without passing the chokepoint.
+
+Specific bypasses fixed:
+
+| # | Sev | Surface | Bug | Fix | Test (provider NOT called on VCF) |
+|---|---|---|---|---|---|
+| B1 | CRITICAL | `/llm/chat` (`routes/llm.js`) | Guard size-checked only string content, then `join()`-ed `message.content`; array content `[{type:'text',text:'<VCF>'}]` made the guard see `"[object Object]"` while the raw array was still forwarded | Reject any non-string message content (clean 400); chokepoint also extracts array text | `genomicGuard.test.js` array-form case; `llm-chokepoint.test.js` |
+| B2 | CRITICAL | `/education/quiz` (`education.js`) | User-controlled `topic` (≤500 chars) embedded in the quiz prompt with no guard | `assertNoRawGenomicLLM(prisma, userId, topic)` before building the prompt | `genomicGuard.test.js` `/education/quiz` |
+| B3 | CRITICAL | `/report-client-error` → `errorReporter.analyzeError` | **Unauthenticated**; client-supplied `message`/`stack` sent to `generateExplanation` with no guard/consent | Pre-check `looksLikeRawGenomicContent(message+stack)`; if genomic, **skip cloud** and use the deterministic heuristic (no consent required on an unauth path — just refuse to forward) | `errorReporter-genomic.test.js` |
+| B4 | HIGH | `/llm/image` + `/education/image` | Image prompts/`topic` sent to `generateImage` with only a string check (`MAX_PROMPT_CHARS` ≈ 200k) | Guard both before `generateImage` | `genomicGuard.test.js` `/llm/image` + `/education/image` |
+
+Consent path preserved: `assertNoRawGenomicLLM` now returns a boolean (`true` = genomic-and-consented) that routes thread into `allowGenomic` so a legitimately consented genomic upload still works end-to-end; the chokepoint blocks everything else.
+
+**Every cloud-AI surface now enforces the guard via the chokepoint** (defense in depth = route-level early 400 + chokepoint backstop):
+- `/llm/invoke` — route guard + chokepoint (`generateExplanation`)
+- `/llm/chat` — non-string-content reject + route guard + chokepoint (`generateChatResponse`)
+- `/llm/image` — route guard + chokepoint (`generateImage`)
+- `/education/explain` — route guard + chokepoint (`generateExplanation`)
+- `/education/quiz` — route guard + chokepoint (`generateQuiz`)
+- `/education/image` — route guard + chokepoint (`generateImage`)
+- `/education/chat` — route guard + chokepoint (`generateChatResponse`)
+- `/report-client-error` (unauth) — heuristic-skip pre-check + chokepoint (`generateExplanation`)
+
+**Follow-up verification:** `pnpm install --frozen-lockfile` clean; API **327 passed, 3 skipped** (+18: `llm-chokepoint` 12, `errorReporter-genomic` 2, plus 4 new route cases in `genomicGuard`); shared 69; web 55; lint + typecheck (self-test) clean; `build:web` clean; `git diff --check` clean. Tests set `OPENAI_API_KEY=''` locally so a guard regression can never make a real paid call.
+
 ## 7. External blockers
 
 - `postgres-integration.test.js` (3 tests) requires a live PostgreSQL and is skipped in this environment; run in CI (`api-integration-postgres` job, `postgres:18`) for full coverage.
