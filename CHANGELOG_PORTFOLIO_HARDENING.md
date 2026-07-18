@@ -72,6 +72,20 @@ Branch: `claude/portfolio-hardening-2026-07-18`. Local commits only — not push
   and the real guarantee is that raw VCF is parsed locally, never sent to cloud
   by default.
 
+## Security / privacy — follow-up 3 (encoded-payload detector hardening)
+
+- **Gzip decode is now bounded** (fixes a decompression-bomb DoS): the guard caps
+  decompression output and treats a cap-hit/corrupt gzip blob as blocked, so a
+  tiny base64 gzip cannot expand to a huge allocation on the AI routes.
+- **Chunked / MIME- or whitespace-wrapped base64 is reconstructed** and decoded,
+  closing the "wrap the base64 every few characters" evasion (incl. gzip+base64).
+- **CSV/TSV variant detection scans a bounded block, not just the first line**, so
+  a prefaced or blank-line-led CSV variant table no longer slips through.
+
+No behavior change for ordinary users; these only broaden what the raw-genomic
+guardrail catches. The guarantee remains architectural: raw VCF is parsed locally
+and never sent to a cloud LLM by default.
+
 ## Compatibility / migration
 
 - **No API contract changes.** All routes, request/response shapes, and stored data are

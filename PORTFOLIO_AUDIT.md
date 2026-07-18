@@ -131,6 +131,16 @@ A third review (Codex) found the chokepoint still had **three** ways raw genomic
 
 **Follow-up verification:** `pnpm install --frozen-lockfile` clean; API **341 passed, 3 skipped**; shared 69; web 55; lint + typecheck (self-test) clean; `build:web` clean; `git diff --check` clean.
 
+## 6d. Follow-up — encoded-payload detector hardening (2026-07-18)
+
+A fourth review (Codex) found three more high-severity gaps in the encoded-payload detector, **including a DoS the prior gzip fix introduced**. All fixed with a test each; the honest docstring (heuristic is defense-in-depth; the load-bearing guarantee is architectural) is retained.
+
+- **D1 [HIGH] NEW-BUG — unbounded gzip decompression bomb (`genomicGuard.js`).** The prior fix did `gunzipSync(buf).toString('utf8').slice(0,100_000)` — it decompressed **fully** before slicing, so a tiny base64 gzip blob in a permitted prompt could expand to a huge allocation and block the event loop (reachable on the guarded AI routes). **Fix:** bounded decompression `gunzipSync(buf, { maxOutputLength: MAX_DECODE_BYTES })`; cap the base64/compressed input (`MAX_B64_INPUT`); a cap-hit or corrupt stream is treated as `BLOCKED` (file-like → genomic), never "continue". **Test:** a ~10 MB-of-zeros gzip bomb → blocked in <1 s, no full expansion.
+- **D2 [HIGH] — chunked/whitespace-wrapped base64 evaded (`genomicGuard.js`).** `extractBase64Blobs` only grabbed contiguous ≥40-char runs and the data-URI regex stopped at whitespace, so MIME-wrapped or every-few-chars-wrapped base64 (incl. gzip+base64) was never reconstructed. **Fix:** the data-URI pattern now spans whitespace and strips it; a whitespace-stripped copy of the whole text is also scanned so chunked/MIME-wrapped payloads are reconstructed, decoded, and re-checked (bounded to 8 blobs, input-capped). **Tests:** chunked data-URI base64 VCF, MIME-wrapped (76-col) base64 VCF, and gzip+base64 with whitespace throughout are all caught.
+- **D3 [HIGH] — CSV detection only checked the first line (`genomicGuard.js`).** `looksLikeVariantCsv` inspected only `split(/\r?\n/,1)[0]`, so a prefaced/blank-line-led CSV block (`here is my file:\nchrom,pos,ref,alt\n1,12345,A,G`) bypassed it. **Fix:** scan the first bounded set (`MAX_CSV_SCAN_LINES`) of non-empty lines for a CSV/TSV variant header **and** confirm a following line is an actual variant-shaped row (numeric position + ≥2 ACGTN alleles). **Test:** a prefaced CSV block with leading blank lines is caught.
+
+**Follow-up verification:** `pnpm install --frozen-lockfile` clean; API **346 passed, 3 skipped**; shared 69; web 55; lint + typecheck (self-test) clean; `build:web` clean; `git diff --check` clean. (Also stripped a stray NUL byte a prior edit had left in `genomicGuard.js`.)
+
 ## 7. External blockers
 
 - `postgres-integration.test.js` (3 tests) requires a live PostgreSQL and is skipped in this environment; run in CI (`api-integration-postgres` job, `postgres:18`) for full coverage.

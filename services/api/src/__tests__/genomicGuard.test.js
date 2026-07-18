@@ -90,6 +90,37 @@ describe('looksLikeRawGenomicContent (detector)', () => {
     expect(looksLikeRawGenomicContent(gz)).toBe(true);
   });
 
+  it('BLOCKS a gzip decompression bomb quickly, without a huge allocation', () => {
+    // ~10 MB of zeros compresses to a tiny base64 blob; the guard must cap the
+    // decompression output and BLOCK rather than expand it fully.
+    const bomb = gzipSync(Buffer.alloc(10_000_000)).toString('base64');
+    const start = Date.now();
+    expect(looksLikeRawGenomicContent(bomb)).toBe(true);
+    expect(Date.now() - start).toBeLessThan(1000);
+  });
+
+  it('catches a chunked (whitespace-wrapped) data-URI base64 VCF', () => {
+    const b64 = Buffer.from(RAW_VCF, 'utf8').toString('base64');
+    const chunked = b64.match(/.{1,8}/g).join(' '); // a space every 8 chars
+    expect(looksLikeRawGenomicContent(`data:application/octet-stream;base64,${chunked}`)).toBe(true);
+  });
+
+  it('catches MIME-wrapped (newline every 76 chars) base64 VCF', () => {
+    const b64 = Buffer.from(RAW_VCF, 'utf8').toString('base64');
+    const wrapped = b64.match(/.{1,76}/g).join('\r\n');
+    expect(looksLikeRawGenomicContent(`Attachment:\n${wrapped}`)).toBe(true);
+  });
+
+  it('catches gzip+base64 VCF with whitespace inserted throughout', () => {
+    const gz = gzipSync(Buffer.from(RAW_VCF, 'utf8')).toString('base64');
+    const spaced = gz.match(/.{1,6}/g).join('\n');
+    expect(looksLikeRawGenomicContent(spaced)).toBe(true);
+  });
+
+  it('catches a prefaced CSV variant block with leading blank lines', () => {
+    expect(looksLikeRawGenomicContent('\n\nhere is my file:\nchrom,pos,ref,alt\n1,12345,A,G')).toBe(true);
+  });
+
   it('does NOT flag a single HGVS/coordinate mention inside a sentence (education still works)', () => {
     expect(looksLikeRawGenomicContent('What does the variant c.20A>T in HBB mean?')).toBe(false);
     expect(looksLikeRawGenomicContent('The SNP chr1:12345:A>G is discussed in this paper.')).toBe(false);
