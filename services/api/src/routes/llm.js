@@ -111,11 +111,22 @@ export default async function llmRoutes(fastify) {
     if (messages.some((m) => m.content.length > MAX_MESSAGE_CHARS)) {
       throw new ValidationError(`each message must be ${MAX_MESSAGE_CHARS} characters or fewer`);
     }
+    // Reject client-supplied tool/function fields. The model reads
+    // tool_calls[].function.arguments and function_call.arguments as input, so
+    // allowing them here would be a channel to smuggle raw genomic text past a
+    // content-only check. This is a plain text proxy — tool calling is not a
+    // supported input.
+    if (messages.some((m) => m && (m.tool_calls != null || m.function_call != null || m.tool_call_id != null))) {
+      throw new ValidationError('tool_calls/function_call are not allowed on this endpoint');
+    }
 
-    // Strip any client-supplied system messages. The /llm/chat surface is
-    // intentionally a thin proxy, but allowing role:'system' here would let
-    // the SPA bypass the safety prompts in /education/chat.
-    const sanitized = messages.filter((m) => m && (m.role === 'user' || m.role === 'assistant'));
+    // Strip any client-supplied system messages, and whitelist each surviving
+    // turn to exactly { role, content } so no other client-supplied field can
+    // ride along to the provider. Allowing role:'system' would let the SPA
+    // bypass the safety prompts in /education/chat.
+    const sanitized = messages
+      .filter((m) => m && (m.role === 'user' || m.role === 'assistant'))
+      .map((m) => ({ role: m.role, content: m.content }));
     if (sanitized.length === 0) {
       throw new ValidationError('messages must contain at least one user/assistant turn');
     }

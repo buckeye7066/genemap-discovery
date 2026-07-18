@@ -75,20 +75,34 @@ export function parseJsonFromLLM(raw, { fallback = null, validate } = {}) {
 // text and refuses it unless the caller passes `allowGenomic: true`, a marker
 // only set after a successful consent check (services/genomicGuard.js).
 
+// Structural keys whose VALUES are never user content the model reads as text
+// (they select roles/part-types, not payload). Skipping them keeps the extracted
+// text clean without missing any provider-visible payload.
+const NON_CONTENT_KEYS = new Set(['role', 'type']);
+
 /**
- * Recursively extract every provider-visible text fragment from a prompt string
- * or a messages array (whose `content` may itself be a string OR an array of
- * `{ type, text }` parts). This is the text the model actually sees.
+ * Recursively collect EVERY provider-visible text fragment from a prompt string
+ * or a messages array. Crucially this includes text hidden in sibling fields
+ * the model still reads — `tool_calls[].function.arguments`, `function_call.
+ * arguments`, array-form `content` parts (`{type,text}`), etc. — not just
+ * `content`. The chokepoint runs its genomic check over THIS text, so a payload
+ * smuggled into tool/function arguments is inspected like any other.
  */
 export function extractProviderText(input) {
-  if (typeof input === 'string') return input;
-  if (Array.isArray(input)) return input.map(extractProviderText).join('\n');
-  if (input && typeof input === 'object') {
-    if (typeof input.content === 'string') return input.content;
-    if (input.content != null) return extractProviderText(input.content);
-    if (typeof input.text === 'string') return input.text;
-  }
-  return '';
+  const parts = [];
+  const visit = (node) => {
+    if (node == null) return;
+    if (typeof node === 'string') { parts.push(node); return; }
+    if (Array.isArray(node)) { for (const item of node) visit(item); return; }
+    if (typeof node === 'object') {
+      for (const [key, value] of Object.entries(node)) {
+        if (NON_CONTENT_KEYS.has(key)) continue;
+        visit(value);
+      }
+    }
+  };
+  visit(input);
+  return parts.join('\n');
 }
 
 /**

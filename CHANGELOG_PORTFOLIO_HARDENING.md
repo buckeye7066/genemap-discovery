@@ -55,6 +55,23 @@ Branch: `claude/portfolio-hardening-2026-07-18`. Local commits only — not push
   returns a clean rejection and nothing is sent to OpenAI/Anthropic (unless the
   operator opt-in + user consent flow is satisfied, unchanged).
 
+## Security / privacy — follow-up 2 (leak vectors closed)
+
+- **Tool/function arguments** can no longer smuggle raw genomic text to the
+  cloud: `/llm/chat` rejects client-supplied `tool_calls`/`function_call` and the
+  provider-text extraction now inspects every provider-visible field (including
+  tool/function arguments), not just `content`.
+- **Revoked consent is honored**: the genomic-LLM consent check now reads the
+  newest consent record and requires it to be granted, so a later revocation
+  immediately blocks uploads (and a missing user fails closed).
+- **The raw-genomic detector fails closed on more shapes**: single VCF/variant
+  rows, compact identifiers (`1-12345-A-G`), HGVS (`c.20A>T`), JSON/CSV variant
+  records, and base64/gzip/data-URI encoded VCFs (decoded and re-checked). A
+  single incidental coordinate/HGVS mention inside a sentence is still allowed so
+  genetics education keeps working; docs note a heuristic can't catch everything
+  and the real guarantee is that raw VCF is parsed locally, never sent to cloud
+  by default.
+
 ## Compatibility / migration
 
 - **No API contract changes.** All routes, request/response shapes, and stored data are

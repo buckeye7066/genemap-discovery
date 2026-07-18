@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from 'vitest';
 import { buildTestApp, createPrismaMock, authCookie } from './setup.js';
+import { gzipSync } from 'node:zlib';
 import {
   looksLikeRawGenomicContent,
   assertNoRawGenomicLLM,
@@ -53,6 +54,46 @@ describe('looksLikeRawGenomicContent (detector)', () => {
     expect(looksLikeRawGenomicContent(undefined)).toBe(false);
     expect(looksLikeRawGenomicContent(42)).toBe(false);
   });
+
+  // ── Fail-closed on small / encoded / structured payloads ──────────────────
+  it('flags a SINGLE bare VCF variant record', () => {
+    expect(looksLikeRawGenomicContent('chr1\t12345\trs1\tA\tG\t50\tPASS\t.')).toBe(true);
+    expect(looksLikeRawGenomicContent('1 12345 rs1 A G')).toBe(true);
+  });
+
+  it('flags a pasted compact single-variant identifier', () => {
+    expect(looksLikeRawGenomicContent('1-12345-A-G')).toBe(true);
+    expect(looksLikeRawGenomicContent('chr1:12345:A>G')).toBe(true);
+  });
+
+  it('flags a bare HGVS variant', () => {
+    expect(looksLikeRawGenomicContent('c.20A>T')).toBe(true);
+  });
+
+  it('flags a JSON variant array', () => {
+    expect(looksLikeRawGenomicContent(
+      '[{"chromosome":"1","position":12345,"referenceAllele":"A","alternateAllele":"G"}]'
+    )).toBe(true);
+  });
+
+  it('flags a CSV with variant columns', () => {
+    expect(looksLikeRawGenomicContent('chrom,pos,ref,alt\n1,12345,A,G')).toBe(true);
+  });
+
+  it('flags a base64-encoded VCF (fail closed on encoding)', () => {
+    const b64 = Buffer.from(RAW_VCF, 'utf8').toString('base64');
+    expect(looksLikeRawGenomicContent(`here is my file: ${b64}`)).toBe(true);
+  });
+
+  it('flags a gzip+base64-encoded VCF', () => {
+    const gz = gzipSync(Buffer.from(RAW_VCF, 'utf8')).toString('base64');
+    expect(looksLikeRawGenomicContent(gz)).toBe(true);
+  });
+
+  it('does NOT flag a single HGVS/coordinate mention inside a sentence (education still works)', () => {
+    expect(looksLikeRawGenomicContent('What does the variant c.20A>T in HBB mean?')).toBe(false);
+    expect(looksLikeRawGenomicContent('The SNP chr1:12345:A>G is discussed in this paper.')).toBe(false);
+  });
 });
 
 describe('assertNoRawGenomicLLM (enforcement)', () => {
@@ -105,6 +146,27 @@ describe('assertNoRawGenomicLLM (enforcement)', () => {
     // Minimisation: only content length, never the genomic payload.
     expect(logged.metadata).toEqual({ contentLength: RAW_VCF.length });
     expect(JSON.stringify(logged.metadata)).not.toContain('CHROM');
+  });
+
+  it('blocks when the LATEST consent record is a revocation (granted:false after an older grant)', async () => {
+    process.env.ALLOW_GENOMIC_LLM_UPLOAD = 'true';
+    const prisma = stubPrisma();
+    // The query must NOT pre-filter to granted:true; it returns the newest
+    // record, which here is the revocation.
+    prisma.consentRecord.findFirst = vi.fn(async () => ({ id: 'c2', granted: false, createdAt: new Date() }));
+
+    await expect(assertNoRawGenomicLLM(prisma, 'u1', RAW_VCF)).rejects.toThrow(/consent required/i);
+    // Ensure the query did not filter on granted (which would have missed the revocation).
+    const where = prisma.consentRecord.findFirst.mock.calls[0][0].where;
+    expect(where).not.toHaveProperty('granted');
+    expect(prisma.auditLog.create).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when userId is missing (no one to check consent for)', async () => {
+    process.env.ALLOW_GENOMIC_LLM_UPLOAD = 'true';
+    const prisma = stubPrisma();
+    await expect(assertNoRawGenomicLLM(prisma, undefined, RAW_VCF)).rejects.toThrow(/consent required/i);
+    expect(prisma.consentRecord.findFirst).not.toHaveBeenCalled();
   });
 });
 
@@ -174,6 +236,22 @@ describe('no-cloud-genomic default is enforced on every cloud-AI route', () => {
       url: '/llm/chat',
       headers: { cookie: authCookie(user, prisma) },
       payload: { messages: [{ role: 'user', content: [{ type: 'text', text: RAW_VCF }] }] },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(llmService.generateChatResponse).not.toHaveBeenCalled();
+  });
+
+  it('/llm/chat rejects clean content that hides a VCF in tool_calls arguments', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/llm/chat',
+      headers: { cookie: authCookie(user, prisma) },
+      payload: {
+        messages: [
+          { role: 'user', content: 'Summarize my results please' },
+          { role: 'assistant', content: 'sure', tool_calls: [{ id: 't1', type: 'function', function: { name: 'annotate', arguments: RAW_VCF } }] },
+        ],
+      },
     });
     expect(res.statusCode).toBe(400);
     expect(llmService.generateChatResponse).not.toHaveBeenCalled();

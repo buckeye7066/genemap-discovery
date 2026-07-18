@@ -59,6 +59,18 @@ describe('extractProviderText', () => {
     const text = extractProviderText([{ role: 'user', content: [{ type: 'text', text: VCF }] }]);
     expect(text).toContain('#CHROM');
   });
+  it('extracts text hidden in tool_calls[].function.arguments', () => {
+    const text = extractProviderText([
+      { role: 'assistant', content: 'looks fine', tool_calls: [{ id: 't1', type: 'function', function: { name: 'x', arguments: VCF } }] },
+    ]);
+    expect(text).toContain('#CHROM');
+  });
+  it('extracts text hidden in function_call.arguments', () => {
+    const text = extractProviderText([
+      { role: 'assistant', content: 'ok', function_call: { name: 'x', arguments: VCF } },
+    ]);
+    expect(text).toContain('#CHROM');
+  });
 });
 
 describe('assertProviderPayloadAllowed (pure chokepoint logic)', () => {
@@ -89,6 +101,15 @@ describe('every exported provider function enforces the chokepoint end-to-end', 
   it('generateChatResponse refuses a VCF hidden in ARRAY-form content parts', async () => {
     await expect(
       generateChatResponse([{ role: 'user', content: [{ type: 'text', text: VCF }] }]),
+    ).rejects.toThrow(/not allowed/i);
+    expect(openai.generateChatResponse).not.toHaveBeenCalled();
+  });
+
+  it('generateChatResponse refuses a VCF hidden in tool_calls[].function.arguments (clean content)', async () => {
+    await expect(
+      generateChatResponse([
+        { role: 'assistant', content: 'here is your answer', tool_calls: [{ id: 't1', type: 'function', function: { name: 'annotate', arguments: VCF } }] },
+      ]),
     ).rejects.toThrow(/not allowed/i);
     expect(openai.generateChatResponse).not.toHaveBeenCalled();
   });
