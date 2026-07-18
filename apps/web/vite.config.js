@@ -49,7 +49,6 @@ export default defineConfig({
           ],
           'vendor-icons': ['lucide-react'],
           'vendor-charts': ['recharts'],
-          'vendor-3d': ['three'],
           'vendor-markdown': ['react-markdown'],
           'vendor-utils': ['clsx', 'tailwind-merge', 'class-variance-authority', 'date-fns'],
           'vendor-canvas': ['html2canvas'],

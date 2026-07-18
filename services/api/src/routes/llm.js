@@ -2,6 +2,7 @@ import { authenticate } from '../middleware/auth.js';
 import { checkEducationEntitlement, enforceUsageLimit, recordUsage } from '../middleware/entitlements.js';
 import { generateExplanation, generateChatResponse, generateImage } from '../services/llm.js';
 import { withHonestyPrefix, honestySystemMessage } from '../services/scientificHonesty.js';
+import { assertNoRawGenomicLLM } from '../services/genomicGuard.js';
 import { createAuditLog } from '../utils/audit.js';
 import { ValidationError } from '../utils/errors.js';
 import { MAX_PROMPT_CHARS, MAX_CHAT_MESSAGES, MAX_MESSAGE_CHARS } from '../config/llmLimits.js';
@@ -30,9 +31,6 @@ const INVOKE_TEXT_MODEL = process.env.LLM_INVOKE_TEXT_MODEL
   || process.env.LLM_EDU_TEXT_MODEL
   || (INVOKE_TEXT_PROVIDER === 'openai' || INVOKE_TEXT_PROVIDER === 'gpt' ? 'gpt-4o-mini' : undefined);
 
-const GENOMIC_LLM_CONSENT_TYPE = 'genomic_llm_upload';
-const GENOMIC_LLM_CONSENT_VERSION = '1.0';
-
 function validatePrompt(prompt) {
   if (!prompt || typeof prompt !== 'string') {
     throw new ValidationError('prompt (string) is required');
@@ -53,48 +51,6 @@ function clampTokens(requested, isPremium) {
 function clampTemperature(requested) {
   if (typeof requested !== 'number' || !Number.isFinite(requested)) return 0.7;
   return Math.max(0, Math.min(2, requested));
-}
-
-function looksLikeRawGenomicContent(text) {
-  if (typeof text !== 'string') return false;
-  if (/#CHROM\s+POS\s+ID\s+REF\s+ALT/i.test(text)) return true;
-  const variantLines = text.split(/\r?\n/).filter((line) =>
-    /^(chr)?([0-9]{1,2}|X|Y|MT|M)\s+\d+\s+(\S+|\.)\s+[ACGTN]+\s+[ACGTN,]+/i.test(line.trim())
-  );
-  return variantLines.length >= 3;
-}
-
-async function assertNoRawGenomicLLM(prisma, userId, text) {
-  if (!looksLikeRawGenomicContent(text)) return;
-
-  if (process.env.ALLOW_GENOMIC_LLM_UPLOAD !== 'true') {
-    throw new ValidationError('Raw VCF/genomic file content is not allowed in LLM requests by default');
-  }
-
-  const consent = await prisma.consentRecord.findFirst({
-    where: {
-      userId,
-      consentType: GENOMIC_LLM_CONSENT_TYPE,
-      version: GENOMIC_LLM_CONSENT_VERSION,
-      granted: true,
-    },
-    orderBy: { createdAt: 'desc' },
-  });
-
-  if (!consent) {
-    throw new ValidationError(`Consent required: ${GENOMIC_LLM_CONSENT_TYPE} v${GENOMIC_LLM_CONSENT_VERSION}`);
-  }
-
-  await createAuditLog(
-    prisma,
-    {
-      userId,
-      action: 'llm.genomic_upload',
-      entityType: 'llm',
-      metadata: { contentLength: text.length },
-    },
-    { required: true }
-  );
 }
 
 export default async function llmRoutes(fastify) {

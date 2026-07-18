@@ -8,6 +8,7 @@ import {
   QUIZ_HONESTY_NOTE,
 } from '../services/scientificHonesty.js';
 import { getSources } from '../services/educationSources.js';
+import { assertNoRawGenomicLLM } from '../services/genomicGuard.js';
 import { AppError } from '../utils/errors.js';
 import { MAX_MESSAGE_CHARS } from '../config/llmLimits.js';
 
@@ -205,6 +206,11 @@ export default async function educationRoutes(fastify) {
   fastify.post('/explain', { preHandler: [authenticate, checkEducationEntitlement, enforceUsageLimit] }, async (request) => {
     const { topic, level, context } = explainSchema.parse(request.body);
 
+    // The optional `context` field is prepended to the prompt sent to a cloud
+    // LLM. Enforce the same no-cloud-genomic default the /llm proxy does so a
+    // raw VCF can't be smuggled to OpenAI/Anthropic via the education surface.
+    await assertNoRawGenomicLLM(prisma, request.user?.userId, `${topic}\n${context || ''}`);
+
     const levelPrompt = LEVEL_PROMPTS[level] || LEVEL_PROMPTS.undergraduate;
     const prompt = [
       `You are a genetics educator. ${levelPrompt}`,
@@ -349,6 +355,14 @@ export default async function educationRoutes(fastify) {
 
   fastify.post('/chat', { preHandler: [authenticate, checkEducationEntitlement, enforceUsageLimit] }, async (request) => {
     const { messages, level, topic } = chatSchema.parse(request.body);
+
+    // Tutor-chat turns also reach a cloud LLM; block a raw genomic dump pasted
+    // into the conversation by default (same policy as /llm/chat).
+    await assertNoRawGenomicLLM(
+      prisma,
+      request.user?.userId,
+      messages.map((m) => m.content).join('\n'),
+    );
 
     const levelPrompt = LEVEL_PROMPTS[level] || LEVEL_PROMPTS.undergraduate;
     const systemMessage = honestySystemMessage(
