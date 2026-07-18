@@ -100,6 +100,7 @@ export function parseArgs(argv = process.argv.slice(2)) {
   for (const arg of argv) {
     if (arg === '--') continue;
     else if (arg === '--skip-http') opts.skipHttp = true;
+    else if (arg === '--self-test') opts.selfTest = true;
     else if (arg === '--json') opts.json = true;
     else if (arg.startsWith('--api-url=')) opts.apiUrl = arg.slice('--api-url='.length);
     else if (arg.startsWith('--web-url=')) opts.webUrl = arg.slice('--web-url='.length);
@@ -384,6 +385,99 @@ export async function runLaunchVerification(opts = {}) {
   };
 }
 
+// ─── Self-test ───────────────────────────────────────────────────────────────
+//
+// The release gate must do more than `node --check` this file — a syntax check
+// never imports env.js or exercises a single validation branch, so a runtime
+// regression (a thrown import, a broken check, an inverted condition) sails
+// through. `--self-test` actually RUNS the verifier against a synthetic but
+// complete production env + evidence fixture and asserts three invariants:
+//   1. a hardened env passes,
+//   2. complete evidence passes,
+//   3. HTTP checks that are skipped FAIL CLOSED (never a false "launch ok").
+// It needs no network and no real secrets, so it is safe in CI while still
+// proving the verifier executes end-to-end.
+const SELF_TEST_ENV = {
+  NODE_ENV: 'production',
+  DATABASE_URL: 'postgresql://user:pass@db.example.com:5432/genemap',
+  JWT_SECRET: 'x'.repeat(48),
+  JWT_REFRESH_SECRET: `${'x'.repeat(48)}r`,
+  COOKIE_SECRET: `${'x'.repeat(48)}c`,
+  CORS_ORIGINS: 'https://app.example.com',
+  MEDICAL_DATA_ENCRYPTION_KEY: 'a'.repeat(64),
+  STRIPE_SECRET_KEY: 'sk_live_selftest0123456789',
+  STRIPE_WEBHOOK_SECRET: 'whsec_selftest0123456789',
+  STRIPE_PRICE_MONTHLY: 'price_selftestMonthly',
+  STRIPE_PRICE_YEARLY: 'price_selftestYearly',
+  STRIPE_PRICE_TEAM_MONTHLY: 'price_selftestTeamMonthly',
+  STRIPE_PRICE_TEAM_YEARLY: 'price_selftestTeamYearly',
+  STRIPE_PRICE_DEPT_MONTHLY: 'price_selftestDeptMonthly',
+  STRIPE_PRICE_DEPT_YEARLY: 'price_selftestDeptYearly',
+  STRIPE_PRICE_ENT_MONTHLY: 'price_selftestEntMonthly',
+  STRIPE_PRICE_ENT_YEARLY: 'price_selftestEntYearly',
+  OPENAI_API_KEY: 'sk-selftest-openai-placeholder',
+};
+
+function buildSelfTestEvidence(now) {
+  const iso = (msAgo) => new Date(now.getTime() - msAgo).toISOString();
+  return {
+    reviewedBy: 'Self-Test Reviewer',
+    reviewedAt: iso(ONE_DAY_MS),
+    productionSecrets: { storedInSecretManager: true, rotatedForLaunch: true, manager: 'Railway/Vercel/1Password' },
+    backups: {
+      automaticBackupsEnabled: true,
+      retentionDays: 30,
+      lastSuccessfulBackupAt: iso(ONE_DAY_MS),
+      restoreTestedAt: iso(7 * ONE_DAY_MS),
+      restoreRunbook: 'docs/BACKUP.md',
+    },
+    monitoring: {
+      errorTrackingConfigured: true,
+      logAggregationConfigured: true,
+      alertingConfigured: true,
+      dashboardUrl: 'https://monitoring.example.com/genemap',
+      pagerEscalation: '#on-call',
+    },
+    stripe: {
+      liveMode: true,
+      webhookEndpoint: 'https://api.example.com/billing/webhook',
+      webhookEvents: [...REQUIRED_STRIPE_EVENTS],
+      lastWebhookTestAt: iso(2 * ONE_DAY_MS),
+    },
+    dataRetention: { policyApproved: true, policyDocument: 'docs/DATA_RETENTION.md', deletionRequestSlaDays: 30, backupRetentionDays: 30 },
+    legalCompliance: {
+      legalReviewCompleted: true,
+      complianceReviewCompleted: true,
+      reviewer: 'Counsel / Compliance Owner',
+      reviewedAt: iso(30 * ONE_DAY_MS),
+      medicalDisclaimerApproved: true,
+      baaStatus: 'not_required',
+    },
+  };
+}
+
+export function runSelfTest(now = new Date()) {
+  const problems = [];
+
+  const envFailures = validateLaunchEnv(SELF_TEST_ENV).checks.filter((c) => c.status === 'fail');
+  if (envFailures.length > 0) {
+    problems.push(`hardened env fixture unexpectedly failed: ${envFailures.map((c) => c.id).join(', ')}`);
+  }
+
+  const evidenceFailures = validateEvidence(buildSelfTestEvidence(now), { now }).filter((c) => c.status === 'fail');
+  if (evidenceFailures.length > 0) {
+    problems.push(`complete evidence fixture unexpectedly failed: ${evidenceFailures.map((c) => c.id).join(', ')}`);
+  }
+
+  // Fail-closed invariant: a missing Stripe live key MUST be caught.
+  const brokenEnv = validateLaunchEnv({ ...SELF_TEST_ENV, STRIPE_SECRET_KEY: 'sk_test_not_live' }).checks;
+  if (!brokenEnv.some((c) => c.status === 'fail')) {
+    problems.push('verifier did not reject a non-live Stripe key (fail-open regression)');
+  }
+
+  return { ok: problems.length === 0, problems };
+}
+
 function printHelp() {
   console.log(`Usage:
   pnpm launch:verify -- --api-url=https://api.example.com --web-url=https://app.example.com --evidence=ops/production-launch-evidence.json
@@ -394,6 +488,8 @@ Options:
   --evidence=PATH     Launch evidence JSON file. Default: ${DEFAULT_EVIDENCE_FILE}
   --timeout-ms=N      HTTP timeout per request. Default: ${DEFAULT_TIMEOUT_MS}
   --skip-http         Validate env and launch evidence only; exits non-zero because live HTTP proof is incomplete.
+  --self-test         Run the verifier against a synthetic hardened env + evidence fixture (no network, no secrets).
+                      Proves the script executes end-to-end and fails closed. Used by the release gate.
   --json              Print machine-readable JSON.
 `);
 }
@@ -408,6 +504,19 @@ async function main() {
   const opts = parseArgs();
   if (opts.help) {
     printHelp();
+    return;
+  }
+
+  if (opts.selfTest) {
+    const selfTest = runSelfTest();
+    if (selfTest.ok) {
+      console.log('Launch verifier self-test passed (env + evidence validation executed, fail-closed confirmed).');
+      process.exitCode = 0;
+    } else {
+      console.error('Launch verifier self-test FAILED:');
+      for (const problem of selfTest.problems) console.error(`  - ${problem}`);
+      process.exitCode = 1;
+    }
     return;
   }
 

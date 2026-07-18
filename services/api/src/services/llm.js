@@ -1,5 +1,7 @@
 import * as openaiService from './openai.js';
 import * as anthropicService from './anthropic.js';
+import { looksLikeRawGenomicContent } from './genomicGuard.js';
+import { ValidationError } from '../utils/errors.js';
 
 const TEXT_PROVIDER = process.env.LLM_TEXT_PROVIDER || 'openai';
 const DEFAULT_TIMEOUT_MS = Number(process.env.LLM_TIMEOUT_MS || 30_000);
@@ -60,6 +62,58 @@ export function parseJsonFromLLM(raw, { fallback = null, validate } = {}) {
     }
   }
   return parsed;
+}
+
+// ─── No-cloud-genomic chokepoint ─────────────────────────────────────────────
+//
+// EVERY cloud-provider call in the app goes through one of the exported
+// functions below. Enforcing the raw-genomic guard HERE (not only at the route
+// layer) means no call site — present or future, authenticated or not — can
+// reach OpenAI/Anthropic with raw VCF/variant text by importing this module
+// directly or by constructing a payload shape a route-level check missed (e.g.
+// array-form message content). The guard extracts the EXACT provider-visible
+// text and refuses it unless the caller passes `allowGenomic: true`, a marker
+// only set after a successful consent check (services/genomicGuard.js).
+
+// Structural keys whose VALUES are never user content the model reads as text
+// (they select roles/part-types, not payload). Skipping them keeps the extracted
+// text clean without missing any provider-visible payload.
+const NON_CONTENT_KEYS = new Set(['role', 'type']);
+
+/**
+ * Recursively collect EVERY provider-visible text fragment from a prompt string
+ * or a messages array. Crucially this includes text hidden in sibling fields
+ * the model still reads — `tool_calls[].function.arguments`, `function_call.
+ * arguments`, array-form `content` parts (`{type,text}`), etc. — not just
+ * `content`. The chokepoint runs its genomic check over THIS text, so a payload
+ * smuggled into tool/function arguments is inspected like any other.
+ */
+export function extractProviderText(input) {
+  const parts = [];
+  const visit = (node) => {
+    if (node == null) return;
+    if (typeof node === 'string') { parts.push(node); return; }
+    if (Array.isArray(node)) { for (const item of node) visit(item); return; }
+    if (typeof node === 'object') {
+      for (const [key, value] of Object.entries(node)) {
+        if (NON_CONTENT_KEYS.has(key)) continue;
+        visit(value);
+      }
+    }
+  };
+  visit(input);
+  return parts.join('\n');
+}
+
+/**
+ * The chokepoint. Throws unless the text is clearly non-genomic or the caller
+ * has an explicit, consent-backed `allowGenomic` marker.
+ */
+export function assertProviderPayloadAllowed(payload, allowGenomic) {
+  if (allowGenomic === true) return;
+  if (looksLikeRawGenomicContent(extractProviderText(payload))) {
+    throw new ValidationError('Raw VCF/genomic file content is not allowed in LLM requests by default');
+  }
 }
 
 function getTextProvider(providerOverride) {
@@ -181,8 +235,9 @@ export async function withProviderRetry(operation, {
 
 export async function generateExplanation(
   prompt,
-  { provider, model, maxTokens = 2000, temperature = 0.7, timeoutMs = DEFAULT_TIMEOUT_MS } = {}
+  { provider, model, maxTokens = 2000, temperature = 0.7, timeoutMs = DEFAULT_TIMEOUT_MS, allowGenomic = false } = {}
 ) {
+  assertProviderPayloadAllowed(prompt, allowGenomic);
   const service = getTextProvider(provider);
   return withProviderRetry(
     () => service.generateText(prompt, { model, maxTokens, temperature, timeoutMs }),
@@ -192,8 +247,9 @@ export async function generateExplanation(
 
 export async function generateChatResponse(
   messages,
-  { provider, model, maxTokens = 2000, temperature = 0.7, timeoutMs = DEFAULT_TIMEOUT_MS } = {}
+  { provider, model, maxTokens = 2000, temperature = 0.7, timeoutMs = DEFAULT_TIMEOUT_MS, allowGenomic = false } = {}
 ) {
+  assertProviderPayloadAllowed(messages, allowGenomic);
   const service = getTextProvider(provider);
   return withProviderRetry(
     () => service.generateChatResponse(messages, { model, maxTokens, temperature, timeoutMs }),
@@ -203,15 +259,17 @@ export async function generateChatResponse(
 
 export async function generateImage(
   prompt,
-  { size = '1024x1024', quality = 'standard', timeoutMs = DEFAULT_TIMEOUT_MS } = {}
+  { size = '1024x1024', quality = 'standard', timeoutMs = DEFAULT_TIMEOUT_MS, allowGenomic = false } = {}
 ) {
+  assertProviderPayloadAllowed(prompt, allowGenomic);
   return withProviderRetry(
     () => openaiService.generateImage(prompt, { size, quality, timeoutMs }),
     { provider: 'openai' }
   );
 }
 
-export async function generateQuiz(prompt, { provider, model, maxTokens = 3000, timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
+export async function generateQuiz(prompt, { provider, model, maxTokens = 3000, timeoutMs = DEFAULT_TIMEOUT_MS, allowGenomic = false } = {}) {
+  assertProviderPayloadAllowed(prompt, allowGenomic);
   const service = getTextProvider(provider);
   const raw = await withProviderRetry(
     () => service.generateText(prompt, { model, maxTokens, temperature: 0.5, timeoutMs }),

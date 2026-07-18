@@ -65,18 +65,33 @@ export function normalizeQuery(query) {
 
 const TRANSIENT_STATUS = new Set([408, 429, 500, 502, 503, 504]);
 
+// Only GET/HEAD are safely retryable by default: they are idempotent, so a
+// transient failure + retry can never double-apply a side effect. Retrying a
+// non-idempotent method (POST/PUT/PATCH/DELETE) risks executing a write twice.
+// A caller that KNOWS its non-GET request is a pure read (e.g. MyGene.info's
+// batch /query, which is POST only because the id list is large) may opt back
+// in with `idempotent: true`. Everything else fails fast on the first error.
+export function isRetryableRequest(method, options = {}) {
+  if (options.idempotent === true) return true;
+  const verb = String(method || 'GET').toUpperCase();
+  return verb === 'GET' || verb === 'HEAD';
+}
+
 /**
  * fetch + JSON with a bounded timeout and a small exponential backoff for
  * transient failures (network errors, timeouts, 429/5xx). 4xx responses other
- * than 429 are treated as permanent and fail fast. The thrown error never
- * includes the full upstream URL — only the host — so a leaked error message
- * can't reveal exact query strings or internal paths to the client.
+ * than 429 are treated as permanent and fail fast. Retries are limited to
+ * idempotent requests (GET/HEAD, or an explicit `idempotent: true` read) so a
+ * write is NEVER retried. The thrown error never includes the full upstream
+ * URL — only the host — so a leaked error message can't reveal exact query
+ * strings or internal paths to the client.
  */
 async function fetchJSON(url, options = {}) {
   const host = (() => {
     try { return new URL(url).host; } catch { return 'upstream'; }
   })();
-  const attempts = 3;
+  const retryable = isRetryableRequest(options.method, options);
+  const attempts = retryable ? 3 : 1;
   let lastErr;
 
   for (let attempt = 0; attempt < attempts; attempt++) {
@@ -93,7 +108,7 @@ async function fetchJSON(url, options = {}) {
       if (!res.ok) {
         const err = new Error(`HTTP ${res.status} from ${host}`);
         err.status = res.status;
-        if (TRANSIENT_STATUS.has(res.status) && attempt < attempts - 1) {
+        if (retryable && TRANSIENT_STATUS.has(res.status) && attempt < attempts - 1) {
           lastErr = err;
           continue;
         }
@@ -101,10 +116,11 @@ async function fetchJSON(url, options = {}) {
       }
       return await res.json();
     } catch (err) {
-      // AbortError / network errors are transient — retry until attempts run out.
+      // AbortError / network errors are transient — retry until attempts run
+      // out, but only for idempotent requests.
       lastErr = err;
       const isPermanent = typeof err.status === 'number' && !TRANSIENT_STATUS.has(err.status);
-      if (isPermanent || attempt === attempts - 1) throw err;
+      if (!retryable || isPermanent || attempt === attempts - 1) throw err;
     }
   }
   throw lastErr;
@@ -348,6 +364,9 @@ export async function enrichGenes(symbols) {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body,
+        // POST here is a pure batch READ (the id list is too large for a query
+        // string), so it is safe to retry on transient failures.
+        idempotent: true,
       });
 
       // MyGene returns one entry per query term, in order; a missed term has
