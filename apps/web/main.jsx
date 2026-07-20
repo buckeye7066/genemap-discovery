@@ -13,6 +13,15 @@ initSentry()
 // and report them to the backend (which emails the owner for non-admin users).
 if (typeof window !== 'undefined') {
   window.addEventListener('error', (event) => {
+    // Browsers mute cross-origin script errors (WHATWG "muted errors"): when a
+    // script we didn't load in our own origin throws (a browser extension's
+    // injected content script is the common case on login-style pages), the
+    // browser reports message="Script error." with error/filename/lineno all
+    // blanked out. There is no real stack to recover here — synthesizing one
+    // via `new Error()` just fabricates a frame pointing at this handler
+    // itself, misattributing the crash to our bundle. Skip reporting rather
+    // than emailing the owner a false alarm with no diagnostic value.
+    if (event?.message === 'Script error.' && !event?.error && !event?.filename) return
     reportClientError(event?.error || new Error(event?.message || 'Unknown error'))
   })
   window.addEventListener('unhandledrejection', (event) => {
