@@ -43,9 +43,11 @@ export default function AdminAnalytics() {
   const [activities, setActivities] = useState([]);
   const [searches, setSearches] = useState([]);
   const [medicalRecords, setMedicalRecords] = useState([]);
+  const [medicalDataTypeBreakdown, setMedicalDataTypeBreakdown] = useState([]);
   const [aiConversations, setAiConversations] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [activeTab, setActiveTab] = useState('overview');
 
   useEffect(() => {
     if (isLoadingAuth) return;
@@ -70,13 +72,17 @@ export default function AdminAnalytics() {
         recentActivity = [],
         recentSearches = [],
         recentConversations = [],
+        medicalDataTypeBreakdown: typeBreakdown = [],
       } = analytics;
 
       setStats(statCounts);
       setActivities(Array.isArray(recentActivity) ? recentActivity : []);
       setSearches(Array.isArray(recentSearches) ? recentSearches : []);
-      // Medical records are exposed as a COUNT only (no PHI listing).
+      // Medical records are exposed as a COUNT only (no PHI listing) — the
+      // upload-type mix comes from a separate privacy-safe server-side
+      // aggregate (counts by type, no record content) instead.
       setMedicalRecords([]);
+      setMedicalDataTypeBreakdown(Array.isArray(typeBreakdown) ? typeBreakdown : []);
       setAiConversations(Array.isArray(recentConversations) ? recentConversations : []);
     } catch (err) {
       console.error('Error loading analytics:', err);
@@ -145,16 +151,11 @@ export default function AdminAnalytics() {
   }, [activities, searches]);
 
   const medicalDataTypes = useMemo(() => {
-    const typeCounts = {};
-    medicalRecords.forEach(record => {
-      const type = record.file_type || 'other';
-      typeCounts[type] = (typeCounts[type] || 0) + 1;
-    });
-    return Object.entries(typeCounts).map(([name, value]) => ({
-      name: name.replace('_', ' ').toUpperCase(),
-      value
+    return medicalDataTypeBreakdown.map(({ dataType, count }) => ({
+      name: (dataType || 'other').replace(/_/g, ' ').toUpperCase(),
+      value: count
     }));
-  }, [medicalRecords]);
+  }, [medicalDataTypeBreakdown]);
 
   const aiUsageStats = useMemo(() => {
     const robertCount = aiConversations.filter(c => c.assistantType === 'robert').length;
@@ -233,9 +234,15 @@ export default function AdminAnalytics() {
           <p className="text-slate-600">Track user activity, popular features, and platform usage</p>
         </div>
 
-        {/* Quick Stats */}
+        {/* Quick Stats — each card jumps to the tab with its breakdown */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-          <Card>
+          <Card
+            role="button"
+            tabIndex={0}
+            onClick={() => setActiveTab('overview')}
+            onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && setActiveTab('overview')}
+            className="cursor-pointer transition-shadow hover:shadow-md"
+          >
             <CardContent className="pt-6">
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
@@ -249,7 +256,13 @@ export default function AdminAnalytics() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card
+            role="button"
+            tabIndex={0}
+            onClick={() => setActiveTab('searches')}
+            onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && setActiveTab('searches')}
+            className="cursor-pointer transition-shadow hover:shadow-md"
+          >
             <CardContent className="pt-6">
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
@@ -263,7 +276,13 @@ export default function AdminAnalytics() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card
+            role="button"
+            tabIndex={0}
+            onClick={() => setActiveTab('features')}
+            onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && setActiveTab('features')}
+            className="cursor-pointer transition-shadow hover:shadow-md"
+          >
             <CardContent className="pt-6">
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
@@ -277,7 +296,13 @@ export default function AdminAnalytics() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card
+            role="button"
+            tabIndex={0}
+            onClick={() => setActiveTab('overview')}
+            onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && setActiveTab('overview')}
+            className="cursor-pointer transition-shadow hover:shadow-md"
+          >
             <CardContent className="pt-6">
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 bg-amber-100 rounded-lg flex items-center justify-center">
@@ -293,7 +318,7 @@ export default function AdminAnalytics() {
         </div>
 
         {/* Main Content */}
-        <Tabs defaultValue="overview" className="space-y-6">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="genes">Popular Genes</TabsTrigger>
@@ -474,15 +499,17 @@ export default function AdminAnalytics() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
+                {hasValues(medicalDataTypes) ? (
                 <ResponsiveContainer width="100%" height={300}>
                   <BarChart data={medicalDataTypes}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="name" />
-                    <YAxis />
+                    <YAxis allowDecimals={false} />
                     <Tooltip />
                     <Bar dataKey="value" fill="#10b981" />
                   </BarChart>
                 </ResponsiveContainer>
+                ) : <ChartEmpty label="No medical data uploads yet" />}
               </CardContent>
             </Card>
 
