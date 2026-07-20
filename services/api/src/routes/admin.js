@@ -574,7 +574,7 @@ export default async function adminRoutes(fastify) {
     const [
       totalUsers, activeSubscriptions, totalSearches,
       totalConversations, totalMedicalRecords, totalGeneSets, totalActivities,
-      recentActivity, recentSearches, recentConversations,
+      recentActivity, recentSearches, recentConversations, medicalDataTypeBreakdown,
     ] = await Promise.all([
       prisma.user.count(),
       prisma.subscription.count({ where: { status: 'active' } }),
@@ -601,6 +601,13 @@ export default async function adminRoutes(fastify) {
         take: 500,
         select: { id: true, assistantType: true, createdAt: true },
       }),
+      // Upload-TYPE counts only (e.g. "vcf": 4, "lab_report": 1) — never the
+      // record rows themselves, so the dashboard can chart the mix without
+      // any PHI (content/title/fileUrl) leaving the server.
+      prisma.medicalData.groupBy({
+        by: ['dataType'],
+        _count: { _all: true },
+      }),
     ]);
 
     return {
@@ -611,6 +618,10 @@ export default async function adminRoutes(fastify) {
       recentActivity,
       recentSearches,
       recentConversations,
+      medicalDataTypeBreakdown: medicalDataTypeBreakdown.map((row) => ({
+        dataType: row.dataType,
+        count: row._count._all,
+      })),
     };
   });
 
