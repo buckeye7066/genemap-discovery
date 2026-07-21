@@ -256,6 +256,13 @@ describe('GET /admin/analytics', () => {
     prisma._store.subscription.push(
       { id: 's-1', userId: 'u-1', status: 'active', createdAt: new Date() },
     );
+    // Duplicate dataTypes on purpose: the upload-type breakdown is produced by
+    // prisma.medicalData.groupBy, so this exercises real grouping + counting.
+    prisma._store.medicalData.push(
+      { id: 'md-1', userId: 'u-1', dataType: 'vcf', content: 'v1', createdAt: new Date() },
+      { id: 'md-2', userId: 'u-2', dataType: 'vcf', content: 'v2', createdAt: new Date() },
+      { id: 'md-3', userId: 'u-1', dataType: 'lab_report', content: 'l1', createdAt: new Date() },
+    );
 
     const res = await app.inject({
       method: 'GET',
@@ -269,7 +276,13 @@ describe('GET /admin/analytics', () => {
     // 2 pushed + 3 auth-seeded baseline (admin-1 + user-1 + super-admin-1).
     expect(body.stats.totalUsers).toBe(5);
     expect(body.stats.activeSubscriptions).toBe(1);
+    expect(body.stats.totalMedicalRecords).toBe(3);
     expect(body.recentActivity).toBeDefined();
+    // Aggregated per-type counts from groupBy — exact, order-independent.
+    const breakdown = Object.fromEntries(
+      body.medicalDataTypeBreakdown.map((r) => [r.dataType, r.count])
+    );
+    expect(breakdown).toEqual({ vcf: 2, lab_report: 1 });
   });
 
   it('should deny regular user access', async () => {
