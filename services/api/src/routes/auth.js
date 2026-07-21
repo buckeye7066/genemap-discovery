@@ -31,6 +31,23 @@ function normalizeEmail(email) {
   return String(email).trim().toLowerCase();
 }
 
+// LOGIN MAINTENANCE MODE — while active, /login and /register return 503 so
+// no new sessions can be created during the upgrade. /refresh and /logout
+// stay open so already-signed-in users are not kicked out. Frontend twin:
+// apps/web/lib/maintenance.js (the banner). Flip to false (one commit) when
+// the upgrade finishes, or set LOGIN_MAINTENANCE=0 for an env kill switch.
+const LOGIN_MAINTENANCE_ACTIVE = true;
+const LOGIN_MAINTENANCE_MESSAGE =
+  'GeneMap Discovery is being upgraded and sign-in is temporarily disabled. ' +
+  'Expected back online by 8:00 PM Eastern tonight (Monday, July 21).';
+
+function isLoginMaintenanceActive() {
+  if (process.env.LOGIN_MAINTENANCE === '0') return false;
+  // Tests exercise the normal auth flows; maintenance is a production posture.
+  if (process.env.NODE_ENV === 'test' || process.env.VITEST) return false;
+  return LOGIN_MAINTENANCE_ACTIVE;
+}
+
 const registerSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8),
@@ -199,6 +216,9 @@ export default async function authRoutes(fastify) {
   };
 
   fastify.post('/register', async (request, reply) => {
+    if (isLoginMaintenanceActive()) {
+      return reply.code(503).send({ error: LOGIN_MAINTENANCE_MESSAGE });
+    }
     const parsed = registerSchema.parse(request.body);
     const email = normalizeEmail(parsed.email);
 
@@ -279,6 +299,9 @@ export default async function authRoutes(fastify) {
   });
 
   fastify.post('/login', async (request, reply) => {
+    if (isLoginMaintenanceActive()) {
+      return reply.code(503).send({ error: LOGIN_MAINTENANCE_MESSAGE });
+    }
     const parsed = loginSchema.parse(request.body);
     const email = normalizeEmail(parsed.email);
 
