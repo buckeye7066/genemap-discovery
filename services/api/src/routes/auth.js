@@ -40,8 +40,10 @@ function normalizeEmail(email) {
 //
 // TOGGLE (no code change, no rebuild): set LOGIN_MAINTENANCE on the API
 // service (Railway) — '0' forces OFF, '1' forces ON; unset falls back to the
-// code default below.
-const LOGIN_MAINTENANCE_ACTIVE = true;
+// code default below. Default OFF: maintenance is armed only deliberately
+// via the env var, so a fresh deploy or a dropped variable can never lock
+// users out by surprise.
+const LOGIN_MAINTENANCE_ACTIVE = false;
 const LOGIN_MAINTENANCE_MESSAGE =
   'GeneMap Discovery is being upgraded and sign-in is temporarily disabled. ' +
   'Expected back online by 8:00 PM Eastern tonight (Monday, July 21).';
