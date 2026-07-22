@@ -1,9 +1,12 @@
-// Login maintenance mode.
+// Login maintenance mode — FALLBACK copy + default.
 //
-// While `active` is true the Login page replaces the sign-in/register form
-// with an upgrade banner. The API twin (services/api/src/routes/auth.js)
-// rejects /login and /register with 503 so the block holds server-side too.
-// Flip both to false (one commit) when the upgrade is finished.
+// The Login page asks GET /auth/maintenance at runtime and follows the
+// server's answer (toggled by the LOGIN_MAINTENANCE env var on the API —
+// '1' on, '0' off — no rebuild needed). This static object is only used
+// (a) as the initial render state before the probe answers, and (b) when the
+// API is unreachable — in which case showing the banner is honest, since
+// sign-in couldn't succeed anyway. The server twin lives in
+// services/api/src/routes/auth.js.
 export const LOGIN_MAINTENANCE = {
   active: true,
   title: "GeneMap Discovery is being upgraded",
