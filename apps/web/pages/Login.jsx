@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useLocation, useNavigate, Link } from "react-router-dom";
 import { Dna, Loader2, LogIn, UserPlus, Wrench } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useAuth } from "@/lib/AuthContext";
+import { apiClient } from "@genemap/shared";
 import { LOGIN_MAINTENANCE } from "@/lib/maintenance";
 
 export default function Login() {
@@ -18,6 +19,24 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState(null);
+
+  // Runtime maintenance status. Render the static fallback immediately (no
+  // flash of the wrong state), then follow the server's answer — the switch
+  // is the API's LOGIN_MAINTENANCE env var, so flipping it needs no frontend
+  // rebuild. If the probe fails the fallback stands: with the API down,
+  // sign-in couldn't succeed anyway.
+  const [maintenance, setMaintenance] = useState(LOGIN_MAINTENANCE);
+  useEffect(() => {
+    let cancelled = false;
+    apiClient
+      .request("/auth/maintenance")
+      .then((status) => {
+        if (cancelled || !status || typeof status.active !== "boolean") return;
+        setMaintenance({ ...LOGIN_MAINTENANCE, ...status });
+      })
+      .catch(() => { /* keep the static fallback */ });
+    return () => { cancelled = true; };
+  }, []);
 
   const isRegister = mode === "register";
   const redirectFrom = location.state?.from;
@@ -55,7 +74,7 @@ export default function Login() {
     }
   };
 
-  if (LOGIN_MAINTENANCE.active) {
+  if (maintenance.active) {
     return (
       <div className="min-h-screen bg-slate-950 px-4 py-10 text-slate-100">
         <div className="mx-auto flex min-h-[calc(100vh-5rem)] w-full max-w-md flex-col items-center justify-center">
@@ -74,9 +93,9 @@ export default function Login() {
                 <div className="flex items-start gap-3">
                   <Wrench className="mt-0.5 h-5 w-5 shrink-0 text-amber-400" aria-hidden="true" />
                   <div>
-                    <p className="font-semibold text-amber-50">{LOGIN_MAINTENANCE.title}</p>
-                    <p className="mt-1">{LOGIN_MAINTENANCE.message}</p>
-                    <p className="mt-2 font-medium text-amber-50">{LOGIN_MAINTENANCE.etaText}</p>
+                    <p className="font-semibold text-amber-50">{maintenance.title}</p>
+                    <p className="mt-1">{maintenance.message}</p>
+                    <p className="mt-2 font-medium text-amber-50">{maintenance.etaText}</p>
                     <p className="mt-2">
                       Sign-in and registration are disabled until the upgrade completes. No action
                       is needed on your part.
