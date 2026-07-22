@@ -2,13 +2,13 @@
 //
 // The Login page asks GET /auth/maintenance at runtime and follows the
 // server's answer (toggled by the LOGIN_MAINTENANCE env var on the API —
-// '1' on, '0' off — no rebuild needed). This static object is only used
-// (a) as the initial render state before the probe answers, and (b) when the
-// API is unreachable — in which case showing the banner is honest, since
-// sign-in couldn't succeed anyway. The server twin lives in
-// services/api/src/routes/auth.js.
+// '1' on, '0' off, default OFF — no rebuild needed). This static object is
+// only the initial render state before the probe answers and the fallback
+// when the API is unreachable; `active: false` matches the API's default so
+// a normal page load never flashes the upgrade banner. The server twin lives
+// in services/api/src/routes/auth.js.
 export const LOGIN_MAINTENANCE = {
-  active: true,
+  active: false,
   title: "GeneMap Discovery is being upgraded",
   message:
     "We are performing a scheduled upgrade. Sign-in and registration are temporarily disabled while we finish.",
