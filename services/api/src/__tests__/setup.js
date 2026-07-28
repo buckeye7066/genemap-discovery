@@ -290,6 +290,8 @@ export function createPrismaMock() {
     learningProgress: createModel('learningProgress'),
     stripeEvent: createModel('stripeEvent'),
     projectAnnotation: createModel('projectAnnotation'),
+    agentMessage: createModel('agentMessage'),
+    agentLesson: createModel('agentLesson'),
     $queryRaw: vi.fn(async () => [{ '?column?': 1 }]),
     $disconnect: vi.fn(),
     $transaction: vi.fn(async (callback) => {
@@ -327,6 +329,7 @@ export function createPrismaMock() {
     'preBannedUser', 'institutionalLicense', 'licenseAssignment',
     'licenseUsageLog', 'consentRecord', 'dataDeletionRequest',
     'learningSession', 'learningProgress', 'stripeEvent', 'projectAnnotation',
+    'agentMessage', 'agentLesson',
   ];
   for (const k of PRE_INIT) getStore(k);
 

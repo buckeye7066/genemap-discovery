@@ -285,6 +285,56 @@ describe('GET /admin/analytics', () => {
     expect(breakdown).toEqual({ vcf: 2, lab_report: 1 });
   });
 
+  it('reports the agent mesh: 7-day message count + operational lessons only', async () => {
+    prisma._store.agentMessage.push(
+      { id: 'am-1', fromAgent: 'robert', toAgent: 'anastasia', kind: 'provider_reliability', body: 'model flaky', readBy: {}, createdAt: new Date() },
+      { id: 'am-2', fromAgent: 'anastasia', toAgent: 'broadcast', kind: 'note', body: 'ack', readBy: {}, createdAt: new Date() },
+      // Older than the 7-day window — must NOT be counted.
+      { id: 'am-old', fromAgent: 'robert', toAgent: 'anastasia', kind: 'note', body: 'ancient', readBy: {}, createdAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) },
+    );
+    prisma._store.agentLesson.push({
+      id: 'al-1',
+      authorAgent: 'robert',
+      topic: 'provider_reliability',
+      claim: 'model gpt-4o-mini failing repeatedly (timeout)',
+      evidence: { model: 'gpt-4o-mini', kind: 'timeout', count: 3 },
+      timesSeen: 4,
+      consumedBy: { anastasia: '2026-07-28T00:00:00.000Z' },
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/admin/analytics',
+      headers: { cookie: adminCookie },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const { agentMesh } = JSON.parse(res.body);
+    expect(agentMesh.messagesLast7d).toBe(2);
+    expect(agentMesh.lessons).toEqual([
+      {
+        authorAgent: 'robert',
+        topic: 'provider_reliability',
+        claim: 'model gpt-4o-mini failing repeatedly (timeout)',
+        timesSeen: 4,
+        consumedBy: { anastasia: '2026-07-28T00:00:00.000Z' },
+      },
+    ]);
+    // Message BODIES are never exposed here — only the count.
+    expect(JSON.stringify(agentMesh)).not.toContain('model flaky');
+  });
+
+  it('returns an empty agent-mesh surface when nothing has happened yet', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/admin/analytics',
+      headers: { cookie: adminCookie },
+    });
+    expect(JSON.parse(res.body).agentMesh).toEqual({ messagesLast7d: 0, lessons: [] });
+  });
+
   it('should deny regular user access', async () => {
     const res = await app.inject({
       method: 'GET',

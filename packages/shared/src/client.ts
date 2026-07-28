@@ -526,11 +526,26 @@ export class ApiClient {
   }
 
   // ─── LLM ───────────────────────────────────────────────────────────
+  //
+  // `options.agent` names the calling persona (see agentRegistry.ts). It is
+  // hoisted OUT of `options` and sent as a sibling `agent` field because the
+  // server treats it as routing/identity metadata, not a generation parameter:
+  // it selects which agent's mesh inbox and lessons are loaded, and which agent
+  // authors a lesson when the provider fails. Unknown/absent ids are ignored by
+  // the server, so this is always safe to send.
   invokeLLM(prompt: string, options: LLMOptions = {}): Promise<LLMResponse> {
-    return this.request('/llm/invoke', { method: 'POST', body: JSON.stringify({ prompt, options }) });
+    const { agent, ...llmOptions } = options;
+    return this.request('/llm/invoke', {
+      method: 'POST',
+      body: JSON.stringify({ prompt, options: llmOptions, ...(agent ? { agent } : {}) }),
+    });
   }
   llmChat(messages: Array<{ role: string; content: string }>, options: LLMOptions = {}): Promise<LLMResponse> {
-    return this.request('/llm/chat', { method: 'POST', body: JSON.stringify({ messages, options }) });
+    const { agent, ...llmOptions } = options;
+    return this.request('/llm/chat', {
+      method: 'POST',
+      body: JSON.stringify({ messages, options: llmOptions, ...(agent ? { agent } : {}) }),
+    });
   }
   llmImage(prompt: string, options: LLMOptions = {}): Promise<LLMImageResponse> {
     // Image generation is slower than a text call and can exceed the 40s

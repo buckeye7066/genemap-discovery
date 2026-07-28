@@ -31,7 +31,8 @@ import {
   Eye,
   AlertCircle,
   BarChart3,
-  Clock
+  Clock,
+  Network
 } from "lucide-react";
 
 export default function AdminAnalytics() {
@@ -45,6 +46,9 @@ export default function AdminAnalytics() {
   const [medicalRecords, setMedicalRecords] = useState([]);
   const [medicalDataTypeBreakdown, setMedicalDataTypeBreakdown] = useState([]);
   const [aiConversations, setAiConversations] = useState([]);
+  // Agent-mesh report surface (GET /admin/analytics -> agentMesh). Counts +
+  // operational lesson text only.
+  const [agentMesh, setAgentMesh] = useState({ messagesLast7d: 0, lessons: [] });
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState('overview');
@@ -73,6 +77,7 @@ export default function AdminAnalytics() {
         recentSearches = [],
         recentConversations = [],
         medicalDataTypeBreakdown: typeBreakdown = [],
+        agentMesh: mesh = {},
       } = analytics;
 
       setStats(statCounts);
@@ -84,6 +89,10 @@ export default function AdminAnalytics() {
       setMedicalRecords([]);
       setMedicalDataTypeBreakdown(Array.isArray(typeBreakdown) ? typeBreakdown : []);
       setAiConversations(Array.isArray(recentConversations) ? recentConversations : []);
+      setAgentMesh({
+        messagesLast7d: Number(mesh?.messagesLast7d) || 0,
+        lessons: Array.isArray(mesh?.lessons) ? mesh.lessons : [],
+      });
     } catch (err) {
       console.error('Error loading analytics:', err);
       setError(err.message || 'Failed to load analytics');
@@ -438,6 +447,48 @@ export default function AdminAnalytics() {
                     </BarChart>
                   </ResponsiveContainer>
                   ) : <ChartEmpty label="No AI chats recorded yet" />}
+                </CardContent>
+              </Card>
+
+              {/* Agent mesh — what Robert and Anastasia have told each other.
+                  Operational metadata only (agent ids, topics, counts); no user
+                  or medical content ever reaches these stores. */}
+              <Card className="shadow-lg md:col-span-2">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Network className="w-5 h-5 text-teal-600" />
+                    Agent Mesh
+                    <Badge variant="outline" className="ml-auto text-xs font-normal">
+                      {agentMesh.messagesLast7d} peer message{agentMesh.messagesLast7d === 1 ? '' : 's'} / 7d
+                    </Badge>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {agentMesh.lessons.length === 0 ? (
+                    <p className="text-sm text-slate-500 py-2">
+                      No cross-agent lessons recorded yet.
+                    </p>
+                  ) : (
+                    <div className="space-y-2">
+                      {agentMesh.lessons.slice(0, 8).map((lesson, idx) => (
+                        <div
+                          key={idx}
+                          className="flex items-start gap-3 text-sm p-2 rounded bg-slate-50 border border-slate-200"
+                        >
+                          <Badge className="bg-teal-600 text-white text-xs shrink-0">
+                            {lesson.topic}
+                          </Badge>
+                          <span className="text-slate-800 flex-1 min-w-0 break-words">
+                            {lesson.claim}
+                          </span>
+                          <span className="text-xs text-slate-500 shrink-0 whitespace-nowrap">
+                            by {lesson.authorAgent} &middot; seen {lesson.timesSeen}&times; &middot;{' '}
+                            learned by {Object.keys(lesson.consumedBy || {}).length}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </div>

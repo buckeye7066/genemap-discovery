@@ -3,6 +3,10 @@ import { createAuditLog } from '../utils/audit.js';
 import { ValidationError, NotFoundError } from '../utils/errors.js';
 import { FREE_PERIOD_DAYS, computeFreePeriodEnd, grantOrExtendFreePeriod } from '../utils/freePeriod.js';
 
+// How many agent-mesh lessons the analytics report carries. Bounded so the
+// owner dashboard stays a summary, not a log dump.
+const AGENT_MESH_LESSON_LIMIT = 20;
+
 function normalizeEmail(email) {
   return String(email || '').trim().toLowerCase();
 }
@@ -575,6 +579,7 @@ export default async function adminRoutes(fastify) {
       totalUsers, activeSubscriptions, totalSearches,
       totalConversations, totalMedicalRecords, totalGeneSets, totalActivities,
       recentActivity, recentSearches, recentConversations, medicalDataTypeBreakdown,
+      agentMessagesLast7d, agentLessons,
     ] = await Promise.all([
       prisma.user.count(),
       prisma.subscription.count({ where: { status: 'active' } }),
@@ -608,6 +613,19 @@ export default async function adminRoutes(fastify) {
         by: ['dataType'],
         _count: { _all: true },
       }),
+      // Agent mesh (services/api/src/services/agentMesh.js). Both stores hold
+      // OPERATIONAL metadata only — agent ids, topics, model names, counts —
+      // so the whole surface is safe to report verbatim. Bounded on purpose.
+      prisma.agentMessage.count({
+        where: { createdAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) } },
+      }),
+      prisma.agentLesson.findMany({
+        orderBy: { updatedAt: 'desc' },
+        take: AGENT_MESH_LESSON_LIMIT,
+        select: {
+          authorAgent: true, topic: true, claim: true, timesSeen: true, consumedBy: true,
+        },
+      }),
     ]);
 
     return {
@@ -622,6 +640,16 @@ export default async function adminRoutes(fastify) {
         dataType: row.dataType,
         count: row._count._all,
       })),
+      agentMesh: {
+        messagesLast7d: agentMessagesLast7d,
+        lessons: (agentLessons || []).map((row) => ({
+          authorAgent: row.authorAgent,
+          topic: row.topic,
+          claim: row.claim,
+          timesSeen: row.timesSeen,
+          consumedBy: row.consumedBy && typeof row.consumedBy === 'object' ? row.consumedBy : {},
+        })),
+      },
     };
   });
 

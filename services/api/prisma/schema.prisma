@@ -401,6 +401,51 @@ model ConsentRecord {
   @@map("consent_records")
 }
 
+// ─── Agent mesh ──────────────────────────────────────────────────────────────
+//
+// Peer-to-peer channel between the LLM personas registered in
+// packages/shared/src/agentRegistry.ts (Robert, Anastasia). Deliberately NOT
+// related to User: these rows carry OPERATIONAL metadata only (agent ids,
+// failure kinds, model names, counts). No user or medical content ever lands
+// here, which is why there is no userId and no cascade.
+
+model AgentMessage {
+  id        String   @id @default(uuid())
+  fromAgent String   @map("from_agent")
+  // A registered agent id, or the reserved literal 'broadcast'.
+  toAgent   String   @map("to_agent")
+  kind      String   @default("note")
+  body      String
+  metadata  Json?
+  // agentId -> ISO timestamp the message was acknowledged.
+  readBy    Json     @default("{}") @map("read_by")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([toAgent, createdAt])
+  @@map("agent_messages")
+}
+
+model AgentLesson {
+  id            String   @id @default(uuid())
+  authorAgent   String   @map("author_agent")
+  // Closed vocabulary enforced in services/agentMesh.js:
+  // provider_reliability | usage_pattern | safety_flag
+  topic         String
+  claim         String
+  evidence      Json?
+  timesSeen     Int      @default(1) @map("times_seen")
+  confirmations Json?
+  refutations   Json?
+  // agentId -> ISO timestamp the lesson was injected into that agent's run.
+  consumedBy    Json     @default("{}") @map("consumed_by")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@index([authorAgent, topic])
+  @@index([topic, updatedAt])
+  @@map("agent_lessons")
+}
+
 model DataDeletionRequest {
   id           String    @id @default(uuid())
   userId       String    @map("user_id")
