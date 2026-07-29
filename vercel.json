@@ -1,11 +1,11 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "vite",
-  "installCommand": "pnpm install --frozen-lockfile",
-  "buildCommand": "pnpm --filter @genemap/shared build && pnpm --filter @genemap/web build",
+  "installCommand": "pnpm install --no-frozen-lockfile",
+  "buildCommand": "pnpm --filter @genemap/shared build && pnpm --filter @genemap/web build && cp pnpm-lock.yaml apps/web/dist/__generated-pnpm-lock.yaml",
   "outputDirectory": "apps/web/dist",
   "rewrites": [
-    { "source": "/((?!assets/|icons/|\\.well-known/).*)", "destination": "/index.html" }
+    { "source": "/((?!assets/|icons/|\\.well-known/|__generated-pnpm-lock\\.yaml).*)", "destination": "/index.html" }
   ],
   "headers": [
     {
