@@ -7,6 +7,8 @@ import {
   createRateLimitRedis,
   isRateLimitRedisHealthy,
   rateLimitProtectionStatus,
+  rateLimitStoreStatus,
+  shouldBypassRateLimit,
 } from '../config/rateLimitStore.js';
 
 /**
@@ -59,23 +61,46 @@ function makeClient() {
   });
 }
 
-function invokeRateLimit(client) {
+function invokeCommand(client, commandName) {
   return new Promise((resolve, reject) => {
-    client.rateLimit('test-key', 60_000, 1, false, false, (error, result) => {
+    client[commandName]('test-key', 60_000, 1, false, false, (error, result) => {
       if (error) reject(error);
       else resolve(result);
     });
   });
 }
 
+function invokeRateLimit(client) {
+  return invokeCommand(client, 'rateLimit');
+}
+
+describe('rate-limit probe bypass normalization', () => {
+  it.each([
+    '/healthz',
+    '/healthz/',
+    '/readyz',
+    '/readyz/',
+    '/readyz/?details=1',
+    '/health',
+    '/health/',
+  ])('keeps %s outside both rate-limit layers', (url) => {
+    expect(shouldBypassRateLimit({ url, raw: { url } })).toBe(true);
+  });
+
+  it.each(['/healthcheck', '/api/health', '/readyz-extra'])('does not over-bypass %s', (url) => {
+    expect(shouldBypassRateLimit({ url, raw: { url } })).toBe(false);
+  });
+});
+
 describe('Redis command-level rate-limit fallback', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('marks protection degraded when a Lua command fails while the socket remains ready', async () => {
+  it('requires a successful write command before leaving emergency mode', async () => {
     const client = makeClient();
     client.defineCommand('rateLimit', { numberOfKeys: 1, lua: 'return {1, 60000}' });
+    client.defineCommand('rateLimitRead', { numberOfKeys: 1, lua: 'return {1, 60000}' });
     client.status = 'ready';
     client.emit('ready');
     vi.clearAllMocks();
@@ -85,6 +110,7 @@ describe('Redis command-level rate-limit fallback', () => {
 
     expect(client.status).toBe('ready');
     expect(isRateLimitRedisHealthy(client)).toBe(false);
+    expect(rateLimitStoreStatus(client)).toBe('redis:degraded:ready');
     expect(rateLimitProtectionStatus(client)).toMatchObject({
       mode: 'emergency-memory',
       distributed: false,
@@ -98,11 +124,29 @@ describe('Redis command-level rate-limit fallback', () => {
       emergencyLimiter: 'active-per-instance',
     });
 
-    // A successful command on the still-ready connection is the recovery signal
-    // for command failures that never forced ioredis to reconnect.
+    // A bare transport-ready event cannot prove that a Redis endpoint which
+    // rejected writes has become writable.
+    client.emit('ready');
+    expect(isRateLimitRedisHealthy(client)).toBe(false);
+    expect(rateLimitStoreStatus(client)).toBe('redis:degraded:ready');
+    expect(logger.warn).toHaveBeenCalledOnce();
+    expect(logger.warn.mock.calls[0][0]).toMatchObject({
+      event: 'rate_limit_redis_ready_awaiting_write_probe',
+      emergencyLimiter: 'active-per-instance',
+    });
+
+    // A read can succeed against a READONLY replica. It must not clear the
+    // write-path outage or disable local emergency protection.
     client.commandError = null;
+    await expect(invokeCommand(client, 'rateLimitRead')).resolves.toEqual([1, 60_000]);
+    expect(isRateLimitRedisHealthy(client)).toBe(false);
+    expect(rateLimitStoreStatus(client)).toBe('redis:degraded:ready');
+    expect(logger.info).not.toHaveBeenCalled();
+
+    // The actual Lua write path is the only command-level recovery proof.
     await expect(invokeRateLimit(client)).resolves.toEqual([1, 60_000]);
     expect(isRateLimitRedisHealthy(client)).toBe(true);
+    expect(rateLimitStoreStatus(client)).toBe('redis:ready');
     expect(logger.info).toHaveBeenCalledOnce();
     expect(logger.info.mock.calls[0][0]).toMatchObject({
       event: 'rate_limit_redis_recovered',
@@ -142,6 +186,7 @@ describe('Redis command-level rate-limit fallback', () => {
 
     expect(client.status).toBe('ready');
     expect(isRateLimitRedisHealthy(client)).toBe(false);
+    expect(rateLimitStoreStatus(client)).toBe('redis:degraded:ready');
     expect(first.statusCode).toBe(200);
     expect(first.headers['x-ratelimit-remaining']).toBe('0');
     expect(second.statusCode).toBe(429);
