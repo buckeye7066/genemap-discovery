@@ -10,6 +10,7 @@ import { initSentry } from './config/sentry.js';
 import {
   createEmergencyRateLimitHook,
   createRateLimitRedis,
+  markRateLimitRedisShuttingDown,
   rateLimitProtectionStatus,
   rateLimitStoreOptions,
   rateLimitStoreStatus,
@@ -216,8 +217,9 @@ const gracefulShutdown = async (signal) => {
   await fastify.close();
   await prisma.$disconnect();
   if (rateLimitRedis) {
-    // quit() rejects when the connection never came up; that must not block
-    // shutdown.
+    // Redis close/end events are expected after this point and must not be
+    // reported as an outage while the instance is deliberately terminating.
+    markRateLimitRedisShuttingDown(rateLimitRedis);
     await rateLimitRedis.quit().catch(() => rateLimitRedis.disconnect());
   }
   process.exit(0);
