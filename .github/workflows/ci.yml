@@ -173,6 +173,50 @@ jobs:
       - name: Verify desktop output exists
         run: test -d apps/desktop/dist-electron/linux-unpacked
 
+  desktop-build-windows-smoke:
+    # Build the actual unsigned NSIS installer on Windows. This catches peer,
+    # Squirrel/NSIS, path, icon, and packaging failures that a Linux --dir build
+    # cannot exercise.
+    runs-on: windows-latest
+    needs: [build-web]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: 'pnpm'
+      - name: Install (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+      - name: Verify Windows builder packages are aligned
+        shell: pwsh
+        run: |
+          $builder = node -p "require('./node_modules/electron-builder/package.json').version"
+          $squirrel = node -p "require('./node_modules/electron-builder-squirrel-windows/package.json').version"
+          Write-Host "electron-builder=$builder squirrel=$squirrel"
+          if ($builder -ne $squirrel) {
+            throw "electron-builder and electron-builder-squirrel-windows must use the same version"
+          }
+      - name: Build shared package
+        run: pnpm --filter @genemap/shared build
+      - name: Build web bundle for desktop resources
+        run: pnpm build:web
+        env:
+          VITE_API_URL: http://localhost:3000
+      - name: Generate desktop icons
+        run: pnpm --filter @genemap/desktop run build:icons
+      - name: Build unsigned Windows NSIS installer
+        working-directory: apps/desktop
+        run: node scripts/electron-build.mjs --win --publish never
+      - name: Verify Windows installer exists
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem -Path apps/desktop/dist-electron -Filter *.exe -File | Select-Object -First 1
+          if (-not $installer) {
+            throw "No Windows installer was produced"
+          }
+          Write-Host "Built $($installer.FullName)"
+
   docker-build-api:
     # Build the API image we ship to Railway, on the same commit. Without
     # this, lockfile drift, missing build deps, or a broken Dockerfile only
