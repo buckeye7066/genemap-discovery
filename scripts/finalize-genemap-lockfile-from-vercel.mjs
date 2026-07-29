@@ -84,6 +84,7 @@ for (const path of [
 ]) {
   fs.rmSync(path, { force: true });
 }
+fs.rmSync('.pnpm-store', { recursive: true, force: true });
 
 fs.mkdirSync('apps/web/dist', { recursive: true });
 fs.writeFileSync(
