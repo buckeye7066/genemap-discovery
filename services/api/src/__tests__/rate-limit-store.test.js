@@ -1,6 +1,7 @@
 import { beforeEach, describe, it, expect, vi } from 'vitest';
 import { EventEmitter } from 'node:events';
 import Fastify from 'fastify';
+import rateLimit from '@fastify/rate-limit';
 import {
   createEmergencyRateLimitHook,
   createRateLimitRedis,
@@ -9,6 +10,8 @@ import {
   rateLimitProtectionStatus,
   rateLimitStoreOptions,
   rateLimitStoreStatus,
+  shouldBypassRateLimit,
+  RATE_LIMIT_BYPASS_PATHS,
   RATE_LIMIT_NAMESPACE,
   REDIS_CLIENT_OPTIONS,
 } from '../config/rateLimitStore.js';
@@ -52,16 +55,55 @@ function makeReply() {
   };
 }
 
-function runHook(hook, ip = '203.0.113.10') {
+function runHook(hook, ip = '203.0.113.10', url = '/probe') {
   const reply = makeReply();
   const done = vi.fn();
-  hook({ ip }, reply, done);
+  hook({ ip, url, raw: { url } }, reply, done);
   return { reply, done };
 }
 
 describe('rate-limit store selection and outage fallback', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  describe('health and readiness bypass policy', () => {
+    it('has one explicit path set shared by both limiter layers', () => {
+      expect([...RATE_LIMIT_BYPASS_PATHS].sort()).toEqual(
+        ['/health', '/healthz', '/readyz'].sort()
+      );
+      expect(shouldBypassRateLimit({ url: '/healthz' })).toBe(true);
+      expect(shouldBypassRateLimit({ url: '/readyz?details=1' })).toBe(true);
+      expect(shouldBypassRateLimit({ raw: { url: '/health?legacy=1' } })).toBe(true);
+      expect(shouldBypassRateLimit({ routeOptions: { url: '/readyz' }, url: '/wrong' })).toBe(true);
+      expect(shouldBypassRateLimit({ url: '/api/health' })).toBe(false);
+      expect(shouldBypassRateLimit({ url: '/healthcheck' })).toBe(false);
+    });
+
+    it('keeps primary Fastify rate limiting off health and readiness routes', async () => {
+      const app = Fastify({ logger: false });
+      await app.register(rateLimit, {
+        max: 1,
+        timeWindow: 60_000,
+        allowList: shouldBypassRateLimit,
+      });
+      app.get('/healthz', async () => ({ status: 'ok' }));
+      app.get('/readyz', async () => ({ status: 'ready' }));
+      app.get('/health', async () => ({ status: 'ok' }));
+      app.get('/probe', async () => ({ ok: true }));
+
+      for (const url of ['/healthz', '/readyz?details=1', '/health']) {
+        expect((await app.inject({ method: 'GET', url })).statusCode).toBe(200);
+        expect((await app.inject({ method: 'GET', url })).statusCode).toBe(200);
+      }
+
+      const allowed = await app.inject({ method: 'GET', url: '/probe' });
+      const blocked = await app.inject({ method: 'GET', url: '/probe' });
+      expect(allowed.statusCode).toBe(200);
+      expect(blocked.statusCode).toBe(429);
+
+      await app.close();
+    });
   });
 
   describe('REDIS_URL absent: Fastify in-memory store', () => {
@@ -253,6 +295,40 @@ describe('rate-limit store selection and outage fallback', () => {
       expect(afterReset.reply.statusCode).toBe(200);
     });
 
+    it('keeps emergency health probes available while ordinary routes are limited', async () => {
+      const client = makeClient();
+      const app = Fastify({ logger: false });
+      app.addHook(
+        'onRequest',
+        createEmergencyRateLimitHook({
+          redisClient: client,
+          max: 1,
+          timeWindowMs: 60_000,
+          skip: shouldBypassRateLimit,
+        })
+      );
+      app.get('/healthz', async () => ({ status: 'ok' }));
+      app.get('/readyz', async () => ({ status: 'ready', degraded: true }));
+      app.get('/health', async () => ({ status: 'ok' }));
+      app.get('/probe', async () => ({ ok: true }));
+
+      for (const url of ['/healthz', '/readyz?details=1', '/health']) {
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+          const response = await app.inject({ method: 'GET', url });
+          expect(response.statusCode).toBe(200);
+          expect(response.headers['x-ratelimit-limit']).toBeUndefined();
+        }
+      }
+
+      const allowed = await app.inject({ method: 'GET', url: '/probe' });
+      const blocked = await app.inject({ method: 'GET', url: '/probe' });
+      expect(allowed.statusCode).toBe(200);
+      expect(allowed.headers['x-ratelimit-remaining']).toBe('0');
+      expect(blocked.statusCode).toBe(429);
+
+      await app.close();
+    });
+
     it('runs correctly inside the Fastify onRequest lifecycle', async () => {
       const client = makeClient();
       const app = Fastify({ logger: false });
@@ -341,6 +417,14 @@ describe('rate-limit store selection and outage fallback', () => {
           maxEntries: 0,
         })
       ).toThrow(/maxEntries/);
+      expect(() =>
+        createEmergencyRateLimitHook({
+          redisClient: makeClient(),
+          max: 1,
+          timeWindowMs: 1000,
+          skip: true,
+        })
+      ).toThrow(/skip/);
     });
   });
 });
