@@ -214,12 +214,14 @@ const gracefulShutdown = async (signal) => {
   if (isShuttingDown) return;
   isShuttingDown = true;
   fastify.log.info(`Received ${signal}, shutting down gracefully...`);
+  if (rateLimitRedis) {
+    // Fastify plugins may begin teardown during close(), so suppress expected
+    // Redis close/end events before any application resource is dismantled.
+    markRateLimitRedisShuttingDown(rateLimitRedis);
+  }
   await fastify.close();
   await prisma.$disconnect();
   if (rateLimitRedis) {
-    // Redis close/end events are expected after this point and must not be
-    // reported as an outage while the instance is deliberately terminating.
-    markRateLimitRedisShuttingDown(rateLimitRedis);
     await rateLimitRedis.quit().catch(() => rateLimitRedis.disconnect());
   }
   process.exit(0);
