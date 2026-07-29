@@ -1,8 +1,10 @@
 import fs from 'node:fs';
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 
 const branch = 'agent/genemap-rate-limit-fallback';
-const repositoryUrl = 'https://github.com/buckeye7066/genemap-discovery.git';
+const repository = 'buckeye7066/genemap-discovery';
+const repositoryUrl = `https://github.com/${repository}.git`;
+const projectId = 'prj_G9SOCfU1TOokRwm8cDczraPXLEKw';
 const expectedBuilderVersion = '26.15.3';
 const expectedChanges = new Set([
   '.github/workflows/refresh-genemap-windows-lockfile.yml',
@@ -20,6 +22,15 @@ function run(command, args, options = {}) {
     ...options,
   });
   return typeof result === 'string' ? result.trim() : '';
+}
+
+async function readJsonResponse(response) {
+  const text = await response.text();
+  try {
+    return { text, json: JSON.parse(text) };
+  } catch {
+    return { text, json: null };
+  }
 }
 
 const builder = JSON.parse(
@@ -97,35 +108,77 @@ if (run('git', ['rev-parse', '--is-inside-work-tree'], { capture: true }) !== 't
   throw new Error('Vercel checkout is not a Git working tree');
 }
 
-const credentialEnvNames = Object.keys(process.env)
-  .filter((name) => /(GIT|GITHUB|TOKEN|OIDC)/i.test(name))
-  .sort();
-console.log(`Credential-related environment names: ${credentialEnvNames.join(', ') || '(none)'}`);
-
-const vercelCli = run('sh', ['-lc', 'command -v vercel || true'], { capture: true });
-console.log(`Vercel CLI path: ${vercelCli || '(not available)'}`);
-if (vercelCli) {
-  const connectorList = spawnSync(vercelCli, ['connect', 'list', '--format=json'], {
-    cwd: process.cwd(),
-    encoding: 'utf8',
-    env: process.env,
-  });
-  const connectorOutput = `${connectorList.stdout || ''}\n${connectorList.stderr || ''}`;
-  const githubConnectorCandidates = [
-    ...new Set(connectorOutput.match(/github\/[A-Za-z0-9._-]+/g) || []),
-  ];
-  const connectorIds = [
-    ...new Set(connectorOutput.match(/scl_[A-Za-z0-9_-]+/g) || []),
-  ];
-  console.log(`Vercel Connect list exit=${connectorList.status}`);
-  console.log(
-    `GitHub connector candidates: ${githubConnectorCandidates.join(', ') || '(none)'}`
-  );
-  console.log(`Connector IDs: ${connectorIds.join(', ') || '(none)'}`);
-  if (connectorList.status !== 0) {
-    console.log(`Vercel Connect list diagnostic: ${connectorOutput.slice(0, 1200)}`);
-  }
+const oidcToken = process.env.VERCEL_OIDC_TOKEN;
+if (!oidcToken) {
+  throw new Error('VERCEL_OIDC_TOKEN is unavailable');
 }
+
+const connectorListResponse = await fetch(
+  `https://api.vercel.com/v1/connect/connectors?projectId=${encodeURIComponent(projectId)}&type=github`,
+  {
+    headers: {
+      Accept: 'application/json',
+      Authorization: `Bearer ${oidcToken}`,
+    },
+  }
+);
+const connectorList = await readJsonResponse(connectorListResponse);
+console.log(`Vercel Connect list status=${connectorListResponse.status}`);
+if (!connectorListResponse.ok) {
+  const code = connectorList.json?.error?.code || connectorList.json?.code || 'unknown';
+  const message = connectorList.json?.error?.message || connectorList.json?.message || 'request failed';
+  throw new Error(`Unable to list linked Connect connectors: ${code}: ${message}`);
+}
+
+const clients = Array.isArray(connectorList.json?.clients)
+  ? connectorList.json.clients
+  : Array.isArray(connectorList.json?.connectors)
+    ? connectorList.json.connectors
+    : [];
+const githubConnectors = clients.filter(
+  (client) =>
+    typeof client?.uid === 'string' &&
+    (client.uid.startsWith('github/') || String(client.type).toLowerCase().includes('github'))
+);
+console.log(
+  `Linked GitHub connectors: ${
+    githubConnectors.map((client) => `${client.uid} (${client.id})`).join(', ') || '(none)'
+  }`
+);
+if (githubConnectors.length !== 1) {
+  throw new Error(`Expected exactly one linked GitHub connector; found ${githubConnectors.length}`);
+}
+
+const connector = githubConnectors[0];
+const tokenResponse = await fetch(
+  `https://api.vercel.com/v1/connect/token/${encodeURIComponent(connector.uid)}`,
+  {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${oidcToken}`,
+    },
+    body: JSON.stringify({
+      subject: { type: 'app' },
+      authorizationDetails: [
+        {
+          type: 'github_app_installation',
+          repositories: [repository],
+          permissions: ['contents:write'],
+        },
+      ],
+    }),
+  }
+);
+const tokenResult = await readJsonResponse(tokenResponse);
+console.log(`Vercel Connect token status=${tokenResponse.status}`);
+if (!tokenResponse.ok || typeof tokenResult.json?.token !== 'string') {
+  const code = tokenResult.json?.error?.code || tokenResult.json?.code || 'unknown';
+  const message = tokenResult.json?.error?.message || tokenResult.json?.message || 'request failed';
+  throw new Error(`Unable to obtain scoped GitHub token: ${code}: ${message}`);
+}
+const githubToken = tokenResult.json.token;
 
 run('git', ['config', 'user.name', 'genemap-preview-bot']);
 run('git', ['config', 'user.email', 'genemap-preview-bot@users.noreply.github.com']);
@@ -145,7 +198,23 @@ if (unexpected.length || missing.length) {
 }
 
 run('git', ['commit', '-m', 'chore(deps): finalize aligned Windows desktop lockfile']);
-run('git', ['push', repositoryUrl, `HEAD:${branch}`], {
-  env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
-});
+
+const askpassPath = '/tmp/genemap-git-askpass.sh';
+fs.writeFileSync(
+  askpassPath,
+  `#!/bin/sh\ncase "$1" in\n  *Username*) printf '%s\\n' 'x-access-token' ;;\n  *Password*) printf '%s\\n' "$GENEMAP_GITHUB_TOKEN" ;;\n  *) exit 1 ;;\nesac\n`,
+  { mode: 0o700 }
+);
+try {
+  run('git', ['push', repositoryUrl, `HEAD:${branch}`], {
+    env: {
+      ...process.env,
+      GENEMAP_GITHUB_TOKEN: githubToken,
+      GIT_ASKPASS: askpassPath,
+      GIT_TERMINAL_PROMPT: '0',
+    },
+  });
+} finally {
+  fs.rmSync(askpassPath, { force: true });
+}
 console.log('LOCKFILE_FINALIZATION_PUSHED');
