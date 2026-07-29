@@ -168,7 +168,8 @@ jobs:
       - name: Generate desktop icons
         run: pnpm --filter @genemap/desktop run build:icons
       - name: Build unpacked desktop application
-        run: node apps/desktop/scripts/electron-build.mjs --dir
+        working-directory: apps/desktop
+        run: node scripts/electron-build.mjs --dir
       - name: Verify desktop output exists
         run: test -d apps/desktop/dist-electron/linux-unpacked
 
