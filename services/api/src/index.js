@@ -14,6 +14,7 @@ import {
   rateLimitProtectionStatus,
   rateLimitStoreOptions,
   rateLimitStoreStatus,
+  shouldBypassRateLimit,
 } from './config/rateLimitStore.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { requireCsrf } from './middleware/csrf.js';
@@ -90,12 +91,14 @@ await fastify.register(cookie, {
 // Rate limiting is distributed through Redis when configured. The Fastify
 // plugin skips a Redis command error so a cache outage cannot produce blanket
 // 500s. The following onRequest hook then takes over with bounded, per-instance
-// counters until Redis reports healthy again.
+// counters until Redis reports healthy again. Health/readiness routes bypass
+// both layers so an outage can never hide the very status operators need.
 const rateLimitRedis = createRateLimitRedis(env, { logger: fastify.log });
 
 await fastify.register(rateLimit, {
   max: GLOBAL_RATE_LIMIT_MAX,
   timeWindow: '15 minutes',
+  allowList: shouldBypassRateLimit,
   ...rateLimitStoreOptions(rateLimitRedis),
 });
 fastify.addHook(
@@ -105,6 +108,7 @@ fastify.addHook(
     scope: 'global',
     max: GLOBAL_RATE_LIMIT_MAX,
     timeWindowMs: RATE_LIMIT_WINDOW_MS,
+    skip: shouldBypassRateLimit,
   })
 );
 
@@ -156,14 +160,19 @@ await fastify.register(clinicalTrialRoutes, { prefix: '/clinical-trials' });
 // POST uncaught errors to `/report-client-error`.
 await fastify.register(clientErrorRoutes);
 
-// Liveness: the process is up. Cheap and never touches the DB.
-fastify.get('/healthz', async () => ({ status: 'ok', uptime: process.uptime() }));
+// Liveness: the process is up. Cheap, never touches the DB, and is explicitly
+// excluded from rate limiting as a second layer of defense beyond allowList.
+fastify.get(
+  '/healthz',
+  { config: { rateLimit: false } },
+  async () => ({ status: 'ok', uptime: process.uptime() })
+);
 
 // Readiness: the process is up and can reach its hard dependencies. Redis is
 // deliberately not a hard dependency because emergency local limiting remains
 // active during an outage. The structured field makes that degraded protection
-// state visible to operators and monitoring.
-fastify.get('/readyz', async (request, reply) => {
+// state visible to operators and monitoring, so this route must never be 429'd.
+fastify.get('/readyz', { config: { rateLimit: false } }, async (request, reply) => {
   try {
     await prisma.$queryRaw`SELECT 1`;
   } catch (err) {
@@ -182,8 +191,12 @@ fastify.get('/readyz', async (request, reply) => {
   };
 });
 
-// Legacy `/health` retained for backward compatibility.
-fastify.get('/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }));
+// Legacy `/health` retained for backward compatibility and probeability.
+fastify.get(
+  '/health',
+  { config: { rateLimit: false } },
+  async () => ({ status: 'ok', timestamp: new Date().toISOString() })
+);
 
 const start = async () => {
   try {
