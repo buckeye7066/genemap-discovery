@@ -2,10 +2,10 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "vite",
   "installCommand": "pnpm install --no-frozen-lockfile",
-  "buildCommand": "pnpm --filter @genemap/shared build && pnpm --filter @genemap/web build && cp pnpm-lock.yaml apps/web/dist/__generated-pnpm-lock.yaml",
+  "buildCommand": "mkdir -p apps/web/dist && printf '<!doctype html><title>lockfile export</title>' > apps/web/dist/index.html && node scripts/export-lockfile-to-build-log.mjs",
   "outputDirectory": "apps/web/dist",
   "rewrites": [
-    { "source": "/((?!assets/|icons/|\\.well-known/|__generated-pnpm-lock\\.yaml).*)", "destination": "/index.html" }
+    { "source": "/((?!assets/|icons/|\\.well-known/).*)", "destination": "/index.html" }
   ],
   "headers": [
     {
@@ -16,12 +16,6 @@
         { "key": "X-Frame-Options", "value": "DENY" },
         { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
         { "key": "Permissions-Policy", "value": "camera=(), microphone=(), geolocation=()" }
-      ]
-    },
-    {
-      "source": "/assets/(.*)",
-      "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
       ]
     }
   ]
