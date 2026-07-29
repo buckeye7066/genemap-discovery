@@ -12,12 +12,13 @@ const expectedChanges = new Set([
 ]);
 
 function run(command, args, options = {}) {
-  return execFileSync(command, args, {
+  const result = execFileSync(command, args, {
     cwd: process.cwd(),
     encoding: 'utf8',
     stdio: options.capture ? ['ignore', 'pipe', 'pipe'] : 'inherit',
     ...options,
-  }).trim();
+  });
+  return typeof result === 'string' ? result.trim() : '';
 }
 
 const builder = JSON.parse(
