@@ -90,9 +90,10 @@ await fastify.register(cookie, {
 
 // Rate limiting is distributed through Redis when configured. The Fastify
 // plugin skips a Redis command error so a cache outage cannot produce blanket
-// 500s. The following onRequest hook then takes over with bounded, per-instance
-// counters until Redis reports healthy again. Health/readiness routes bypass
-// both layers so an outage can never hide the very status operators need.
+// 500s. Its command callbacks mark the shared client degraded, then the
+// preHandler emergency limiter takes over on that same request with bounded,
+// per-instance counters. Health/readiness routes bypass both layers so an outage
+// can never hide the very status operators need.
 const rateLimitRedis = createRateLimitRedis(env, { logger: fastify.log });
 
 await fastify.register(rateLimit, {
@@ -102,7 +103,7 @@ await fastify.register(rateLimit, {
   ...rateLimitStoreOptions(rateLimitRedis),
 });
 fastify.addHook(
-  'onRequest',
+  'preHandler',
   createEmergencyRateLimitHook({
     redisClient: rateLimitRedis,
     scope: 'global',
@@ -137,7 +138,7 @@ await fastify.register(async (authScope) => {
     ...rateLimitStoreOptions(rateLimitRedis, 'auth'),
   });
   authScope.addHook(
-    'onRequest',
+    'preHandler',
     createEmergencyRateLimitHook({
       redisClient: rateLimitRedis,
       scope: 'auth',
