@@ -77,6 +77,7 @@ export function createRateLimitRedis(env, opts = {}) {
     degradedSince: null,
     lastAlertAt: 0,
     lastReason: null,
+    shuttingDown: false,
   };
   Object.defineProperty(client, RATE_LIMIT_HEALTH, {
     value: state,
@@ -86,6 +87,10 @@ export function createRateLimitRedis(env, opts = {}) {
   });
 
   const markDegraded = (reason, err) => {
+    // Expected close/end events during a graceful process shutdown are not an
+    // outage and must not page operators while the instance is terminating.
+    if (state.shuttingDown) return;
+
     const at = now();
     const firstAlert = !state.degraded;
     state.degraded = true;
@@ -153,6 +158,12 @@ export function createRateLimitRedis(env, opts = {}) {
   return client;
 }
 
+/** Suppress expected Redis close/end alerts during graceful app shutdown. */
+export function markRateLimitRedisShuttingDown(redisClient) {
+  const state = healthState(redisClient);
+  if (state) state.shuttingDown = true;
+}
+
 /**
  * Options for @fastify/rate-limit. Redis errors are skipped by the plugin so
  * requests can proceed to the emergency per-instance limiter instead of 500ing.
@@ -210,8 +221,8 @@ export function rateLimitProtectionStatus(redisClient) {
 /**
  * Build an onRequest hook that enforces a fixed-window, per-instance limit only
  * while configured Redis protection is unavailable. Counters are bounded and
- * cleared as soon as Redis recovers, so a later outage starts with a clean local
- * window rather than inheriting stale emergency state.
+ * cleared on the Redis ready event, so a later outage starts with a clean local
+ * window even when no request arrives during the healthy interval.
  */
 export function createEmergencyRateLimitHook({
   redisClient,
@@ -234,6 +245,14 @@ export function createEmergencyRateLimitHook({
   const windows = new Map();
   let emergencyWasActive = false;
 
+  const clearEmergencyState = () => {
+    windows.clear();
+    emergencyWasActive = false;
+  };
+  if (redisClient && typeof redisClient.on === 'function') {
+    redisClient.on('ready', clearEmergencyState);
+  }
+
   const prune = (at) => {
     for (const [key, entry] of windows) {
       if (entry.resetAt <= at) windows.delete(key);
@@ -249,8 +268,7 @@ export function createEmergencyRateLimitHook({
     const active = Boolean(redisClient) && !isRateLimitRedisHealthy(redisClient);
 
     if (!active) {
-      if (emergencyWasActive) windows.clear();
-      emergencyWasActive = false;
+      if (emergencyWasActive) clearEmergencyState();
       if (typeof done === 'function') done();
       return;
     }
