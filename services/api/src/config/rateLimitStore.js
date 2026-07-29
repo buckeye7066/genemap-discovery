@@ -17,6 +17,7 @@ export const RATE_LIMIT_BYPASS_PATHS = new Set(['/healthz', '/readyz', '/health'
 
 const RATE_LIMIT_HEALTH = Symbol('genemapRateLimitHealth');
 const MONITORED_REDIS_COMMAND = Symbol('genemapMonitoredRedisCommand');
+const RATE_LIMIT_RECOVERED = Symbol('genemapRateLimitRecovered');
 
 export const REDIS_CLIENT_OPTIONS = {
   // Fail fast on connect instead of hanging request-adjacent work.
@@ -61,12 +62,16 @@ function setRateHeaders(reply, { max, count, resetAt }) {
  * Health and readiness endpoints must remain probeable even when rate-limit
  * infrastructure is degraded. Both @fastify/rate-limit's allowList callback and
  * the emergency hook use this one predicate so their bypass rules cannot drift.
+ * A trailing slash is normalized because load balancers and uptime services may
+ * probe either spelling.
  */
 export function shouldBypassRateLimit(request) {
   const rawPath =
     request?.routeOptions?.url || request?.url || request?.raw?.url || '';
   const pathname = String(rawPath).split('?', 1)[0];
-  return RATE_LIMIT_BYPASS_PATHS.has(pathname);
+  const normalized =
+    pathname.length > 1 ? pathname.replace(/\/+$/, '') : pathname;
+  return RATE_LIMIT_BYPASS_PATHS.has(normalized);
 }
 
 /**
@@ -151,6 +156,7 @@ export function createRateLimitRedis(env, opts = {}) {
         },
         'Rate-limit Redis recovered; distributed limiting is active again'
       );
+      client.emit(RATE_LIMIT_RECOVERED);
     } else {
       writeLog(
         logger,
@@ -159,6 +165,30 @@ export function createRateLimitRedis(env, opts = {}) {
         'Rate-limit Redis connected; distributed limiting is active'
       );
     }
+  };
+
+  /**
+   * A connection-level ready event proves transport recovery, but it does not
+   * prove that a Redis endpoint which rejected the Lua write is writable again.
+   * Keep emergency protection active after a command failure until the actual
+   * `rateLimit` write command succeeds.
+   */
+  const markConnectionReady = () => {
+    if (state.degraded && String(state.lastReason || '').startsWith('command:')) {
+      writeLog(
+        logger,
+        'warn',
+        {
+          event: 'rate_limit_redis_ready_awaiting_write_probe',
+          redisStatus: client.status || 'ready',
+          reason: state.lastReason,
+          emergencyLimiter: 'active-per-instance',
+        },
+        'Rate-limit Redis transport is ready, but write recovery is not yet proven'
+      );
+      return;
+    }
+    markReady();
   };
 
   /**
@@ -184,9 +214,16 @@ export function createRateLimitRedis(env, opts = {}) {
         markDegraded(`command:${commandName}`, err);
       };
       const recordSuccess = () => {
-        // A successful command on a still-ready connection is the recovery
-        // signal for command-level failures that never caused a reconnect.
-        if (state.degraded && client.status === 'ready') markReady();
+        // Only a successful `rateLimit` call proves the required Lua write path
+        // works again. A read-only command may succeed on a READONLY replica and
+        // must never disable emergency limiting after a write failure.
+        if (
+          commandName === 'rateLimit' &&
+          state.degraded &&
+          client.status === 'ready'
+        ) {
+          markReady();
+        }
       };
 
       if (callback) {
@@ -248,7 +285,7 @@ export function createRateLimitRedis(env, opts = {}) {
   client.on('close', () => markDegraded('close'));
   client.on('reconnecting', () => markDegraded('reconnecting'));
   client.on('end', () => markDegraded('end'));
-  client.on('ready', markReady);
+  client.on('ready', markConnectionReady);
 
   return client;
 }
@@ -279,10 +316,16 @@ export function isRateLimitRedisHealthy(redisClient) {
   return redisClient.status === 'ready' && state?.degraded !== true;
 }
 
-/** Backward-compatible compact status used by existing readiness consumers. */
+/**
+ * Compact status used by existing readiness consumers. It must never report a
+ * healthy-looking `redis:ready` string while emergency protection is active.
+ */
 export function rateLimitStoreStatus(redisClient) {
   if (!redisClient) return 'memory';
-  return `redis:${redisClient.status || 'unknown'}`;
+  const connectionStatus = redisClient.status || 'unknown';
+  return isRateLimitRedisHealthy(redisClient)
+    ? `redis:${connectionStatus}`
+    : `redis:degraded:${connectionStatus}`;
 }
 
 /**
@@ -318,8 +361,9 @@ export function rateLimitProtectionStatus(redisClient) {
  * while configured Redis protection is unavailable. Running after the primary
  * onRequest limiter lets a command callback mark the client degraded and makes
  * the emergency counter protect that same request. Counters are bounded and
- * cleared on the Redis ready event, so a later outage starts with a clean local
- * window even when no request arrives during the healthy interval.
+ * cleared only after proven Redis recovery, so a later outage starts with a
+ * clean local window without allowing a bare transport-ready event to erase an
+ * active emergency budget.
  */
 export function createEmergencyRateLimitHook({
   redisClient,
@@ -351,7 +395,7 @@ export function createEmergencyRateLimitHook({
     emergencyWasActive = false;
   };
   if (redisClient && typeof redisClient.on === 'function') {
-    redisClient.on('ready', clearEmergencyState);
+    redisClient.on(RATE_LIMIT_RECOVERED, clearEmergencyState);
   }
 
   const prune = (at) => {
