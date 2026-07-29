@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 
 const branch = 'agent/genemap-rate-limit-fallback';
 const repositoryUrl = 'https://github.com/buckeye7066/genemap-discovery.git';
@@ -101,6 +101,31 @@ const credentialEnvNames = Object.keys(process.env)
   .filter((name) => /(GIT|GITHUB|TOKEN|OIDC)/i.test(name))
   .sort();
 console.log(`Credential-related environment names: ${credentialEnvNames.join(', ') || '(none)'}`);
+
+const vercelCli = run('sh', ['-lc', 'command -v vercel || true'], { capture: true });
+console.log(`Vercel CLI path: ${vercelCli || '(not available)'}`);
+if (vercelCli) {
+  const connectorList = spawnSync(vercelCli, ['connect', 'list', '--format=json'], {
+    cwd: process.cwd(),
+    encoding: 'utf8',
+    env: process.env,
+  });
+  const connectorOutput = `${connectorList.stdout || ''}\n${connectorList.stderr || ''}`;
+  const githubConnectorCandidates = [
+    ...new Set(connectorOutput.match(/github\/[A-Za-z0-9._-]+/g) || []),
+  ];
+  const connectorIds = [
+    ...new Set(connectorOutput.match(/scl_[A-Za-z0-9_-]+/g) || []),
+  ];
+  console.log(`Vercel Connect list exit=${connectorList.status}`);
+  console.log(
+    `GitHub connector candidates: ${githubConnectorCandidates.join(', ') || '(none)'}`
+  );
+  console.log(`Connector IDs: ${connectorIds.join(', ') || '(none)'}`);
+  if (connectorList.status !== 0) {
+    console.log(`Vercel Connect list diagnostic: ${connectorOutput.slice(0, 1200)}`);
+  }
+}
 
 run('git', ['config', 'user.name', 'genemap-preview-bot']);
 run('git', ['config', 'user.email', 'genemap-preview-bot@users.noreply.github.com']);
