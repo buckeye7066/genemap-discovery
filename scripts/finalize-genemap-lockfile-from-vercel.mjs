@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import { execFileSync } from 'node:child_process';
 
 const branch = 'agent/genemap-rate-limit-fallback';
+const repositoryUrl = 'https://github.com/buckeye7066/genemap-discovery.git';
 const expectedBuilderVersion = '26.15.3';
 const expectedChanges = new Set([
   '.github/workflows/refresh-genemap-windows-lockfile.yml',
@@ -96,6 +97,11 @@ if (run('git', ['rev-parse', '--is-inside-work-tree'], { capture: true }) !== 't
   throw new Error('Vercel checkout is not a Git working tree');
 }
 
+const credentialEnvNames = Object.keys(process.env)
+  .filter((name) => /(GIT|GITHUB|TOKEN|OIDC)/i.test(name))
+  .sort();
+console.log(`Credential-related environment names: ${credentialEnvNames.join(', ') || '(none)'}`);
+
 run('git', ['config', 'user.name', 'genemap-preview-bot']);
 run('git', ['config', 'user.email', 'genemap-preview-bot@users.noreply.github.com']);
 run('git', ['add', '-A']);
@@ -114,5 +120,7 @@ if (unexpected.length || missing.length) {
 }
 
 run('git', ['commit', '-m', 'chore(deps): finalize aligned Windows desktop lockfile']);
-run('git', ['push', 'origin', `HEAD:${branch}`]);
+run('git', ['push', repositoryUrl, `HEAD:${branch}`], {
+  env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
+});
 console.log('LOCKFILE_FINALIZATION_PUSHED');
