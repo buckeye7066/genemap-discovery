@@ -32,6 +32,8 @@ jobs:
           cache: 'pnpm'
       - name: Install (frozen lockfile)
         run: pnpm install --frozen-lockfile
+      - name: Verify reviewed security exceptions
+        run: node scripts/verify-security-exceptions.mjs
       - name: Build shared package
         # @genemap/shared resolves via dist/*.d.ts (its package "types"/"exports"
         # point at ./dist). Without this, `pnpm typecheck` fails with TS2307
@@ -142,6 +144,34 @@ jobs:
           path: apps/web/dist
           retention-days: 7
 
+  desktop-build-smoke:
+    # electron-builder is part of the shipped desktop toolchain. Build an unpacked
+    # Linux directory on every PR so a dependency/security upgrade cannot silently
+    # break packaging while web and API CI remain green.
+    runs-on: ubuntu-latest
+    needs: [build-web]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: 'pnpm'
+      - name: Install (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+      - name: Build shared package
+        run: pnpm --filter @genemap/shared build
+      - name: Build web bundle for desktop resources
+        run: pnpm build:web
+        env:
+          VITE_API_URL: http://localhost:3000
+      - name: Generate desktop icons
+        run: pnpm --filter @genemap/desktop run build:icons
+      - name: Build unpacked desktop application
+        run: node apps/desktop/scripts/electron-build.mjs --dir
+      - name: Verify desktop output exists
+        run: test -d apps/desktop/dist-electron/linux-unpacked
+
   docker-build-api:
     # Build the API image we ship to Railway, on the same commit. Without
     # this, lockfile drift, missing build deps, or a broken Dockerfile only
@@ -215,5 +245,5 @@ jobs:
           cache: 'pnpm'
       - name: Install (frozen lockfile)
         run: pnpm install --frozen-lockfile
-      - name: Dependency audit
-        run: pnpm audit --audit-level=low
+      - name: Dependency audit with reviewed exception guard
+        run: pnpm run audit
