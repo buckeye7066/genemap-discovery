@@ -16,6 +16,7 @@ export const DEFAULT_EMERGENCY_MAX_ENTRIES = 10_000;
 export const RATE_LIMIT_BYPASS_PATHS = new Set(['/healthz', '/readyz', '/health']);
 
 const RATE_LIMIT_HEALTH = Symbol('genemapRateLimitHealth');
+const MONITORED_REDIS_COMMAND = Symbol('genemapMonitoredRedisCommand');
 
 export const REDIS_CLIENT_OPTIONS = {
   // Fail fast on connect instead of hanging request-adjacent work.
@@ -160,6 +161,87 @@ export function createRateLimitRedis(env, opts = {}) {
     }
   };
 
+  /**
+   * @fastify/rate-limit defines Lua-backed `rateLimit` / `rateLimitRead`
+   * commands on the supplied ioredis client and receives failures through their
+   * callbacks. A Redis command can fail while ioredis still reports `ready`
+   * (READONLY, ACL, script, timeout, or transient server errors), so lifecycle
+   * events alone are not a sufficient health signal. Wrap each defined command
+   * and mark protection degraded before the plugin's skipOnError path continues.
+   */
+  const monitorCommand = (commandName) => {
+    const original = client[commandName];
+    if (typeof original !== 'function' || original[MONITORED_REDIS_COMMAND]) return;
+
+    const wrapped = function monitoredRedisCommand(...args) {
+      const callbackIndex = args.length - 1;
+      const callback =
+        callbackIndex >= 0 && typeof args[callbackIndex] === 'function'
+          ? args[callbackIndex]
+          : null;
+
+      const recordFailure = (err) => {
+        markDegraded(`command:${commandName}`, err);
+      };
+      const recordSuccess = () => {
+        // A successful command on a still-ready connection is the recovery
+        // signal for command-level failures that never caused a reconnect.
+        if (state.degraded && client.status === 'ready') markReady();
+      };
+
+      if (callback) {
+        args[callbackIndex] = (err, ...results) => {
+          if (err) recordFailure(err);
+          else recordSuccess();
+          callback(err, ...results);
+        };
+      }
+
+      let result;
+      try {
+        result = original.apply(this, args);
+      } catch (err) {
+        recordFailure(err);
+        throw err;
+      }
+
+      // ioredis returns a promise when no callback is supplied. Monitor that
+      // path as well so future store usage cannot bypass the health transition.
+      if (!callback && result && typeof result.then === 'function') {
+        return result.then(
+          (value) => {
+            recordSuccess();
+            return value;
+          },
+          (err) => {
+            recordFailure(err);
+            throw err;
+          }
+        );
+      }
+      if (!callback) recordSuccess();
+      return result;
+    };
+
+    Object.defineProperty(wrapped, MONITORED_REDIS_COMMAND, {
+      value: true,
+      enumerable: false,
+    });
+    client[commandName] = wrapped;
+  };
+
+  if (typeof client.defineCommand === 'function') {
+    const originalDefineCommand = client.defineCommand.bind(client);
+    client.defineCommand = function monitoredDefineCommand(commandName, definition) {
+      const result = originalDefineCommand(commandName, definition);
+      monitorCommand(commandName);
+      return result;
+    };
+  }
+  // Also cover clients on which another plugin defined the commands first.
+  monitorCommand('rateLimit');
+  monitorCommand('rateLimitRead');
+
   // An error listener is mandatory. EventEmitter would otherwise treat an
   // unhandled ioredis error as fatal to the process.
   client.on('error', (err) => markDegraded('error', err));
@@ -232,8 +314,10 @@ export function rateLimitProtectionStatus(redisClient) {
 }
 
 /**
- * Build an onRequest hook that enforces a fixed-window, per-instance limit only
- * while configured Redis protection is unavailable. Counters are bounded and
+ * Build a preHandler hook that enforces a fixed-window, per-instance limit only
+ * while configured Redis protection is unavailable. Running after the primary
+ * onRequest limiter lets a command callback mark the client degraded and makes
+ * the emergency counter protect that same request. Counters are bounded and
  * cleared on the Redis ready event, so a later outage starts with a clean local
  * window even when no request arrives during the healthy interval.
  */
