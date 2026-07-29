@@ -1,5 +1,6 @@
 import { beforeEach, describe, it, expect, vi } from 'vitest';
 import { EventEmitter } from 'node:events';
+import Fastify from 'fastify';
 import {
   createEmergencyRateLimitHook,
   createRateLimitRedis,
@@ -250,6 +251,34 @@ describe('rate-limit store selection and outage fallback', () => {
       const afterReset = runHook(hook);
       expect(afterReset.done).toHaveBeenCalledOnce();
       expect(afterReset.reply.statusCode).toBe(200);
+    });
+
+    it('runs correctly inside the Fastify onRequest lifecycle', async () => {
+      const client = makeClient();
+      const app = Fastify({ logger: false });
+      app.addHook(
+        'onRequest',
+        createEmergencyRateLimitHook({
+          redisClient: client,
+          max: 1,
+          timeWindowMs: 60_000,
+        })
+      );
+      app.get('/probe', async () => ({ ok: true }));
+
+      const allowed = await app.inject({ method: 'GET', url: '/probe' });
+      const blocked = await app.inject({ method: 'GET', url: '/probe' });
+
+      expect(allowed.statusCode).toBe(200);
+      expect(allowed.headers['x-ratelimit-remaining']).toBe('0');
+      expect(blocked.statusCode).toBe(429);
+      expect(blocked.json()).toEqual({
+        statusCode: 429,
+        error: 'Too Many Requests',
+        message: 'Rate limit exceeded. Please retry later.',
+      });
+
+      await app.close();
     });
 
     it('keeps callers and auth/global scopes independent', () => {
