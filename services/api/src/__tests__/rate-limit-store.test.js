@@ -4,6 +4,7 @@ import {
   createEmergencyRateLimitHook,
   createRateLimitRedis,
   isRateLimitRedisHealthy,
+  markRateLimitRedisShuttingDown,
   rateLimitProtectionStatus,
   rateLimitStoreOptions,
   rateLimitStoreStatus,
@@ -204,6 +205,19 @@ describe('rate-limit store selection and outage fallback', () => {
       });
     });
 
+    it('does not emit outage alerts for expected graceful-shutdown events', () => {
+      const client = makeClient();
+      client.status = 'ready';
+      client.emit('ready');
+      vi.clearAllMocks();
+
+      markRateLimitRedisShuttingDown(client);
+      expect(() => client.emit('close')).not.toThrow();
+      expect(() => client.emit('end')).not.toThrow();
+      expect(() => client.emit('error', new Error('connection closed by quit'))).not.toThrow();
+      expect(silentLogger.error).not.toHaveBeenCalled();
+    });
+
     it('enforces a bounded local window while Redis is unavailable', () => {
       let clock = 10_000;
       const client = makeClient();
@@ -260,7 +274,7 @@ describe('rate-limit store selection and outage fallback', () => {
       expect(runHook(authHook, '198.51.100.1').reply.statusCode).toBe(429);
     });
 
-    it('clears emergency counters when Redis recovers', () => {
+    it('clears emergency counters immediately on Redis recovery', () => {
       const client = makeClient();
       const hook = createEmergencyRateLimitHook({
         redisClient: client,
@@ -271,15 +285,13 @@ describe('rate-limit store selection and outage fallback', () => {
       expect(runHook(hook).reply.statusCode).toBe(200);
       expect(runHook(hook).reply.statusCode).toBe(429);
 
+      // No request arrives while healthy. The ready event itself must clear the
+      // local map before a later outage begins.
       client.status = 'ready';
       client.emit('ready');
-      const whileHealthy = runHook(hook);
-      expect(whileHealthy.done).toHaveBeenCalledOnce();
-      expect(whileHealthy.reply.statusCode).toBe(200);
-      expect(whileHealthy.reply.headers.size).toBe(0);
-
       client.status = 'reconnecting';
       client.emit('reconnecting');
+
       const nextOutage = runHook(hook);
       expect(nextOutage.done).toHaveBeenCalledOnce();
       expect(nextOutage.reply.statusCode).toBe(200);
