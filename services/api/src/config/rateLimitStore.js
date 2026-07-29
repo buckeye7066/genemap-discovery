@@ -13,6 +13,7 @@ import Redis from 'ioredis';
 export const RATE_LIMIT_NAMESPACE = 'genemap-rate-limit-';
 export const DEFAULT_RATE_LIMIT_ALERT_INTERVAL_MS = 5 * 60 * 1000;
 export const DEFAULT_EMERGENCY_MAX_ENTRIES = 10_000;
+export const RATE_LIMIT_BYPASS_PATHS = new Set(['/healthz', '/readyz', '/health']);
 
 const RATE_LIMIT_HEALTH = Symbol('genemapRateLimitHealth');
 
@@ -53,6 +54,18 @@ function setRateHeaders(reply, { max, count, resetAt }) {
   reply.header('x-ratelimit-limit', String(max));
   reply.header('x-ratelimit-remaining', String(Math.max(0, max - count)));
   reply.header('x-ratelimit-reset', String(Math.ceil(resetAt / 1000)));
+}
+
+/**
+ * Health and readiness endpoints must remain probeable even when rate-limit
+ * infrastructure is degraded. Both @fastify/rate-limit's allowList callback and
+ * the emergency hook use this one predicate so their bypass rules cannot drift.
+ */
+export function shouldBypassRateLimit(request) {
+  const rawPath =
+    request?.routeOptions?.url || request?.url || request?.raw?.url || '';
+  const pathname = String(rawPath).split('?', 1)[0];
+  return RATE_LIMIT_BYPASS_PATHS.has(pathname);
 }
 
 /**
@@ -231,6 +244,7 @@ export function createEmergencyRateLimitHook({
   timeWindowMs,
   now = Date.now,
   maxEntries = DEFAULT_EMERGENCY_MAX_ENTRIES,
+  skip = () => false,
 }) {
   if (!Number.isInteger(max) || max < 1) {
     throw new TypeError('Emergency rate-limit max must be a positive integer');
@@ -240,6 +254,9 @@ export function createEmergencyRateLimitHook({
   }
   if (!Number.isInteger(maxEntries) || maxEntries < 1) {
     throw new TypeError('Emergency rate-limit maxEntries must be a positive integer');
+  }
+  if (typeof skip !== 'function') {
+    throw new TypeError('Emergency rate-limit skip must be a function');
   }
 
   const windows = new Map();
@@ -265,6 +282,11 @@ export function createEmergencyRateLimitHook({
   };
 
   return function emergencyRateLimit(request, reply, done) {
+    if (skip(request)) {
+      if (typeof done === 'function') done();
+      return;
+    }
+
     const active = Boolean(redisClient) && !isRateLimitRedisHealthy(redisClient);
 
     if (!active) {
