@@ -10,7 +10,7 @@ const compressed = zlib.brotliCompressSync(raw, {
   },
 });
 const encoded = compressed.toString('base64');
-const chunkSize = 3000;
+const chunkSize = 3950;
 const chunks = Array.from(
   { length: Math.ceil(encoded.length / chunkSize) },
   (_, index) => encoded.slice(index * chunkSize, (index + 1) * chunkSize)
@@ -23,19 +23,13 @@ console.log(
     .update(raw)
     .digest('hex')}:chunkSize=${chunkSize}:chunkCount=${chunks.length}`
 );
-console.log(
-  `LOCKHASHES:${JSON.stringify(
-    chunks.map((chunk, index) => ({
-      index,
-      length: chunk.length,
-      sha256: crypto.createHash('sha256').update(chunk).digest('hex'),
-    }))
-  )}`
-);
 
 for (let index = 0; index < chunks.length; index += 1) {
-  console.log(`LOCKCHUNK:${String(index).padStart(3, '0')}:${chunks[index]}`);
-  Atomics.wait(sleeper, 0, 0, 450);
+  const hash = crypto.createHash('sha256').update(chunks[index]).digest('hex');
+  console.log(
+    `LOCKCHUNK:${String(index).padStart(3, '0')}:length=${chunks[index].length}:sha256=${hash}:${chunks[index]}`
+  );
+  Atomics.wait(sleeper, 0, 0, 1100);
 }
 console.log('LOCKEND');
 
