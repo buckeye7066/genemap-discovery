@@ -60,11 +60,23 @@ export function errorHandler(error, request, reply) {
     'request failed'
   );
 
+  // Framework-originated client errors (@fastify/rate-limit's 429, body
+  // parser 400s/413s, …) carry a 4xx statusCode but are NOT AppErrors, so they
+  // previously fell through to the generic 500 branch — a rate-limited client
+  // saw "Internal server error" (masking the real "retry in N minutes"
+  // message) and every 429 was captured by Sentry as a server failure.
+  const isFrameworkClientError =
+    Number.isInteger(error?.statusCode) && error.statusCode >= 400 && error.statusCode < 500;
+
   // Resolve the status code we are about to return so the owner is only
   // notified about genuine server-side failures (>=500), not client/validation
   // errors. Fire-and-forget; never awaited and never throws. The reporter
   // itself excludes admin/owner users.
-  const resolvedStatus = error instanceof ZodError ? 400 : isAppError(error) ? error.statusCode : 500;
+  const resolvedStatus =
+    error instanceof ZodError ? 400
+    : isAppError(error) ? error.statusCode
+    : isFrameworkClientError ? error.statusCode
+    : 500;
   if (resolvedStatus >= 500) {
     reportErrorToOwner({
       error,
@@ -94,6 +106,14 @@ export function errorHandler(error, request, reply) {
   }
 
   if (isAppError(error)) {
+    return reply.status(error.statusCode).send({
+      error: error.message,
+      code: error.code,
+      requestId,
+    });
+  }
+
+  if (isFrameworkClientError) {
     return reply.status(error.statusCode).send({
       error: error.message,
       code: error.code,

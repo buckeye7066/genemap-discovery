@@ -1,5 +1,5 @@
 import React, { createContext, useState, useContext, useEffect, useCallback, useMemo } from 'react';
-import { apiClient } from '@genemap/shared';
+import { apiClient, hasStoredSession, setCsrfToken } from '@genemap/shared';
 
 const AuthContext = createContext(null);
 
@@ -11,6 +11,22 @@ export const AuthProvider = ({ children }) => {
   const [authError, setAuthError] = useState(null);
 
   const checkAuth = useCallback(async () => {
+    // Anonymous visitors carry no session hint (no cached CSRF token from a
+    // prior login). For them GET /auth/me can only 401, and the browser logs
+    // every 401 response as a console error — so a clean visit to /login was
+    // producing "Failed to load resource: 401" noise (twice, under
+    // StrictMode's dev double-mount). Skip the round-trip entirely: the
+    // login page renders instantly and stays console-clean, and an API
+    // outage can no longer trap a logged-out visitor on the retry screen.
+    // Real sessions are unaffected — login/register/refresh responses set
+    // the hint, so returning users still hydrate via getMe() as before.
+    if (!hasStoredSession()) {
+      setUser(null);
+      setIsAuthenticated(false);
+      setAuthError({ type: 'auth_required', message: 'Authentication required' });
+      setIsLoadingAuth(false);
+      return;
+    }
     try {
       setIsLoadingAuth(true);
       setAuthError(null);
@@ -23,6 +39,10 @@ export const AuthProvider = ({ children }) => {
       if (error?.status === 403 && error?.code === 'user_not_registered') {
         setAuthError({ type: 'user_not_registered', message: error.message });
       } else if (error?.status === 401) {
+        // The stored hint is stale (session expired/revoked server-side).
+        // Drop it so subsequent loads take the quiet anonymous path instead
+        // of re-earning a 401 on every visit.
+        setCsrfToken(null);
         setAuthError({ type: 'auth_required', message: error.message || 'Authentication required' });
       } else {
         console.error('Auth check failed:', error);

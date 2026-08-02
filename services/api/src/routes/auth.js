@@ -232,7 +232,14 @@ export default async function authRoutes(fastify) {
 
   // Public status probe: the Login page asks this at runtime so the banner
   // follows the server-side switch without a frontend rebuild. No auth.
-  fastify.get('/maintenance', async () => ({
+  //
+  // Exempt from rate limiting: this scope's strict bucket (10/15min) exists
+  // to slow credential stuffing on login/register, but EVERY login-page load
+  // fires this read-only GET (twice under React StrictMode in dev), so a
+  // visitor reloading /login a few times exhausted the bucket and then the
+  // probe — and their actual sign-in attempt — started failing. A constant
+  // in-memory JSON response needs no throttle.
+  fastify.get('/maintenance', { config: { rateLimit: false } }, async () => ({
     active: isLoginMaintenanceActive(),
     ...LOGIN_MAINTENANCE_COPY,
   }));

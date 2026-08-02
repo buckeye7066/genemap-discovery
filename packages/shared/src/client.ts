@@ -225,6 +225,24 @@ function getCsrfToken(): string | null {
 }
 
 /**
+ * Whether any evidence of a prior authenticated session exists on this
+ * browser (a CSRF token cached from a login/register/refresh response, or a
+ * readable same-origin csrfToken cookie). The session cookies themselves are
+ * HttpOnly and invisible to JS, so this hint is the ONLY client-side signal.
+ *
+ * Used by AuthContext to skip the startup GET /auth/me for anonymous
+ * visitors: without the hint that request can only 401, and the browser
+ * unconditionally logs every 401 response as a console error — noise that
+ * plagued the login page (and EVA's console-clean journeys) on every fresh
+ * visit. A visitor with valid HttpOnly cookies but a wiped localStorage on a
+ * cross-site deploy will look logged-out and simply signs in again — an
+ * acceptable trade for a quiet, instant login page.
+ */
+export function hasStoredSession(): boolean {
+  return getCsrfToken() !== null;
+}
+
+/**
  * Typed API error that preserves HTTP status and any structured `code` /
  * `details` from the backend. Replaces the previous `new Error(message)`
  * which discarded everything AuthContext wanted to inspect.
