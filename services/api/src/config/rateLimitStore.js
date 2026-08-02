@@ -75,6 +75,22 @@ export function shouldBypassRateLimit(request) {
 }
 
 /**
+ * A route that opts out of @fastify/rate-limit with `config: { rateLimit: false }`
+ * (for example GET /auth/maintenance, which every login-page load fires) must
+ * also be exempt from the emergency limiter. Otherwise a Redis outage would
+ * silently re-throttle routes an operator deliberately unthrottled — the plugin
+ * bucket and the emergency bucket would disagree about the route's policy.
+ */
+export function isRouteRateLimitDisabled(request) {
+  return (
+    request?.routeOptions?.config?.rateLimit === false ||
+    // Fastify 4 / older plugin shapes keep route config here.
+    request?.context?.config?.rateLimit === false ||
+    request?.routeConfig?.rateLimit === false
+  );
+}
+
+/**
  * Create the shared ioredis client, or null when Redis is not configured.
  * Operational state is attached privately to the client so readiness and the
  * emergency limiter can distinguish a healthy connection from a recent error
@@ -156,7 +172,6 @@ export function createRateLimitRedis(env, opts = {}) {
         },
         'Rate-limit Redis recovered; distributed limiting is active again'
       );
-      client.emit(RATE_LIMIT_RECOVERED);
     } else {
       writeLog(
         logger,
@@ -165,6 +180,14 @@ export function createRateLimitRedis(env, opts = {}) {
         'Rate-limit Redis connected; distributed limiting is active'
       );
     }
+
+    // Always clear local emergency budgets once Redis is authoritative again,
+    // not only after a logged degradation. The emergency hook also engages
+    // while the client is merely still `connecting` (never `degraded`), and if
+    // no request happens to arrive during the healthy window those stale
+    // counters would carry straight into the NEXT outage and 429 a caller who
+    // had spent nothing in it.
+    client.emit(RATE_LIMIT_RECOVERED);
   };
 
   /**
@@ -410,7 +433,7 @@ export function createEmergencyRateLimitHook({
   };
 
   return function emergencyRateLimit(request, reply, done) {
-    if (skip(request)) {
+    if (isRouteRateLimitDisabled(request) || skip(request)) {
       if (typeof done === 'function') done();
       return;
     }

@@ -329,6 +329,38 @@ describe('rate-limit store selection and outage fallback', () => {
       await app.close();
     });
 
+    it('honors a route-level rateLimit:false opt-out during a Redis outage', async () => {
+      // GET /auth/maintenance is deliberately exempted from the strict /auth
+      // bucket (every login-page load fires it). A Redis outage must not
+      // silently re-throttle it through the emergency limiter.
+      const client = makeClient();
+      const app = Fastify({ logger: false });
+      app.addHook(
+        'onRequest',
+        createEmergencyRateLimitHook({
+          redisClient: client,
+          scope: 'auth',
+          max: 1,
+          timeWindowMs: 60_000,
+        })
+      );
+      app.get('/maintenance', { config: { rateLimit: false } }, async () => ({ active: false }));
+      app.get('/login', async () => ({ ok: true }));
+
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        const response = await app.inject({ method: 'GET', url: '/maintenance' });
+        expect(response.statusCode).toBe(200);
+        expect(response.headers['x-ratelimit-limit']).toBeUndefined();
+      }
+
+      // The failure mode still fires for a route that did NOT opt out, so this
+      // test cannot pass by simply disabling the limiter.
+      expect((await app.inject({ method: 'GET', url: '/login' })).statusCode).toBe(200);
+      expect((await app.inject({ method: 'GET', url: '/login' })).statusCode).toBe(429);
+
+      await app.close();
+    });
+
     it('runs correctly inside the Fastify onRequest lifecycle', async () => {
       const client = makeClient();
       const app = Fastify({ logger: false });
