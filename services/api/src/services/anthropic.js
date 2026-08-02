@@ -1,5 +1,39 @@
 // Lazy-load Anthropic SDK — same rationale as ./openai.js.
 
+/**
+ * Default Claude model. `claude-sonnet-4-20250514` is past EOL (deprecated,
+ * retires 2026-06-15); `claude-sonnet-5` is the current Sonnet. Override with
+ * ANTHROPIC_MODEL so the next migration is config-only, no code change.
+ */
+export const DEFAULT_ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || 'claude-sonnet-5';
+
+/**
+ * Current-generation Claude models REJECT sampling parameters (`temperature`,
+ * `top_p`, `top_k`) with a 400, and default to adaptive thinking that shares the
+ * `max_tokens` budget with the visible answer. Our callers pass a temperature
+ * (llm.js defaults to 0.7) and a small max_tokens (2000), so for those models we
+ * drop the sampling parameter and keep thinking off — preserving the latency,
+ * cost, and no-truncation profile the previous model had.
+ */
+const CURRENT_GEN_MODEL = /^claude-(fable-5|mythos-5|opus-5|opus-4-[78]|sonnet-5)/;
+
+export function isCurrentGenerationModel(model) {
+  return CURRENT_GEN_MODEL.test(String(model || ''));
+}
+
+/** Build the model-appropriate request body shared by both entry points. */
+function buildParams(model, maxTokens, temperature) {
+  const params = { model, max_tokens: maxTokens };
+  if (isCurrentGenerationModel(model)) {
+    // Sampling params are a 400 on these models; thinking would otherwise eat
+    // the max_tokens budget and truncate the answer.
+    params.thinking = { type: 'disabled' };
+  } else if (temperature !== undefined) {
+    params.temperature = temperature;
+  }
+  return params;
+}
+
 let client = null;
 
 async function getClient() {
@@ -16,14 +50,12 @@ async function getClient() {
 
 export async function generateText(
   prompt,
-  { model = 'claude-sonnet-4-20250514', maxTokens = 2000, temperature = 0.7, timeoutMs = 30_000 } = {}
+  { model = DEFAULT_ANTHROPIC_MODEL, maxTokens = 2000, temperature = 0.7, timeoutMs = 30_000 } = {}
 ) {
   const anthropic = await getClient();
   const response = await anthropic.messages.create(
     {
-      model,
-      max_tokens: maxTokens,
-      temperature,
+      ...buildParams(model || DEFAULT_ANTHROPIC_MODEL, maxTokens, temperature),
       messages: [{ role: 'user', content: prompt }],
     },
     { timeout: timeoutMs }
@@ -34,7 +66,7 @@ export async function generateText(
 
 export async function generateChatResponse(
   messages,
-  { model = 'claude-sonnet-4-20250514', maxTokens = 2000, temperature = 0.7, timeoutMs = 30_000 } = {}
+  { model = DEFAULT_ANTHROPIC_MODEL, maxTokens = 2000, temperature = 0.7, timeoutMs = 30_000 } = {}
 ) {
   const anthropic = await getClient();
 
@@ -54,9 +86,7 @@ export async function generateChatResponse(
   }
 
   const params = {
-    model,
-    max_tokens: maxTokens,
-    temperature,
+    ...buildParams(model || DEFAULT_ANTHROPIC_MODEL, maxTokens, temperature),
     messages: chatMessages,
   };
 
