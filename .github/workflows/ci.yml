@@ -25,7 +25,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
+      - uses: pnpm/action-setup@v6.0.9
       - uses: actions/setup-node@v6
         with:
           node-version: '24'
@@ -65,7 +65,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
+      - uses: pnpm/action-setup@v6.0.9
       - uses: actions/setup-node@v6
         with:
           node-version: '24'
@@ -105,7 +105,7 @@ jobs:
       STRIPE_WEBHOOK_SECRET: whsec_test
     steps:
       - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
+      - uses: pnpm/action-setup@v6.0.9
       - uses: actions/setup-node@v6
         with:
           node-version: '24'
@@ -124,7 +124,7 @@ jobs:
     needs: [lint-and-typecheck, test, api-integration-postgres]
     steps:
       - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
+      - uses: pnpm/action-setup@v6.0.9
       - uses: actions/setup-node@v6
         with:
           node-version: '24'
@@ -152,7 +152,7 @@ jobs:
     needs: [build-web]
     steps:
       - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
+      - uses: pnpm/action-setup@v6.0.9
       - uses: actions/setup-node@v6
         with:
           node-version: '24'
@@ -181,7 +181,7 @@ jobs:
     needs: [build-web]
     steps:
       - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
+      - uses: pnpm/action-setup@v6.0.9
       - uses: actions/setup-node@v6
         with:
           node-version: '24'
@@ -260,7 +260,7 @@ jobs:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/genemap
     steps:
       - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
+      - uses: pnpm/action-setup@v6.0.9
       - uses: actions/setup-node@v6
         with:
           node-version: '24'
@@ -283,7 +283,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
+      - uses: pnpm/action-setup@v6.0.9
       - uses: actions/setup-node@v6
         with:
           node-version: '24'
