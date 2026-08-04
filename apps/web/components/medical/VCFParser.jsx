@@ -269,7 +269,18 @@ export default function VCFParser({ fileUrl, vcfText, onVariantsParsed, onEnrich
                 const clinVarSummary = clinVarResultId
                   ? annotations.clinVar?.data?.result?.[clinVarResultId]
                   : null;
-                const classification = clinVarSummary?.clinical_significance?.description || null;
+                // The server normalizes ClinVar's classification blocks; the raw
+                // reads below only cover payloads enriched before that landed.
+                const classification = annotations.clinVar?.classification
+                  || clinVarSummary?.germline_classification?.description
+                  || clinVarSummary?.clinical_significance?.description
+                  || null;
+                const reviewStatus = annotations.clinVar?.reviewStatus
+                  || clinVarSummary?.germline_classification?.review_status
+                  || null;
+                const matchedRecord = annotations.clinVar?.recordTitle
+                  || clinVarSummary?.title
+                  || null;
                 return (
                   <Card key={idx} className="border border-slate-200 hover:shadow-md transition-shadow">
                     <CardContent className="pt-4">
@@ -316,7 +327,22 @@ export default function VCFParser({ fileUrl, vcfText, onVariantsParsed, onEnrich
                             <p className="font-medium">{annotations.clinVar.status}</p>
                           </div>
                         )}
+                        {reviewStatus && (
+                          <div>
+                            <p className="text-slate-500">ClinVar review status</p>
+                            <p className="font-medium">{reviewStatus}</p>
+                          </div>
+                        )}
                       </div>
+
+                      {matchedRecord && (
+                        <p className="mt-3 text-xs text-slate-500">
+                          Matched ClinVar record:{' '}
+                          <span className="font-mono text-slate-700">{matchedRecord}</span>
+                          . Confirm this record describes your variant before relying on
+                          the classification.
+                        </p>
+                      )}
 
                       {(() => {
                         const refs = variantReferenceLinks(v, annotations);

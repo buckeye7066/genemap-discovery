@@ -5,12 +5,23 @@ vi.mock('../services/genomicDatabases.js', () => ({
   lookupVariant: vi.fn(async (id) => ({ _id: id, dbsnp: { rsid: id } })),
   lookupGene: vi.fn(async (symbol) => ({ id: 'ENSG00000012048', display_name: symbol })),
   searchClinVar: vi.fn(async () => ({ esearchresult: { idlist: ['123'] } })),
+  // Shape captured verbatim from a live NCBI esummary response (db=clinvar,
+  // uid 17677, the BRCA1 c.5266dup record). NCBI replaced the flat
+  // `clinical_significance` + top-level `review_status` fields with the
+  // germline/oncogenicity/clinical-impact blocks below; a mock still using the
+  // old names would keep this suite green while the UI rendered nothing.
   getClinVarVariant: vi.fn(async () => ({
     result: {
       123: {
-        accession: 'VCV000000123',
-        clinical_significance: { description: 'Benign' },
-        review_status: 'criteria provided, single submitter',
+        accession: 'VCV000017677',
+        title: 'NM_007294.4(BRCA1):c.5266dup (p.Gln1756fs)',
+        germline_classification: {
+          description: 'Pathogenic',
+          last_evaluated: '2016/04/22 00:00',
+          review_status: 'reviewed by expert panel',
+        },
+        oncogenicity_classification: {},
+        clinical_impact_classification: {},
       },
     },
   })),
@@ -111,7 +122,13 @@ describe('VCF genomics routes', () => {
     });
     expect(body.enrichedVariants[0].annotations.clinVar).toMatchObject({
       status: 'found',
-      source: { name: 'ClinVar E-utilities' },
+      source: { name: 'ClinVar E-utilities', reviewStatus: 'reviewed by expert panel' },
+      // The classification is the single most consequential value the VCF
+      // pipeline produces. Assert it by value: a null here means the user is
+      // shown an annotated variant with no pathogenicity verdict.
+      classification: 'Pathogenic',
+      reviewStatus: 'reviewed by expert panel',
+      recordTitle: 'NM_007294.4(BRCA1):c.5266dup (p.Gln1756fs)',
     });
     expect(body.enrichedVariants[0].clinicalConfirmationRequired).toBe(true);
     expect(prisma._store.auditLog.some((row) => row.action === 'vcf.enrich')).toBe(true);
