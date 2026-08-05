@@ -30,7 +30,8 @@ import {
   Brain,
   Heart,
   RefreshCw,
-  Dna
+  Dna,
+  BookOpen
 } from "lucide-react";
 import OnboardingTour from "../components/dashboard/OnboardingTour";
 
@@ -96,9 +97,12 @@ export default function Dashboard() {
         apiClient.getUserActivity().catch(() => []),
         apiClient.getSearchHistory().catch(() => []),
         apiClient.getProjects ? apiClient.getProjects().catch(() => []) : Promise.resolve([]),
-        apiClient.getMedicalData().catch(() => []),
+        // Personal medical-record processing is intentionally unavailable in
+        // the publishable education/research build.
+        Promise.resolve([]),
         apiClient.getGeneSets().catch(() => []),
-        apiClient.getConversations().catch(() => [])
+        // The former assistants included clinical and symptom interpretation.
+        Promise.resolve([])
       ]);
 
       setRecentGenes(activities);
@@ -123,8 +127,8 @@ export default function Dashboard() {
       }
 
       // Generate personalized insights
-      if (activities.length > 0 || records.length > 0 || searches.length > 0) {
-        generatePersonalizedInsights(user, activities, records, searches);
+      if (activities.length > 0 || searches.length > 0) {
+        generatePersonalizedInsights(user, activities, searches);
       }
 
     } catch (err) {
@@ -135,7 +139,7 @@ export default function Dashboard() {
     }
   };
 
-  const generatePersonalizedInsights = async (user, activities, records, searches) => {
+  const generatePersonalizedInsights = async (user, activities, searches) => {
     try {
       const uniqueGenes = [...new Set(
         activities
@@ -144,22 +148,20 @@ export default function Dashboard() {
           .filter(Boolean)
       )];
       const allPhenotypes = searches.map(s => normalizeSearchHistoryEntry(s).query).filter(Boolean);
-      const relevantGenes = records.flatMap(r => r.relevant_genes || []);
-
-      const prompt = `As an AI genomics advisor, provide 3 personalized insights for this user:
+      const prompt = `As a genetics education and research assistant, summarize three patterns in this user's learning activity:
 
 **User Profile:**
 - Education: ${user.education_level || 'General'}
 - Recently viewed genes: ${uniqueGenes.slice(0, 5).join(', ')}
 - Recent phenotype searches: ${allPhenotypes.slice(0, 3).join(', ')}
-- Medical data genes: ${relevantGenes.slice(0, 5).join(', ')}
 
-**Task:** Generate 3 brief, actionable insights (2-3 sentences each):
+**Task:** Generate 3 brief research-learning observations (2-3 sentences each):
 1. A pattern or trend in their research
 2. A connection they might have missed
-3. A next step recommendation
+3. A source-checking or learning next step
 
-Keep each insight under 50 words, practical, and personalized.`;
+Do not infer diagnosis, personal genetic risk, treatment, or clinical action.
+Keep each observation under 50 words, practical, and specific to the activity listed.`;
 
       const response = await apiClient.invokeLLM(prompt);
       // invokeLLM resolves to { result, disclaimer }; render only the text.
@@ -229,7 +231,7 @@ Keep each insight under 50 words, practical, and personalized.`;
                 {getGreeting()}, {(user?.fullName || user?.full_name || user?.displayName)?.split(' ')[0] || 'there'}
               </h1>
               <p className="text-slate-600 mt-1">
-                Welcome to your personalized genomics dashboard
+                Welcome to your genetics learning and research dashboard
               </p>
             </div>
             <div className="flex gap-2">
@@ -608,7 +610,7 @@ Keep each insight under 50 words, practical, and personalized.`;
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <Dna className="w-5 h-5 text-indigo-600" />
-                    Personalized Insights
+                    Research Activity Summary
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="text-sm text-slate-800 leading-relaxed">
@@ -680,10 +682,10 @@ Keep each insight under 50 words, practical, and personalized.`;
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-2">
-                  <Link to={createPageUrl("AIAssistants")}>
+                  <Link to={createPageUrl("TopicExplorer")}>
                     <Button variant="outline" size="sm" className="w-full justify-start gap-2">
-                      <Brain className="w-3 h-3" />
-                      New AI Chat
+                      <BookOpen className="w-3 h-3" />
+                      Continue Learning
                     </Button>
                   </Link>
                   {geneViews.length >= 2 && (
