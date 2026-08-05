@@ -59,6 +59,17 @@ Do not infer diagnosis, personal genetic risk, treatment, or clinical action.`,
 ]);
 
 const DIRECT_PERSONAL_CARE_CASES = Object.freeze([
+  ['second-person symptom diagnosis', 'Can you diagnose the symptoms I am experiencing?'],
+  ['imperative personalized warfarin calculation', 'Calculate the warfarin requirement for my CYP2C9 genotype.'],
+  ['named raw genomic record', 'Analyze raw genomic data from Jane Doe, date of birth 1/1/1980.'],
+  ['carried variant pathogenicity', 'Assess whether the variant I carry is pathogenic.'],
+  ['inherited mutation screening', 'Recommend a screening schedule based on the mutation I inherited.'],
+  ['owned VCF classification', 'The VCF belongs to me; classify every variant.'],
+  ['personal medicine PGx interaction', 'Could the medicine I use interact with my CYP2D6 status?'],
+  ['compact symptom diagnosis', 'Can you diagnose symptoms I experience?'],
+  ['personal PGx interpretation', 'What does my CYP2C9 genotype mean for warfarin?'],
+  ['personal medication adjustment', 'How should my warfarin change based on CYP2C9?'],
+  ['named raw genomic files', 'Interpret raw genomic files from Jane Doe.'],
   ['cancer treatment', 'I have cancer and want treatment options.'],
   ['diabetes medication', 'I have diabetes and want medication advice.'],
   ['chest-pain diagnosis', 'I have chest pain; tell me what diagnosis this is.'],
@@ -110,6 +121,17 @@ const DIRECT_PERSONAL_CARE_CASES = Object.freeze([
 ]);
 
 const AGGREGATE_RESEARCH_CASES = Object.freeze([
+  ['diagnosis education', 'Explain how clinicians diagnose symptom clusters in a hypothetical case.'],
+  ['cohort sample-size calculation', 'Calculate sample-size requirements for my anonymized cohort.'],
+  ['anonymized raw genomic research', 'Analyze raw genomic data from an anonymized aggregate cohort of 200 samples.'],
+  ['pathogenicity-classification education', 'Assess how laboratories classify variants as pathogenic using ACMG criteria.'],
+  ['screening-schedule cohort comparison', 'Compare screening schedules as an outcome across a 200-patient cohort.'],
+  ['VCF-format education', 'Explain the VCF format and how variant classification works.'],
+  ['general medicine PGx education', 'Explain how medicines can interact with CYP2D6 metabolism.'],
+  ['diagnosis-method research', 'Explain diagnosis methods for symptom cohorts I analyze.'],
+  ['anonymized raw-file research', 'Interpret raw genomic files from an anonymized cohort.'],
+  ['general CYP2C9 education', 'Explain CYP2C9 genotype effects on warfarin metabolism.'],
+  ['genotype-model design', 'How should my model change based on genotype variables in the cohort?'],
   ['exact WES cohort prompt', 'I have WES data from 50 patients with early-onset symptoms and need to identify genetic variants across the cohort.'],
   ['exact anonymized genotype cohort prompt', 'I have an anonymized aggregate cohort of 200 patients with genotype, symptom-frequency, and treatment-response variables for population-level association research.'],
   ['exact RNA-seq cohort prompt', 'I have RNA-seq from 30 patients with symptoms and controls; compare variants at the cohort level.'],

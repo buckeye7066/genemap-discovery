@@ -138,6 +138,10 @@ const PERSONAL_VARIANT_SYMPTOM_LINK =
   /\b(?:my|this|these|that|those)\s+(?:genetic\s+)?(?:variants?|mutations?|results?)\b[\s\S]{0,120}\b(?:pain|symptoms?)\b[\s\S]{0,60}\bi(?:['’]ve| have)\s+been\s+(?:having|experiencing|feeling)\b/i;
 const PERSONAL_SYMPTOM_DIAGNOSIS_QUESTION =
   /\b(?:do|could|can|would)\s+(?:my|these|this)\s+(?:symptoms?|pain)\b[\s\S]{0,100}\b(?:mean|indicate|suggest|show)\b[\s\S]{0,80}\bi\s+(?:have|might have|could have)\b/i;
+const CLINICAL_THEN_PERSONAL_EXPERIENCE =
+  /\b(?:diagnos\w*|symptoms?|pain)\b[\s\S]{0,180}\bi\s+(?:(?:am|was|have been)\s+)?(?:experienc(?:e|ed|ing)|feel(?:t|ing)?|hav(?:e|ing)\s+(?:symptoms?|pain))\b/i;
+const DIRECT_CLINICAL_ACTION_ON_SELF =
+  /\b(?:diagnos\w*|screen\w*|treat|assess|evaluate|interpret|classify)\s+(?:me|myself)\b/i;
 const DIRECT_SYMPTOM_ACTION =
   /\b(?:[\w-]+\s+)?pain\b(?!\s+(?:point|points|index|score|scale|measure|measurement|variable|variables|phenotype|phenotypes)\b)[\s\S]{0,120}\b(?:what should i do|what do i do|what could it be|could it be|should i seek|is this (?:serious|urgent)|do i need (?:a )?doctor)\b/i;
 const PERSONAL_BODY_COMPLAINT =
@@ -156,6 +160,22 @@ const PERSONAL_HEREDITY_QUESTION =
   /\b(?:could|can|might)\s+my\s+(?!(?:dataset|data|model|study|analysis|experiment|lab|research|project)\b)[\w -]{1,60}\s+be\s+(?:genetic|hereditary|inherited)\b/i;
 const PERSONAL_GENE_CAUSATION_QUESTION =
   /\b(?:is|could|does)\s+[a-z0-9_-]{2,20}\s+(?:the reason\s+)?why\s+i have\s+(?!no\s+(?:association|signal|result)\b)/i;
+const PERSONALIZED_DOSE_CALCULATION =
+  /\b(?:calculate|determine|estimate|recommend|choose|adjust)\b[\s\S]{0,160}\b(?:dose|dosing|dosage|amount|requirement)\b[\s\S]{0,160}\b(?:for|based on)\s+my\b[\s\S]{0,80}\b(?:cyp[0-9a-z-]*|genotyp\w*|phenotyp\w*|variants?|mutations?|metabolizer|pharmacogen\w*)\b/i;
+const PERSONAL_CARRIED_VARIANT_INTERPRETATION =
+  /\b(?:assess|interpret|classify|evaluate|determine)\w*\b[\s\S]{0,140}\b(?:variants?|mutations?)\s+i\s+(?:carry|have|inherited)\b/i;
+const PERSONAL_INHERITED_VARIANT_CARE =
+  /\b(?:recommend|create|provide|design|suggest)\w*\b[\s\S]{0,140}\b(?:screen\w*|treatments?|therap(?:y|ies)|monitoring|surveillance)\b[\s\S]{0,180}\b(?:variants?|mutations?|results?)\s+i\s+(?:inherited|carry|have)\b/i;
+const PERSONAL_GENETIC_MATERIAL_OWNERSHIP =
+  /\b(?:vcf|variants?|mutations?|genotyp\w*|genomic data|genetic data|dna results?)\b[\s\S]{0,120}\b(?:belongs? to me|is mine|are mine|came from my|from my (?:test|sample|data))\b/i;
+const PERSONAL_MEDICATION_PGX =
+  /\b(?:medications?|medicines?|drugs?)\s+i\s+(?:use|take|am taking|am using)\b[\s\S]{0,180}\b(?:my\s+)?(?:cyp[0-9a-z-]*|genotyp\w*|phenotyp\w*|metabolizer|pharmacogen\w*)\b/i;
+const PERSONAL_PGX_INTERPRETATION =
+  /\b(?:what does|interpret|explain|assess)\s+my\s+(?:cyp[0-9a-z-]+|[\w-]+)\s+(?:genotyp\w*|phenotyp\w*|status|results?)\b[\s\S]{0,120}\b(?:mean|medications?|medicines?|drugs?|dos(?:e|ing)|warfarin)\b/i;
+const PERSONAL_MEDICATION_ADJUSTMENT_BY_MARKER = new RegExp(
+  String.raw`\b(?:how|what)\s+should\s+my\s+(?!${NONCLINICAL_PERSONAL_TARGET}\b)[\w-]+\b[\s\S]{0,100}\b(?:change|adjust|increase|decrease)\b[\s\S]{0,140}\b(?:cyp[0-9a-z-]+|genotyp\w*|phenotyp\w*|metabolizer|pharmacogen\w*)\b`,
+  'i'
+);
 const NONCLINICAL_TAKING_ACTIVITY =
   String.raw`(?:(?:a|an|the|this|that|my)\s+)?(?:[\w-]+\s+){0,3}(?:course|class|workshop|lesson|training|notes?|break|walk|look|approach|position|survey|exam|test|route|train|bus|taxi|photos?|pictures?|samples?|measurements?|data|dataset|steps?|part|interest|issue|action|time|study|project|analysis|research|experiment|tool|method|software|package|library|algorithm|protocol|assay|code|script|pipeline|workflow|search|review|reading|writing|calculation|simulation|model|modeling|size|coverage|power|resolution|quality|replicates?|controls?|design)\b`;
 const NONCLINICAL_POSITIVE_FOR_OBJECT =
@@ -217,6 +237,10 @@ const EXPLICIT_IDENTIFIABLE_PATIENT_DATA = new RegExp(
   String.raw`(?:${SENSITIVE_PATIENT_DATA_ACTION}[\s\S]{0,240}${SENSITIVE_PATIENT_DATA_OBJECT}|${SENSITIVE_PATIENT_DATA_OBJECT}[\s\S]{0,240}${SENSITIVE_PATIENT_DATA_ACTION})`,
   'i'
 );
+const RAW_GENOMIC_DATA_WITH_IDENTIFIER =
+  /\b(?:raw\s+)?(?:genomic|genetic|dna|vcf|variant)\s+(?:data|records?|files?)\b[\s\S]{0,240}\b(?:date of birth|dob|social security(?: number)?|ssn|medical record number|mrn|email address|phone number|home address)\b/i;
+const RAW_GENOMIC_DATA_FROM_NAMED_PERSON =
+  /\b(?:Analyze|Process|Review|Interpret|Use)\b[\s\S]{0,140}\braw\s+(?:genomic|genetic|dna|vcf|variant)\s+(?:data|records?|files?)\b[\s\S]{0,120}\bfrom\s+[A-Z][\p{L}'-]+\s+[A-Z][\p{L}'-]+\b/u;
 const SAFE_AGGREGATE_MY_RESULTS =
   /\bmy results?\b[\s\S]{0,100}\b(?:anonymized|de-identified|deidentified|aggregate)\b[\s\S]{0,80}\b(?:cohort|samples?|data)\b/gi;
 const SAFE_AGGREGATE_MY_RESEARCH_MEASURE =
@@ -264,13 +288,24 @@ export function isPersonalClinicalPrompt(text) {
     || PERSONAL_RESULT_INTERPRETATION.test(text)
     || PERSONAL_VARIANT_SYMPTOM_LINK.test(text)
     || PERSONAL_SYMPTOM_DIAGNOSIS_QUESTION.test(text)
+    || CLINICAL_THEN_PERSONAL_EXPERIENCE.test(text)
+    || DIRECT_CLINICAL_ACTION_ON_SELF.test(text)
     || DIRECT_SYMPTOM_ACTION.test(text)
     || PERSONAL_BODY_COMPLAINT.test(text)
     || FIRST_PERSON_UNSPECIFIED_CARE_FOLLOWUP.test(text)
     || REPORTED_PERSONAL_CONDITION.test(text)
     || PERSONAL_HEREDITY_QUESTION.test(text)
     || PERSONAL_GENE_CAUSATION_QUESTION.test(text)
+    || PERSONALIZED_DOSE_CALCULATION.test(text)
+    || PERSONAL_CARRIED_VARIANT_INTERPRETATION.test(text)
+    || PERSONAL_INHERITED_VARIANT_CARE.test(text)
+    || PERSONAL_GENETIC_MATERIAL_OWNERSHIP.test(text)
+    || PERSONAL_MEDICATION_PGX.test(text)
+    || PERSONAL_PGX_INTERPRETATION.test(text)
+    || PERSONAL_MEDICATION_ADJUSTMENT_BY_MARKER.test(text)
     || PERSONAL_TEST_OR_RESULT.test(text)
+    || RAW_GENOMIC_DATA_WITH_IDENTIFIER.test(text)
+    || RAW_GENOMIC_DATA_FROM_NAMED_PERSON.test(text)
     || FIRST_PERSON_FUTURE_DISEASE.test(text)
     || DIRECT_PERSONAL_CLINICAL_HELP.test(text)
     || FIRST_PERSON_DIAGNOSIS.test(text)
