@@ -203,7 +203,9 @@ describe('publishable education/research boundary', () => {
     'I have two copies of APOE4. What does that mean?',
     'My lab report shows c.68_69delAG; explain it.',
     'I am positive for Factor V Leiden.',
+    'I am positive for taking warfarin.',
     'Here are my raw DNA results—what do they mean?',
+    'I was told I have raw patient-level WES records from 50 patients and need to compare variants across the cohort.',
     'We have data from 200 patients; what treatment should I take?',
     'We have data from 200 patients; what treatment should I use?',
     'We have 200 patient records and compare outcomes across the cohort; what treatment should I take?',
@@ -352,7 +354,7 @@ describe('publishable education/research boundary', () => {
       prompt: 'I was told to compare two cohort models.',
     }],
     ['reported WES research material', '/llm/invoke', {
-      prompt: 'I was told I have WES data from 50 patients and need to compare variants across the cohort.',
+      prompt: 'I was told I have anonymized aggregate WES data from 50 patients and need to compare variants across the cohort.',
     }],
     ['doctor-reported cohort material', '/education/chat', {
       messages: [{ role: 'user', content: 'The doctor says I have an anonymized cohort of 200 patients; compare genotype variables at the population level.' }],

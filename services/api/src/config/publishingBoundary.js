@@ -137,7 +137,7 @@ const DIRECT_SYMPTOM_ACTION =
 const PERSONAL_BODY_COMPLAINT =
   /\bmy\s+(?:[\w-]+\s+){0,2}(?:hurts?|aches?|is painful)\b/i;
 const NONCLINICAL_I_HAVE_OBJECT =
-  String.raw`(?:a\s+(?:question|course|class|lesson|study|project|dataset|data set|model|analysis|research task)|(?:wes|wgs|rna[- ]?seq|genotype|genomic|transcriptomic|proteomic)\s+data|(?:(?:an?|the)\s+)?(?:anonymized|de-identified|aggregate)(?:\s+aggregate)?\s+cohort|pilot study|condition labels)`;
+  String.raw`(?:a\s+(?:question|course|class|lesson|study|project|dataset|data set|model|analysis|research task)|(?:(?:anonymized|de-identified|aggregate)(?:\s+aggregate)?\s+)?(?:wes|wgs|rna[- ]?seq|genotype|genomic|transcriptomic|proteomic)\s+data|(?:(?:an?|the)\s+)?(?:anonymized|de-identified|aggregate)(?:\s+aggregate)?\s+cohort|pilot study|condition labels)`;
 const FIRST_PERSON_UNSPECIFIED_CARE_FOLLOWUP = new RegExp(
   String.raw`\bi have\s+(?!${NONCLINICAL_I_HAVE_OBJECT}\b)[\s\S]{0,140}\b(?:what are my options|what can i do|what should i do|what now|what does that mean|what do they mean|explain it)\b`,
   'i'
@@ -151,11 +151,13 @@ const PERSONAL_HEREDITY_QUESTION =
 const PERSONAL_GENE_CAUSATION_QUESTION =
   /\b(?:is|could|does)\s+[a-z0-9_-]{2,20}\s+(?:the reason\s+)?why\s+i have\s+(?!no\s+(?:association|signal|result)\b)/i;
 const NONCLINICAL_POSITIVE_FOR_OBJECT =
-  String.raw`(?:(?:(?:a|an|the|this|that|my)\s+)?(?:course|class|workshop|lesson|training|study|project|analysis|research|approach|method|tool|software|model|workflow|policy|plan|idea)\b|(?:using|taking|including|adding|choosing|adopting|trying|running|continuing|supporting|keeping|reviewing|comparing|studying|learning|researching)\b)`;
+  String.raw`(?:(?:(?:a|an|the|this|that|my)\s+)?(?:course|class|workshop|lesson|training|study|project|analysis|research|approach|method|tool|software|model|workflow|policy|plan|idea)\b|(?:using|taking|including|adding|choosing|adopting|trying|running|continuing|supporting|keeping|reviewing|comparing|studying|learning|researching)\s+(?:(?:a|an|the|this|that|my|our)\s+)?(?:[\w-]+\s+){0,3}(?:course|class|workshop|lesson|training|study|project|analysis|research|approach|method|tool|software|model|workflow|policy|plan|idea)\b)`;
 const PERSONAL_TEST_OR_RESULT = new RegExp(
   String.raw`(?:\bmy\s+(?:raw\s+)?(?:(?:lab|dna|genetic|genomic)\s+)?(?:report|results?|test)\b[\s\S]{0,160}\b(?:shows?|found|positive|mean|interpret|explain)\b|\bhere (?:are|is) my\s+(?:raw\s+)?(?:dna|genetic|genomic)\s+(?:report|results?|test)\b[\s\S]{0,120}\b(?:mean|interpret|explain)\b|\bi am positive for\s+(?!${NONCLINICAL_POSITIVE_FOR_OBJECT})\S+)`,
   'i'
 );
+const IDENTIFIABLE_PATIENT_LEVEL_DATA =
+  /(?:\b(?:raw|identifiable|identified|non[- ]anonymized|not anonymized)\s+(?:patient|participant|subject)[- ]level\b|\b(?:raw|identifiable|identified|non[- ]anonymized|not anonymized)\b[\s\S]{0,80}\b(?:patient|participant|subject)\s+(?:records?|files?|data)\b|\b(?:patient|participant|subject)[- ]level\s+(?:wes|wgs|rna[- ]?seq|genomic|genetic|medical|health|records?|data)\b)/i;
 const FIRST_PERSON_FUTURE_DISEASE =
   /(?:\bi\s+need\s+to\s+know\b[\s\S]{0,180}\bi\s+(?:will|might|could|may)\s+(?:get|develop|have|be diagnosed)|\b(?:will|might|could|may)\s+i\s+(?:get|develop|have|be diagnosed))/i;
 const DIRECT_PERSONAL_CLINICAL_HELP =
@@ -239,6 +241,7 @@ export function isPersonalClinicalPrompt(text) {
     || PERSONAL_HEREDITY_QUESTION.test(text)
     || PERSONAL_GENE_CAUSATION_QUESTION.test(text)
     || PERSONAL_TEST_OR_RESULT.test(text)
+    || IDENTIFIABLE_PATIENT_LEVEL_DATA.test(text)
     || FIRST_PERSON_FUTURE_DISEASE.test(text)
     || DIRECT_PERSONAL_CLINICAL_HELP.test(text)
     || FIRST_PERSON_DIAGNOSIS.test(text)
