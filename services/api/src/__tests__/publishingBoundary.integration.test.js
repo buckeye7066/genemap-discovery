@@ -59,6 +59,8 @@ const DIRECT_PERSONAL_CARE_CASES = Object.freeze([
   ['diabetes medication', 'I have diabetes and want medication advice.'],
   ['chest-pain diagnosis', 'I have chest pain; tell me what diagnosis this is.'],
   ['BRCA1 screening', 'I have a BRCA1 mutation; how should I be screened?'],
+  ['symptom help', 'I need help with these symptoms.'],
+  ['personal genetic variants', 'I have genetic variants.'],
 ]);
 
 async function buildBoundaryApp() {
@@ -264,6 +266,26 @@ describe('publishing boundary Fastify integration', () => {
         publicationMode: 'education_research',
       });
       expect(handler).not.toHaveBeenCalled();
+    } finally {
+      await app.close();
+    }
+  });
+
+  it.each([
+    ['education course', 'I take a genetics course and want to understand Mendelian inheritance.'],
+    ['research notes', 'I take notes while reviewing genetic variants across an aggregate cohort.'],
+    ['condition labels', 'I have condition labels for 200 patients in an aggregate cohort for population-level association research.'],
+  ])('allows ordinary non-clinical research wording from %s', async (_label, prompt) => {
+    const { app, handler } = await buildBoundaryApp();
+    try {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/education/chat',
+        payload: { messages: [{ role: 'user', content: prompt }] },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ ok: true });
+      expect(handler).toHaveBeenCalledTimes(1);
     } finally {
       await app.close();
     }

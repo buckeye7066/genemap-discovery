@@ -112,16 +112,19 @@ const CLINICAL_FOR_ME = new RegExp(
 // evaluated first; only explicit aggregate data ownership paired with a
 // cohort-level research output can neutralize the otherwise fail-closed
 // "I have ... clinical action" rule.
-const FIRST_PERSON_DIAGNOSIS_OR_MEDICATION =
-  /\bi\s+(?:(?:was|have\s+been)\s+diagnosed\b|(?:am\s+taking|take)\b)/i;
+const FIRST_PERSON_DIAGNOSIS = /\bi\s+(?:was|have\s+been)\s+diagnosed\b/i;
 const DIRECT_CARE_ACTION =
   String.raw`(?:diagnos\w*|personal risk|risk level|disease risk|medication(?:s| advice)?|medicine(?:s| advice)?|drug(?:s| advice)?|dos(?:e|ing)|treatment(?:s| options?)?|therap(?:y|ies)|screen\w*|prognosis|metabolizer|pharmacogen\w*|clinical management|medical advice|urgent|emergency)`;
 const DIRECT_PERSONAL_CARE_REQUEST = new RegExp(
-  String.raw`\b(?:i|me|my|mine)\b[\s\S]{0,160}\b(?:want|need|tell me|advise me|how should i|what should i|should i|can i)\b[\s\S]{0,120}${DIRECT_CARE_ACTION}`,
+  String.raw`(?:\b(?:i|me|my|mine)\b[\s\S]{0,160}\b(?:want|need|tell me|advise me|how should i|what should i|should i|can i)\b[\s\S]{0,120}${DIRECT_CARE_ACTION}|\b(?:what|which)\s+dose\s+should\s+i\b|\bshould\s+i\s+(?:take|stop|start|change|increase|decrease)\b)`,
   'i'
 );
 const GENERIC_I_HAVE_CLINICAL = new RegExp(
   String.raw`\bi have\b[\s\S]{0,320}${CLINICAL_ACTION}`,
+  'i'
+);
+const FIRST_PERSON_CLINICAL_HELP = new RegExp(
+  String.raw`\bi need\b[\s\S]{0,80}\b(?:help|advice|guidance)\b[\s\S]{0,100}${CLINICAL_ACTION}`,
   'i'
 );
 const SHOULD_I_CLINICAL = new RegExp(
@@ -152,8 +155,9 @@ export function isPersonalClinicalPrompt(text) {
 
   return MY_CLINICAL.test(text)
     || CLINICAL_FOR_ME.test(text)
-    || FIRST_PERSON_DIAGNOSIS_OR_MEDICATION.test(text)
+    || FIRST_PERSON_DIAGNOSIS.test(text)
     || (GENERIC_I_HAVE_CLINICAL.test(text) && !isAggregateResearchOwnership(text))
+    || (FIRST_PERSON_CLINICAL_HELP.test(text) && !isAggregateResearchOwnership(text))
     || SHOULD_I_CLINICAL.test(text)
     || PERSON_THEN_CLINICAL.test(text)
     || CLINICAL_THEN_PERSON.test(text);

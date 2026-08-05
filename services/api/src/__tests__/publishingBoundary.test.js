@@ -175,6 +175,8 @@ describe('publishable education/research boundary', () => {
     'I have diabetes and want medication advice.',
     'I have chest pain; tell me what diagnosis this is.',
     'I have a BRCA1 mutation; how should I be screened?',
+    'I need help with these symptoms.',
+    'I have genetic variants.',
   ])('blocks personalized clinical generation: %s', (prompt) => {
     expect(isPersonalClinicalPrompt(prompt)).toBe(true);
     expect(publicationBoundaryDecision({ url: '/education/chat', body: {
@@ -264,6 +266,15 @@ describe('publishable education/research boundary', () => {
   it.each([
     ['general genetics lesson', '/education/explain', { topic: 'What is pharmacogenomics?' }],
     ['general PGx mechanism', '/llm/invoke', { prompt: 'Explain how CYP2D6 metabolizer phenotypes are defined.' }],
+    ['ordinary education wording', '/education/chat', {
+      messages: [{ role: 'user', content: 'I take a genetics course and want to understand Mendelian inheritance.' }],
+    }],
+    ['ordinary research wording', '/llm/invoke', {
+      prompt: 'I take notes while reviewing genetic variants across an aggregate cohort.',
+    }],
+    ['aggregate condition-label wording', '/llm/invoke', {
+      prompt: 'I have condition labels for 200 patients in an aggregate cohort for population-level association research.',
+    }],
     ['gene lookup', '/genomics/gene/CFTR', null],
     ['candidate enrichment', '/genomics/enrich', { symbols: ['CFTR'] }],
     ['research project', '/entities/projects', { title: 'CFTR literature review' }],
