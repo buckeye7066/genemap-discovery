@@ -42,6 +42,45 @@ describe('clinical publishing boundary', () => {
     expect(dashboard).not.toContain('Medical data genes:');
   });
 
+  it('declares a finite publication task on every surviving generation wrapper', () => {
+    const wrappers = [
+      ['Dashboard', read('../../pages/Dashboard.jsx'), 'apiClient.invokeLLM(', 'learning_activity_summary'],
+      ['PhenotypeSearchService', read('../../components/search/PhenotypeSearchService.jsx'), 'apiClient.invokeLLM(', 'candidate_gene_research'],
+      ['AutocompleteSearch', read('../../components/search/AutocompleteSearch.jsx'), 'apiClient.invokeLLM(', 'candidate_gene_research'],
+      ['HypothesisGenerator', read('../../components/research/HypothesisGenerator.jsx'), 'apiClient.invokeLLM(', 'research_hypothesis'],
+      ['TopicExplorer', read('../../pages/TopicExplorer.jsx'), 'apiClient.chat(', 'genetics_education'],
+    ];
+
+    for (const [label, source, call, task] of wrappers) {
+      const callCount = source.split(call).length - 1;
+      const taskCount = source.split(`publicationTask: '${task}'`).length - 1;
+      expect(callCount, `${label} generation call count`).toBeGreaterThan(0);
+      expect(taskCount, `${label} task declarations`).toBe(callCount);
+    }
+
+    const sharedTypes = read('../../../../packages/shared/src/types.ts');
+    for (const task of [
+      'genetics_education',
+      'aggregate_genomics_research',
+      'candidate_gene_research',
+      'research_hypothesis',
+      'learning_activity_summary',
+    ]) {
+      expect(sharedTypes).toContain(`'${task}'`);
+    }
+    expect(sharedTypes).toContain('publicationTask: PublicationTask;');
+  });
+
+  it('removes unrelated arbitrary generation from published support and icon routes', () => {
+    const support = read('../../pages/ContactSupport.jsx');
+    const pageConfig = read('../../pages.config.js');
+
+    expect(support).not.toContain('apiClient.invokeLLM');
+    expect(support).not.toContain('AI Draft');
+    expect(pageConfig).not.toContain("import('./pages/IconGenerator')");
+    expect(pageConfig).not.toContain('"IconGenerator"');
+  });
+
   it('omits unverified VCF, database, and pathway-statistics execution from Research Mode', () => {
     const researchMode = read('../../pages/ResearchMode.jsx');
     expect(researchMode).not.toContain('BulkVCFAnalysis');

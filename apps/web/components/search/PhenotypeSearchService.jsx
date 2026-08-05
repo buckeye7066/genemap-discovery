@@ -145,7 +145,11 @@ genes (BRCA1 / TP53 / APOE) unless they are genuinely relevant.
         'hpoTerms (array of strings), synonyms (array of strings), inheritancePattern ' +
         '(string|null), and candidateGenes (array of objects with: symbol, name, entrezId, ' +
         'ensemblId, chromosome, start, end, score, associationType, evidenceSpecies, explanation).',
-      { add_context_from_internet: true, maxTokens: 4096 }
+      {
+        publicationTask: 'candidate_gene_research',
+        add_context_from_internet: true,
+        maxTokens: 4096,
+      }
     );
 
     const parsed = parseLLMJson(response, {});
@@ -328,6 +332,7 @@ Provide a bounded exploratory analysis for candidate-gene lead generation.
 `;
 
     const response = await apiClient.invokeLLM(prompt + '\n\nReturn your response as JSON with keys: queryType, isDisease, diseaseName, isHPOTerm, mainFeatures (array), hpoTerms (array), synonyms (array), category, inheritancePattern.', {
+      publicationTask: 'candidate_gene_research',
       add_context_from_internet: true
     });
 
@@ -403,6 +408,7 @@ Return 3-8 candidate leads ranked by model-estimated relevance for source verifi
     // explanations easily exceeds the default cap, and a truncated reply yields
     // invalid JSON → an empty list → the "Found 0 candidate genes" the user saw.
     const response = await apiClient.invokeLLM(prompt + '\n\nReturn your response as JSON with key "candidateGenes" containing an array of objects with: symbol, name, entrezId, ensemblId, chromosome, start, end, score, associationType, evidenceSpecies, explanation.', {
+      publicationTask: 'candidate_gene_research',
       add_context_from_internet: true,
       maxTokens: 4096
     });
@@ -495,7 +501,11 @@ Return ONLY a JSON object with these keys:
 - "keyTakeaways": array of 3-4 one-sentence strings
 - "phenotypes": array of { "name": string, "hpoId": string|null } for candidate phenotype terms`;
 
-    const response = await apiClient.invokeLLM(prompt, { add_context_from_internet: true, maxTokens: 2048 });
+    const response = await apiClient.invokeLLM(prompt, {
+      publicationTask: 'candidate_gene_research',
+      add_context_from_internet: true,
+      maxTokens: 2048,
+    });
     const parsed = parseLLMJson(response, {});
 
     return {
@@ -536,6 +546,7 @@ UniProt, HPO, or PubMed were queried, and do not invent citations or evidence gr
 `;
 
     const response = await apiClient.invokeLLM(prompt + '\n\nReturn as JSON with key "phenotypes" containing array of {name, hpoId}.', {
+      publicationTask: 'candidate_gene_research',
       add_context_from_internet: true
     });
 
@@ -567,6 +578,7 @@ record identifiers, evidence grades, expression values, or clinical significance
 `;
 
     const response = await apiClient.invokeLLM(prompt, {
+      publicationTask: 'candidate_gene_research',
       add_context_from_internet: true
     });
     return response?.result || response || `${gene.symbol} is associated with the searched phenotype.`;
@@ -595,6 +607,7 @@ Return ONLY an array of strings, no additional formatting.
 `;
 
     const response = await apiClient.invokeLLM(prompt + '\n\nReturn as JSON with key "takeaways" containing array of strings.', {
+      publicationTask: 'candidate_gene_research',
       add_context_from_internet: true
     });
 

@@ -133,9 +133,19 @@ export interface UserChatMessage {
   content: string;
 }
 
+/** Finite server-enforced intents available in the public education/research build. */
+export type PublicationTask =
+  | 'genetics_education'
+  | 'aggregate_genomics_research'
+  | 'candidate_gene_research'
+  | 'research_hypothesis'
+  | 'learning_activity_summary';
+
 export interface ChatRequest {
   messages: UserChatMessage[];
   level: EducationLevel | string;
+  /** Required by the publication boundary; arbitrary tutor generation is unavailable. */
+  publicationTask: PublicationTask;
   /** Optional topic context so the tutor reply carries the topic's references. */
   topic?: string;
 }
@@ -157,6 +167,8 @@ export interface LLMOptions {
   maxTokens?: number;
   size?: string;
   quality?: string;
+  /** Server-enforced intent for a publishable text-generation request. */
+  publicationTask?: PublicationTask;
   /**
    * Calling persona id from the shared agent registry ('robert' | 'anastasia').
    * Sent as a sibling `agent` field on the request, not inside `options` — see

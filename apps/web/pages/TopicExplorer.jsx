@@ -213,6 +213,7 @@ export default function TopicExplorer() {
       const res = await apiClient.chat({
         messages: outgoing,
         level: level || 'undergraduate',
+        publicationTask: 'genetics_education',
         topic: topicTitle,
       });
       setChatMessages(prev => [...prev, { role: 'assistant', content: res.response }]);

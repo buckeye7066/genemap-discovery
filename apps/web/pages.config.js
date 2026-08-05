@@ -4,7 +4,6 @@ import __Layout from './Layout.jsx';
 const Search = lazyWithRetry(() => import('./pages/Search'));
 const Premium = lazyWithRetry(() => import('./pages/Premium'));
 const History = lazyWithRetry(() => import('./pages/History'));
-const IconGenerator = lazyWithRetry(() => import('./pages/IconGenerator'));
 const Profile = lazyWithRetry(() => import('./pages/Profile'));
 const ResearchMode = lazyWithRetry(() => import('./pages/ResearchMode'));
 const Dashboard = lazyWithRetry(() => import('./pages/Dashboard'));
@@ -38,7 +37,6 @@ export const PAGES = {
     "Search": Search,
     "Premium": Premium,
     "History": History,
-    "IconGenerator": IconGenerator,
     "Profile": Profile,
     "ResearchMode": ResearchMode,
     "Dashboard": Dashboard,

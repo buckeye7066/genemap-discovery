@@ -146,7 +146,9 @@ export default function Dashboard() {
 Do not infer diagnosis, personal genetic risk, treatment, or clinical action.
 Keep each observation under 50 words, practical, and specific to the activity listed.`;
 
-      const response = await apiClient.invokeLLM(prompt);
+      const response = await apiClient.invokeLLM(prompt, {
+        publicationTask: 'learning_activity_summary',
+      });
       // invokeLLM resolves to { result, disclaimer }; render only the text.
       const insightText = typeof response === 'string' ? response : response?.result;
       if (insightText) setPersonalizedInsights(insightText);

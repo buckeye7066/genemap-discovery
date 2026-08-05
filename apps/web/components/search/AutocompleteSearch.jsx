@@ -78,7 +78,9 @@ Format as JSON array with objects containing:
 - description: brief 1-line description
 
 Focus on the most common and relevant matches. Return JSON: {"suggestions": [...]}`;
-        const raw = await apiClient.invokeLLM(suggestionPrompt);
+        const raw = await apiClient.invokeLLM(suggestionPrompt, {
+          publicationTask: 'candidate_gene_research',
+        });
         const response = parseLLMJson(raw, { suggestions: [] });
 
         if (Array.isArray(response.suggestions) && response.suggestions.length > 0) {

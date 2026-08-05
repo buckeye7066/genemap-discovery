@@ -134,7 +134,9 @@ ${selectedDataTypes.join(', ')}
 
 Generate creative, scientifically rigorous hypotheses that integrate multi-omic data.`;
 
-      const { result: response } = await apiClient.invokeLLM(prompt);
+      const { result: response } = await apiClient.invokeLLM(prompt, {
+        publicationTask: 'research_hypothesis',
+      });
 
       setHypotheses({
         context: researchContext,
