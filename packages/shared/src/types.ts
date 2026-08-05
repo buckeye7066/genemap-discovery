@@ -157,6 +157,12 @@ export interface LLMOptions {
   maxTokens?: number;
   size?: string;
   quality?: string;
+  /**
+   * Calling persona id from the shared agent registry ('robert' | 'anastasia').
+   * Sent as a sibling `agent` field on the request, not inside `options` — see
+   * ApiClient#invokeLLM. Unknown ids are ignored server-side.
+   */
+  agent?: string;
 }
 
 // API actually returns { result, disclaimer } for /llm/* — fix the contract.
@@ -446,11 +452,30 @@ export interface AdminAnalyticsStats {
   totalActivities: number;
 }
 
+/**
+ * Agent-mesh report surface. Operational metadata only — counts, agent ids,
+ * topics and the short operational claim text. Never user or medical content.
+ */
+export interface AgentLessonSummary {
+  authorAgent: string;
+  topic: string;
+  claim: string;
+  timesSeen: number;
+  /** agentId -> ISO timestamp the lesson was consumed. */
+  consumedBy: Record<string, string>;
+}
+
+export interface AgentMeshSummary {
+  messagesLast7d: number;
+  lessons: AgentLessonSummary[];
+}
+
 export interface AdminAnalytics {
   stats: AdminAnalyticsStats;
   recentActivity: unknown[];
   recentSearches: unknown[];
   recentConversations: unknown[];
+  agentMesh?: AgentMeshSummary;
 }
 
 // The admin API emits the same snake_case contract as /auth/me (a Base44

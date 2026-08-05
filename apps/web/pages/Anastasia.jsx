@@ -283,8 +283,11 @@ ${userMessage}
 **Remember:** You're Anastasia - smart, friendly, and amazing at making genetics make sense! Be yourself - warm, witty, and wonderfully clear. 💜`;
 
     try {
+      // Identify the calling persona to the server so the agent mesh can brief
+      // this run with peer notes and attribute what it learns to Anastasia.
       const response = await apiClient.invokeLLM(contextPrompt, {
-        add_context_from_internet: true
+        add_context_from_internet: true,
+        agent: 'anastasia'
       });
       // Coerce to a guaranteed string. When the model returns an empty string,
       // `response.result` is falsy and the old `|| response` fallback handed the

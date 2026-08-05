@@ -6,6 +6,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 let checkHttpEndpoints;
 let parseArgs;
 let runLaunchVerification;
+let runSelfTest;
 let validateEvidence;
 let validateLaunchEnv;
 
@@ -17,6 +18,7 @@ beforeAll(async () => {
     checkHttpEndpoints,
     parseArgs,
     runLaunchVerification,
+    runSelfTest,
     validateEvidence,
     validateLaunchEnv,
   } = launchVerifier);
@@ -177,6 +179,17 @@ describe('production launch verification', () => {
     });
 
     expect(failures(checks)).toEqual([]);
+  });
+
+  it('self-test executes the verifier end-to-end and confirms fail-closed behaviour', () => {
+    // This is what the release gate runs instead of `node --check`: it actually
+    // imports env.js and exercises the env + evidence validators against a
+    // synthetic hardened fixture, then confirms the verifier still rejects a
+    // non-live Stripe key. A green self-test proves the script runs, not merely
+    // that it parses.
+    const result = runSelfTest(NOW);
+    expect(result.problems).toEqual([]);
+    expect(result.ok).toBe(true);
   });
 
   it('does not allow skipped HTTP checks to pass launch verification', async () => {

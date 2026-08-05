@@ -31,7 +31,8 @@ import {
   Eye,
   AlertCircle,
   BarChart3,
-  Clock
+  Clock,
+  Network
 } from "lucide-react";
 
 export default function AdminAnalytics() {
@@ -43,9 +44,14 @@ export default function AdminAnalytics() {
   const [activities, setActivities] = useState([]);
   const [searches, setSearches] = useState([]);
   const [medicalRecords, setMedicalRecords] = useState([]);
+  const [medicalDataTypeBreakdown, setMedicalDataTypeBreakdown] = useState([]);
   const [aiConversations, setAiConversations] = useState([]);
+  // Agent-mesh report surface (GET /admin/analytics -> agentMesh). Counts +
+  // operational lesson text only.
+  const [agentMesh, setAgentMesh] = useState({ messagesLast7d: 0, lessons: [] });
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [activeTab, setActiveTab] = useState('overview');
 
   useEffect(() => {
     if (isLoadingAuth) return;
@@ -70,14 +76,23 @@ export default function AdminAnalytics() {
         recentActivity = [],
         recentSearches = [],
         recentConversations = [],
+        medicalDataTypeBreakdown: typeBreakdown = [],
+        agentMesh: mesh = {},
       } = analytics;
 
       setStats(statCounts);
       setActivities(Array.isArray(recentActivity) ? recentActivity : []);
       setSearches(Array.isArray(recentSearches) ? recentSearches : []);
-      // Medical records are exposed as a COUNT only (no PHI listing).
+      // Medical records are exposed as a COUNT only (no PHI listing) — the
+      // upload-type mix comes from a separate privacy-safe server-side
+      // aggregate (counts by type, no record content) instead.
       setMedicalRecords([]);
+      setMedicalDataTypeBreakdown(Array.isArray(typeBreakdown) ? typeBreakdown : []);
       setAiConversations(Array.isArray(recentConversations) ? recentConversations : []);
+      setAgentMesh({
+        messagesLast7d: Number(mesh?.messagesLast7d) || 0,
+        lessons: Array.isArray(mesh?.lessons) ? mesh.lessons : [],
+      });
     } catch (err) {
       console.error('Error loading analytics:', err);
       setError(err.message || 'Failed to load analytics');
@@ -145,16 +160,11 @@ export default function AdminAnalytics() {
   }, [activities, searches]);
 
   const medicalDataTypes = useMemo(() => {
-    const typeCounts = {};
-    medicalRecords.forEach(record => {
-      const type = record.file_type || 'other';
-      typeCounts[type] = (typeCounts[type] || 0) + 1;
-    });
-    return Object.entries(typeCounts).map(([name, value]) => ({
-      name: name.replace('_', ' ').toUpperCase(),
-      value
+    return medicalDataTypeBreakdown.map(({ dataType, count }) => ({
+      name: (dataType || 'other').replace(/_/g, ' ').toUpperCase(),
+      value: count
     }));
-  }, [medicalRecords]);
+  }, [medicalDataTypeBreakdown]);
 
   const aiUsageStats = useMemo(() => {
     const robertCount = aiConversations.filter(c => c.assistantType === 'robert').length;
@@ -233,9 +243,15 @@ export default function AdminAnalytics() {
           <p className="text-slate-600">Track user activity, popular features, and platform usage</p>
         </div>
 
-        {/* Quick Stats */}
+        {/* Quick Stats — each card jumps to the tab with its breakdown */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-          <Card>
+          <Card
+            role="button"
+            tabIndex={0}
+            onClick={() => setActiveTab('overview')}
+            onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && setActiveTab('overview')}
+            className="cursor-pointer transition-shadow hover:shadow-md"
+          >
             <CardContent className="pt-6">
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
@@ -249,7 +265,13 @@ export default function AdminAnalytics() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card
+            role="button"
+            tabIndex={0}
+            onClick={() => setActiveTab('searches')}
+            onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && setActiveTab('searches')}
+            className="cursor-pointer transition-shadow hover:shadow-md"
+          >
             <CardContent className="pt-6">
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
@@ -263,7 +285,13 @@ export default function AdminAnalytics() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card
+            role="button"
+            tabIndex={0}
+            onClick={() => setActiveTab('features')}
+            onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && setActiveTab('features')}
+            className="cursor-pointer transition-shadow hover:shadow-md"
+          >
             <CardContent className="pt-6">
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
@@ -277,7 +305,13 @@ export default function AdminAnalytics() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card
+            role="button"
+            tabIndex={0}
+            onClick={() => setActiveTab('overview')}
+            onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && setActiveTab('overview')}
+            className="cursor-pointer transition-shadow hover:shadow-md"
+          >
             <CardContent className="pt-6">
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 bg-amber-100 rounded-lg flex items-center justify-center">
@@ -293,7 +327,7 @@ export default function AdminAnalytics() {
         </div>
 
         {/* Main Content */}
-        <Tabs defaultValue="overview" className="space-y-6">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="genes">Popular Genes</TabsTrigger>
@@ -415,6 +449,48 @@ export default function AdminAnalytics() {
                   ) : <ChartEmpty label="No AI chats recorded yet" />}
                 </CardContent>
               </Card>
+
+              {/* Agent mesh — what Robert and Anastasia have told each other.
+                  Operational metadata only (agent ids, topics, counts); no user
+                  or medical content ever reaches these stores. */}
+              <Card className="shadow-lg md:col-span-2">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Network className="w-5 h-5 text-teal-600" />
+                    Agent Mesh
+                    <Badge variant="outline" className="ml-auto text-xs font-normal">
+                      {agentMesh.messagesLast7d} peer message{agentMesh.messagesLast7d === 1 ? '' : 's'} / 7d
+                    </Badge>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {agentMesh.lessons.length === 0 ? (
+                    <p className="text-sm text-slate-500 py-2">
+                      No cross-agent lessons recorded yet.
+                    </p>
+                  ) : (
+                    <div className="space-y-2">
+                      {agentMesh.lessons.slice(0, 8).map((lesson, idx) => (
+                        <div
+                          key={idx}
+                          className="flex items-start gap-3 text-sm p-2 rounded bg-slate-50 border border-slate-200"
+                        >
+                          <Badge className="bg-teal-600 text-white text-xs shrink-0">
+                            {lesson.topic}
+                          </Badge>
+                          <span className="text-slate-800 flex-1 min-w-0 break-words">
+                            {lesson.claim}
+                          </span>
+                          <span className="text-xs text-slate-500 shrink-0 whitespace-nowrap">
+                            by {lesson.authorAgent} &middot; seen {lesson.timesSeen}&times; &middot;{' '}
+                            learned by {Object.keys(lesson.consumedBy || {}).length}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
             </div>
           </TabsContent>
 
@@ -474,15 +550,17 @@ export default function AdminAnalytics() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
+                {hasValues(medicalDataTypes) ? (
                 <ResponsiveContainer width="100%" height={300}>
                   <BarChart data={medicalDataTypes}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="name" />
-                    <YAxis />
+                    <YAxis allowDecimals={false} />
                     <Tooltip />
                     <Bar dataKey="value" fill="#10b981" />
                   </BarChart>
                 </ResponsiveContainer>
+                ) : <ChartEmpty label="No medical data uploads yet" />}
               </CardContent>
             </Card>
 

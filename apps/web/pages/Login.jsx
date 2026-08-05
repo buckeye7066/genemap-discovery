@@ -1,12 +1,14 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useLocation, useNavigate, Link } from "react-router-dom";
-import { Dna, Loader2, LogIn, UserPlus } from "lucide-react";
+import { Dna, Loader2, LogIn, UserPlus, Wrench } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useAuth } from "@/lib/AuthContext";
+import { apiClient } from "@genemap/shared";
+import { LOGIN_MAINTENANCE } from "@/lib/maintenance";
 
 export default function Login() {
   const { login, register } = useAuth();
@@ -17,6 +19,24 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState(null);
+
+  // Runtime maintenance status. Render the static fallback immediately (no
+  // flash of the wrong state), then follow the server's answer — the switch
+  // is the API's LOGIN_MAINTENANCE env var, so flipping it needs no frontend
+  // rebuild. If the probe fails the fallback stands: with the API down,
+  // sign-in couldn't succeed anyway.
+  const [maintenance, setMaintenance] = useState(LOGIN_MAINTENANCE);
+  useEffect(() => {
+    let cancelled = false;
+    apiClient
+      .request("/auth/maintenance")
+      .then((status) => {
+        if (cancelled || !status || typeof status.active !== "boolean") return;
+        setMaintenance({ ...LOGIN_MAINTENANCE, ...status });
+      })
+      .catch(() => { /* keep the static fallback */ });
+    return () => { cancelled = true; };
+  }, []);
 
   const isRegister = mode === "register";
   const redirectFrom = location.state?.from;
@@ -53,6 +73,42 @@ export default function Login() {
       setIsSubmitting(false);
     }
   };
+
+  if (maintenance.active) {
+    return (
+      <div className="min-h-screen bg-slate-950 px-4 py-10 text-slate-100">
+        <div className="mx-auto flex min-h-[calc(100vh-5rem)] w-full max-w-md flex-col items-center justify-center">
+          <Card className="w-full border-slate-800 bg-slate-900 shadow-2xl">
+            <CardHeader className="space-y-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-cyan-500 text-slate-950">
+                <Dna className="h-7 w-7" />
+              </div>
+              <CardTitle className="text-2xl text-white">GeneMap Discovery</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div
+                role="status"
+                className="rounded-lg border border-amber-500/60 bg-amber-950/40 p-4 text-sm text-amber-100"
+              >
+                <div className="flex items-start gap-3">
+                  <Wrench className="mt-0.5 h-5 w-5 shrink-0 text-amber-400" aria-hidden="true" />
+                  <div>
+                    <p className="font-semibold text-amber-50">{maintenance.title}</p>
+                    <p className="mt-1">{maintenance.message}</p>
+                    <p className="mt-2 font-medium text-amber-50">{maintenance.etaText}</p>
+                    <p className="mt-2">
+                      Sign-in and registration are disabled until the upgrade completes. No action
+                      is needed on your part.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-950 px-4 py-10 text-slate-100">

@@ -267,7 +267,9 @@ ${isBatchAnalysis ? '- Organize analysis by target, then provide cross-reference
 
 Provide a comprehensive but accessible clinical analysis formatted in clear sections with markdown.`;
 
-      const { result: response } = await apiClient.invokeLLM(prompt);
+      // Identify the calling persona to the server so the agent mesh can brief
+      // this run with peer notes and attribute what it learns to Robert.
+      const { result: response } = await apiClient.invokeLLM(prompt, { agent: 'robert' });
 
       // An empty model response would otherwise render a blank "Clinical
       // Analysis" card with no error and no retry (and any future contract that

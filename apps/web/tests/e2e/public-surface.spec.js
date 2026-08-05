@@ -45,7 +45,12 @@ test.describe('Legal pages (reachable logged-out)', () => {
 });
 
 test.describe('Security headers', () => {
-  test('the web app sends the expected security headers', async ({ request }) => {
+  test('the web app sends the expected security headers', async ({ request, baseURL }) => {
+    // These headers come from vercel.json / the deployed edge; the local Vite
+    // dev server never sends them, so this check only means something against
+    // a deployed URL. Skipping locally keeps the nightly local sweep honest
+    // (a test that can only fail locally measures the environment, not the app).
+    test.skip(/localhost|127\.0\.0\.1/.test(baseURL || ''), 'security headers are added by the deployed edge, not the dev server');
     const res = await request.get('/login');
     const headers = res.headers();
     expect(headers['x-content-type-options']).toBe('nosniff');

@@ -31,6 +31,38 @@ function normalizeEmail(email) {
   return String(email).trim().toLowerCase();
 }
 
+// LOGIN MAINTENANCE MODE — while active, /login and /register return 503 so
+// no new sessions can be created during the upgrade. /refresh and /logout
+// stay open so already-signed-in users are not kicked out. Frontend twin:
+// apps/web/lib/maintenance.js (fallback banner copy); the Login page asks
+// GET /auth/maintenance at runtime, so this switch is the single source of
+// truth.
+//
+// TOGGLE (no code change, no rebuild): set LOGIN_MAINTENANCE on the API
+// service (Railway) — '0' forces OFF, '1' forces ON; unset falls back to the
+// code default below. Default OFF: maintenance is armed only deliberately
+// via the env var, so a fresh deploy or a dropped variable can never lock
+// users out by surprise.
+const LOGIN_MAINTENANCE_ACTIVE = false;
+const LOGIN_MAINTENANCE_MESSAGE =
+  'GeneMap Discovery is being upgraded and sign-in is temporarily disabled. ' +
+  'Expected back online by 8:00 PM Eastern tonight (Monday, July 21).';
+const LOGIN_MAINTENANCE_COPY = {
+  title: 'GeneMap Discovery is being upgraded',
+  message:
+    'We are performing a scheduled upgrade. Sign-in and registration are temporarily disabled while we finish.',
+  etaText: 'Expected back online by 8:00 PM Eastern tonight (Monday, July 21).',
+};
+
+function isLoginMaintenanceActive() {
+  // Explicit env override wins in both directions.
+  if (process.env.LOGIN_MAINTENANCE === '0') return false;
+  if (process.env.LOGIN_MAINTENANCE === '1') return true;
+  // Tests exercise the normal auth flows; maintenance is a production posture.
+  if (process.env.NODE_ENV === 'test' || process.env.VITEST) return false;
+  return LOGIN_MAINTENANCE_ACTIVE;
+}
+
 const registerSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8),
@@ -198,7 +230,24 @@ export default async function authRoutes(fastify) {
     request.user = { userId: user.id, email: user.email, role: user.role };
   };
 
+  // Public status probe: the Login page asks this at runtime so the banner
+  // follows the server-side switch without a frontend rebuild. No auth.
+  //
+  // Exempt from rate limiting: this scope's strict bucket (10/15min) exists
+  // to slow credential stuffing on login/register, but EVERY login-page load
+  // fires this read-only GET (twice under React StrictMode in dev), so a
+  // visitor reloading /login a few times exhausted the bucket and then the
+  // probe — and their actual sign-in attempt — started failing. A constant
+  // in-memory JSON response needs no throttle.
+  fastify.get('/maintenance', { config: { rateLimit: false } }, async () => ({
+    active: isLoginMaintenanceActive(),
+    ...LOGIN_MAINTENANCE_COPY,
+  }));
+
   fastify.post('/register', async (request, reply) => {
+    if (isLoginMaintenanceActive()) {
+      return reply.code(503).send({ error: LOGIN_MAINTENANCE_MESSAGE });
+    }
     const parsed = registerSchema.parse(request.body);
     const email = normalizeEmail(parsed.email);
 
@@ -279,6 +328,9 @@ export default async function authRoutes(fastify) {
   });
 
   fastify.post('/login', async (request, reply) => {
+    if (isLoginMaintenanceActive()) {
+      return reply.code(503).send({ error: LOGIN_MAINTENANCE_MESSAGE });
+    }
     const parsed = loginSchema.parse(request.body);
     const email = normalizeEmail(parsed.email);
 

@@ -2,9 +2,12 @@ import { authenticate } from '../middleware/auth.js';
 import { checkEducationEntitlement, enforceUsageLimit, recordUsage } from '../middleware/entitlements.js';
 import { generateExplanation, generateChatResponse, generateImage } from '../services/llm.js';
 import { withHonestyPrefix, honestySystemMessage } from '../services/scientificHonesty.js';
+import { assertNoRawGenomicLLM } from '../services/genomicGuard.js';
+import { consumePeerBriefing, recordProviderFailureLesson } from '../services/agentMesh.js';
 import { createAuditLog } from '../utils/audit.js';
 import { ValidationError } from '../utils/errors.js';
 import { MAX_PROMPT_CHARS, MAX_CHAT_MESSAGES, MAX_MESSAGE_CHARS } from '../config/llmLimits.js';
+import { isRegisteredAgent } from '@genemap/shared';
 
 // Hard ceiling on tokens per call. Premium users can request up to this
 // limit; free-tier users are additionally bounded by enforceUsageLimit.
@@ -30,9 +33,6 @@ const INVOKE_TEXT_MODEL = process.env.LLM_INVOKE_TEXT_MODEL
   || process.env.LLM_EDU_TEXT_MODEL
   || (INVOKE_TEXT_PROVIDER === 'openai' || INVOKE_TEXT_PROVIDER === 'gpt' ? 'gpt-4o-mini' : undefined);
 
-const GENOMIC_LLM_CONSENT_TYPE = 'genomic_llm_upload';
-const GENOMIC_LLM_CONSENT_VERSION = '1.0';
-
 function validatePrompt(prompt) {
   if (!prompt || typeof prompt !== 'string') {
     throw new ValidationError('prompt (string) is required');
@@ -55,46 +55,54 @@ function clampTemperature(requested) {
   return Math.max(0, Math.min(2, requested));
 }
 
-function looksLikeRawGenomicContent(text) {
-  if (typeof text !== 'string') return false;
-  if (/#CHROM\s+POS\s+ID\s+REF\s+ALT/i.test(text)) return true;
-  const variantLines = text.split(/\r?\n/).filter((line) =>
-    /^(chr)?([0-9]{1,2}|X|Y|MT|M)\s+\d+\s+(\S+|\.)\s+[ACGTN]+\s+[ACGTN,]+/i.test(line.trim())
-  );
-  return variantLines.length >= 3;
+// ─── Agent mesh wiring ───────────────────────────────────────────────────────
+//
+// The optional `agent` body field finally tells this persona-less proxy WHO is
+// calling (see packages/shared/src/agentRegistry.ts). It is identity metadata,
+// never a generation parameter, and it is the only thing gating mesh access.
+//
+// An unregistered/absent id is IGNORED rather than rejected: the field is
+// additive, older web bundles and every non-persona caller (gene cards, VCF
+// analysis, autocomplete, ...) send no agent at all, and a 400 here would turn
+// a metadata mismatch into a broken feature. Every other field on this route
+// keeps its existing loud ValidationError behaviour.
+function resolveAgent(body) {
+  const candidate = body?.agent;
+  return isRegisteredAgent(candidate) ? candidate : null;
 }
 
-async function assertNoRawGenomicLLM(prisma, userId, text) {
-  if (!looksLikeRawGenomicContent(text)) return;
+// The model this route actually asks for, as a stable string for mesh evidence.
+function effectiveModel(options) {
+  if (options?.provider) return String(options.provider);
+  return INVOKE_TEXT_MODEL || 'default';
+}
 
-  if (process.env.ALLOW_GENOMIC_LLM_UPLOAD !== 'true') {
-    throw new ValidationError('Raw VCF/genomic file content is not allowed in LLM requests by default');
-  }
+// Detached mesh work. Mesh calls are a SIDE CHANNEL: they must never fail, slow,
+// or alter a user's request. Handles are retained only so tests can await the
+// background work deterministically instead of racing a floating promise.
+const backgroundMeshWork = [];
 
-  const consent = await prisma.consentRecord.findFirst({
-    where: {
-      userId,
-      consentType: GENOMIC_LLM_CONSENT_TYPE,
-      version: GENOMIC_LLM_CONSENT_VERSION,
-      granted: true,
-    },
-    orderBy: { createdAt: 'desc' },
+function fireAndForgetMeshWork(request, promise) {
+  const tracked = Promise.resolve(promise).catch((error) => {
+    request?.log?.warn?.({ err: error }, '[agentMesh] background work failed');
   });
+  backgroundMeshWork.push(tracked);
+  return tracked;
+}
 
-  if (!consent) {
-    throw new ValidationError(`Consent required: ${GENOMIC_LLM_CONSENT_TYPE} v${GENOMIC_LLM_CONSENT_VERSION}`);
+/**
+ * Run-start: pull this agent's peer briefing. Fail-open — a mesh outage returns
+ * null and the request proceeds exactly as it did before the mesh existed.
+ */
+async function peerNoteFor(request, prisma, agent) {
+  if (!agent) return null;
+  try {
+    const briefing = await consumePeerBriefing(prisma, agent);
+    return briefing?.note || null;
+  } catch (error) {
+    request?.log?.warn?.({ err: error }, '[agentMesh] peer briefing failed');
+    return null;
   }
-
-  await createAuditLog(
-    prisma,
-    {
-      userId,
-      action: 'llm.genomic_upload',
-      entityType: 'llm',
-      metadata: { contentLength: text.length },
-    },
-    { required: true }
-  );
 }
 
 export default async function llmRoutes(fastify) {
@@ -107,19 +115,43 @@ export default async function llmRoutes(fastify) {
   fastify.post('/invoke', { preHandler: guarded }, async (request) => {
     const { prompt, options = {} } = request.body || {};
     validatePrompt(prompt);
-    await assertNoRawGenomicLLM(prisma, request.user.userId, prompt);
+    const agent = resolveAgent(request.body);
+    const allowGenomic = await assertNoRawGenomicLLM(prisma, request.user.userId, prompt);
 
     const isPremium = Boolean(request.entitlements?.isPremium);
     const maxTokens = clampTokens(options.maxTokens, isPremium);
     const temperature = clampTemperature(options.temperature);
 
-    const result = await generateExplanation(withHonestyPrefix(prompt), {
-      provider: options.provider,
-      model: options.provider ? undefined : INVOKE_TEXT_MODEL,
-      maxTokens,
-      temperature,
-      timeoutMs: LLM_TIMEOUT_MS,
-    });
+    // Peer note rides in withHonestyPrefix's `extra` slot, which places it
+    // AFTER the scientific-honesty directive and BEFORE the user prompt. The
+    // guard rails stay the leading text of every generation — see
+    // services/scientificHonesty.js and __tests__/llm-chokepoint.test.js.
+    const peerNote = await peerNoteFor(request, prisma, agent);
+
+    let result;
+    try {
+      result = await generateExplanation(withHonestyPrefix(prompt, peerNote || ''), {
+        provider: options.provider,
+        model: options.provider ? undefined : INVOKE_TEXT_MODEL,
+        maxTokens,
+        temperature,
+        timeoutMs: LLM_TIMEOUT_MS,
+        allowGenomic,
+      });
+    } catch (error) {
+      // Run-end teaching hook. Fire-and-forget so the caller still gets the
+      // real provider error at the normal speed.
+      fireAndForgetMeshWork(
+        request,
+        recordProviderFailureLesson(prisma, {
+          agent,
+          model: effectiveModel(options),
+          error,
+          userId: request.user.userId,
+        })
+      );
+      throw error;
+    }
 
     await recordUsage(prisma, request.user.userId, 'explanation', {
       maxTokens,
@@ -130,7 +162,7 @@ export default async function llmRoutes(fastify) {
       userId: request.user.userId,
       action: 'llm_invoke',
       entityType: 'llm',
-      metadata: { promptLength: prompt.length, maxTokens, provider: options.provider || null },
+      metadata: { promptLength: prompt.length, maxTokens, provider: options.provider || null, agent },
     });
 
     return { result, disclaimer: 'For educational purposes only. Not medical advice.' };
@@ -138,24 +170,43 @@ export default async function llmRoutes(fastify) {
 
   fastify.post('/chat', { preHandler: guarded }, async (request) => {
     const { messages, options = {} } = request.body || {};
+    const agent = resolveAgent(request.body);
     if (!Array.isArray(messages) || messages.length === 0) {
       throw new ValidationError('messages (non-empty array) is required');
     }
     if (messages.length > MAX_CHAT_MESSAGES) {
       throw new ValidationError(`messages must contain ${MAX_CHAT_MESSAGES} turns or fewer`);
     }
-    if (messages.some((m) => typeof m?.content === 'string' && m.content.length > MAX_MESSAGE_CHARS)) {
+    // Message content MUST be a plain string. Array/object content (e.g.
+    // [{type:'text',text:'<VCF>'}]) is not a supported input here and, if
+    // forwarded, would let a caller slip raw genomic text past a string-only
+    // check while the provider still reads every part. Reject it outright.
+    if (messages.some((m) => typeof m?.content !== 'string')) {
+      throw new ValidationError('each message content must be a string');
+    }
+    if (messages.some((m) => m.content.length > MAX_MESSAGE_CHARS)) {
       throw new ValidationError(`each message must be ${MAX_MESSAGE_CHARS} characters or fewer`);
     }
+    // Reject client-supplied tool/function fields. The model reads
+    // tool_calls[].function.arguments and function_call.arguments as input, so
+    // allowing them here would be a channel to smuggle raw genomic text past a
+    // content-only check. This is a plain text proxy — tool calling is not a
+    // supported input.
+    if (messages.some((m) => m && (m.tool_calls != null || m.function_call != null || m.tool_call_id != null))) {
+      throw new ValidationError('tool_calls/function_call are not allowed on this endpoint');
+    }
 
-    // Strip any client-supplied system messages. The /llm/chat surface is
-    // intentionally a thin proxy, but allowing role:'system' here would let
-    // the SPA bypass the safety prompts in /education/chat.
-    const sanitized = messages.filter((m) => m && (m.role === 'user' || m.role === 'assistant'));
+    // Strip any client-supplied system messages, and whitelist each surviving
+    // turn to exactly { role, content } so no other client-supplied field can
+    // ride along to the provider. Allowing role:'system' would let the SPA
+    // bypass the safety prompts in /education/chat.
+    const sanitized = messages
+      .filter((m) => m && (m.role === 'user' || m.role === 'assistant'))
+      .map((m) => ({ role: m.role, content: m.content }));
     if (sanitized.length === 0) {
       throw new ValidationError('messages must contain at least one user/assistant turn');
     }
-    await assertNoRawGenomicLLM(
+    const allowGenomic = await assertNoRawGenomicLLM(
       prisma,
       request.user.userId,
       sanitized.map((message) => message.content).join('\n')
@@ -165,16 +216,39 @@ export default async function llmRoutes(fastify) {
     const maxTokens = clampTokens(options.maxTokens, isPremium);
     const temperature = clampTemperature(options.temperature);
 
-    // The generic proxy has no persona of its own; inject only the honesty
-    // guard rails as the single leading system message. (recordUsage below
-    // still counts `sanitized.length` so the extra message is not billed.)
-    const result = await generateChatResponse([honestySystemMessage(), ...sanitized], {
-      provider: options.provider,
-      model: options.provider ? undefined : INVOKE_TEXT_MODEL,
-      maxTokens,
-      temperature,
-      timeoutMs: LLM_TIMEOUT_MS,
-    });
+    // The generic proxy has no persona of its own; the honesty guard rails are
+    // ALWAYS the leading system message. A server-composed peer note (only when
+    // a registered agent is named, and only when the mesh has something to say)
+    // may follow it as a second system message — never before it, never
+    // replacing it. Client-supplied system messages remain stripped above.
+    // (recordUsage below still counts `sanitized.length` so the server's own
+    // system messages are not billed to the user.)
+    const peerNote = await peerNoteFor(request, prisma, agent);
+    const systemMessages = [honestySystemMessage()];
+    if (peerNote) systemMessages.push({ role: 'system', content: peerNote });
+
+    let result;
+    try {
+      result = await generateChatResponse([...systemMessages, ...sanitized], {
+        provider: options.provider,
+        model: options.provider ? undefined : INVOKE_TEXT_MODEL,
+        maxTokens,
+        temperature,
+        timeoutMs: LLM_TIMEOUT_MS,
+        allowGenomic,
+      });
+    } catch (error) {
+      fireAndForgetMeshWork(
+        request,
+        recordProviderFailureLesson(prisma, {
+          agent,
+          model: effectiveModel(options),
+          error,
+          userId: request.user.userId,
+        })
+      );
+      throw error;
+    }
 
     await recordUsage(prisma, request.user.userId, 'chat', {
       messageCount: sanitized.length,
@@ -186,7 +260,7 @@ export default async function llmRoutes(fastify) {
       userId: request.user.userId,
       action: 'llm_chat',
       entityType: 'llm',
-      metadata: { messageCount: sanitized.length, maxTokens, provider: options.provider || null },
+      metadata: { messageCount: sanitized.length, maxTokens, provider: options.provider || null, agent },
     });
 
     return { result, disclaimer: 'For educational purposes only. Not medical advice.' };
@@ -195,11 +269,13 @@ export default async function llmRoutes(fastify) {
   fastify.post('/image', { preHandler: guarded }, async (request) => {
     const { prompt, options = {} } = request.body || {};
     validatePrompt(prompt);
+    const allowGenomic = await assertNoRawGenomicLLM(prisma, request.user.userId, prompt);
 
     const result = await generateImage(prompt, {
       size: options.size || '1024x1024',
       quality: options.quality || 'standard',
       timeoutMs: LLM_TIMEOUT_MS,
+      allowGenomic,
     });
 
     await recordUsage(prisma, request.user.userId, 'image', {
@@ -221,6 +297,10 @@ export const __test = {
   clampTokens,
   clampTemperature,
   validatePrompt,
+  resolveAgent,
+  effectiveModel,
+  /** Await every detached mesh task so assertions never race the side channel. */
+  flushMeshWork: () => Promise.all(backgroundMeshWork.splice(0)),
   ABSOLUTE_MAX_TOKENS,
   DEFAULT_MAX_TOKENS,
   PREMIUM_MAX_TOKENS,

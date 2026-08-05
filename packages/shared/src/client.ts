@@ -225,6 +225,24 @@ function getCsrfToken(): string | null {
 }
 
 /**
+ * Whether any evidence of a prior authenticated session exists on this
+ * browser (a CSRF token cached from a login/register/refresh response, or a
+ * readable same-origin csrfToken cookie). The session cookies themselves are
+ * HttpOnly and invisible to JS, so this hint is the ONLY client-side signal.
+ *
+ * Used by AuthContext to skip the startup GET /auth/me for anonymous
+ * visitors: without the hint that request can only 401, and the browser
+ * unconditionally logs every 401 response as a console error — noise that
+ * plagued the login page (and EVA's console-clean journeys) on every fresh
+ * visit. A visitor with valid HttpOnly cookies but a wiped localStorage on a
+ * cross-site deploy will look logged-out and simply signs in again — an
+ * acceptable trade for a quiet, instant login page.
+ */
+export function hasStoredSession(): boolean {
+  return getCsrfToken() !== null;
+}
+
+/**
  * Typed API error that preserves HTTP status and any structured `code` /
  * `details` from the backend. Replaces the previous `new Error(message)`
  * which discarded everything AuthContext wanted to inspect.
@@ -310,15 +328,17 @@ export class ApiClient {
     const ms = this.retryBaseDelayMs * 2 ** attempt;
     if (ms <= 0 || signal?.aborted) return Promise.resolve();
     return new Promise((resolve) => {
-      const onAbort = () => {
+      let settled = false;
+      let timer: ReturnType<typeof setTimeout>;
+      const settle = () => {
+        if (settled) return;
+        settled = true;
         clearTimeout(timer);
+        if (signal) signal.removeEventListener('abort', settle);
         resolve();
       };
-      const timer = setTimeout(() => {
-        if (signal) signal.removeEventListener('abort', onAbort);
-        resolve();
-      }, ms);
-      if (signal) signal.addEventListener('abort', onAbort, { once: true });
+      timer = setTimeout(settle, ms);
+      if (signal) signal.addEventListener('abort', settle, { once: true });
     });
   }
 
@@ -602,11 +622,26 @@ export class ApiClient {
   }
 
   // ─── LLM ───────────────────────────────────────────────────────────
+  //
+  // `options.agent` names the calling persona (see agentRegistry.ts). It is
+  // hoisted OUT of `options` and sent as a sibling `agent` field because the
+  // server treats it as routing/identity metadata, not a generation parameter:
+  // it selects which agent's mesh inbox and lessons are loaded, and which agent
+  // authors a lesson when the provider fails. Unknown/absent ids are ignored by
+  // the server, so this is always safe to send.
   invokeLLM(prompt: string, options: LLMOptions = {}): Promise<LLMResponse> {
-    return this.request('/llm/invoke', { method: 'POST', body: JSON.stringify({ prompt, options }) });
+    const { agent, ...llmOptions } = options;
+    return this.request('/llm/invoke', {
+      method: 'POST',
+      body: JSON.stringify({ prompt, options: llmOptions, ...(agent ? { agent } : {}) }),
+    });
   }
   llmChat(messages: Array<{ role: string; content: string }>, options: LLMOptions = {}): Promise<LLMResponse> {
-    return this.request('/llm/chat', { method: 'POST', body: JSON.stringify({ messages, options }) });
+    const { agent, ...llmOptions } = options;
+    return this.request('/llm/chat', {
+      method: 'POST',
+      body: JSON.stringify({ messages, options: llmOptions, ...(agent ? { agent } : {}) }),
+    });
   }
   llmImage(prompt: string, options: LLMOptions = {}): Promise<LLMImageResponse> {
     // Image generation is slower than a text call and can exceed the 40s

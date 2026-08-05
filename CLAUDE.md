@@ -57,6 +57,17 @@ Toolchain floor: Node >=24 + corepack/pnpm required (root `engines`) — Node 20
 | Rate-limit store | `services/api/src/config/rateLimitStore.js` — optional `REDIS_URL` (ioredis) backs it; in-memory otherwise |
 | Error monitoring | Sentry (`@sentry/node`, `services/api/src/config/sentry.js`) wired into `index.js` + `middleware/errorHandler.js` |
 
+## Nightly self-test sweep (agents v1)
+
+`scripts/agents/nightly-sweep.mjs` — GrantFlow-style self-testing/self-correcting loop, right-sized for this repo. Runs the REAL gates (`pnpm lint`, `pnpm typecheck`, `pnpm test`), then starts API+web dev servers (or reuses running ones) and runs the Playwright journey set (`apps/web/tests/e2e`, `PLAYWRIGHT_BASE_URL=http://localhost:5173`) — including the EVA regression journeys in `login-journeys.spec.js`: login loads console-clean with zero failed requests, and registration is reachable from /Login via EVA's verbatim locator.
+
+- **Auto-fix lane (safe classes only):** if lint fails AND the tree was clean at sweep start, runs `eslint --fix`, re-runs the FULL gate (incl. e2e), and only then commits — on an `agents/autofix-*` branch (pushed for review unless `--no-push`), never on the current branch/main. Re-gate failure → fix reverted, finding reported. Dirty tree → auto-fix skipped entirely.
+- **Findings report (Anya-style):** `reports/agents/nightly-<date>.md` + `latest.json` (health score 0–100 weighted lint 15 / typecheck 25 / unit 30 / e2e 30, needs-attention tails). Directory is gitignored (runtime output).
+- **Schedule:** Windows scheduled task "GeneMap Nightly Sweep", daily 03:00, runs `scripts/agents/nightly-sweep.cmd` (logs to `reports/agents/last-run.log`). Manage with `schtasks /Query|/Run|/Delete /TN "GeneMap Nightly Sweep"`.
+- **Local DB:** the local API's `services/api/.env` points `DATABASE_URL` at the shared `eva-postgres` Docker container (`postgresql://eva:eva@localhost:5433/genemap_eva`) — NOT the native :5432 Postgres (its credentials don't match; that mismatch silently 500'd every local register/login until 2026-08-02).
+- Flags: `--no-push` (autofix branch stays local), `--no-servers` (never spawn servers), `--skip-e2e`.
+- Trap: probe dev servers via host `localhost`, not `127.0.0.1` — Vite binds only `::1` on this box.
+
 ## Gotchas
 
 - Base44 Deno functions have been removed from the active tree.

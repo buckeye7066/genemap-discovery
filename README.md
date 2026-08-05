@@ -13,7 +13,7 @@ This is a pnpm-workspaces monorepo containing:
 
 ## Migration Status
 
-Active migration from Base44 to Railway + Vercel + Postgres + Stripe.
+Migrated off Base44 to Railway + Vercel + Postgres + Stripe.
 
 ### Completed
 
@@ -28,22 +28,28 @@ Active migration from Base44 to Railway + Vercel + Postgres + Stripe.
 - Documentation suite
 - Backup scripts (Bash + PowerShell)
 - GitHub Actions CI
+- Production deployment: API live on Railway (Docker, auto-deploys on merge to
+  `main`), web on Vercel. See CLAUDE.md for the Railway source-connection note.
 
 ### In Progress
 
-- Production deployment
 - E2E testing with Playwright
 - Ongoing hardening of genomics privacy and scientific-safety flows
 
-See [docs/MIGRATION_OFF_BASE44.md](docs/MIGRATION_OFF_BASE44.md) for migration details.
+Deployment responsibilities: the **web** app (`apps/web`) ships to Vercel; the
+**API** (`services/api`) ships to Railway as a Docker image with a Railway
+PostgreSQL database; the **desktop** shell (`apps/desktop`, Electron) loads the
+built web app and is distributed as a packaged binary, not part of the cloud
+deploy. See [docs/MIGRATION_OFF_BASE44.md](docs/MIGRATION_OFF_BASE44.md) for
+migration details and [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for the deploy runbook.
 
 ## Quick Start
 
 ### Prerequisites
 
 - Node.js 24+
-- pnpm 9+
-- PostgreSQL 16+
+- pnpm 9 (managed via corepack; pinned by the root `packageManager` field)
+- PostgreSQL 18 (production and CI run PostgreSQL 18)
 
 ### Installation
 
@@ -58,8 +64,8 @@ Edit the `.env` files with local development values before starting the app.
 ### Development
 
 ```bash
-# Start database, if using Docker
-docker run -d -p 5432:5432 -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=genemap postgres:16
+# Start database, if using Docker (match the production/CI major version)
+docker run -d -p 5432:5432 -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=genemap postgres:18
 
 # Generate Prisma client and prepare the development schema
 pnpm db:generate

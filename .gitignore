@@ -61,6 +61,9 @@ ops/production-launch-evidence*.json
 services/api/prisma/*.db
 services/api/prisma/*.db-journal
 
+# Nightly agent sweep output (regenerated every run; not source)
+reports/agents/
+
 # Testing
 coverage
 .nyc_output

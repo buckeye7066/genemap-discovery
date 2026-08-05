@@ -2,7 +2,7 @@ import React from 'react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { AuthProvider, useAuth } from '../AuthContext.jsx';
-import { apiClient } from '@genemap/shared';
+import { apiClient, hasStoredSession, setCsrfToken } from '@genemap/shared';
 
 vi.mock('@genemap/shared', () => ({
   apiClient: {
@@ -11,6 +11,11 @@ vi.mock('@genemap/shared', () => ({
     register: vi.fn(),
     logout: vi.fn(),
   },
+  // Default: pretend a prior session hint exists so the legacy tests keep
+  // exercising the getMe() path; individual tests override to cover the
+  // anonymous fast-path.
+  hasStoredSession: vi.fn(() => true),
+  setCsrfToken: vi.fn(),
 }));
 
 function Probe() {
@@ -38,6 +43,31 @@ function renderAuth() {
 describe('AuthContext', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it('skips the /auth/me round-trip entirely for anonymous visitors (no session hint)', async () => {
+    hasStoredSession.mockReturnValue(false);
+
+    renderAuth();
+
+    await waitFor(() => expect(screen.getByTestId('loading')).toHaveTextContent('false'));
+    expect(screen.getByTestId('authenticated')).toHaveTextContent('false');
+    expect(screen.getByTestId('error')).toHaveTextContent('auth_required');
+    // The whole point: no network call means no 401, means no browser
+    // console error on a clean /login visit.
+    expect(apiClient.getMe).not.toHaveBeenCalled();
+
+    hasStoredSession.mockReturnValue(true);
+  });
+
+  it('drops a stale session hint when the stored session 401s', async () => {
+    apiClient.getMe.mockRejectedValue({ status: 401, message: 'Authentication required' });
+
+    renderAuth();
+
+    await waitFor(() => expect(screen.getByTestId('loading')).toHaveTextContent('false'));
+    expect(screen.getByTestId('error')).toHaveTextContent('auth_required');
+    expect(setCsrfToken).toHaveBeenCalledWith(null);
   });
 
   it('classifies a startup 401 as auth_required without logging an error', async () => {

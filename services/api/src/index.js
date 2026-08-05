@@ -8,9 +8,13 @@ import { PrismaClient } from '@prisma/client';
 import { loadEnv } from './config/env.js';
 import { initSentry } from './config/sentry.js';
 import {
+  createEmergencyRateLimitHook,
   createRateLimitRedis,
+  markRateLimitRedisShuttingDown,
+  rateLimitProtectionStatus,
   rateLimitStoreOptions,
   rateLimitStoreStatus,
+  shouldBypassRateLimit,
 } from './config/rateLimitStore.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { requireCsrf } from './middleware/csrf.js';
@@ -23,6 +27,10 @@ import entityRoutes from './routes/entities.js';
 import genomicsRoutes from './routes/genomics.js';
 import clinicalTrialRoutes from './routes/clinicalTrials.js';
 import clientErrorRoutes from './routes/clientError.js';
+
+const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
+const GLOBAL_RATE_LIMIT_MAX = 100;
+const AUTH_RATE_LIMIT_MAX = 10;
 
 // Load + validate env BEFORE constructing anything that depends on it.
 // loadEnv() throws in production if required secrets are missing.
@@ -53,8 +61,8 @@ fastify.decorate('env', env);
 //    Railway). Harmless if a proxy already sets it.
 //  - nosniff + frameguard(deny) + no-referrer: defense in depth.
 //  - CSP/COEP are disabled: they govern HTML documents, and this origin never
-//    serves one — enabling CSP here only risks breaking JSON clients.
-//  - x-powered-by is removed so we don't advertise the framework.
+//    serves one, so enabling CSP here only risks breaking JSON clients.
+//  - x-powered-by is removed so we do not advertise the framework.
 await fastify.register(helmet, {
   contentSecurityPolicy: false,
   crossOriginEmbedderPolicy: false,
@@ -80,16 +88,30 @@ await fastify.register(cookie, {
   secret: env.COOKIE_SECRET,
 });
 
-// Rate limiting: Redis-backed (shared across instances) when REDIS_URL is
-// set; otherwise the plugin's default per-process in-memory store. Redis
-// failures fail OPEN (skipOnError) — an outage never breaks requests.
+// Rate limiting is distributed through Redis when configured. The Fastify
+// plugin skips a Redis command error so a cache outage cannot produce blanket
+// 500s. Its command callbacks mark the shared client degraded, then the
+// preHandler emergency limiter takes over on that same request with bounded,
+// per-instance counters. Health/readiness routes bypass both layers so an outage
+// can never hide the very status operators need.
 const rateLimitRedis = createRateLimitRedis(env, { logger: fastify.log });
 
 await fastify.register(rateLimit, {
-  max: 100,
+  max: GLOBAL_RATE_LIMIT_MAX,
   timeWindow: '15 minutes',
+  allowList: shouldBypassRateLimit,
   ...rateLimitStoreOptions(rateLimitRedis),
 });
+fastify.addHook(
+  'preHandler',
+  createEmergencyRateLimitHook({
+    redisClient: rateLimitRedis,
+    scope: 'global',
+    max: GLOBAL_RATE_LIMIT_MAX,
+    timeWindowMs: RATE_LIMIT_WINDOW_MS,
+    skip: shouldBypassRateLimit,
+  })
+);
 
 // Global CSRF guard for state-changing requests on cookie-authenticated paths.
 fastify.addHook('preHandler', requireCsrf);
@@ -109,12 +131,21 @@ fastify.setErrorHandler(errorHandler);
 
 await fastify.register(async (authScope) => {
   await authScope.register(rateLimit, {
-    max: 10,
+    max: AUTH_RATE_LIMIT_MAX,
     timeWindow: '15 minutes',
     // Distinct namespace: without it the auth counters would share Redis keys
     // with the global limiter (both key on nameSpace + ip).
     ...rateLimitStoreOptions(rateLimitRedis, 'auth'),
   });
+  authScope.addHook(
+    'preHandler',
+    createEmergencyRateLimitHook({
+      redisClient: rateLimitRedis,
+      scope: 'auth',
+      max: AUTH_RATE_LIMIT_MAX,
+      timeWindowMs: RATE_LIMIT_WINDOW_MS,
+    })
+  );
   await authScope.register(authRoutes, { prefix: '/auth' });
 });
 
@@ -130,40 +161,51 @@ await fastify.register(clinicalTrialRoutes, { prefix: '/clinical-trials' });
 // POST uncaught errors to `/report-client-error`.
 await fastify.register(clientErrorRoutes);
 
-// Liveness — process is up. Cheap, never touches the DB.
-fastify.get('/healthz', async () => ({ status: 'ok', uptime: process.uptime() }));
+// Liveness: the process is up. Cheap, never touches the DB, and is explicitly
+// excluded from rate limiting as a second layer of defense beyond allowList.
+fastify.get(
+  '/healthz',
+  { config: { rateLimit: false } },
+  async () => ({ status: 'ok', uptime: process.uptime() })
+);
 
-// Readiness — process is up AND can reach its hard dependencies.
-// Used by orchestrators (Railway, k8s) to gate traffic. Returns 503 when
-// the database is unreachable so traffic is not routed to a broken instance.
-fastify.get('/readyz', async (request, reply) => {
+// Readiness: the process is up and can reach its hard dependencies. Redis is
+// deliberately not a hard dependency because emergency local limiting remains
+// active during an outage. The structured field makes that degraded protection
+// state visible to operators and monitoring, so this route must never be 429'd.
+fastify.get('/readyz', { config: { rateLimit: false } }, async (request, reply) => {
   try {
     await prisma.$queryRaw`SELECT 1`;
   } catch (err) {
     reply.status(503);
     return { status: 'not_ready', reason: 'database unreachable' };
   }
+
+  const rateLimitProtection = rateLimitProtectionStatus(rateLimitRedis);
   return {
     status: 'ready',
+    degraded: rateLimitProtection.emergency,
     medicalEncryption: env.hasMedicalEncryption(),
-    // Informational only — Redis is NOT a hard dependency (rate limiting
-    // fails open to per-instance limits), so it never gates readiness.
     rateLimitStore: rateLimitStoreStatus(rateLimitRedis),
+    rateLimitProtection,
     timestamp: new Date().toISOString(),
   };
 });
 
-// Legacy `/health` retained for backward compatibility.
-fastify.get('/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }));
+// Legacy `/health` retained for backward compatibility and probeability.
+fastify.get(
+  '/health',
+  { config: { rateLimit: false } },
+  async () => ({ status: 'ok', timestamp: new Date().toISOString() })
+);
 
 const start = async () => {
   try {
     // Keep-alive race fix: Node's default keepAliveTimeout (5s; Fastify's 72s
     // default can also sit under a proxy's idle window) is shorter than the
     // Railway edge proxy's idle timeout, so the server can close an idle
-    // socket at the exact moment the proxy writes the next request into it —
-    // the proxy then surfaces a bodiless 502 on a healthy app. The server-side
-    // timeout must EXCEED the proxy's so the proxy always closes first;
+    // socket at the exact moment the proxy writes the next request into it.
+    // The server-side timeout must exceed the proxy's so the proxy closes first;
     // headersTimeout must exceed keepAliveTimeout.
     fastify.server.keepAliveTimeout = Number(process.env.HTTP_KEEPALIVE_TIMEOUT_MS || 620_000);
     fastify.server.headersTimeout = fastify.server.keepAliveTimeout + 5_000;
@@ -186,11 +228,14 @@ const gracefulShutdown = async (signal) => {
   if (isShuttingDown) return;
   isShuttingDown = true;
   fastify.log.info(`Received ${signal}, shutting down gracefully...`);
+  if (rateLimitRedis) {
+    // Fastify plugins may begin teardown during close(), so suppress expected
+    // Redis close/end events before any application resource is dismantled.
+    markRateLimitRedisShuttingDown(rateLimitRedis);
+  }
   await fastify.close();
   await prisma.$disconnect();
   if (rateLimitRedis) {
-    // quit() rejects when the connection never came up; that must not block
-    // shutdown.
     await rateLimitRedis.quit().catch(() => rateLimitRedis.disconnect());
   }
   process.exit(0);

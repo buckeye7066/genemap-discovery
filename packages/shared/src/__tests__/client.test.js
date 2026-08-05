@@ -719,4 +719,49 @@ describe('Transient-failure retry', () => {
     await expect(infClient.getMe()).rejects.toThrow('Service unavailable');
     expect(global.fetch).toHaveBeenCalledTimes(3); // initial + 2 retries, not unbounded
   });
+
+  it('normalizes every non-finite retry option to a finite default', () => {
+    const nonFiniteClient = new ApiClient('http://localhost:3000', {
+      maxRetries: Number.NaN,
+      retryBaseDelayMs: Infinity,
+    });
+
+    expect(nonFiniteClient.maxRetries).toBe(2);
+    expect(nonFiniteClient.retryBaseDelayMs).toBe(300);
+  });
+
+  it('does not schedule a timer when backoff receives an already-aborted signal', async () => {
+    const delayedClient = new ApiClient('http://localhost:3000', { retryBaseDelayMs: 1_000 });
+    const controller = new AbortController();
+    controller.abort();
+    const timerSpy = vi.spyOn(globalThis, 'setTimeout');
+
+    await expect(delayedClient.backoff(0, controller.signal)).resolves.toBeUndefined();
+    expect(timerSpy).not.toHaveBeenCalled();
+    timerSpy.mockRestore();
+  });
+
+  it('removes the abort listener when the backoff timer settles', async () => {
+    const delayedClient = new ApiClient('http://localhost:3000', { retryBaseDelayMs: 1 });
+    const controller = new AbortController();
+    const removeSpy = vi.spyOn(controller.signal, 'removeEventListener');
+
+    await delayedClient.backoff(0, controller.signal);
+
+    expect(removeSpy).toHaveBeenCalledWith('abort', expect.any(Function));
+    removeSpy.mockRestore();
+  });
+
+  it('removes the abort listener when an in-flight backoff is cancelled', async () => {
+    const delayedClient = new ApiClient('http://localhost:3000', { retryBaseDelayMs: 1_000 });
+    const controller = new AbortController();
+    const removeSpy = vi.spyOn(controller.signal, 'removeEventListener');
+    const pending = delayedClient.backoff(0, controller.signal);
+
+    controller.abort();
+    await pending;
+
+    expect(removeSpy).toHaveBeenCalledWith('abort', expect.any(Function));
+    removeSpy.mockRestore();
+  });
 });

@@ -197,6 +197,73 @@ export function createPrismaMock() {
       }
       return records.length;
     }),
+
+    // Mirrors Prisma's groupBy: returns one row per distinct combination of
+    // the `by` fields, carrying those fields plus any requested aggregations
+    // (_count/_max/_min/_sum/_avg) in the same nested shape the real client
+    // produces, e.g. [{ dataType: 'vcf', _count: { _all: 4 } }].
+    groupBy: vi.fn(async (args = {}) => {
+      const { by = [], where, _count, _max, _min, _sum, _avg } = args;
+      const fields = Array.isArray(by) ? by : [by];
+      let records = [...getStore(name)];
+      if (where) {
+        records = records.filter((r) => matchWhere(r, where));
+      }
+
+      const groups = new Map();
+      for (const r of records) {
+        const key = JSON.stringify(fields.map((f) => r[f] ?? null));
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(r);
+      }
+
+      const defined = (v) => v !== null && v !== undefined;
+      const numeric = (rows, field) => rows.map((r) => r[field]).filter(defined).map(Number);
+
+      return [...groups.values()].map((rows) => {
+        const result = {};
+        for (const f of fields) result[f] = rows[0][f] ?? null;
+        if (_count) {
+          if (_count === true) {
+            result._count = rows.length;
+          } else {
+            result._count = {};
+            for (const f of Object.keys(_count)) {
+              result._count[f] = f === '_all' ? rows.length : rows.filter((r) => defined(r[f])).length;
+            }
+          }
+        }
+        if (_max) {
+          result._max = {};
+          for (const f of Object.keys(_max)) {
+            const vals = rows.map((r) => r[f]).filter(defined);
+            result._max[f] = vals.length ? vals.reduce((a, b) => (a > b ? a : b)) : null;
+          }
+        }
+        if (_min) {
+          result._min = {};
+          for (const f of Object.keys(_min)) {
+            const vals = rows.map((r) => r[f]).filter(defined);
+            result._min[f] = vals.length ? vals.reduce((a, b) => (a < b ? a : b)) : null;
+          }
+        }
+        if (_sum) {
+          result._sum = {};
+          for (const f of Object.keys(_sum)) {
+            const vals = numeric(rows, f);
+            result._sum[f] = vals.length ? vals.reduce((a, b) => a + b, 0) : null;
+          }
+        }
+        if (_avg) {
+          result._avg = {};
+          for (const f of Object.keys(_avg)) {
+            const vals = numeric(rows, f);
+            result._avg[f] = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+          }
+        }
+        return result;
+      });
+    }),
   });
 
   const prisma = {
@@ -223,6 +290,8 @@ export function createPrismaMock() {
     learningProgress: createModel('learningProgress'),
     stripeEvent: createModel('stripeEvent'),
     projectAnnotation: createModel('projectAnnotation'),
+    agentMessage: createModel('agentMessage'),
+    agentLesson: createModel('agentLesson'),
     $queryRaw: vi.fn(async () => [{ '?column?': 1 }]),
     $disconnect: vi.fn(),
     $transaction: vi.fn(async (callback) => {
@@ -260,6 +329,7 @@ export function createPrismaMock() {
     'preBannedUser', 'institutionalLicense', 'licenseAssignment',
     'licenseUsageLog', 'consentRecord', 'dataDeletionRequest',
     'learningSession', 'learningProgress', 'stripeEvent', 'projectAnnotation',
+    'agentMessage', 'agentLesson',
   ];
   for (const k of PRE_INIT) getStore(k);
 

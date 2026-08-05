@@ -8,6 +8,7 @@
 
 import { sendEmail } from './email.js';
 import * as llm from './llm.js';
+import { looksLikeRawGenomicContent } from './genomicGuard.js';
 import { sanitizeError } from '../utils/errors.js';
 
 // Recipient + admin exclusion ---------------------------------------------
@@ -167,6 +168,17 @@ function heuristicAnalysis(error, ctx) {
  * failure (no key, timeout, malformed JSON). Never throws.
  */
 async function analyzeError(error, ctx) {
+  // This path is reachable UNAUTHENTICATED (POST /report-client-error accepts
+  // anonymous reports). A client could POST a VCF-shaped `message`/`stack`;
+  // there is no user and no consent flow here, so we must NEVER forward such
+  // content to the cloud LLM. If the error content looks like raw genomic data,
+  // skip cloud triage entirely and use the deterministic heuristic instead.
+  const errorContent = `${String(error?.message || '').slice(0, 500)}\n${String(error?.stack || '').slice(0, 1500)}`;
+  if (looksLikeRawGenomicContent(errorContent)) {
+    console.warn('[errorReporter] error content looks like raw genomic data — skipping cloud analysis');
+    return heuristicAnalysis(error, ctx);
+  }
+
   try {
     const prompt = [
       'You are a senior engineer triaging a production error in "GeneMap", a Fastify + Prisma + PostgreSQL backend with a React frontend.',
@@ -362,4 +374,5 @@ export const __test = {
   isTransientConnectionError,
   heuristicAnalysis,
   buildSignature,
+  analyzeError,
 };

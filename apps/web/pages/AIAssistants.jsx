@@ -30,10 +30,16 @@ const ResearchSuggester = lazyWithRetry(() => import("../components/ai/ResearchS
 const GeneticExplainer = lazyWithRetry(() => import("../components/ai/GeneticExplainer"));
 const PathwayPredictor = lazyWithRetry(() => import("../components/ai/PathwayPredictor"));
 
+// The persona ids this page can switch between, in tab order. Every id here
+// MUST exist in the shared agent registry (packages/shared/src/agentRegistry.ts)
+// — pages/__tests__/agentRegistryTotality.test.js source-scans for this literal
+// and fails if the app and the registry ever disagree.
+const ASSISTANT_IDS = ['robert', 'anastasia'];
+
 export default function AIAssistantsPage() {
   const { user } = useAuth();
   const [medicalRecords, setMedicalRecords] = useState([]);
-  const [activeAssistant, setActiveAssistant] = useState("robert");
+  const [activeAssistant, setActiveAssistant] = useState(ASSISTANT_IDS[0]);
   const [messages, setMessages] = useState([]);
   const [inputMessage, setInputMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -286,8 +292,12 @@ ${medicalRecords.length > 0 && activeAssistant === 'robert'
 
 Please provide a comprehensive response.`;
 
+    // `agent` tells the persona-less server proxy which assistant is speaking,
+    // which is what lets the agent mesh hand this run its peer notes and
+    // attribute anything it learns. See packages/shared/src/agentRegistry.ts.
     const response = await apiClient.invokeLLM(prompt, {
-      add_context_from_internet: true
+      add_context_from_internet: true,
+      agent: assistant
     });
     // Always return a string. An empty model output made `response.result`
     // falsy and the old `|| response` fallback returned the whole response

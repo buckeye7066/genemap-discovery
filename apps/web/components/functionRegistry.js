@@ -30,6 +30,11 @@ export const KNOWN_FUNCTIONS = [
   { functionId: 'llm.chat', filePath: 'services/api/src/routes/llm.js', category: 'service', description: 'POST /llm/chat — guarded multi-turn LLM chat.' },
   { functionId: 'llm.parseJsonFromLLM', filePath: 'services/api/src/services/llm.js', category: 'shared', description: 'Robustly extract JSON from a raw LLM completion.' },
 
+  // ─── Agent mesh (backend + shared) ──────────────────────────────────
+  { functionId: 'agentMesh.registry', filePath: 'packages/shared/src/agentRegistry.ts', category: 'shared', description: 'Frozen registry of the LLM personas (Robert, Anastasia) shared by web + API.' },
+  { functionId: 'agentMesh.consumePeerBriefing', filePath: 'services/api/src/services/agentMesh.js', category: 'service', description: 'Run-start hook: fold peer messages + fresh lessons into one note, then ack/consume.' },
+  { functionId: 'agentMesh.recordProviderFailureLesson', filePath: 'services/api/src/services/agentMesh.js', category: 'service', description: 'Run-end hook: teach peers when a model fails repeatedly in 24h.' },
+
   // ─── Genomics (backend) ─────────────────────────────────────────────
   { functionId: 'genomics.lookupGene', filePath: 'services/api/src/routes/genomics.js', category: 'service', description: 'GET /genomics/gene/:symbol — gene metadata lookup.' },
   { functionId: 'genomics.searchPhenotypes', filePath: 'services/api/src/routes/genomics.js', category: 'service', description: 'GET /genomics/phenotype/search — HPO/phenotype search.' },
