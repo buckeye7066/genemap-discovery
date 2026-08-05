@@ -109,7 +109,7 @@ export default function GeneResults({ results, selectedGenes = [], onGeneSelect 
                 {getQueryTypeLabel()}
               </CardTitle>
               <p className="text-slate-600 mt-1">
-                Found {(candidateGenes || []).length} {queryType === 'disease' ? 'associated' : 'candidate'} genes for "{query}"
+                Generated {(candidateGenes || []).length} candidate genes to review for "{query}"
               </p>
             </div>
 
@@ -125,11 +125,11 @@ export default function GeneResults({ results, selectedGenes = [], onGeneSelect 
           <div className="flex flex-wrap gap-2">
             <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
               <TrendingUp className="w-3 h-3 mr-1" />
-              Ranked by Evidence
+              AI-prioritized leads
             </Badge>
             <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
               <Star className="w-3 h-3 mr-1" />
-              AI Insights
+              Verify in primary sources
             </Badge>
             {onGeneSelect && (
               <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">
@@ -139,7 +139,7 @@ export default function GeneResults({ results, selectedGenes = [], onGeneSelect 
             )}
             {queryType === 'disease' && (
               <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">
-                🩺 All Disease Genes
+                Candidate disease-gene leads
               </Badge>
             )}
           </div>
@@ -182,10 +182,10 @@ export default function GeneResults({ results, selectedGenes = [], onGeneSelect 
         <CardContent className="pt-6">
           <h4 className="font-medium text-slate-900 mb-3">Search Tips</h4>
           <ul className="text-sm text-slate-600 space-y-1">
-            <li>• Search by disease name (e.g., "Rheumatoid Arthritis", "Trisomy 21") to find all associated genes</li>
+            <li>• Search by disease name (e.g., "Rheumatoid Arthritis", "Trisomy 21") to generate candidate genes for follow-up</li>
             <li>• Use phenotype terms (e.g., "polydactyly") for specific features</li>
             <li>• Try HPO terms (HP:0001234) for more precise results</li>
-            <li>• Premium searches include population data and treatment info</li>
+            <li>• Database links are follow-up destinations; they are not claim-level citations for the AI ranking</li>
             {onGeneSelect && <li>• Select multiple genes to compare them side-by-side</li>}
           </ul>
         </CardContent>
