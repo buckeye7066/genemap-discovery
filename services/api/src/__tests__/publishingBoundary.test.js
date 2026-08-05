@@ -185,6 +185,13 @@ describe('publishable education/research boundary', () => {
     'I need guidance on this chest pain.',
     'I need to know if BRCA1 means I will get cancer.',
     'I take warfarin; could CYP2C9 change how much I need tonight?',
+    'I take warfarin.',
+    'My chest hurts. What could it be?',
+    'Chest pain—what should I do?',
+    'What does my BRCA1 result mean for me?',
+    "Could this mutation explain the pain I've been having?",
+    'Do these symptoms mean I have cancer?',
+    'We have 200 patient records; what treatment should I choose for myself?',
     "I've got chest pain; what could be causing it?",
     'I am taking warfarin.',
     'What is the risk for my child?',
@@ -300,6 +307,12 @@ describe('publishable education/research boundary', () => {
     }],
     ['ordinary research wording', '/llm/invoke', {
       prompt: 'I take notes while reviewing genetic variants across an aggregate cohort.',
+    }],
+    ['ordinary course shorthand', '/education/chat', {
+      messages: [{ role: 'user', content: 'I take this course.' }],
+    }],
+    ['aggregate medication-response dataset', '/llm/invoke', {
+      prompt: 'In my dataset, compare medication response in 200 patients.',
     }],
     ['ordinary note-taking question', '/education/chat', {
       messages: [{ role: 'user', content: 'Should I take notes while learning how variants are classified?' }],

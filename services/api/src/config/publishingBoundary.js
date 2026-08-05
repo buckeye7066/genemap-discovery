@@ -104,7 +104,7 @@ const MY_CLINICAL = new RegExp(
   'i'
 );
 const CLINICAL_FOR_ME = new RegExp(
-  `${CLINICAL_ACTION}[\\s\\S]{0,120}(?:\\bfor me\\b|\\bmine\\b)`,
+  `${CLINICAL_ACTION}[\\s\\S]{0,120}(?:\\bfor (?:me|myself)\\b|\\bmine\\b)`,
   'i'
 );
 // First-person wording is not itself personal-clinical intent. Researchers
@@ -118,8 +118,22 @@ const DIRECT_PERSONAL_CARE_REQUEST = new RegExp(
   String.raw`(?:\b(?:i|me|my|mine)\b[\s\S]{0,160}\b(?:want|need|tell me|advise me|how should i|what should i|should i|can i|could i)\b[\s\S]{0,120}${DIRECT_CARE_ACTION}|\b(?:what|which)\s+dose\s+should\s+i\b)`,
   'i'
 );
+const CARE_THEN_PERSONAL_DECISION = new RegExp(
+  String.raw`${DIRECT_CARE_ACTION}[\s\S]{0,120}\b(?:should|can|could|would)\s+i\s+(?:choose|use|take|receive|start|stop|change|increase|decrease)\b`,
+  'i'
+);
 const PERSONAL_VARIANT_INTERPRETATION =
   /\b(?:interpret|explain|assess|evaluate|classify)\w*\b[\s\S]{0,80}\b(?:my|this|these|that|those)\s+(?:genetic\s+)?(?:variants?|mutations?|vcf|results?)\b/i;
+const PERSONAL_RESULT_INTERPRETATION =
+  /\bwhat does\s+my\s+(?:[\w-]+\s+){0,3}results?\s+mean(?:\s+for\s+me)?\b/i;
+const PERSONAL_VARIANT_SYMPTOM_LINK =
+  /\b(?:my|this|these|that|those)\s+(?:genetic\s+)?(?:variants?|mutations?|results?)\b[\s\S]{0,120}\b(?:pain|symptoms?)\b[\s\S]{0,60}\bi(?:['’]ve| have)\s+been\s+(?:having|experiencing|feeling)\b/i;
+const PERSONAL_SYMPTOM_DIAGNOSIS_QUESTION =
+  /\b(?:do|could|can|would)\s+(?:my|these|this)\s+(?:symptoms?|pain)\b[\s\S]{0,100}\b(?:mean|indicate|suggest|show)\b[\s\S]{0,80}\bi\s+(?:have|might have|could have)\b/i;
+const DIRECT_SYMPTOM_ACTION =
+  /\b(?:[\w-]+\s+)?pain\b[\s\S]{0,120}\b(?:what should i do|what do i do|what could it be|could it be|should i seek|is this (?:serious|urgent)|do i need (?:a )?doctor)\b/i;
+const PERSONAL_BODY_COMPLAINT =
+  /\bmy\s+(?:[\w-]+\s+){0,2}(?:hurts?|aches?|is painful)\b/i;
 const FIRST_PERSON_FUTURE_DISEASE =
   /(?:\bi\s+need\s+to\s+know\b[\s\S]{0,180}\bi\s+(?:will|might|could|may)\s+(?:get|develop|have|be diagnosed)|\b(?:will|might|could|may)\s+i\s+(?:get|develop|have|be diagnosed))/i;
 const DIRECT_PERSONAL_CLINICAL_HELP =
@@ -128,6 +142,10 @@ const NONCLINICAL_TAKING_ACTIVITY =
   String.raw`(?:(?:a|an|the|this|that|my)\s+)?(?:[\w-]+\s+){0,3}(?:course|class|workshop|lesson|training|notes?|break|walk|look|approach|position|survey|exam|test|route|train|bus|taxi|photos?|pictures?|samples?|measurements?|data|dataset|steps?|part|interest|issue|action|time|study|project|analysis|research|experiment|pipeline|workflow|search|review|reading|writing|calculation|simulation|model|modeling|size|coverage|power|resolution|quality|replicates?|controls?|design)\b`;
 const CLEAR_NONCLINICAL_TAKING = new RegExp(
   String.raw`\bi(?:['’]m| am)\s+(?:currently\s+)?taking\s+${NONCLINICAL_TAKING_ACTIVITY}`,
+  'i'
+);
+const SIMPLE_MEDICATION_DISCLOSURE = new RegExp(
+  String.raw`\bi take\s+(?!${NONCLINICAL_TAKING_ACTIVITY})\S+`,
   'i'
 );
 const PROGRESSIVE_MEDICATION_DISCLOSURE =
@@ -177,7 +195,13 @@ export function isPersonalClinicalPrompt(text) {
   if (typeof text !== 'string' || !text.trim()) return false;
   if (
     DIRECT_PERSONAL_CARE_REQUEST.test(text)
+    || CARE_THEN_PERSONAL_DECISION.test(text)
     || PERSONAL_VARIANT_INTERPRETATION.test(text)
+    || PERSONAL_RESULT_INTERPRETATION.test(text)
+    || PERSONAL_VARIANT_SYMPTOM_LINK.test(text)
+    || PERSONAL_SYMPTOM_DIAGNOSIS_QUESTION.test(text)
+    || DIRECT_SYMPTOM_ACTION.test(text)
+    || PERSONAL_BODY_COMPLAINT.test(text)
     || FIRST_PERSON_FUTURE_DISEASE.test(text)
     || DIRECT_PERSONAL_CLINICAL_HELP.test(text)
     || FIRST_PERSON_DIAGNOSIS.test(text)
@@ -185,6 +209,7 @@ export function isPersonalClinicalPrompt(text) {
     || CLINICAL_FOR_ME.test(text)
     || PERSON_THEN_CLINICAL.test(text)
     || CLINICAL_THEN_PERSON.test(text)
+    || SIMPLE_MEDICATION_DISCLOSURE.test(text)
     || SIMPLE_MEDICATION_DECISION.test(text)
     || (
       PROGRESSIVE_MEDICATION_DISCLOSURE.test(text)
