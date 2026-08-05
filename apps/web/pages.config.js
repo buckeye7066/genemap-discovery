@@ -6,7 +6,6 @@ const Premium = lazyWithRetry(() => import('./pages/Premium'));
 const History = lazyWithRetry(() => import('./pages/History'));
 const IconGenerator = lazyWithRetry(() => import('./pages/IconGenerator'));
 const Profile = lazyWithRetry(() => import('./pages/Profile'));
-const VisualizationHub = lazyWithRetry(() => import('./pages/VisualizationHub'));
 const ResearchMode = lazyWithRetry(() => import('./pages/ResearchMode'));
 const Dashboard = lazyWithRetry(() => import('./pages/Dashboard'));
 const InstitutionalAdmin = lazyWithRetry(() => import('./pages/InstitutionalAdmin'));
@@ -16,7 +15,6 @@ const DemographicCollection = lazyWithRetry(() => import('./pages/DemographicCol
 const SuperAdminSetup = lazyWithRetry(() => import('./pages/SuperAdminSetup'));
 const AxiomNewsletter = lazyWithRetry(() => import('./pages/AxiomNewsletter'));
 const UsersLog = lazyWithRetry(() => import('./pages/UsersLog'));
-const GSEA = lazyWithRetry(() => import('./pages/GSEA'));
 const AdminAnalytics = lazyWithRetry(() => import('./pages/AdminAnalytics'));
 const ContactSupport = lazyWithRetry(() => import('./pages/ContactSupport'));
 const AdminMessages = lazyWithRetry(() => import('./pages/AdminMessages'));
@@ -42,7 +40,6 @@ export const PAGES = {
     "History": History,
     "IconGenerator": IconGenerator,
     "Profile": Profile,
-    "VisualizationHub": VisualizationHub,
     "ResearchMode": ResearchMode,
     "Dashboard": Dashboard,
     "InstitutionalAdmin": InstitutionalAdmin,
@@ -52,7 +49,6 @@ export const PAGES = {
     "SuperAdminSetup": SuperAdminSetup,
     "AxiomNewsletter": AxiomNewsletter,
     "UsersLog": UsersLog,
-    "GSEA": GSEA,
     "AdminAnalytics": AdminAnalytics,
     "ContactSupport": ContactSupport,
     "AdminMessages": AdminMessages,
@@ -109,8 +105,9 @@ export const pagesConfig = {
 };
 
 // The publishable build deliberately omits MedicalData, VCFAnalysis,
-// AIAssistants, Anastasia, and RobertClinical from both the route map and the
-// lazy-import graph. Their former implementations included personalized
-// medical-record analysis, symptom/diagnostic guidance, variant interpretation,
-// pharmacogenomics, drug avoidance, and dosing suggestions. A disclaimer is not
-// an adequate safety boundary for those execution paths.
+// AIAssistants, Anastasia, RobertClinical, VisualizationHub, and GSEA from both
+// the route map and lazy-import graph. The first group contains personalized
+// clinical execution. VisualizationHub and GSEA currently present LLM-generated
+// coordinates, expression values, interactions, p-values, or FDR values as if
+// they came from named databases or statistical computation. Those routes stay
+// unavailable until they use versioned source adapters or real calculations.
