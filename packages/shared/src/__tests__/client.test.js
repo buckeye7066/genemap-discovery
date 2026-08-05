@@ -687,4 +687,36 @@ describe('Transient-failure retry', () => {
     await expect(retryClient.getMe()).rejects.toThrow('Not found');
     expect(global.fetch).toHaveBeenCalledTimes(1);
   });
+
+  it('retries a HEAD through a 503 and resolves undefined (empty body is not an error)', async () => {
+    let calls = 0;
+    global.fetch = vi.fn(async () => {
+      calls += 1;
+      if (calls < 2) return { ok: false, status: 503, text: async () => '', json: async () => ({}) };
+      // A successful HEAD has NO body — text() returns ''. This must not become
+      // an "empty response" ApiError now that HEAD is retryable.
+      return { ok: true, status: 200, text: async () => '', json: async () => ({}) };
+    });
+
+    await expect(retryClient.request('/health', { method: 'HEAD' })).resolves.toBeUndefined();
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('normalizes a non-finite maxRetries so the retry loop stays bounded', async () => {
+    // maxRetries: Infinity must be clamped to the finite default (2), not loop
+    // forever against a persistent gateway failure.
+    const infClient = new ApiClient('http://localhost:3000', {
+      maxRetries: Infinity,
+      retryBaseDelayMs: 0,
+    });
+    global.fetch = vi.fn(async () => ({
+      ok: false,
+      status: 503,
+      text: async () => '',
+      json: async () => ({ error: 'Service unavailable' }),
+    }));
+
+    await expect(infClient.getMe()).rejects.toThrow('Service unavailable');
+    expect(global.fetch).toHaveBeenCalledTimes(3); // initial + 2 retries, not unbounded
+  });
 });

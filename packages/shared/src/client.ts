@@ -293,8 +293,13 @@ export class ApiClient {
     // Sanitize here too so a polluted constructor override (or env value that
     // sneaks a newline back in) can never produce a malformed request URL.
     this.baseURL = sanitizeBaseURL(baseURL);
-    this.maxRetries = Math.max(0, options.maxRetries ?? 2);
-    this.retryBaseDelayMs = Math.max(0, options.retryBaseDelayMs ?? 300);
+    // Normalize to FINITE values. Math.max alone preserves Infinity (→ retry a
+    // persistent failure forever) and yields NaN for junk input; guard both so
+    // the retry loop is always bounded.
+    const maxRetries = options.maxRetries ?? 2;
+    const retryBaseDelayMs = options.retryBaseDelayMs ?? 300;
+    this.maxRetries = Number.isFinite(maxRetries) ? Math.max(0, Math.floor(maxRetries)) : 2;
+    this.retryBaseDelayMs = Number.isFinite(retryBaseDelayMs) ? Math.max(0, retryBaseDelayMs) : 300;
   }
 
   /**
@@ -303,19 +308,17 @@ export class ApiClient {
    */
   private backoff(attempt: number, signal?: AbortSignal | null): Promise<void> {
     const ms = this.retryBaseDelayMs * 2 ** attempt;
-    if (ms <= 0) return Promise.resolve();
+    if (ms <= 0 || signal?.aborted) return Promise.resolve();
     return new Promise((resolve) => {
-      const timer = setTimeout(resolve, ms);
-      if (signal) {
-        signal.addEventListener(
-          'abort',
-          () => {
-            clearTimeout(timer);
-            resolve();
-          },
-          { once: true }
-        );
-      }
+      const onAbort = () => {
+        clearTimeout(timer);
+        resolve();
+      };
+      const timer = setTimeout(() => {
+        if (signal) signal.removeEventListener('abort', onAbort);
+        resolve();
+      }, ms);
+      if (signal) signal.addEventListener('abort', onAbort, { once: true });
     });
   }
 
@@ -465,8 +468,10 @@ export class ApiClient {
       );
     }
 
-    // 204 No Content: callers expect undefined. Avoid response.json() throw.
-    if (response.status === 204) return undefined as T;
+    // 204 No Content — and a successful HEAD, which by definition carries no
+    // body — yield undefined. Without the HEAD guard the empty-body check below
+    // would turn a healthy HEAD 200 into a spurious "empty response" ApiError.
+    if (method === 'HEAD' || response.status === 204) return undefined as T;
 
     // Read the body defensively. A real fetch Response exposes text(); reading
     // text first lets an empty or non-JSON 2xx response (e.g. a gateway that
