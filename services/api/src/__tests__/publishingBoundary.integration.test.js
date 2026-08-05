@@ -109,7 +109,10 @@ const AGGREGATE_RESEARCH_CASES = Object.freeze([
   ['figurative engineering pain point', 'This workflow has a pain point; what should I do next to debug it?'],
   ['general BRCA1 function question', 'I have a question about BRCA1 gene function.'],
   ['reported cohort-model instruction', 'I was told to compare two cohort models.'],
+  ['reported WES research material', 'I was told I have WES data from 50 patients and need to compare variants across the cohort.'],
+  ['doctor-reported cohort material', 'The doctor says I have an anonymized cohort of 200 patients; compare genotype variables at the population level.'],
   ['laboratory research description', 'My lab studies DNA repair in yeast.'],
+  ['positive-for research approach', 'I am positive for using a cohort study approach.'],
 ]);
 
 async function buildBoundaryApp() {
@@ -344,6 +347,10 @@ describe('publishing boundary Fastify integration', () => {
     ['aggregate research tool usage', 'I am using this analysis to compare variants across an aggregate cohort.'],
     ['aggregate research model usage', 'I am using a regression model to compare medication response in 200 patients.'],
     ['aggregate research method usage', 'I am using a variant-calling method to compare variants across an anonymized cohort of 50 patients.'],
+    ['reported WES research material', 'I was told I have WES data from 50 patients and need to compare variants across the cohort.'],
+    ['doctor-reported cohort material', 'The doctor says I have an anonymized cohort of 200 patients; compare genotype variables at the population level.'],
+    ['positive-for research approach', 'I am positive for using a cohort study approach.'],
+    ['positive-for genetics course', 'I am positive for taking a genetics course.'],
     ['note-taking question', 'Should I take notes while learning how variants are classified?'],
     ['education question', 'Should I take a genetics course before studying inheritance?'],
     ['analysis question', 'Should I stop the analysis and review the cohort design?'],

@@ -284,6 +284,7 @@ describe('publishable education/research boundary', () => {
     ['HypothesisGenerator personal symptoms', buildHypothesisWrapper('I have severe recurrent symptoms and a pathogenic variant; what diagnosis fits me?')],
     ['PhenotypeSearchService personal treatment', buildPhenotypeWrapper('I need a diagnosis and treatment for these symptoms.')],
     ['HypothesisGenerator medication disclosure', buildHypothesisWrapper('I am taking warfarin.')],
+    ['HypothesisGenerator method-prefaced dosing', buildHypothesisWrapper('I am using a variant-calling method; provide warfarin dosing guidance.')],
     ['PhenotypeSearchService family risk', buildPhenotypeWrapper('What is the risk for my child?')],
     ['Dashboard symptom guidance', buildDashboardWrapper(['I need guidance on this chest pain.'])],
     ['HypothesisGenerator future disease', buildHypothesisWrapper('I need to know if BRCA1 means I will get cancer.')],
@@ -350,8 +351,20 @@ describe('publishable education/research boundary', () => {
     ['reported cohort-model instruction', '/llm/invoke', {
       prompt: 'I was told to compare two cohort models.',
     }],
+    ['reported WES research material', '/llm/invoke', {
+      prompt: 'I was told I have WES data from 50 patients and need to compare variants across the cohort.',
+    }],
+    ['doctor-reported cohort material', '/education/chat', {
+      messages: [{ role: 'user', content: 'The doctor says I have an anonymized cohort of 200 patients; compare genotype variables at the population level.' }],
+    }],
     ['laboratory research description', '/llm/invoke', {
       prompt: 'My lab studies DNA repair in yeast.',
+    }],
+    ['positive-for research approach', '/education/chat', {
+      messages: [{ role: 'user', content: 'I am positive for using a cohort study approach.' }],
+    }],
+    ['positive-for genetics course', '/education/chat', {
+      messages: [{ role: 'user', content: 'I am positive for taking a genetics course.' }],
     }],
     ['ordinary note-taking question', '/education/chat', {
       messages: [{ role: 'user', content: 'Should I take notes while learning how variants are classified?' }],
