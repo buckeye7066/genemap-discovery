@@ -6,14 +6,9 @@ const Premium = lazyWithRetry(() => import('./pages/Premium'));
 const History = lazyWithRetry(() => import('./pages/History'));
 const IconGenerator = lazyWithRetry(() => import('./pages/IconGenerator'));
 const Profile = lazyWithRetry(() => import('./pages/Profile'));
-const MedicalData = lazyWithRetry(() => import('./pages/MedicalData'));
-const Anastasia = lazyWithRetry(() => import('./pages/Anastasia'));
-const RobertClinical = lazyWithRetry(() => import('./pages/RobertClinical'));
 const VisualizationHub = lazyWithRetry(() => import('./pages/VisualizationHub'));
 const ResearchMode = lazyWithRetry(() => import('./pages/ResearchMode'));
 const Dashboard = lazyWithRetry(() => import('./pages/Dashboard'));
-const AIAssistants = lazyWithRetry(() => import('./pages/AIAssistants'));
-const VCFAnalysis = lazyWithRetry(() => import('./pages/VCFAnalysis'));
 const InstitutionalAdmin = lazyWithRetry(() => import('./pages/InstitutionalAdmin'));
 const InstitutionalPricing = lazyWithRetry(() => import('./pages/InstitutionalPricing'));
 const BannedUsers = lazyWithRetry(() => import('./pages/BannedUsers'));
@@ -47,14 +42,9 @@ export const PAGES = {
     "History": History,
     "IconGenerator": IconGenerator,
     "Profile": Profile,
-    "MedicalData": MedicalData,
-    "Anastasia": Anastasia,
-    "RobertClinical": RobertClinical,
     "VisualizationHub": VisualizationHub,
     "ResearchMode": ResearchMode,
     "Dashboard": Dashboard,
-    "AIAssistants": AIAssistants,
-    "VCFAnalysis": VCFAnalysis,
     "InstitutionalAdmin": InstitutionalAdmin,
     "InstitutionalPricing": InstitutionalPricing,
     "BannedUsers": BannedUsers,
@@ -117,3 +107,10 @@ export const pagesConfig = {
     Pages: PAGES,
     Layout: __Layout,
 };
+
+// The publishable build deliberately omits MedicalData, VCFAnalysis,
+// AIAssistants, Anastasia, and RobertClinical from both the route map and the
+// lazy-import graph. Their former implementations included personalized
+// medical-record analysis, symptom/diagnostic guidance, variant interpretation,
+// pharmacogenomics, drug avoidance, and dosing suggestions. A disclaimer is not
+// an adequate safety boundary for those execution paths.
