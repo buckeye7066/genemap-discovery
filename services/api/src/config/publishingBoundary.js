@@ -107,8 +107,23 @@ const CLINICAL_FOR_ME = new RegExp(
   `${CLINICAL_ACTION}[\\s\\S]{0,120}(?:\\bfor me\\b|\\bmine\\b)`,
   'i'
 );
-const FIRST_PERSON_CLINICAL = new RegExp(
-  String.raw`\b(?:i have|i was diagnosed|i am taking|i take|i need|should i)\b[\s\S]{0,180}(?:symptoms?|variants?|genotyp\w*|diagnos\w*|risk|medications?|medicines?|drugs?|dos(?:e|ing)|treatments?|therap(?:y|ies)|screening|prognosis|metabolizer|pharmacogen\w*|pathogenic\w*)`,
+// First-person wording is not itself personal-clinical intent. Researchers
+// naturally say "I have WES data from 50 patients" or "I need to identify
+// variants across the cohort." Keep the personal anchors explicit so those
+// aggregate-research requests are not rejected merely because clinical words
+// appear later in a long UI prompt wrapper.
+const FIRST_PERSON_DIAGNOSIS_OR_MEDICATION =
+  /\bi\s+(?:(?:was|have\s+been)\s+diagnosed\b|(?:am\s+taking|take)\b)/i;
+const I_HAVE_PERSONAL_CLINICAL = new RegExp(
+  String.raw`\bi have\s+(?:(?:been experiencing|experienced|tested positive for|a|an|the|my|these|those|some|several|multiple|one|two|three|new|recent|current|chronic|severe|recurrent|unexplained|known|suspected)\s+){0,5}(?:symptoms?|variants?|genotyp\w*|vcf|diagnos\w*|personal risk|risk level|disease risk|medications?|medicines?|drugs?|dos(?:e|ing)|treatments?|therap(?:y|ies)|screening|prognosis|metabolizer|pharmacogen\w*|pathogenic\w*|health condition|condition|results?)\b`,
+  'i'
+);
+const I_NEED_PERSONAL_CLINICAL = new RegExp(
+  String.raw`\bi need(?:\s+to\s+(?:know|understand|decide|find(?: out)?|get|choose))?[\s\S]{0,60}(?:diagnos\w*|personal risk|risk level|disease risk|medications?|medicines?|drugs?|dos(?:e|ing)|treatments?|therap(?:y|ies)|screening|prognosis|clinical management)\b`,
+  'i'
+);
+const SHOULD_I_CLINICAL = new RegExp(
+  String.raw`\bshould i\b[\s\S]{0,180}(?:symptoms?|variants?|genotyp\w*|diagnos\w*|risk|medications?|medicines?|drugs?|dos(?:e|ing)|treatments?|therap(?:y|ies)|screening|prognosis|metabolizer|pharmacogen\w*|pathogenic\w*)`,
   'i'
 );
 const PATIENT_OR_FAMILY =
@@ -120,7 +135,10 @@ export function isPersonalClinicalPrompt(text) {
   if (typeof text !== 'string' || !text.trim()) return false;
   return MY_CLINICAL.test(text)
     || CLINICAL_FOR_ME.test(text)
-    || FIRST_PERSON_CLINICAL.test(text)
+    || FIRST_PERSON_DIAGNOSIS_OR_MEDICATION.test(text)
+    || I_HAVE_PERSONAL_CLINICAL.test(text)
+    || I_NEED_PERSONAL_CLINICAL.test(text)
+    || SHOULD_I_CLINICAL.test(text)
     || PERSON_THEN_CLINICAL.test(text)
     || CLINICAL_THEN_PERSON.test(text);
 }

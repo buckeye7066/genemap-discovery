@@ -131,6 +131,12 @@ const buildDashboardWrapper = (searches) => `As a genetics education and researc
 Do not infer diagnosis, personal genetic risk, treatment, or clinical action.
 Keep each observation under 50 words, practical, and specific to the activity listed.`;
 
+const FIRST_PERSON_AGGREGATE_RESEARCH_PROMPTS = Object.freeze([
+  'I have WES data from 50 patients with early-onset symptoms and need to identify genetic variants across the cohort.',
+  'I have an anonymized aggregate cohort of 200 patients with genotype, symptom-frequency, and treatment-response variables for population-level association research.',
+  'I have RNA-seq from 30 patients with symptoms and controls; compare variants at the cohort level.',
+]);
+
 describe('publishable education/research boundary', () => {
   it('is fail-closed in source code rather than controlled by deployment env', () => {
     expect(PUBLICATION_MODE).toBe('education_research');
@@ -172,6 +178,26 @@ describe('publishable education/research boundary', () => {
     } })).toMatchObject({ statusCode: 403 });
   });
 
+  it.each(FIRST_PERSON_AGGREGATE_RESEARCH_PROMPTS)(
+    'allows first-person ownership of aggregate research data: %s',
+    (prompt) => {
+      expect(isPersonalClinicalPrompt(prompt)).toBe(false);
+      expect(publicationBoundaryDecision({
+        url: '/llm/invoke',
+        body: { prompt },
+      })).toBeNull();
+    }
+  );
+
+  it.each([
+    ['HypothesisGenerator', buildHypothesisWrapper(FIRST_PERSON_AGGREGATE_RESEARCH_PROMPTS[0])],
+    ['PhenotypeSearchService', buildPhenotypeWrapper(FIRST_PERSON_AGGREGATE_RESEARCH_PROMPTS[1])],
+    ['Dashboard', buildDashboardWrapper([FIRST_PERSON_AGGREGATE_RESEARCH_PROMPTS[2]])],
+  ])('allows first-person aggregate research inside the complete %s wrapper', (_surface, prompt) => {
+    expect(isPersonalClinicalPrompt(prompt)).toBe(false);
+    expect(publicationBoundaryDecision({ url: '/llm/invoke', body: { prompt } })).toBeNull();
+  });
+
   it.each([
     [
       'HypothesisGenerator WES example',
@@ -198,6 +224,8 @@ describe('publishable education/research boundary', () => {
     ['HypothesisGenerator dosing request', buildHypothesisWrapper('I am taking warfarin; what dose should I use for my genotype?')],
     ['PhenotypeSearchService personal risk', buildPhenotypeWrapper('What is my risk from this variant?')],
     ['Dashboard family diagnosis', buildDashboardWrapper(['What diagnosis fits my child and these symptoms?'])],
+    ['HypothesisGenerator personal symptoms', buildHypothesisWrapper('I have severe recurrent symptoms and a pathogenic variant; what diagnosis fits me?')],
+    ['PhenotypeSearchService personal treatment', buildPhenotypeWrapper('I need a diagnosis and treatment for these symptoms.')],
   ])('blocks personal clinical intent inside complete wrapper: %s', (_label, prompt) => {
     expect(isPersonalClinicalPrompt(prompt)).toBe(true);
     expect(publicationBoundaryDecision({ url: '/llm/invoke', body: { prompt } })).toMatchObject({

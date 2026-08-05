@@ -2,6 +2,58 @@ import Fastify from 'fastify';
 import { describe, expect, it, vi } from 'vitest';
 import { enforcePublishingBoundary } from '../config/publishingBoundary.js';
 
+const FIRST_PERSON_AGGREGATE_RESEARCH_CASES = Object.freeze([
+  [
+    'HypothesisGenerator',
+    `You are an AI-powered scientific hypothesis generator for genomics research. Generate novel, testable hypotheses.
+
+**Research Context:**
+I have WES data from 50 patients with early-onset symptoms and need to identify genetic variants across the cohort.
+
+**Available Data Types:**
+genomics
+
+**Audience:** research scientists - provide comprehensive technical details
+
+**Your Task - Generate Research Hypotheses:**
+1. Primary and alternative testable hypotheses with scientific rationale
+2. Multi-omic integration using variant calling, GWAS, and rare variant analysis
+3. Experimental design, sample size, controls, statistical power, and confounders
+4. Quality control, integration methods, statistical tests, and visualization
+5. Expected-result scenarios, interpretation, clinical implications, therapeutic targets
+6. Resource requirements, challenges, grant relevance, and broader impacts
+
+Generate creative, scientifically rigorous hypotheses that integrate multi-omic data.`,
+  ],
+  [
+    'PhenotypeSearchService',
+    `You are a genomics assistant. For the query below, do BOTH steps in ONE response.
+
+Query: "I have an anonymized aggregate cohort of 200 patients with genotype, symptom-frequency, and treatment-response variables for population-level association research."
+
+STEP 1 — Classify the query as a disease name, phenotype description, or HPO term and identify features, related terms, synonyms, and inheritance pattern.
+
+STEP 2 — Generate a bounded set of candidate-gene research leads. Never claim the list is exhaustive or clinically validated. Provide identifiers if known, approximate location, AI relevance score, association type, evidence species, and explanation.
+
+OMIM, ClinVar, GWAS Catalog, DisGeNET, UniProt, HPO, and PubMed are follow-up destinations, not sources you may claim to have checked. Do not invent citations, evidence grades, prevalence, or clinical significance.
+
+Return ONLY the requested JSON object.`,
+  ],
+  [
+    'Dashboard',
+    `As a genetics education and research assistant, summarize three patterns in this user's learning activity:
+
+**User Profile:**
+- Education: Researcher
+- Recently viewed genes: CFTR, BRCA1
+- Recent phenotype searches: I have RNA-seq from 30 patients with symptoms and controls; compare variants at the cohort level.
+
+**Task:** Generate 3 brief research-learning observations: a research pattern, a connection, and a source-checking or learning next step.
+
+Do not infer diagnosis, personal genetic risk, treatment, or clinical action.`,
+  ],
+]);
+
 async function buildBoundaryApp() {
   const app = Fastify({ logger: false });
   const handler = vi.fn(async () => ({ ok: true }));
@@ -148,6 +200,45 @@ describe('publishing boundary Fastify integration', () => {
       expect(response.statusCode).toBe(200);
       expect(response.json()).toEqual({ ok: true });
       expect(handler).toHaveBeenCalledTimes(1);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it.each(FIRST_PERSON_AGGREGATE_RESEARCH_CASES)(
+    'executes the matched handler for first-person aggregate research from %s',
+    async (_surface, prompt) => {
+      const { app, handler } = await buildBoundaryApp();
+      try {
+        const response = await app.inject({
+          method: 'POST',
+          url: '/llm/invoke',
+          payload: { prompt },
+        });
+        expect(response.statusCode).toBe(200);
+        expect(response.json()).toEqual({ ok: true });
+        expect(handler).toHaveBeenCalledTimes(1);
+      } finally {
+        await app.close();
+      }
+    }
+  );
+
+  it.each([
+    ['personal diagnosis', 'I have severe recurrent symptoms and a pathogenic variant; what diagnosis fits me?'],
+    ['personal dosing', 'I am taking warfarin; what dose should I use for my genotype?'],
+    ['personal treatment', 'I need a diagnosis and treatment for these symptoms.'],
+  ])('still blocks %s before the matched handler', async (_label, prompt) => {
+    const { app, handler } = await buildBoundaryApp();
+    try {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/llm/invoke',
+        payload: { prompt },
+      });
+      expect(response.statusCode).toBe(403);
+      expect(response.json()).toMatchObject({ code: 'EDUCATION_RESEARCH_BOUNDARY' });
+      expect(handler).not.toHaveBeenCalled();
     } finally {
       await app.close();
     }
