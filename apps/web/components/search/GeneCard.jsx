@@ -53,6 +53,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"; // Added
 import FHIRExporter from "../medical/FHIRExporter";
 import { exportGeneReport, exportJSON, copyShareableLink } from "../../lib/exportUtils";
 import { getClinicalRecordsCached } from "../../lib/medicalContextCache";
+import { HIGH_RISK_CLINICAL_AI_ENABLED } from "../../lib/featureFlags";
 import { Download, Share, Copy, Printer } from "lucide-react";
 
 // Session-scoped set of gene views already logged, so a (re)mount doesn't
@@ -75,7 +76,9 @@ function GeneCard({ gene, rank, isPremium, isSelected = false, onSelect = null }
   const [showClinicalTrials, setShowClinicalTrials] = useState(false); // Added
 
   React.useEffect(() => {
-    loadMedicalContext();
+    if (HIGH_RISK_CLINICAL_AI_ENABLED) {
+      loadMedicalContext();
+    }
     
     // Track gene view activity
     if (gene && gene.symbol) {
@@ -111,10 +114,10 @@ function GeneCard({ gene, rank, isPremium, isSelected = false, onSelect = null }
 
   React.useEffect(() => {
     if (isExpanded) {
-      if (!scoreInterpretation && gene.score && gene.explanation) {
+      if (HIGH_RISK_CLINICAL_AI_ENABLED && !scoreInterpretation && gene.score && gene.explanation) {
         loadScoreInterpretation();
       }
-      if (!comprehensiveSynthesis && gene.aiSummary) {
+      if (HIGH_RISK_CLINICAL_AI_ENABLED && !comprehensiveSynthesis && gene.aiSummary) {
         loadComprehensiveSynthesis();
       }
     }
@@ -499,7 +502,7 @@ Provide comprehensive, evidence-based analysis formatted with clear sections.`;
           <div className="flex items-center gap-2">
             <Badge className={`${confidenceColor} flex items-center gap-1`}>
               <ConfidenceIcon className="w-3 h-3" />
-              {Math.round(gene.score * 100)}% confidence
+              {Math.round(gene.score * 100)}% AI relevance
             </Badge>
             <Button
               variant="ghost"
@@ -547,7 +550,7 @@ Provide comprehensive, evidence-based analysis formatted with clear sections.`;
               }`} />
               <div className="flex-1">
                 <h4 className="font-medium text-slate-900 mb-2">
-                  Robert's Confidence Analysis
+                  About this AI ranking
                 </h4>
                 
                 {isLoadingInterpretation ? (
@@ -564,10 +567,9 @@ Provide comprehensive, evidence-based analysis formatted with clear sections.`;
                 ) : (
                   <div className="text-sm text-slate-600">
                     <p className="mb-2">
-                      <strong>Evidence Score:</strong> {Math.round(gene.score * 100)}% - 
-                      {gene.score >= 0.9 ? " Very high confidence" : 
-                       gene.score >= 0.7 ? " Good confidence" : 
-                       " Moderate confidence"}
+                      <strong>AI relevance score:</strong> {Math.round(gene.score * 100)}%. This is
+                      a model-generated ordering aid, not a calibrated probability, evidence grade,
+                      diagnosis, or measure of personal risk.
                     </p>
                     {gene.explanation && (
                       <p className="text-xs text-slate-500 italic">
@@ -638,8 +640,8 @@ Provide comprehensive, evidence-based analysis formatted with clear sections.`;
             <span>
               <strong>Coordinates &amp; IDs verified</strong> against MyGene.info (Ensembl/NCBI).
               Gene–phenotype associations and the summary are AI-suggested
-              {gene.hpoChecked ? "; HP: ids shown are HPO-validated" : ""} — confirm clinically
-              before any medical use.
+              {gene.hpoChecked ? "; HP: ids shown are HPO-validated" : ""}. Verify each association
+              in the cited primary database record before research use; do not use this output medically.
             </span>
           </div>
         ) : (
@@ -657,7 +659,7 @@ Provide comprehensive, evidence-based analysis formatted with clear sections.`;
         <div className="mb-4">
           <h4 className="font-medium text-slate-900 mb-2 flex items-center gap-2">
             <Tag className="w-4 h-4" />
-            Associated Phenotypes
+            Candidate Phenotype Terms
           </h4>
           <div className="flex flex-wrap gap-2">
             {gene.phenotypes?.slice(0, 5).map((phenotype, idx) => (
@@ -681,7 +683,7 @@ Provide comprehensive, evidence-based analysis formatted with clear sections.`;
           </div>
         </div>
 
-        {isExpanded && (
+        {HIGH_RISK_CLINICAL_AI_ENABLED && isExpanded && (
           <div className="mb-4 bg-gradient-to-br from-purple-50 via-indigo-50 to-blue-50 p-5 rounded-lg border-2 border-purple-200 shadow-sm">
             <div className="flex items-start gap-3">
               <div className="w-10 h-10 bg-gradient-to-r from-purple-600 to-indigo-600 rounded-xl flex items-center justify-center flex-shrink-0">
@@ -764,6 +766,7 @@ Provide comprehensive, evidence-based analysis formatted with clear sections.`;
 
         {isExpanded && (
           <div className="mb-4">
+            {HIGH_RISK_CLINICAL_AI_ENABLED ? (
             <Tabs defaultValue={showClinicalTrials ? "trials" : "clinical"} className="w-full">
               <TabsList className="grid w-full grid-cols-3">
                 <TabsTrigger value="clinical">Clinical Analysis</TabsTrigger>
@@ -993,10 +996,20 @@ Provide comprehensive, evidence-based analysis formatted with clear sections.`;
                 />
               </TabsContent>
             </Tabs>
+            ) : (
+              <Alert className="bg-slate-50 border-slate-200">
+                <Info className="h-4 w-4 text-slate-600" />
+                <AlertDescription className="text-slate-700">
+                  Personalized clinical, medical-record, variant-interpretation,
+                  pharmacogenomic, dosing, and trial-matching tools are unavailable
+                  in this education and exploratory-research build.
+                </AlertDescription>
+              </Alert>
+            )}
           </div>
         )}
 
-        {showClinicalAnalysis && (
+        {HIGH_RISK_CLINICAL_AI_ENABLED && showClinicalAnalysis && (
           <div className="mb-4">
             <RobertClinicalSupport
               gene={gene}
@@ -1108,7 +1121,7 @@ Provide comprehensive, evidence-based analysis formatted with clear sections.`;
           </>
         )}
 
-        {isPremium && (
+        {HIGH_RISK_CLINICAL_AI_ENABLED && isPremium && (
           <Collapsible open={isExpanded} onOpenChange={setIsExpanded}>
             <CollapsibleContent className="mt-4">
               <Separator className="mb-4" />
