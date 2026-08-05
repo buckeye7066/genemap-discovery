@@ -107,7 +107,7 @@ describe('clinical publishing boundary', () => {
     const enrichmentIndex = searchService.indexOf('this.safeEnrich(symbols, [])');
     expect(capIndex).toBeGreaterThan(-1);
     expect(enrichmentIndex).toBeGreaterThan(capIndex);
-    expect(searchService).toContain('usedFallback && this.usesDiseaseCandidatePrompt');
+    expect(searchService).toContain('const usesDiseaseCandidateLimit = this.usesDiseaseCandidatePrompt');
     expect(searchService).toContain('if (this.usesDiseaseCandidatePrompt(phenotypeAnalysis, originalQuery))');
   });
 });

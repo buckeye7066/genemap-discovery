@@ -45,23 +45,21 @@ export class PhenotypeSearchService {
       const effectivePremium = isPremium || isAdmin;
 
       let { analysis, candidateGenes } = fused;
-      let usedFallback = false;
 
       // Reliability net: if the single fused call came back without genes (sparse
       // or unparseable JSON), fall back to the original two-step path so the
       // speedup never costs us a result.
       if (!candidateGenes.length) {
-        usedFallback = true;
         analysis = await this.analyzePhenotype(phenotypeQuery);
         candidateGenes = await this.findCandidateGenes(analysis, effectivePremium, phenotypeQuery);
       }
 
       // LLM output is untrusted: enforce the promised lead limits before any
       // authoritative or per-gene enrichment can fan out into external calls.
-      const usedDiseaseFallbackPrompt = usedFallback && this.usesDiseaseCandidatePrompt(analysis, phenotypeQuery);
+      const usesDiseaseCandidateLimit = this.usesDiseaseCandidatePrompt(analysis, phenotypeQuery);
       const maxCandidateLeads = analysis.isDisease
         || analysis.queryType === 'disease'
-        || usedDiseaseFallbackPrompt
+        || usesDiseaseCandidateLimit
         ? 15
         : 8;
       candidateGenes = candidateGenes.slice(0, maxCandidateLeads);
