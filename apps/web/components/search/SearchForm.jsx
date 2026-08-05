@@ -189,7 +189,7 @@ export default function SearchForm({ onSearch, isLoading, initialQuery = "" }) {
           className="bg-blue-600 hover:bg-blue-700 w-full min-h-[48px] touch-manipulation"
         >
           <Search className="w-4 h-4 mr-2" />
-          {isLoading ? "Searching..." : searchMode === "disease" ? "Find Disease Genes" : "Search (Free)"}
+          {isLoading ? "Searching..." : searchMode === "disease" ? "Generate Candidate Genes" : "Search (Free)"}
         </Button>
 
         <TooltipProvider>
@@ -211,7 +211,7 @@ export default function SearchForm({ onSearch, isLoading, initialQuery = "" }) {
             <TooltipContent>
               <p className="max-w-xs">
                 {isAdmin ? "You have admin access to all premium features" :
-                 "Get additional data: population prevalence, gene history, mutations, and treatment information"}
+                 "Use the expanded research workspace and save additional candidate-gene leads"}
               </p>
             </TooltipContent>
           </Tooltip>
@@ -222,9 +222,9 @@ export default function SearchForm({ onSearch, isLoading, initialQuery = "" }) {
         <div className="flex items-start gap-2">
           <Sparkles className="w-5 h-5 text-blue-600 mt-0.5" />
           <div>
-            <h4 className="font-medium text-blue-900">AI-Powered Insights</h4>
+            <h4 className="font-medium text-blue-900">AI-Generated Research Leads</h4>
             <p className="text-sm text-blue-700">
-              Search by disease name (e.g., "Rheumatoid Arthritis", "Trisomy 21") to discover all associated genes with personalized explanations
+              Search by disease or phenotype to generate candidate genes for follow-up. Rankings and explanations are AI-generated, are not exhaustive, and are not clinical evidence.
             </p>
           </div>
         </div>
