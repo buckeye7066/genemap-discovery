@@ -365,7 +365,7 @@ export default function PremiumPage() {
               </div>
               <div className="flex items-center gap-2">
                 <Check className="w-4 h-4 text-green-600 flex-shrink-0" />
-                <span className="text-sm">All visualization tools</span>
+                <span className="text-sm">Learning progress and advanced topic paths</span>
               </div>
               <div className="flex items-center gap-2">
                 <Check className="w-4 h-4 text-green-600 flex-shrink-0" />
@@ -457,4 +457,3 @@ export default function PremiumPage() {
     </div>
   );
 }
-
