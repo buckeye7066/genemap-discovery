@@ -60,7 +60,9 @@ Do not infer diagnosis, personal genetic risk, treatment, or clinical action.`,
 
 const DIRECT_PERSONAL_CARE_CASES = Object.freeze([
   ['second-person symptom diagnosis', 'Can you diagnose the symptoms I am experiencing?'],
+  ['diagnosis of personal experience', 'Can you diagnose what I am experiencing?'],
   ['lower-case named raw genomic record', 'analyze raw genomic data from Jane Doe.'],
+  ['upper-case named raw genomic record', 'ANALYZE RAW GENOMIC DATA FROM John Smith.'],
   ['upper-case acronym named raw genomic files', 'review raw DNA files from María García.'],
   ['imperative personalized warfarin calculation', 'Calculate the warfarin requirement for my CYP2C9 genotype.'],
   ['named raw genomic record', 'Analyze raw genomic data from Jane Doe, date of birth 1/1/1980.'],
@@ -70,6 +72,7 @@ const DIRECT_PERSONAL_CARE_CASES = Object.freeze([
   ['personal medicine PGx interaction', 'Could the medicine I use interact with my CYP2D6 status?'],
   ['compact symptom diagnosis', 'Can you diagnose symptoms I experience?'],
   ['clinical self-classification', 'Classify myself based on my CYP2C9 genotype.'],
+  ['gene-symbol self-classification', 'Classify me from BRCA1.'],
   ['personal PGx interpretation', 'What does my CYP2C9 genotype mean for warfarin?'],
   ['personal medication adjustment', 'How should my warfarin change based on CYP2C9?'],
   ['named raw genomic files', 'Interpret raw genomic files from Jane Doe.'],
@@ -122,6 +125,9 @@ const DIRECT_PERSONAL_CARE_CASES = Object.freeze([
   ['personal genetic variants', 'I have genetic variants.'],
   ['personal variants compared with cohort', 'Compare my variants with an aggregate cohort of 200 patients.'],
   ['aggregate provenance plus owned VCF', 'Compare variants that came from my anonymized cohort of 200 patients; the VCF belongs to me.'],
+  ['research-vocabulary personal dose calculation', 'Calculate the warfarin requirement for my CYP2C9 genotype; sequencing depth is part of my study.'],
+  ['research-calculation preface plus personal requirement', 'Calculate sequencing depth for my study, then the warfarin requirement for my CYP2C9 genotype.'],
+  ['research requirement plus personal dose', 'Calculate the sequencing-depth requirement for my genotype study, then recommend a warfarin dose for my CYP2C9 genotype.'],
 ]);
 
 const AGGREGATE_RESEARCH_CASES = Object.freeze([
@@ -162,11 +168,14 @@ const AGGREGATE_RESEARCH_CASES = Object.freeze([
   ['non-identifiable cohort material', 'Analyze these non-identifiable patient-level genomic records across an aggregate cohort of 200 participants.'],
   ['learner self-classification', 'Classify myself by learner level for this genetics lesson.'],
   ['learner self-assessment', 'Assess myself as a beginner in this genetics course.'],
+  ['learner classification source', 'Classify me from the learner rubric.'],
   ['aggregate cohort provenance', 'Compare variants that came from my anonymized cohort of 200 patients.'],
   ['aggregate variants-in-dataset inventory', 'Assess the variants I have in my anonymized cohort of 200 patients.'],
   ['aggregate variants-in-data-set inventory', 'Evaluate mutations I have in an aggregate data set of 50 samples.'],
   ['symptom-lesson learning difficulty', 'Explain symptom classification in this lesson; I am experiencing difficulty with the statistics.'],
+  ['diagnosis-lesson learning difficulty', 'Explain diagnosis methods in this lesson; I am experiencing difficulty with the statistics.'],
   ['genotype-study sequencing requirement', 'Calculate the sequencing-depth requirement for my genotype study.'],
+  ['upper-case anonymized raw-data research', 'ANALYZE RAW GENOMIC DATA FROM AN ANONYMIZED COHORT OF 200 SAMPLES.'],
 ]);
 
 async function buildBoundaryApp() {

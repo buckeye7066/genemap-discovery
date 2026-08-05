@@ -173,7 +173,9 @@ describe('publishable education/research boundary', () => {
 
   it.each([
     'Can you diagnose the symptoms I am experiencing?',
+    'Can you diagnose what I am experiencing?',
     'analyze raw genomic data from Jane Doe.',
+    'ANALYZE RAW GENOMIC DATA FROM John Smith.',
     'review raw DNA files from María García.',
     'Calculate the warfarin requirement for my CYP2C9 genotype.',
     'Analyze raw genomic data from Jane Doe, date of birth 1/1/1980.',
@@ -183,6 +185,7 @@ describe('publishable education/research boundary', () => {
     'Could the medicine I use interact with my CYP2D6 status?',
     'Can you diagnose symptoms I experience?',
     'Classify myself based on my CYP2C9 genotype.',
+    'Classify me from BRCA1.',
     'What does my CYP2C9 genotype mean for warfarin?',
     'How should my warfarin change based on CYP2C9?',
     'Interpret raw genomic files from Jane Doe.',
@@ -239,6 +242,9 @@ describe('publishable education/research boundary', () => {
     'I have genetic variants.',
     'Compare my variants with an aggregate cohort of 200 patients.',
     'Compare variants that came from my anonymized cohort of 200 patients; the VCF belongs to me.',
+    'Calculate the warfarin requirement for my CYP2C9 genotype; sequencing depth is part of my study.',
+    'Calculate sequencing depth for my study, then the warfarin requirement for my CYP2C9 genotype.',
+    'Calculate the sequencing-depth requirement for my genotype study, then recommend a warfarin dose for my CYP2C9 genotype.',
   ])('blocks personalized clinical generation: %s', (prompt) => {
     expect(isPersonalClinicalPrompt(prompt)).toBe(true);
     expect(publicationBoundaryDecision({ url: '/education/chat', body: {
@@ -381,6 +387,9 @@ describe('publishable education/research boundary', () => {
     ['learner self-assessment', '/education/chat', {
       messages: [{ role: 'user', content: 'Assess myself as a beginner in this genetics course.' }],
     }],
+    ['learner classification source', '/education/chat', {
+      messages: [{ role: 'user', content: 'Classify me from the learner rubric.' }],
+    }],
     ['aggregate cohort provenance', '/llm/invoke', {
       prompt: 'Compare variants that came from my anonymized cohort of 200 patients.',
     }],
@@ -393,8 +402,14 @@ describe('publishable education/research boundary', () => {
     ['symptom-lesson learning difficulty', '/education/chat', {
       messages: [{ role: 'user', content: 'Explain symptom classification in this lesson; I am experiencing difficulty with the statistics.' }],
     }],
+    ['diagnosis-lesson learning difficulty', '/education/chat', {
+      messages: [{ role: 'user', content: 'Explain diagnosis methods in this lesson; I am experiencing difficulty with the statistics.' }],
+    }],
     ['genotype-study sequencing requirement', '/llm/invoke', {
       prompt: 'Calculate the sequencing-depth requirement for my genotype study.',
+    }],
+    ['upper-case anonymized raw-data research', '/llm/invoke', {
+      prompt: 'ANALYZE RAW GENOMIC DATA FROM AN ANONYMIZED COHORT OF 200 SAMPLES.',
     }],
     ['general genetics lesson', '/education/explain', { topic: 'What is pharmacogenomics?' }],
     ['general PGx mechanism', '/llm/invoke', { prompt: 'Explain how CYP2D6 metabolizer phenotypes are defined.' }],

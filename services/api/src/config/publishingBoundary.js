@@ -138,12 +138,16 @@ const PERSONAL_VARIANT_SYMPTOM_LINK =
   /\b(?:my|this|these|that|those)\s+(?:genetic\s+)?(?:variants?|mutations?|results?)\b[\s\S]{0,120}\b(?:pain|symptoms?)\b[\s\S]{0,60}\bi(?:['’]ve| have)\s+been\s+(?:having|experiencing|feeling)\b/i;
 const PERSONAL_SYMPTOM_DIAGNOSIS_QUESTION =
   /\b(?:do|could|can|would)\s+(?:my|these|this)\s+(?:symptoms?|pain)\b[\s\S]{0,100}\b(?:mean|indicate|suggest|show)\b[\s\S]{0,80}\bi\s+(?:have|might have|could have)\b/i;
+const DIRECT_DIAGNOSIS_OF_PERSONAL_EXPERIENCE =
+  /\bdiagnos\w*\b[\s\S]{0,100}\bwhat\s+(?:i\s+(?:(?:am|was|have been)\s+)?(?:experienc(?:e|ed|ing)|feel(?:t|ing)?|hav(?:e|ing))|i(?:['’]ve)\s+been\s+(?:experiencing|feeling|having))\b/i;
 const CLINICAL_THEN_PERSONAL_EXPERIENCE =
   /\b(?:symptoms?|pain)\b(?:\s+(?:that|which))?\s+i\s+(?:(?:am|was|have been)\s+)?(?:experienc(?:e|ed|ing)|feel(?:t|ing)?|hav(?:e|ing)\s+(?:symptoms?|pain))\b/i;
 const DIRECT_CLINICAL_ACTION_ON_SELF = new RegExp(
   String.raw`(?:\b(?:diagnos\w*|screen\w*|treat)\s+(?:me|myself)\b|\b(?:assess|evaluate|interpret|classify)\s+(?:me|myself)\b[\s\S]{0,40}\b(?:for|based on|using|with|because of|from)\b[\s\S]{0,80}${CLINICAL_ACTION})`,
   'i'
 );
+const DIRECT_GENETIC_ACTION_ON_SELF =
+  /\b(?:[Aa]ssess|[Ee]valuate|[Ii]nterpret|[Cc]lassify)\s+(?:me|myself)\b[\s\S]{0,40}\b(?:for|based on|using|with|because of|from)\s+(?:my\s+)?[A-Z][A-Z0-9-]{1,15}\b/;
 const DIRECT_SYMPTOM_ACTION =
   /\b(?:[\w-]+\s+)?pain\b(?!\s+(?:point|points|index|score|scale|measure|measurement|variable|variables|phenotype|phenotypes)\b)[\s\S]{0,120}\b(?:what should i do|what do i do|what could it be|could it be|should i seek|is this (?:serious|urgent)|do i need (?:a )?doctor)\b/i;
 const PERSONAL_BODY_COMPLAINT =
@@ -164,8 +168,9 @@ const PERSONAL_GENE_CAUSATION_QUESTION =
   /\b(?:is|could|does)\s+[a-z0-9_-]{2,20}\s+(?:the reason\s+)?why\s+i have\s+(?!no\s+(?:association|signal|result)\b)/i;
 const PERSONALIZED_DOSE_CALCULATION =
   /\b(?:calculate|determine|estimate|recommend|choose|adjust)\b[\s\S]{0,160}\b(?:dose|dosing|dosage|amount|requirement)\b[\s\S]{0,160}\b(?:for|based on)\s+my\b[\s\S]{0,80}\b(?:cyp[0-9a-z-]*|genotyp\w*|phenotyp\w*|variants?|mutations?|metabolizer|pharmacogen\w*)\b/i;
+const EXPLICIT_DOSE_TERM = /\b(?:dose|dosing|dosage)\b/i;
 const RESEARCH_DESIGN_AMOUNT_CALCULATION =
-  /\b(?:calculate|determine|estimate|recommend|choose|adjust)\b(?=[\s\S]{0,180}\b(?:amount|requirement)\b)(?=[\s\S]{0,180}\b(?:sequencing(?:[- ]depth)?|read(?:s| depth)?|coverage|depth|sample size|panel size|library size|assay size|replicates?|statistical power)\b)/i;
+  /\b(?:calculate|determine|estimate|recommend|choose|adjust)\b[\s\S]{0,120}\b(?:sequencing(?:[- ]depth)?|read(?:s| depth)?|coverage|depth|sample size|panel size|library size|assay size|replicates?|statistical power)\s+(?:amount|requirement)\b/i;
 const PERSONAL_CARRIED_VARIANT_INTERPRETATION =
   /\b(?:assess|interpret|classify|evaluate|determine)\w*\b[\s\S]{0,140}\b(?:variants?|mutations?)\s+i\s+(?:carry|have|inherited)\b/i;
 const PERSONAL_INHERITED_VARIANT_CARE =
@@ -243,8 +248,21 @@ const EXPLICIT_IDENTIFIABLE_PATIENT_DATA = new RegExp(
 );
 const RAW_GENOMIC_DATA_WITH_IDENTIFIER =
   /\b(?:raw\s+)?(?:genomic|genetic|dna|vcf|variant)\s+(?:data|records?|files?)\b[\s\S]{0,240}\b(?:date of birth|dob|social security(?: number)?|ssn|medical record number|mrn|email address|phone number|home address)\b/i;
-const RAW_GENOMIC_DATA_FROM_NAMED_PERSON =
-  /\b(?:[Aa]naly[sz]e|[Pp]rocess|[Rr]eview|[Ii]nterpret|[Uu]se)\b[\s\S]{0,140}\b[Rr]aw\s+(?:[Gg]enomic|[Gg]enetic|[Dd][Nn][Aa]|[Vv][Cc][Ff]|[Vv]ariant)\s+(?:[Dd]ata|[Rr]ecords?|[Ff]iles?)\b[\s\S]{0,120}\b[Ff]rom\s+\p{Lu}[\p{L}'-]+\s+\p{Lu}[\p{L}'-]+(?=\P{L}|$)/u;
+const RAW_GENOMIC_DATA_SOURCE_REQUEST =
+  /\b(?:analy[sz]e|process|review|interpret|use)\b[\s\S]{0,140}\braw\s+(?:genomic|genetic|dna|vcf|variant)\s+(?:data|records?|files?)\b[\s\S]{0,120}\bfrom\s+([\p{L}'-]+\s+[\p{L}'-]+)/iu;
+const PROPER_NAMED_PERSON =
+  /^\p{Lu}[\p{L}'-]+\s+\p{Lu}[\p{L}'-]+$/u;
+const SAFE_RAW_GENOMIC_RESEARCH_SOURCE =
+  /^(?:(?:an?|the)\s+)?(?:anonymized|de-identified|deidentified|aggregate|public|synthetic|cohort|study|data ?set|samples?|controls?|patients?|participants?|subjects?|repository|database|biobank|sequencing)\b/i;
+
+function hasRawGenomicDataFromNamedPerson(text) {
+  const source = RAW_GENOMIC_DATA_SOURCE_REQUEST.exec(text)?.[1];
+  return Boolean(
+    source
+    && !SAFE_RAW_GENOMIC_RESEARCH_SOURCE.test(source)
+    && PROPER_NAMED_PERSON.test(source)
+  );
+}
 const SAFE_AGGREGATE_GENETIC_PROVENANCE =
   /\b(?:vcf|variants?|mutations?|genotyp\w*|genomic data|genetic data|dna results?)\b[\s\S]{0,120}\b(?:came from|from) my\s+(?:(?:anonymized|de-identified|deidentified|aggregate)\s+)+(?:cohort|data ?set|study|samples?|records?)\b/gi;
 const SAFE_AGGREGATE_VARIANTS_I_HAVE =
@@ -305,8 +323,10 @@ export function isPersonalClinicalPrompt(text) {
     || PERSONAL_RESULT_INTERPRETATION.test(text)
     || PERSONAL_VARIANT_SYMPTOM_LINK.test(text)
     || PERSONAL_SYMPTOM_DIAGNOSIS_QUESTION.test(text)
+    || DIRECT_DIAGNOSIS_OF_PERSONAL_EXPERIENCE.test(text)
     || CLINICAL_THEN_PERSONAL_EXPERIENCE.test(text)
     || DIRECT_CLINICAL_ACTION_ON_SELF.test(text)
+    || DIRECT_GENETIC_ACTION_ON_SELF.test(text)
     || DIRECT_SYMPTOM_ACTION.test(text)
     || PERSONAL_BODY_COMPLAINT.test(text)
     || FIRST_PERSON_UNSPECIFIED_CARE_FOLLOWUP.test(text)
@@ -315,7 +335,10 @@ export function isPersonalClinicalPrompt(text) {
     || PERSONAL_GENE_CAUSATION_QUESTION.test(text)
     || (
       PERSONALIZED_DOSE_CALCULATION.test(text)
-      && !RESEARCH_DESIGN_AMOUNT_CALCULATION.test(text)
+      && (
+        EXPLICIT_DOSE_TERM.test(text)
+        || !RESEARCH_DESIGN_AMOUNT_CALCULATION.test(text)
+      )
     )
     || PERSONAL_CARRIED_VARIANT_INTERPRETATION.test(personalCarriedVariantText)
     || PERSONAL_INHERITED_VARIANT_CARE.test(text)
@@ -325,7 +348,7 @@ export function isPersonalClinicalPrompt(text) {
     || PERSONAL_MEDICATION_ADJUSTMENT_BY_MARKER.test(text)
     || PERSONAL_TEST_OR_RESULT.test(text)
     || RAW_GENOMIC_DATA_WITH_IDENTIFIER.test(text)
-    || RAW_GENOMIC_DATA_FROM_NAMED_PERSON.test(text)
+    || hasRawGenomicDataFromNamedPerson(text)
     || FIRST_PERSON_FUTURE_DISEASE.test(text)
     || DIRECT_PERSONAL_CLINICAL_HELP.test(text)
     || FIRST_PERSON_DIAGNOSIS.test(text)
