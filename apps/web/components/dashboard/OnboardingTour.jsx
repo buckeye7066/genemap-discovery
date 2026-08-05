@@ -3,7 +3,7 @@ import { apiClient } from "@genemap/shared";
 import { useAuth } from '../../lib/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { X, Sparkles, MessageSquare, Palette, Search, BarChart3, ChevronRight, ChevronLeft } from "lucide-react";
+import { X, Sparkles, MessageSquare, Palette, Search, ChevronRight, ChevronLeft } from "lucide-react";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 
@@ -42,15 +42,6 @@ const tourSteps = [
     position: "center",
     highlight: "search-link",
     action: { label: "Start Searching", link: createPageUrl("Search") }
-  },
-  {
-    id: "visualizations",
-    title: "Visualize & Compare",
-    description: "Compare saved research gene lists and explore clearly labeled visual summaries. AI-generated relationships require source verification.",
-    icon: BarChart3,
-    position: "center",
-    highlight: "viz-link",
-    action: { label: "Explore Visualizations", link: createPageUrl("VisualizationHub") }
   },
   {
     id: "complete",
