@@ -147,7 +147,7 @@ const DIRECT_CLINICAL_ACTION_ON_SELF = new RegExp(
   'i'
 );
 const DIRECT_GENETIC_ACTION_ON_SELF =
-  /\b(?:[Aa]ssess|[Ee]valuate|[Ii]nterpret|[Cc]lassify)\s+(?:me|myself)\b[\s\S]{0,40}\b(?:for|based on|using|with|because of|from)\s+(?:my\s+)?[A-Z][A-Z0-9-]{1,15}\b/;
+  /\b(?:[Aa]ssess|[Ee]valuate|[Ii]nterpret|[Cc]lassify)\s+(?:me|myself)\b[\s\S]{0,40}\b(?:for|based on|using|with|because of|from)\s+(?:my\s+)?(?:[A-Z][A-Z-]{1,15}|[A-Za-z][A-Za-z0-9-]*\d[A-Za-z0-9-]*)\b/;
 const DIRECT_SYMPTOM_ACTION =
   /\b(?:[\w-]+\s+)?pain\b(?!\s+(?:point|points|index|score|scale|measure|measurement|variable|variables|phenotype|phenotypes)\b)[\s\S]{0,120}\b(?:what should i do|what do i do|what could it be|could it be|should i seek|is this (?:serious|urgent)|do i need (?:a )?doctor)\b/i;
 const PERSONAL_BODY_COMPLAINT =
@@ -248,19 +248,18 @@ const EXPLICIT_IDENTIFIABLE_PATIENT_DATA = new RegExp(
 const RAW_GENOMIC_DATA_WITH_IDENTIFIER =
   /\b(?:raw\s+)?(?:genomic|genetic|dna|vcf|variant)\s+(?:data|records?|files?)\b[\s\S]{0,240}\b(?:date of birth|dob|social security(?: number)?|ssn|medical record number|mrn|email address|phone number|home address)\b/i;
 const RAW_GENOMIC_DATA_SOURCE_REQUEST =
-  /\b(?:analy[sz]e|process|review|interpret|use)\b[\s\S]{0,140}\braw\s+(?:genomic|genetic|dna|vcf|variant)\s+(?:data|records?|files?)\b[\s\S]{0,120}\bfrom\s+([\p{L}'-]+\s+[\p{L}'-]+)/iu;
+  /\b(?:analy[sz]e|process|review|interpret|use)\b[\s\S]{0,140}\braw\s+(?:genomic|genetic|dna|vcf|variant)\s+(?:data|records?|files?)\b[\s\S]{0,120}\bfrom\s+([\p{L}'-]+\s+[\p{L}'-]+)/giu;
 const PROPER_NAMED_PERSON =
   /^\p{Lu}[\p{L}'-]+\s+\p{Lu}[\p{L}'-]+$/u;
 const SAFE_RAW_GENOMIC_RESEARCH_SOURCE =
-  /^(?:(?:an?|the)\s+)?(?:anonymized|de-identified|deidentified|aggregate|public|synthetic|cohort|study|data ?set|samples?|controls?|patients?|participants?|subjects?|repository|database|biobank|sequencing)\b/i;
+  /^(?:(?:an?|the)\s+)?(?:anonymized|de-identified|deidentified|aggregate|public|synthetic|cohort|study|data ?set|samples?|controls?|repository|database|biobank|sequencing)\b/i;
 
 function hasRawGenomicDataFromNamedPerson(text) {
-  const source = RAW_GENOMIC_DATA_SOURCE_REQUEST.exec(text)?.[1];
-  return Boolean(
-    source
-    && !SAFE_RAW_GENOMIC_RESEARCH_SOURCE.test(source)
-    && PROPER_NAMED_PERSON.test(source)
-  );
+  return [...text.matchAll(RAW_GENOMIC_DATA_SOURCE_REQUEST)].some((match) => {
+    const source = match[1];
+    return !SAFE_RAW_GENOMIC_RESEARCH_SOURCE.test(source)
+      && PROPER_NAMED_PERSON.test(source);
+  });
 }
 const SAFE_AGGREGATE_GENETIC_PROVENANCE =
   /\b(?:vcf|variants?|mutations?|genotyp\w*|genomic data|genetic data|dna results?)\b[\s\S]{0,120}\b(?:came from|from) my\s+(?:(?:anonymized|de-identified|deidentified|aggregate)\s+)+(?:cohort|data ?set|study|samples?|records?)\b/gi;
