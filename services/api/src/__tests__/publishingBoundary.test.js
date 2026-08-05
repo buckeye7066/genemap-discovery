@@ -135,6 +135,7 @@ const FIRST_PERSON_AGGREGATE_RESEARCH_PROMPTS = Object.freeze([
   'I have WES data from 50 patients with early-onset symptoms and need to identify genetic variants across the cohort.',
   'I have an anonymized aggregate cohort of 200 patients with genotype, symptom-frequency, and treatment-response variables for population-level association research.',
   'I have RNA-seq from 30 patients with symptoms and controls; compare variants at the cohort level.',
+  'I have a pilot study with symptom counts and variant annotations for exploratory analysis.',
 ]);
 
 describe('publishable education/research boundary', () => {
@@ -176,6 +177,7 @@ describe('publishable education/research boundary', () => {
     'I have chest pain; tell me what diagnosis this is.',
     'I have a BRCA1 mutation; how should I be screened?',
     'I need help with these symptoms.',
+    'I need help interpreting these variants.',
     'I have genetic variants.',
   ])('blocks personalized clinical generation: %s', (prompt) => {
     expect(isPersonalClinicalPrompt(prompt)).toBe(true);
@@ -274,6 +276,9 @@ describe('publishable education/research boundary', () => {
     }],
     ['aggregate condition-label wording', '/llm/invoke', {
       prompt: 'I have condition labels for 200 patients in an aggregate cohort for population-level association research.',
+    }],
+    ['less-structured aggregate study', '/llm/invoke', {
+      prompt: 'I have a pilot study with symptom counts and variant annotations for exploratory analysis.',
     }],
     ['gene lookup', '/genomics/gene/CFTR', null],
     ['candidate enrichment', '/genomics/enrich', { symbols: ['CFTR'] }],

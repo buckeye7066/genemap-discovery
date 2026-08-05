@@ -52,6 +52,10 @@ Return ONLY the requested JSON object.`,
 
 Do not infer diagnosis, personal genetic risk, treatment, or clinical action.`,
   ],
+  [
+    'less-structured pilot study',
+    'I have a pilot study with symptom counts and variant annotations for exploratory analysis.',
+  ],
 ]);
 
 const DIRECT_PERSONAL_CARE_CASES = Object.freeze([
@@ -60,6 +64,7 @@ const DIRECT_PERSONAL_CARE_CASES = Object.freeze([
   ['chest-pain diagnosis', 'I have chest pain; tell me what diagnosis this is.'],
   ['BRCA1 screening', 'I have a BRCA1 mutation; how should I be screened?'],
   ['symptom help', 'I need help with these symptoms.'],
+  ['variant help', 'I need help interpreting these variants.'],
   ['personal genetic variants', 'I have genetic variants.'],
 ]);
 
@@ -275,6 +280,7 @@ describe('publishing boundary Fastify integration', () => {
     ['education course', 'I take a genetics course and want to understand Mendelian inheritance.'],
     ['research notes', 'I take notes while reviewing genetic variants across an aggregate cohort.'],
     ['condition labels', 'I have condition labels for 200 patients in an aggregate cohort for population-level association research.'],
+    ['less-structured pilot study', 'I have a pilot study with symptom counts and variant annotations for exploratory analysis.'],
   ])('allows ordinary non-clinical research wording from %s', async (_label, prompt) => {
     const { app, handler } = await buildBoundaryApp();
     try {

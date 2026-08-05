@@ -132,11 +132,13 @@ const SHOULD_I_CLINICAL = new RegExp(
   'i'
 );
 const AGGREGATE_DATA_OWNERSHIP =
-  /\bi have\b[\s\S]{0,140}(?:\b(?:wes|whole[- ]exome|whole[- ]genome|wgs|rna[- ]?seq|transcriptom\w*|genom\w*|proteom\w*|metabolom\w*)\b(?:\s+data)?|\bdata ?sets?\b|\b(?:anonymized|de-identified|aggregate)\s+cohort\b)/i;
+  /\bi have\b[\s\S]{0,140}(?:\b(?:wes|whole[- ]exome|whole[- ]genome|wgs|rna[- ]?seq|transcriptom\w*|genom\w*|proteom\w*|metabolom\w*)\b(?:\s+data)?|\bdata ?sets?\b|\b(?:anonymized|de-identified|aggregate)\s+cohort\b|\b(?:(?:pilot|research|case-control|observational|exploratory)\s+)?(?:study|project|analysis)\b)/i;
 const AGGREGATE_RESEARCH_EVIDENCE =
   /(?:\b(?:anonymized|de-identified|aggregate)\b|\b\d+\s+(?:patients?|participants?|subjects?|samples?)\b|\bpatients?\b[\s\S]{0,100}\bcontrols?\b|\bcohort\b|\bpopulation[- ]level\b|\bassociation research\b)/i;
 const COHORT_LEVEL_RESEARCH_OUTPUT =
   /(?:\b(?:across|within|for|at)\s+(?:the\s+)?cohort\b|\bcohort[- ]level\b|\bpopulation[- ]level\b|\bassociation research\b|\bcompare\b[\s\S]{0,120}\b(?:cohort|patients?|controls?|samples?)\b|\bidentify\b[\s\S]{0,100}\b(?:variants?|mutations?|genes?|associations?)\b[\s\S]{0,100}\b(?:cohort|patients?|controls?|population)\b)/i;
+const RESEARCH_WORK_PRODUCT =
+  /\b(?:pilot study|research (?:study|project|analysis)|case-control (?:study|analysis)|observational study|exploratory analysis)\b/i;
 const PATIENT_OR_FAMILY =
   String.raw`(?:\bthis patient\b|\bmy patient(?:['’]s)?\b|\bthe patient['’]s\b|\bpatient['’]s\b|\bmy (?:child|son|daughter|mother|father|parent|sibling|brother|sister|spouse|partner|family member)(?:['’]s)?\b)`;
 const PERSON_THEN_CLINICAL = new RegExp(`${PATIENT_OR_FAMILY}[\\s\\S]{0,240}${CLINICAL_ACTION}`, 'i');
@@ -144,8 +146,11 @@ const CLINICAL_THEN_PERSON = new RegExp(`${CLINICAL_ACTION}[\\s\\S]{0,240}${PATI
 
 function isAggregateResearchOwnership(text) {
   return AGGREGATE_DATA_OWNERSHIP.test(text)
-    && AGGREGATE_RESEARCH_EVIDENCE.test(text)
-    && COHORT_LEVEL_RESEARCH_OUTPUT.test(text)
+    && (
+      AGGREGATE_RESEARCH_EVIDENCE.test(text)
+      || COHORT_LEVEL_RESEARCH_OUTPUT.test(text)
+      || RESEARCH_WORK_PRODUCT.test(text)
+    )
     && !DIRECT_PERSONAL_CARE_REQUEST.test(text);
 }
 
