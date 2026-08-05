@@ -136,6 +136,20 @@ const DIRECT_SYMPTOM_ACTION =
   /\b(?:[\w-]+\s+)?pain\b(?!\s+(?:point|points|index|score|scale|measure|measurement|variable|variables|phenotype|phenotypes)\b)[\s\S]{0,120}\b(?:what should i do|what do i do|what could it be|could it be|should i seek|is this (?:serious|urgent)|do i need (?:a )?doctor)\b/i;
 const PERSONAL_BODY_COMPLAINT =
   /\bmy\s+(?:[\w-]+\s+){0,2}(?:hurts?|aches?|is painful)\b/i;
+const NONCLINICAL_I_HAVE_OBJECT =
+  String.raw`(?:a\s+(?:question|course|class|lesson|study|project|dataset|data set|model|analysis|research task)|(?:wes|wgs|rna[- ]?seq|genotype|genomic|transcriptomic|proteomic)\s+data|(?:anonymized|de-identified|aggregate)\s+cohort|pilot study|condition labels)`;
+const FIRST_PERSON_UNSPECIFIED_CARE_FOLLOWUP = new RegExp(
+  String.raw`\bi have\s+(?!${NONCLINICAL_I_HAVE_OBJECT}\b)[\s\S]{0,140}\b(?:what are my options|what can i do|what should i do|what now|what does that mean|what do they mean|explain it)\b`,
+  'i'
+);
+const REPORTED_PERSONAL_CONDITION =
+  /(?:\bi was told\s+(?:that\s+)?i have\b|\b(?:my|the|a)\s+doctor\s+(?:says|said|told me)\b[\s\S]{0,80}\bi have\b)/i;
+const PERSONAL_HEREDITY_QUESTION =
+  /\b(?:could|can|might)\s+my\s+(?!(?:dataset|data|model|study|analysis|experiment|lab|research|project)\b)[\w -]{1,60}\s+be\s+(?:genetic|hereditary|inherited)\b/i;
+const PERSONAL_GENE_CAUSATION_QUESTION =
+  /\b(?:is|could|does)\s+[a-z0-9_-]{2,20}\s+(?:the reason\s+)?why\s+i have\s+(?!no\s+(?:association|signal|result)\b)/i;
+const PERSONAL_TEST_OR_RESULT =
+  /(?:\bmy\s+(?:raw\s+)?(?:(?:lab|dna|genetic|genomic)\s+)?(?:report|results?|test)\b[\s\S]{0,160}\b(?:shows?|found|positive|mean|interpret|explain)\b|\bhere (?:are|is) my\s+(?:raw\s+)?(?:dna|genetic|genomic)\s+(?:report|results?|test)\b[\s\S]{0,120}\b(?:mean|interpret|explain)\b|\bi am positive for\b)/i;
 const FIRST_PERSON_FUTURE_DISEASE =
   /(?:\bi\s+need\s+to\s+know\b[\s\S]{0,180}\bi\s+(?:will|might|could|may)\s+(?:get|develop|have|be diagnosed)|\b(?:will|might|could|may)\s+i\s+(?:get|develop|have|be diagnosed))/i;
 const DIRECT_PERSONAL_CLINICAL_HELP =
@@ -208,6 +222,11 @@ export function isPersonalClinicalPrompt(text) {
     || PERSONAL_SYMPTOM_DIAGNOSIS_QUESTION.test(text)
     || DIRECT_SYMPTOM_ACTION.test(text)
     || PERSONAL_BODY_COMPLAINT.test(text)
+    || FIRST_PERSON_UNSPECIFIED_CARE_FOLLOWUP.test(text)
+    || REPORTED_PERSONAL_CONDITION.test(text)
+    || PERSONAL_HEREDITY_QUESTION.test(text)
+    || PERSONAL_GENE_CAUSATION_QUESTION.test(text)
+    || PERSONAL_TEST_OR_RESULT.test(text)
     || FIRST_PERSON_FUTURE_DISEASE.test(text)
     || DIRECT_PERSONAL_CLINICAL_HELP.test(text)
     || FIRST_PERSON_DIAGNOSIS.test(text)

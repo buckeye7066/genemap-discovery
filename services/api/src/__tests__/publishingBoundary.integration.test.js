@@ -76,6 +76,18 @@ const DIRECT_PERSONAL_CARE_CASES = Object.freeze([
   ['variant-symptom link', "Could this mutation explain the pain I've been having?"],
   ['symptom-diagnosis question', 'Do these symptoms mean I have cancer?'],
   ['aggregate preface with personal treatment', 'We have 200 patient records; what treatment should I choose for myself?'],
+  ['unspecified cancer care', 'I have cancer. What are my options?'],
+  ['unspecified diabetes care', 'I have diabetes. What can I do?'],
+  ['reported lupus condition', 'I was told I have lupus.'],
+  ['doctor-reported MS condition', 'The doctor says I have MS. What now?'],
+  ['personal hereditary symptom', 'Could my headaches be genetic?'],
+  ['gene-personal condition causation', 'Is BRCA1 why I have breast cancer?'],
+  ['personal APOE4 copy result', 'I have two copies of APOE4. What does that mean?'],
+  ['personal lab report', 'My lab report shows c.68_69delAG; explain it.'],
+  ['positive test result', 'I am positive for Factor V Leiden.'],
+  ['raw DNA result interpretation', 'Here are my raw DNA results—what do they mean?'],
+  ['aggregate preface with treatment to take', 'We have data from 200 patients; what treatment should I take?'],
+  ['aggregate preface with treatment to use', 'We have data from 200 patients; what treatment should I use?'],
   ['aggregate boilerplate with personal treatment', 'We have 200 patient records and compare outcomes across the cohort; what treatment should I take?'],
   ['chest-pain cause', "I've got chest pain; what could be causing it?"],
   ['medication disclosure', 'I am taking warfarin.'],
@@ -94,6 +106,9 @@ const AGGREGATE_RESEARCH_CASES = Object.freeze([
   ['cohort medication-response analysis', 'I have genotype data from 200 patients and need to compare medication response across the cohort.'],
   ['cohort treatment endpoint', 'In a 200-patient study, what treatment should I use as an endpoint for the cohort analysis?'],
   ['figurative engineering pain point', 'This workflow has a pain point; what should I do next to debug it?'],
+  ['general BRCA1 function question', 'I have a question about BRCA1 gene function.'],
+  ['reported cohort-model instruction', 'I was told to compare two cohort models.'],
+  ['laboratory research description', 'My lab studies DNA repair in yeast.'],
 ]);
 
 async function buildBoundaryApp() {

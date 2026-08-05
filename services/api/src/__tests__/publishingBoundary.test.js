@@ -193,6 +193,18 @@ describe('publishable education/research boundary', () => {
     "Could this mutation explain the pain I've been having?",
     'Do these symptoms mean I have cancer?',
     'We have 200 patient records; what treatment should I choose for myself?',
+    'I have cancer. What are my options?',
+    'I have diabetes. What can I do?',
+    'I was told I have lupus.',
+    'The doctor says I have MS. What now?',
+    'Could my headaches be genetic?',
+    'Is BRCA1 why I have breast cancer?',
+    'I have two copies of APOE4. What does that mean?',
+    'My lab report shows c.68_69delAG; explain it.',
+    'I am positive for Factor V Leiden.',
+    'Here are my raw DNA results—what do they mean?',
+    'We have data from 200 patients; what treatment should I take?',
+    'We have data from 200 patients; what treatment should I use?',
     'We have 200 patient records and compare outcomes across the cohort; what treatment should I take?',
     "I've got chest pain; what could be causing it?",
     'I am taking warfarin.',
@@ -330,6 +342,15 @@ describe('publishable education/research boundary', () => {
     }],
     ['figurative engineering pain point', '/education/chat', {
       messages: [{ role: 'user', content: 'This workflow has a pain point; what should I do next to debug it?' }],
+    }],
+    ['general BRCA1 function question', '/education/chat', {
+      messages: [{ role: 'user', content: 'I have a question about BRCA1 gene function.' }],
+    }],
+    ['reported cohort-model instruction', '/llm/invoke', {
+      prompt: 'I was told to compare two cohort models.',
+    }],
+    ['laboratory research description', '/llm/invoke', {
+      prompt: 'My lab studies DNA repair in yeast.',
     }],
     ['ordinary note-taking question', '/education/chat', {
       messages: [{ role: 'user', content: 'Should I take notes while learning how variants are classified?' }],
