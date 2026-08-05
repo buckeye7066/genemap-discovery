@@ -65,7 +65,7 @@ const levelField = z.preprocess(
 const explainSchema = z.object({
   topic: z.string().min(1).max(500),
   level: levelField,
-});
+}).strict();
 
 const imageSchema = z.object({
   topic: z.string().min(1).max(500),
