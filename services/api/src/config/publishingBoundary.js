@@ -203,7 +203,9 @@ const OWNER_PREFIX_ACTION =
 const SAFE_AGGREGATE_OWNER =
   /^(?:(?:an?|the)\s+)?(?:(?:(?:anonymized|de-identified|deidentified|non-identifiable|aggregate|synthetic|public)\s+){1,3})?(?:cohort|population|data ?set|biobank|repository|\d+(?:\s+|-)\s*(?:patients?|participants?|subjects?|samples?|controls?))(?:\s+(?:of|with|containing|including)\s+\d+(?:\s+|-)\s*(?:patients?|participants?|subjects?|samples?|controls?))?\s*$/i;
 const GENERIC_EDUCATIONAL_OWNER =
-  /^(?:[\p{L}\p{N}-]+\s+){0,4}(?:gene|protein|enzyme|pathway|cell|tissue|organism|species|strain|yeast|mouse|model|study|research|laboratory|lab)\s*$/iu;
+  /^(?:(?:how|why|whether|when)\s+)?(?:(?:an?|the|this|that|each|any)\s+)?(?:(?:human|mouse|yeast|plant|model|target|candidate|reference|wild[- ]type|mutant|protein[- ]coding|tumou?r[- ]suppressor|dna[- ]repair)\s+){0,2}(?:gene|protein|enzyme|pathway|cell|tissue|organism|species|strain|model|study|research|laboratory|lab)\s*$/i;
+const NAMED_GENE_EDUCATIONAL_OWNER =
+  /^(?:(?:how|why|whether|when)\s+)?(?:(?:an?|the|this|that)\s+)?[A-Z][A-Z0-9-]{1,9}\s+gene\s*$/u;
 const FROM_SENSITIVE_SOURCE = /\bfrom\b/i;
 const EXPLICIT_AGGREGATE_DATA_SOURCE =
   /\bfrom\s+(?:(?:an?|the)\s+)?(?:(?:(?:anonymized|de-identified|deidentified|non-identifiable|aggregate|synthetic|public)\s+){1,3}(?:cohort|population|data ?set|data|records?|samples?|biobank|repository)|\d+(?:\s+|-)\s*(?:patients?|participants?|subjects?|samples?|controls?))\b/i;
@@ -221,7 +223,12 @@ function hasIndividualGenomicOwnership(text) {
     // Possessive descriptions of a gene/protein/pathway are ordinary genetics
     // education, not patient ownership. Nested possession (for example,
     // "Jane Doe's gene's variants") is never eligible for this exemption.
-    if (!/['’]s\b/i.test(owner) && GENERIC_EDUCATIONAL_OWNER.test(owner)) continue;
+    if (
+      !/['’]s\b/i.test(owner) &&
+      (GENERIC_EDUCATIONAL_OWNER.test(owner) || NAMED_GENE_EDUCATIONAL_OWNER.test(owner))
+    ) {
+      continue;
+    }
     return true;
   }
   for (const match of String(text).matchAll(ATTRIBUTED_GENOMIC_ARTIFACT)) {
