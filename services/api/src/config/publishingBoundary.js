@@ -188,6 +188,11 @@ const EXPLICITLY_IDENTIFIABLE =
   /\b(?:identifiable|identified|non[- ]anonymized|not anonymized)\b[\s\S]{0,100}\b(?:patient|participant|subject|individual|data|records?|files?)\b/i;
 const NAMED_SENSITIVE_SOURCE =
   /\bfrom\s+(?:(?:patient|participant|subject|dr)\.?\s+)?(?:\p{Lu}\.?|\p{Lu}[\p{Ll}'-]+)(?:\s+(?:\p{Lu}\.?|\p{Lu}[\p{Ll}'-]+)){1,2}\b/u;
+const FROM_SENSITIVE_SOURCE = /\bfrom\b/i;
+const EXPLICIT_AGGREGATE_DATA_SOURCE =
+  /\bfrom\s+(?:(?:an?|the)\s+)?(?:(?:(?:anonymized|de-identified|deidentified|non-identifiable|aggregate|synthetic|public)\s+){1,3}(?:cohort|population|data ?set|data|records?|samples?|biobank|repository)|\d+(?:\s+|-)\s*(?:patients?|participants?|subjects?|samples?|controls?))\b/i;
+const EXPLICIT_AGGREGATE_SENSITIVE_CONTEXT =
+  /(?:\b(?:anonymized|de-identified|deidentified|non-identifiable|aggregate|synthetic|public)\b[\s\S]{0,100}\b(?:raw\s+)?(?:genomic|genetic|dna|vcf|variant|genotype|wes|wgs|rna[- ]?seq)\s+(?:data|records?|files?|results?)\b|\b(?:raw\s+)?(?:genomic|genetic|dna|vcf|variant|genotype|wes|wgs|rna[- ]?seq)\s+(?:data|records?|files?|results?)\b[\s\S]{0,100}\b(?:anonymized|de-identified|deidentified|non-identifiable|aggregate|synthetic|public)\b)/i;
 
 function hasUnsafeSensitiveData(text) {
   if (IDENTIFIER.test(text) || EXPLICITLY_IDENTIFIABLE.test(text)) return true;
@@ -195,6 +200,21 @@ function hasUnsafeSensitiveData(text) {
   return splitIntentClauses(text).some((clause) => {
     if (!DATA_EXECUTION.test(clause) || !SENSITIVE_DATA_MATERIAL.test(clause)) return false;
     if (NAMED_SENSITIVE_SOURCE.test(clause)) return true;
+    // A later cohort count must never sanitize an earlier person/source. Raw
+    // genomic material introduced with "from" is publishable only when the
+    // source immediately following "from" is itself explicitly aggregate,
+    // deidentified, synthetic/public, or count-based. This is deliberately
+    // case-independent and does not try to infer whether arbitrary words are a
+    // person's name.
+    if (FROM_SENSITIVE_SOURCE.test(clause) && !EXPLICIT_AGGREGATE_DATA_SOURCE.test(clause)) {
+      return true;
+    }
+    // Without a "from" source, require an aggregate/deidentification marker
+    // attached to the sensitive material itself. A cohort count elsewhere in
+    // the clause cannot sanitize an unidentified person's raw record.
+    if (!FROM_SENSITIVE_SOURCE.test(clause) && !EXPLICIT_AGGREGATE_SENSITIVE_CONTEXT.test(clause)) {
+      return true;
+    }
     return !isAggregateResearchIntent(clause);
   });
 }
@@ -283,8 +303,7 @@ function hasDirectPersonalOrClinicalExecution(text) {
 }
 
 const GENETICS_DOMAIN =
-  /\b(?:gene|genes|genetic|genetics|genomic|genomics|dna|rna|chromosome|variant|mutation|allele|inheritance|phenotype|genotype|protein|cell|molecular|transcription|translation|crispr|gwas|hpo|vcf|pharmacogenomics?)\b/i;
-const GENE_SYMBOL = /\b[A-Z]{2,}[A-Z0-9-]{0,9}\b/;
+  /\b(?:gene|genes|genetic|genetics|genomic|genomics|dna|rna|chromosome|variant|mutation|allele|phenotype|genotype|crispr|gwas|hpo|vcf|pharmacogenomics?)\b/i;
 const EDUCATION_FRAME =
   /\b(?:explain|describe|teach|learn(?:ing)?|lesson|course|what (?:is|are)|how (?:does|do|is|are)|why (?:does|do|is|are)|overview|definition|difference between|help me understand|tell me about|tell me more)\b/i;
 const CANDIDATE_RESEARCH_CONTRACT =
@@ -301,7 +320,29 @@ const CUSTOM_EDUCATION_TOPIC_SHAPE =
 function isGenericGeneticsEducation(text) {
   return !PROMPT_CONTROL_OR_UNRELATED_OUTPUT.test(text)
     && EDUCATION_FRAME.test(text)
-    && (GENETICS_DOMAIN.test(text) || GENE_SYMBOL.test(text));
+    && GENETICS_DOMAIN.test(text);
+}
+
+function normalizedEducationTopic(value) {
+  return typeof value === 'string' ? value.trim().toLowerCase().replace(/\s+/g, ' ') : '';
+}
+
+function isKnownEducationTopic(value) {
+  return KNOWN_EDUCATION_TOPICS.has(normalizedEducationTopic(value));
+}
+
+function isCatalogEducationConversation(body) {
+  if (!isKnownEducationTopic(body?.topic) || !Array.isArray(body?.messages)) return false;
+  const topic = normalizedEducationTopic(body.topic);
+  const userText = body.messages
+    .filter((message) => message?.role === 'user' && typeof message?.content === 'string')
+    .map((message) => message.content)
+    .join('\n');
+  const normalizedUserText = normalizedEducationTopic(userText);
+  return Boolean(userText)
+    && normalizedUserText.includes(topic)
+    && EDUCATION_FRAME.test(userText)
+    && !PROMPT_CONTROL_OR_UNRELATED_OUTPUT.test(userText);
 }
 
 function isRouteOwnedGeneticsTopic(body) {
@@ -309,25 +350,24 @@ function isRouteOwnedGeneticsTopic(body) {
   if (!topic) return false;
   if (typeof body?.context === 'string' && body.context.trim()) return false;
 
-  const topicKey = topic.toLowerCase().replace(/\s+/g, ' ');
-  if (KNOWN_EDUCATION_TOPICS.has(topicKey)) return true;
+  if (isKnownEducationTopic(topic)) return true;
   return CUSTOM_EDUCATION_TOPIC_SHAPE.test(topic)
     && !PROMPT_CONTROL_OR_UNRELATED_OUTPUT.test(topic)
-    && (GENETICS_DOMAIN.test(topic) || GENE_SYMBOL.test(topic));
+    && GENETICS_DOMAIN.test(topic);
 }
 
-function taskContractAllows(task, text) {
+function taskContractAllows(task, text, { body } = {}) {
   if (!text.trim()) return false;
   if (PROMPT_CONTROL_OR_UNRELATED_OUTPUT.test(text)) return false;
 
   switch (task) {
     case PUBLICATION_TASKS.GENETICS_EDUCATION:
-      return isGenericGeneticsEducation(text);
+      return isGenericGeneticsEducation(text) || isCatalogEducationConversation(body);
     case PUBLICATION_TASKS.AGGREGATE_GENOMICS_RESEARCH:
       return isAggregateResearchIntent(text);
     case PUBLICATION_TASKS.CANDIDATE_GENE_RESEARCH:
       return CANDIDATE_RESEARCH_CONTRACT.test(text)
-        && (GENETICS_DOMAIN.test(text) || GENE_SYMBOL.test(text) || isAggregateResearchIntent(text));
+        && (GENETICS_DOMAIN.test(text) || isAggregateResearchIntent(text));
     case PUBLICATION_TASKS.RESEARCH_HYPOTHESIS:
       return HYPOTHESIS_CONTRACT.test(text)
         && (GENETICS_DOMAIN.test(text) || isAggregateResearchIntent(text));
@@ -404,7 +444,7 @@ export function publicationBoundaryDecision({ url, routeUrl, body } = {}) {
 
   const satisfiesTaskContract = routeOwnedTask
     ? isRouteOwnedGeneticsTopic(body)
-    : taskContractAllows(task, text);
+    : taskContractAllows(task, text, { body });
   if (!satisfiesTaskContract) {
     return block('This request does not satisfy the declared education or aggregate-research task.');
   }
@@ -438,6 +478,8 @@ export const __test = {
   hasDirectPersonalOrClinicalExecution,
   hasUnsafeSensitiveData,
   isAggregateResearchIntent,
+  isCatalogEducationConversation,
+  isKnownEducationTopic,
   isRouteOwnedGeneticsTopic,
   normalizePath,
   policyPath,
