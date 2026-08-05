@@ -97,7 +97,6 @@ export type EducationLevel =
 export interface ExplanationRequest {
   topic: string;
   level: EducationLevel | string;
-  context?: string;
 }
 
 /**

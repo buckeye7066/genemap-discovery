@@ -11,81 +11,7 @@ import { getSources } from '../services/educationSources.js';
 import { assertNoRawGenomicLLM } from '../services/genomicGuard.js';
 import { AppError } from '../utils/errors.js';
 import { MAX_MESSAGE_CHARS } from '../config/llmLimits.js';
-
-const TOPICS_CATALOG = [
-  {
-    category: 'DNA Basics',
-    topics: [
-      { id: 'what-is-dna', title: 'What is DNA?', description: 'The molecule of life' },
-      { id: 'dna-structure', title: 'DNA Structure', description: 'The double helix and base pairing' },
-      { id: 'dna-replication', title: 'DNA Replication', description: 'How DNA copies itself' },
-      { id: 'genes-and-chromosomes', title: 'Genes & Chromosomes', description: 'How DNA is organized' },
-    ],
-  },
-  {
-    category: 'How Genes Work',
-    topics: [
-      { id: 'transcription', title: 'Transcription', description: 'From DNA to RNA' },
-      { id: 'translation', title: 'Translation', description: 'From RNA to Protein' },
-      { id: 'gene-expression', title: 'Gene Expression', description: 'When and how genes are turned on' },
-      { id: 'gene-regulation', title: 'Gene Regulation', description: 'Controlling gene activity' },
-    ],
-  },
-  {
-    category: 'Inheritance',
-    topics: [
-      { id: 'mendelian-genetics', title: 'Mendelian Genetics', description: 'Dominant and recessive traits' },
-      { id: 'punnett-squares', title: 'Punnett Squares', description: 'Predicting offspring traits' },
-      { id: 'sex-linked-traits', title: 'Sex-Linked Traits', description: 'Genes on the X and Y chromosomes' },
-      { id: 'complex-inheritance', title: 'Complex Inheritance', description: 'Beyond simple dominance' },
-    ],
-  },
-  {
-    category: 'Mutations & Variation',
-    topics: [
-      { id: 'what-are-mutations', title: 'What Are Mutations?', description: 'Changes in the DNA sequence' },
-      { id: 'types-of-mutations', title: 'Types of Mutations', description: 'Point mutations, insertions, deletions' },
-      { id: 'genetic-variation', title: 'Genetic Variation', description: 'Why we are all different' },
-      { id: 'snps-and-polymorphisms', title: 'SNPs & Polymorphisms', description: 'Common genetic differences' },
-    ],
-  },
-  {
-    category: 'Genomics & Technology',
-    topics: [
-      { id: 'human-genome-project', title: 'The Human Genome Project', description: 'Mapping all human genes' },
-      { id: 'dna-sequencing', title: 'DNA Sequencing', description: 'Reading the genetic code' },
-      { id: 'crispr', title: 'CRISPR Gene Editing', description: 'Editing genes with molecular scissors' },
-      { id: 'genetic-testing', title: 'Genetic Testing', description: 'What your DNA can tell you' },
-    ],
-  },
-  {
-    category: 'Genetics & Health',
-    topics: [
-      { id: 'genetic-diseases', title: 'Genetic Diseases', description: 'When genes cause illness' },
-      { id: 'cancer-genetics', title: 'Cancer Genetics', description: 'How genes relate to cancer' },
-      { id: 'pharmacogenomics', title: 'Pharmacogenomics', description: 'How genes affect drug response' },
-      { id: 'gene-therapy', title: 'Gene Therapy', description: 'Treating disease by fixing genes' },
-    ],
-  },
-  {
-    category: 'Evolution & Population Genetics',
-    topics: [
-      { id: 'natural-selection', title: 'Natural Selection', description: 'Survival of the fittest' },
-      { id: 'population-genetics', title: 'Population Genetics', description: 'Genes in groups' },
-      { id: 'molecular-evolution', title: 'Molecular Evolution', description: 'How DNA changes over time' },
-      { id: 'phylogenetics', title: 'Phylogenetics', description: 'The tree of life' },
-    ],
-  },
-  {
-    category: 'Advanced Topics',
-    topics: [
-      { id: 'epigenetics', title: 'Epigenetics', description: 'Changes beyond the DNA sequence' },
-      { id: 'rna-world', title: 'The RNA World', description: 'Non-coding RNA and regulation' },
-      { id: 'systems-biology', title: 'Systems Biology', description: 'Networks and pathways' },
-      { id: 'synthetic-biology', title: 'Synthetic Biology', description: 'Engineering life' },
-    ],
-  },
-];
+import { TOPICS_CATALOG } from '../config/educationCatalog.js';
 
 // Index every catalog topic by BOTH its id and its lower-cased title, so a
 // request that passes either (the client sends the title) resolves to the
@@ -139,10 +65,6 @@ const levelField = z.preprocess(
 const explainSchema = z.object({
   topic: z.string().min(1).max(500),
   level: levelField,
-  // Bound the optional free-text context by the same shared LLM input ceiling
-  // so an enriched explanation request can't be unbounded, while still allowing
-  // the large medical/genomic context the app legitimately prepends.
-  context: z.string().max(MAX_MESSAGE_CHARS).optional(),
 });
 
 const imageSchema = z.object({
@@ -204,17 +126,13 @@ export default async function educationRoutes(fastify) {
   });
 
   fastify.post('/explain', { preHandler: [authenticate, checkEducationEntitlement, enforceUsageLimit] }, async (request) => {
-    const { topic, level, context } = explainSchema.parse(request.body);
+    const { topic, level } = explainSchema.parse(request.body);
 
-    // The optional `context` field is prepended to the prompt sent to a cloud
-    // LLM. Enforce the same no-cloud-genomic default the /llm proxy does so a
-    // raw VCF can't be smuggled to OpenAI/Anthropic via the education surface.
-    const allowGenomic = await assertNoRawGenomicLLM(prisma, request.user?.userId, `${topic}\n${context || ''}`);
+    const allowGenomic = await assertNoRawGenomicLLM(prisma, request.user?.userId, topic);
 
     const levelPrompt = LEVEL_PROMPTS[level] || LEVEL_PROMPTS.undergraduate;
     const prompt = [
       `You are a genetics educator. ${levelPrompt}`,
-      context ? `\nAdditional context: ${context}` : '',
       `\nTopic to explain: ${topic}`,
       '\nStructure your response with these sections:',
       '## The Big Picture',

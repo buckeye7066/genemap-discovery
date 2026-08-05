@@ -30,6 +30,47 @@ const HIGH_RISK_AGENT_IDS = new Set(['robert', 'anastasia']);
 const MAX_PATH_DECODE_PASSES = 2;
 const ALL_PUBLICATION_TASKS = new Set(PUBLICATION_TASK_VALUES);
 
+// Fixed education routes accept the curated catalog verbatim. Custom topics
+// remain useful, but they must be a short, single genetics subject rather than
+// an arbitrary instruction that happens to be posted to an education URL.
+// Keep both ids and display titles because the web client currently sends the
+// title while API consumers may use the stable id returned by /education/topics.
+const KNOWN_EDUCATION_TOPIC_VALUES = Object.freeze([
+  'what-is-dna', 'what is dna?',
+  'dna-structure', 'dna structure',
+  'dna-replication', 'dna replication',
+  'genes-and-chromosomes', 'genes & chromosomes',
+  'transcription',
+  'translation',
+  'gene-expression', 'gene expression',
+  'gene-regulation', 'gene regulation',
+  'mendelian-genetics', 'mendelian genetics',
+  'punnett-squares', 'punnett squares',
+  'sex-linked-traits', 'sex-linked traits',
+  'complex-inheritance', 'complex inheritance',
+  'what-are-mutations', 'what are mutations?',
+  'types-of-mutations', 'types of mutations',
+  'genetic-variation', 'genetic variation',
+  'snps-and-polymorphisms', 'snps & polymorphisms',
+  'human-genome-project', 'the human genome project',
+  'dna-sequencing', 'dna sequencing',
+  'crispr', 'crispr gene editing',
+  'genetic-testing', 'genetic testing',
+  'genetic-diseases', 'genetic diseases',
+  'cancer-genetics', 'cancer genetics',
+  'pharmacogenomics',
+  'gene-therapy', 'gene therapy',
+  'natural-selection', 'natural selection',
+  'population-genetics', 'population genetics',
+  'molecular-evolution', 'molecular evolution',
+  'phylogenetics',
+  'epigenetics',
+  'rna-world', 'the rna world',
+  'systems-biology', 'systems biology',
+  'synthetic-biology', 'synthetic biology',
+]);
+const KNOWN_EDUCATION_TOPICS = new Set(KNOWN_EDUCATION_TOPIC_VALUES);
+
 const ROUTE_OWNED_TASKS = new Map([
   ['/education/explain', PUBLICATION_TASKS.GENETICS_EDUCATION],
   ['/education/quiz', PUBLICATION_TASKS.GENETICS_EDUCATION],
@@ -252,14 +293,32 @@ const HYPOTHESIS_CONTRACT =
   /\b(?:scientific hypothesis generator|generate (?:novel,? )?testable hypotheses|research hypotheses|multi-omic integration|experimental design|data analysis pipeline)\b/i;
 const LEARNING_SUMMARY_CONTRACT =
   /\bgenetics education and research assistant\b[\s\S]{0,500}\blearning activity\b[\s\S]{0,1000}\bresearch-learning observations?\b/i;
+const PROMPT_CONTROL_OR_UNRELATED_OUTPUT =
+  /\b(?:ignore|disregard|override|bypass|forget)\b[\s\S]{0,80}\b(?:previous|prior|above|system|developer|instructions?|prompt|rules?)\b|\b(?:system|developer)\s*:\s*|\b(?:reveal|repeat|print|show)\b[\s\S]{0,80}\b(?:system|developer)\s+(?:message|prompt|instructions?)\b|\b(?:phish(?:ing)?|malware|ransomware|credential theft|steal (?:a )?password|real[- ]estate advertisement|marketing copy|quarterly sales|sales forecast|vacation itinerary)\b|\b(?:write|compose|draft|send|create|generate)\b[\s\S]{0,80}\b(?:phishing\s+)?(?:email|advertisement|ad copy|malware|ransomware|exploit|social media post)\b/i;
+const CUSTOM_EDUCATION_TOPIC_SHAPE =
+  /^[\p{L}\p{N}][\p{L}\p{N} \t&'’()+,./?-]{0,159}$/u;
 
 function isGenericGeneticsEducation(text) {
-  return EDUCATION_FRAME.test(text) && (GENETICS_DOMAIN.test(text) || GENE_SYMBOL.test(text));
+  return !PROMPT_CONTROL_OR_UNRELATED_OUTPUT.test(text)
+    && EDUCATION_FRAME.test(text)
+    && (GENETICS_DOMAIN.test(text) || GENE_SYMBOL.test(text));
 }
 
-function taskContractAllows(task, text, { routeOwned = false } = {}) {
+function isRouteOwnedGeneticsTopic(body) {
+  const topic = typeof body?.topic === 'string' ? body.topic.trim() : '';
+  if (!topic) return false;
+  if (typeof body?.context === 'string' && body.context.trim()) return false;
+
+  const topicKey = topic.toLowerCase().replace(/\s+/g, ' ');
+  if (KNOWN_EDUCATION_TOPICS.has(topicKey)) return true;
+  return CUSTOM_EDUCATION_TOPIC_SHAPE.test(topic)
+    && !PROMPT_CONTROL_OR_UNRELATED_OUTPUT.test(topic)
+    && (GENETICS_DOMAIN.test(topic) || GENE_SYMBOL.test(topic));
+}
+
+function taskContractAllows(task, text) {
   if (!text.trim()) return false;
-  if (routeOwned) return true;
+  if (PROMPT_CONTROL_OR_UNRELATED_OUTPUT.test(text)) return false;
 
   switch (task) {
     case PUBLICATION_TASKS.GENETICS_EDUCATION:
@@ -343,7 +402,10 @@ export function publicationBoundaryDecision({ url, routeUrl, body } = {}) {
     return block('GeneMap supports general genetics education and explicit aggregate research, not personal or identifiable clinical/genomic requests.');
   }
 
-  if (!taskContractAllows(task, text, { routeOwned: Boolean(routeOwnedTask) })) {
+  const satisfiesTaskContract = routeOwnedTask
+    ? isRouteOwnedGeneticsTopic(body)
+    : taskContractAllows(task, text);
+  if (!satisfiesTaskContract) {
     return block('This request does not satisfy the declared education or aggregate-research task.');
   }
 
@@ -376,6 +438,7 @@ export const __test = {
   hasDirectPersonalOrClinicalExecution,
   hasUnsafeSensitiveData,
   isAggregateResearchIntent,
+  isRouteOwnedGeneticsTopic,
   normalizePath,
   policyPath,
   requestedTask,
