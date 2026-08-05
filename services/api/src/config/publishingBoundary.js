@@ -209,12 +209,14 @@ const RESEARCH_WORK_PRODUCT =
   /\b(?:pilot study|research (?:study|project|analysis)|case-control (?:study|analysis)|observational study|exploratory analysis)\b/i;
 const STRUCTURED_RESEARCH_MATERIAL =
   /\b(?:data|data ?sets?|counts?|annotations?|variables?|samples?|cohort|controls?|case-control|population[- ]level)\b/i;
-const EXPLICIT_IDENTIFIABLE_PATIENT_DATA =
-  /\b(?:identifiable|non[- ]anonymized|not anonymized|raw\s+(?:patient|participant|subject|individual)[- ]level|raw\s+(?:patient|participant|subject|individual)\s+records?)\b/i;
-const PATIENT_LEVEL_DATA =
-  /\b(?:patient|participant|subject|individual)[- ]level\b[\s\S]{0,100}\b(?:data|records?|wes|wgs|rna[- ]?seq|genotyp\w*|variants?)\b/i;
-const EXPLICIT_DEIDENTIFICATION =
-  /\b(?:anonymized|de-identified|deidentified|aggregate)\b/i;
+const SENSITIVE_PATIENT_DATA_ACTION =
+  String.raw`(?:\b(?:i|we)\s+(?:have|hold|possess|received)\b|\bi was told\s+(?:that\s+)?i have\b|\b(?:analy[sz]e|process|use|review|summari[sz]e|upload|interpret)\s+(?:these|this|the|my|our)\b|\bhere (?:are|is)\b|\b(?:these|this) (?:are|is)\b)`;
+const SENSITIVE_PATIENT_DATA_OBJECT =
+  String.raw`(?:\b(?:identifiable|non[- ]anonymized|not anonymized)\b[\s\S]{0,100}\b(?:patient|participant|subject|individual|data|records?|files?|wes|wgs|rna[- ]?seq|genotyp\w*|variants?)\b|\braw\s+(?:patient|participant|subject|individual)[- ]level\b[\s\S]{0,100}\b(?:data|records?|files?|wes|wgs|rna[- ]?seq|genotyp\w*|variants?)\b)`;
+const EXPLICIT_IDENTIFIABLE_PATIENT_DATA = new RegExp(
+  String.raw`(?:${SENSITIVE_PATIENT_DATA_ACTION}[\s\S]{0,240}${SENSITIVE_PATIENT_DATA_OBJECT}|${SENSITIVE_PATIENT_DATA_OBJECT}[\s\S]{0,240}${SENSITIVE_PATIENT_DATA_ACTION})`,
+  'i'
+);
 const SAFE_AGGREGATE_MY_RESULTS =
   /\bmy results?\b[\s\S]{0,100}\b(?:anonymized|de-identified|deidentified|aggregate)\b[\s\S]{0,80}\b(?:cohort|samples?|data)\b/i;
 const PATIENT_OR_FAMILY =
@@ -236,8 +238,7 @@ export function isPersonalClinicalPrompt(text) {
   const aggregateResearchIntent = isAggregateResearchIntent(text);
   const clearNonclinicalProgressiveActivity = CLEAR_NONCLINICAL_TAKING.test(text)
     || (aggregateResearchIntent && CLEAR_NONCLINICAL_USING.test(text));
-  const exposesPatientLevelData = EXPLICIT_IDENTIFIABLE_PATIENT_DATA.test(text)
-    || (PATIENT_LEVEL_DATA.test(text) && !EXPLICIT_DEIDENTIFICATION.test(text));
+  const exposesPatientLevelData = EXPLICIT_IDENTIFIABLE_PATIENT_DATA.test(text);
   if (
     exposesPatientLevelData
     || DIRECT_PERSONAL_CARE_REQUEST.test(text)

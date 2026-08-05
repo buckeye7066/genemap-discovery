@@ -127,6 +127,7 @@ const AGGREGATE_RESEARCH_CASES = Object.freeze([
   ['patient-cohort variant analysis', 'Analyzing anonymized variants across this patient cohort of 500 participants.'],
   ['de-identified result summary', 'Summarize my results for the de-identified cohort of 200 samples.'],
   ['anonymized reported WES material', 'I was told I have anonymized aggregate WES data from 50 patients and need to compare variants across the cohort.'],
+  ['patient-level terminology education', 'Explain the difference between patient-level genomic data and population-level aggregate analysis.'],
 ]);
 
 async function buildBoundaryApp() {
@@ -369,6 +370,7 @@ describe('publishing boundary Fastify integration', () => {
     ['patient-cohort variant analysis', 'Analyzing anonymized variants across this patient cohort of 500 participants.'],
     ['de-identified result summary', 'Summarize my results for the de-identified cohort of 200 samples.'],
     ['anonymized reported WES material', 'I was told I have anonymized aggregate WES data from 50 patients and need to compare variants across the cohort.'],
+    ['patient-level terminology education', 'Explain the difference between patient-level genomic data and population-level aggregate analysis.'],
     ['note-taking question', 'Should I take notes while learning how variants are classified?'],
     ['education question', 'Should I take a genetics course before studying inheritance?'],
     ['analysis question', 'Should I stop the analysis and review the cohort design?'],

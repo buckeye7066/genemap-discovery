@@ -387,6 +387,9 @@ describe('publishable education/research boundary', () => {
     ['anonymized reported WES material', '/llm/invoke', {
       prompt: 'I was told I have anonymized aggregate WES data from 50 patients and need to compare variants across the cohort.',
     }],
+    ['patient-level terminology education', '/education/chat', {
+      messages: [{ role: 'user', content: 'Explain the difference between patient-level genomic data and population-level aggregate analysis.' }],
+    }],
     ['ordinary note-taking question', '/education/chat', {
       messages: [{ role: 'user', content: 'Should I take notes while learning how variants are classified?' }],
     }],
