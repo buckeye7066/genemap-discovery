@@ -321,6 +321,9 @@ describe('publishable education/research boundary', () => {
     ['aggregate research model usage', '/education/chat', {
       messages: [{ role: 'user', content: 'I am using a regression model to compare medication response in 200 patients.' }],
     }],
+    ['aggregate research method usage', '/llm/invoke', {
+      prompt: 'I am using a variant-calling method to compare variants across an anonymized cohort of 50 patients.',
+    }],
     ['aggregate treatment endpoint', '/llm/invoke', {
       prompt: 'In a 200-patient study, what treatment should I use as an endpoint for the cohort analysis?',
     }],

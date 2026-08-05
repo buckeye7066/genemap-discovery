@@ -326,6 +326,7 @@ describe('publishing boundary Fastify integration', () => {
     ['aggregate medication-response dataset', 'In my dataset, compare medication response in 200 patients.'],
     ['aggregate research tool usage', 'I am using this analysis to compare variants across an aggregate cohort.'],
     ['aggregate research model usage', 'I am using a regression model to compare medication response in 200 patients.'],
+    ['aggregate research method usage', 'I am using a variant-calling method to compare variants across an anonymized cohort of 50 patients.'],
     ['note-taking question', 'Should I take notes while learning how variants are classified?'],
     ['education question', 'Should I take a genetics course before studying inheritance?'],
     ['analysis question', 'Should I stop the analysis and review the cohort design?'],
