@@ -27,6 +27,10 @@ import entityRoutes from './routes/entities.js';
 import genomicsRoutes from './routes/genomics.js';
 import clinicalTrialRoutes from './routes/clinicalTrials.js';
 import clientErrorRoutes from './routes/clientError.js';
+import {
+  PUBLICATION_MODE,
+  enforcePublishingBoundary,
+} from './config/publishingBoundary.js';
 
 const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
 const GLOBAL_RATE_LIMIT_MAX = 100;
@@ -113,6 +117,13 @@ fastify.addHook(
   })
 );
 
+// Enforce the public education/research product boundary at the API choke
+// point. UI hiding is not security: direct calls to clinical, medical-record,
+// VCF, PGx, dosing, and diagnostic paths are rejected here as well. Register
+// it before CSRF so a disabled path has the same fail-closed response whether
+// or not a caller supplies cookie-auth request headers.
+fastify.addHook('preHandler', enforcePublishingBoundary);
+
 // Global CSRF guard for state-changing requests on cookie-authenticated paths.
 fastify.addHook('preHandler', requireCsrf);
 
@@ -185,6 +196,7 @@ fastify.get('/readyz', { config: { rateLimit: false } }, async (request, reply) 
   return {
     status: 'ready',
     degraded: rateLimitProtection.emergency,
+    publicationMode: PUBLICATION_MODE,
     medicalEncryption: env.hasMedicalEncryption(),
     rateLimitStore: rateLimitStoreStatus(rateLimitRedis),
     rateLimitProtection,
