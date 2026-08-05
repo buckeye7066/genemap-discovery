@@ -70,6 +70,7 @@ const DIRECT_PERSONAL_CARE_CASES = Object.freeze([
   ['warfarin amount', 'I take warfarin; could CYP2C9 change how much I need tonight?'],
   ['bare medication disclosure', 'I take warfarin.'],
   ['using medication disclosure', 'I am using warfarin.'],
+  ['method preface with personal dosing', 'I am using a variant-calling method; provide warfarin dosing guidance.'],
   ['personal chest complaint', 'My chest hurts. What could it be?'],
   ['direct chest-pain action', 'Chest pain—what should I do?'],
   ['personal BRCA1 result', 'What does my BRCA1 result mean for me?'],

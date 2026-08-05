@@ -187,6 +187,7 @@ describe('publishable education/research boundary', () => {
     'I take warfarin; could CYP2C9 change how much I need tonight?',
     'I take warfarin.',
     'I am using warfarin.',
+    'I am using a variant-calling method; provide warfarin dosing guidance.',
     'My chest hurts. What could it be?',
     'Chest pain—what should I do?',
     'What does my BRCA1 result mean for me?',
