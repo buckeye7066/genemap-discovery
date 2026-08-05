@@ -139,9 +139,11 @@ const PERSONAL_VARIANT_SYMPTOM_LINK =
 const PERSONAL_SYMPTOM_DIAGNOSIS_QUESTION =
   /\b(?:do|could|can|would)\s+(?:my|these|this)\s+(?:symptoms?|pain)\b[\s\S]{0,100}\b(?:mean|indicate|suggest|show)\b[\s\S]{0,80}\bi\s+(?:have|might have|could have)\b/i;
 const CLINICAL_THEN_PERSONAL_EXPERIENCE =
-  /\b(?:diagnos\w*|symptoms?|pain)\b[\s\S]{0,180}\bi\s+(?:(?:am|was|have been)\s+)?(?:experienc(?:e|ed|ing)|feel(?:t|ing)?|hav(?:e|ing)\s+(?:symptoms?|pain))\b/i;
-const DIRECT_CLINICAL_ACTION_ON_SELF =
-  /\b(?:diagnos\w*|screen\w*|treat|assess|evaluate|interpret|classify)\s+(?:me|myself)\b/i;
+  /\b(?:symptoms?|pain)\b(?:\s+(?:that|which))?\s+i\s+(?:(?:am|was|have been)\s+)?(?:experienc(?:e|ed|ing)|feel(?:t|ing)?|hav(?:e|ing)\s+(?:symptoms?|pain))\b/i;
+const DIRECT_CLINICAL_ACTION_ON_SELF = new RegExp(
+  String.raw`(?:\b(?:diagnos\w*|screen\w*|treat)\s+(?:me|myself)\b|\b(?:assess|evaluate|interpret|classify)\s+(?:me|myself)\b[\s\S]{0,40}\b(?:for|based on|using|with|because of|from)\b[\s\S]{0,80}${CLINICAL_ACTION})`,
+  'i'
+);
 const DIRECT_SYMPTOM_ACTION =
   /\b(?:[\w-]+\s+)?pain\b(?!\s+(?:point|points|index|score|scale|measure|measurement|variable|variables|phenotype|phenotypes)\b)[\s\S]{0,120}\b(?:what should i do|what do i do|what could it be|could it be|should i seek|is this (?:serious|urgent)|do i need (?:a )?doctor)\b/i;
 const PERSONAL_BODY_COMPLAINT =
@@ -162,6 +164,8 @@ const PERSONAL_GENE_CAUSATION_QUESTION =
   /\b(?:is|could|does)\s+[a-z0-9_-]{2,20}\s+(?:the reason\s+)?why\s+i have\s+(?!no\s+(?:association|signal|result)\b)/i;
 const PERSONALIZED_DOSE_CALCULATION =
   /\b(?:calculate|determine|estimate|recommend|choose|adjust)\b[\s\S]{0,160}\b(?:dose|dosing|dosage|amount|requirement)\b[\s\S]{0,160}\b(?:for|based on)\s+my\b[\s\S]{0,80}\b(?:cyp[0-9a-z-]*|genotyp\w*|phenotyp\w*|variants?|mutations?|metabolizer|pharmacogen\w*)\b/i;
+const RESEARCH_DESIGN_AMOUNT_CALCULATION =
+  /\b(?:calculate|determine|estimate|recommend|choose|adjust)\b(?=[\s\S]{0,180}\b(?:amount|requirement)\b)(?=[\s\S]{0,180}\b(?:sequencing(?:[- ]depth)?|read(?:s| depth)?|coverage|depth|sample size|panel size|library size|assay size|replicates?|statistical power)\b)/i;
 const PERSONAL_CARRIED_VARIANT_INTERPRETATION =
   /\b(?:assess|interpret|classify|evaluate|determine)\w*\b[\s\S]{0,140}\b(?:variants?|mutations?)\s+i\s+(?:carry|have|inherited)\b/i;
 const PERSONAL_INHERITED_VARIANT_CARE =
@@ -224,7 +228,7 @@ const SHOULD_I_UNKNOWN_MEDICATION =
 const AGGREGATE_RESEARCH_EVIDENCE =
   /(?:\b(?:anonymized|de-identified|deidentified|aggregate)\b|\b\d+(?:\s+|-)\s*(?:patients?|participants?|subjects?|samples?|controls?)\b|\bpatients?\b[\s\S]{0,100}\bcontrols?\b|\bcohort\b|\bpopulation[- ]level\b|\bassociation research\b)/i;
 const COHORT_RESEARCH_OPERATION =
-  /\b(?:analy[sz](?:e|ing|is)|compar(?:e|ing|ison)|identif(?:y|ying)|associat(?:e|ion)|model(?:ing)?|estimat(?:e|ing)|test(?:ing)?|evaluat(?:e|ing|ion)|explor(?:e|ing|atory)|investigat(?:e|ing|ion)|includ(?:e|ing)|review(?:ing)?|summari[sz](?:e|ing)|prioriti[sz](?:e|ing)|annotat(?:e|ing|ion)|covariates?|endpoints?|outcomes?|variables?|data ?sets?|cohort[- ]level|population[- ]level|variant calling)\b/i;
+  /\b(?:analy[sz](?:e|ing|is)|assess(?:ing|ment)?|calculat(?:e|ing|ion)|compar(?:e|ing|ison)|identif(?:y|ying)|associat(?:e|ion)|model(?:ing)?|estimat(?:e|ing)|test(?:ing)?|evaluat(?:e|ing|ion)|explor(?:e|ing|atory)|investigat(?:e|ing|ion)|includ(?:e|ing)|review(?:ing)?|summari[sz](?:e|ing)|prioriti[sz](?:e|ing)|annotat(?:e|ing|ion)|covariates?|endpoints?|outcomes?|variables?|data ?sets?|cohort[- ]level|population[- ]level|variant calling)\b/i;
 const RESEARCH_WORK_PRODUCT =
   /\b(?:pilot study|research (?:study|project|analysis)|case-control (?:study|analysis)|observational study|exploratory analysis)\b/i;
 const STRUCTURED_RESEARCH_MATERIAL =
@@ -240,11 +244,17 @@ const EXPLICIT_IDENTIFIABLE_PATIENT_DATA = new RegExp(
 const RAW_GENOMIC_DATA_WITH_IDENTIFIER =
   /\b(?:raw\s+)?(?:genomic|genetic|dna|vcf|variant)\s+(?:data|records?|files?)\b[\s\S]{0,240}\b(?:date of birth|dob|social security(?: number)?|ssn|medical record number|mrn|email address|phone number|home address)\b/i;
 const RAW_GENOMIC_DATA_FROM_NAMED_PERSON =
-  /\b(?:Analyze|Process|Review|Interpret|Use)\b[\s\S]{0,140}\braw\s+(?:genomic|genetic|dna|vcf|variant)\s+(?:data|records?|files?)\b[\s\S]{0,120}\bfrom\s+[A-Z][\p{L}'-]+\s+[A-Z][\p{L}'-]+\b/u;
+  /\b(?:[Aa]naly[sz]e|[Pp]rocess|[Rr]eview|[Ii]nterpret|[Uu]se)\b[\s\S]{0,140}\b[Rr]aw\s+(?:[Gg]enomic|[Gg]enetic|[Dd][Nn][Aa]|[Vv][Cc][Ff]|[Vv]ariant)\s+(?:[Dd]ata|[Rr]ecords?|[Ff]iles?)\b[\s\S]{0,120}\b[Ff]rom\s+\p{Lu}[\p{L}'-]+\s+\p{Lu}[\p{L}'-]+(?=\P{L}|$)/u;
+const SAFE_AGGREGATE_GENETIC_PROVENANCE =
+  /\b(?:vcf|variants?|mutations?|genotyp\w*|genomic data|genetic data|dna results?)\b[\s\S]{0,120}\b(?:came from|from) my\s+(?:(?:anonymized|de-identified|deidentified|aggregate)\s+)+(?:cohort|data ?set|study|samples?|records?)\b/gi;
+const SAFE_AGGREGATE_VARIANTS_I_HAVE =
+  /\b(?:assess|interpret|classify|evaluate|determine)\w*\b[\s\S]{0,140}\b(?:variants?|mutations?)\s+i\s+have\b[\s\S]{0,80}\b(?:in|from|for)\s+(?:my\s+)?(?:(?:an?|the)\s+)?(?:(?:anonymized|de-identified|deidentified|aggregate)\s+)*(?:cohort|data ?set|study|samples?|records?)\b/gi;
 const SAFE_AGGREGATE_MY_RESULTS =
   /\bmy results?\b[\s\S]{0,100}\b(?:anonymized|de-identified|deidentified|aggregate)\b[\s\S]{0,80}\b(?:cohort|samples?|data)\b/gi;
 const SAFE_AGGREGATE_MY_RESEARCH_MEASURE =
   /\bmy\s+(?:(?:genetic\s+)?(?:variants?|mutations?|genotyp\w*|symptoms?|conditions?|treatments?|medications?|drugs?)[- ](?:data|annotations?|counts?|labels?|variables?|covariates?|responses?|endpoints?|outcomes?|tables?|models?)|(?:treatment|medication|drug)[- ]responses?(?:\s+(?:data|variables?|covariates?|endpoints?|outcomes?|tables?|models?))?)\b/gi;
+const SAFE_MY_RESEARCH_CONTEXT =
+  /\bmy\s+(?:(?:genetic\s+)?(?:variants?|mutations?)|genotyp\w*|phenotyp\w*|genomic|genetic|transcriptomic|proteomic)\s+(?:study|data ?set|analysis|model|cohort|project|experiment)\b/gi;
 const SAFE_AGGREGATE_PATIENT_RESEARCH_MEASURE =
   /\b(?:each|every|the)\s+patient(?:['’]s)\s+(?:(?:genetic\s+)?(?:variants?|mutations?|genotyp\w*|symptoms?|conditions?|treatments?|medications?|drugs?)[- ](?:data|annotations?|counts?|labels?|variables?|covariates?|responses?|endpoints?|outcomes?|tables?|models?)|(?:treatment|medication|drug)[- ]responses?(?:\s+(?:data|variables?|covariates?|endpoints?|outcomes?|tables?|models?))?)\b/gi;
 const PATIENT_OR_FAMILY =
@@ -267,11 +277,18 @@ export function isPersonalClinicalPrompt(text) {
   const clearNonclinicalProgressiveActivity = CLEAR_NONCLINICAL_TAKING.test(text)
     || (aggregateResearchIntent && CLEAR_NONCLINICAL_USING.test(text));
   const exposesPatientLevelData = EXPLICIT_IDENTIFIABLE_PATIENT_DATA.test(text);
+  const researchContextText = text.replace(SAFE_MY_RESEARCH_CONTEXT, '');
   const broadClinicalText = aggregateResearchIntent
-    ? text
+    ? researchContextText
       .replace(SAFE_AGGREGATE_MY_RESULTS, '')
       .replace(SAFE_AGGREGATE_MY_RESEARCH_MEASURE, '')
       .replace(SAFE_AGGREGATE_PATIENT_RESEARCH_MEASURE, '')
+    : researchContextText;
+  const personalCarriedVariantText = aggregateResearchIntent
+    ? text.replace(SAFE_AGGREGATE_VARIANTS_I_HAVE, '')
+    : text;
+  const personalGeneticMaterialText = aggregateResearchIntent
+    ? text.replace(SAFE_AGGREGATE_GENETIC_PROVENANCE, '')
     : text;
   if (
     exposesPatientLevelData
@@ -296,10 +313,13 @@ export function isPersonalClinicalPrompt(text) {
     || REPORTED_PERSONAL_CONDITION.test(text)
     || PERSONAL_HEREDITY_QUESTION.test(text)
     || PERSONAL_GENE_CAUSATION_QUESTION.test(text)
-    || PERSONALIZED_DOSE_CALCULATION.test(text)
-    || PERSONAL_CARRIED_VARIANT_INTERPRETATION.test(text)
+    || (
+      PERSONALIZED_DOSE_CALCULATION.test(text)
+      && !RESEARCH_DESIGN_AMOUNT_CALCULATION.test(text)
+    )
+    || PERSONAL_CARRIED_VARIANT_INTERPRETATION.test(personalCarriedVariantText)
     || PERSONAL_INHERITED_VARIANT_CARE.test(text)
-    || PERSONAL_GENETIC_MATERIAL_OWNERSHIP.test(text)
+    || PERSONAL_GENETIC_MATERIAL_OWNERSHIP.test(personalGeneticMaterialText)
     || PERSONAL_MEDICATION_PGX.test(text)
     || PERSONAL_PGX_INTERPRETATION.test(text)
     || PERSONAL_MEDICATION_ADJUSTMENT_BY_MARKER.test(text)
