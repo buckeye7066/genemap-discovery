@@ -54,8 +54,6 @@ const discoverNav = [
 // "I want to analyze data / run research workflows."
 const researchNav = [
   { title: "Dashboard", url: createPageUrl("Dashboard"), icon: LayoutDashboard },
-  { title: "GSEA", url: createPageUrl("GSEA"), icon: Sparkles },
-  { title: "Visualization Hub", url: createPageUrl("VisualizationHub"), icon: BarChart3 },
   { title: "Research Mode", url: createPageUrl("ResearchMode"), icon: Microscope },
 ];
 
