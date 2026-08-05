@@ -140,8 +140,8 @@ const DIRECT_PERSONAL_CLINICAL_HELP =
   /(?:\bi need\s+(?:help|advice|guidance)\s+(?:(?:with|on|for)\s+)?(?:(?:these|this|my)\s+)?(?:\w+\s+)?(?:symptoms?|pain)\b|\bi need\s+(?:symptoms?|pain)\s+(?:help|advice|guidance)\b)/i;
 const NONCLINICAL_TAKING_ACTIVITY =
   String.raw`(?:(?:a|an|the|this|that|my)\s+)?(?:[\w-]+\s+){0,3}(?:course|class|workshop|lesson|training|notes?|break|walk|look|approach|position|survey|exam|test|route|train|bus|taxi|photos?|pictures?|samples?|measurements?|data|dataset|steps?|part|interest|issue|action|time|study|project|analysis|research|experiment|pipeline|workflow|search|review|reading|writing|calculation|simulation|model|modeling|size|coverage|power|resolution|quality|replicates?|controls?|design)\b`;
-const CLEAR_NONCLINICAL_TAKING = new RegExp(
-  String.raw`\bi(?:['’]m| am)\s+(?:currently\s+)?taking\s+${NONCLINICAL_TAKING_ACTIVITY}`,
+const CLEAR_NONCLINICAL_TAKING_OR_USING = new RegExp(
+  String.raw`\bi(?:['’]m| am)\s+(?:currently\s+)?(?:taking|using)\s+${NONCLINICAL_TAKING_ACTIVITY}`,
   'i'
 );
 const SIMPLE_MEDICATION_DISCLOSURE = new RegExp(
@@ -213,7 +213,7 @@ export function isPersonalClinicalPrompt(text) {
     || SIMPLE_MEDICATION_DECISION.test(text)
     || (
       PROGRESSIVE_MEDICATION_DISCLOSURE.test(text)
-      && !CLEAR_NONCLINICAL_TAKING.test(text)
+      && !CLEAR_NONCLINICAL_TAKING_OR_USING.test(text)
     )
   ) return true;
 

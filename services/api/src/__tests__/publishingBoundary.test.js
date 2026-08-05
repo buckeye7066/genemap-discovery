@@ -186,6 +186,7 @@ describe('publishable education/research boundary', () => {
     'I need to know if BRCA1 means I will get cancer.',
     'I take warfarin; could CYP2C9 change how much I need tonight?',
     'I take warfarin.',
+    'I am using warfarin.',
     'My chest hurts. What could it be?',
     'Chest pain—what should I do?',
     'What does my BRCA1 result mean for me?',
@@ -313,6 +314,12 @@ describe('publishable education/research boundary', () => {
     }],
     ['aggregate medication-response dataset', '/llm/invoke', {
       prompt: 'In my dataset, compare medication response in 200 patients.',
+    }],
+    ['aggregate research tool usage', '/llm/invoke', {
+      prompt: 'I am using this analysis to compare variants across an aggregate cohort.',
+    }],
+    ['aggregate research model usage', '/education/chat', {
+      messages: [{ role: 'user', content: 'I am using a regression model to compare medication response in 200 patients.' }],
     }],
     ['ordinary note-taking question', '/education/chat', {
       messages: [{ role: 'user', content: 'Should I take notes while learning how variants are classified?' }],
