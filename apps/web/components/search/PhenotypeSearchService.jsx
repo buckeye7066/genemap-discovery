@@ -45,18 +45,25 @@ export class PhenotypeSearchService {
       const effectivePremium = isPremium || isAdmin;
 
       let { analysis, candidateGenes } = fused;
+      let usedFallback = false;
 
       // Reliability net: if the single fused call came back without genes (sparse
       // or unparseable JSON), fall back to the original two-step path so the
       // speedup never costs us a result.
       if (!candidateGenes.length) {
+        usedFallback = true;
         analysis = await this.analyzePhenotype(phenotypeQuery);
         candidateGenes = await this.findCandidateGenes(analysis, effectivePremium, phenotypeQuery);
       }
 
       // LLM output is untrusted: enforce the promised lead limits before any
       // authoritative or per-gene enrichment can fan out into external calls.
-      const maxCandidateLeads = analysis.isDisease || analysis.queryType === 'disease' ? 15 : 8;
+      const usedDiseaseFallbackPrompt = usedFallback && this.usesDiseaseCandidatePrompt(analysis, phenotypeQuery);
+      const maxCandidateLeads = analysis.isDisease
+        || analysis.queryType === 'disease'
+        || usedDiseaseFallbackPrompt
+        ? 15
+        : 8;
       candidateGenes = candidateGenes.slice(0, maxCandidateLeads);
 
       const symbols = candidateGenes.map((g) => g.symbol).filter(Boolean);
@@ -346,7 +353,7 @@ Provide a bounded exploratory analysis for candidate-gene lead generation.
 
     let prompt = "";
 
-    if (phenotypeAnalysis.isDisease || (!searchTerms && originalQuery)) {
+    if (this.usesDiseaseCandidatePrompt(phenotypeAnalysis, originalQuery)) {
       prompt = `
 Generate candidate-gene research leads for the disease/condition: ${diseaseTarget}
 
@@ -407,6 +414,14 @@ source verification, not confirmed findings.
     const parsed = parseLLMJson(response, { candidateGenes: [] });
     const geneResults = Array.isArray(parsed) ? { candidateGenes: parsed } : parsed;
     return (geneResults?.candidateGenes || []).filter((g) => g && g.symbol);
+  }
+
+  static usesDiseaseCandidatePrompt(phenotypeAnalysis, originalQuery = "") {
+    const searchTerms = [
+      phenotypeAnalysis?.mainFeatures,
+      phenotypeAnalysis?.synonyms,
+    ].flat().filter(Boolean).join(", ");
+    return Boolean(phenotypeAnalysis?.isDisease || (!searchTerms && originalQuery));
   }
 
   static async enrichGeneData(candidateGenes, isPremium, userPreferences) {

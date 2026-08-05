@@ -95,6 +95,8 @@ describe('clinical publishing boundary', () => {
     const enrichIndex = phenotypeSearch.indexOf('await this.safeEnrich(symbols, [])');
     expect(capIndex).toBeGreaterThan(-1);
     expect(enrichIndex).toBeGreaterThan(capIndex);
+    expect(phenotypeSearch).toContain('usedFallback && this.usesDiseaseCandidatePrompt');
+    expect(phenotypeSearch).toContain('if (this.usesDiseaseCandidatePrompt(phenotypeAnalysis, originalQuery))');
 
     const playListing = read('../../../../docs/play-store/listing.md');
     expect(playListing).not.toContain('compare expression, interactions');
