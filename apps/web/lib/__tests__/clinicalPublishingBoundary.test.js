@@ -24,6 +24,8 @@ describe('clinical publishing boundary', () => {
       'AIAssistants',
       'Anastasia',
       'RobertClinical',
+      'VisualizationHub',
+      'GSEA',
     ];
 
     for (const page of forbiddenPages) {
@@ -40,10 +42,26 @@ describe('clinical publishing boundary', () => {
     expect(dashboard).not.toContain('Medical data genes:');
   });
 
-  it('omits personal and cohort VCF execution from Research Mode', () => {
+  it('omits unverified VCF, database, and pathway-statistics execution from Research Mode', () => {
     const researchMode = read('../../pages/ResearchMode.jsx');
     expect(researchMode).not.toContain('BulkVCFAnalysis');
     expect(researchMode).not.toContain('value="bulk-vcf"');
+    expect(researchMode).not.toContain('ExternalDatabaseIntegration');
+    expect(researchMode).not.toContain('PathwayEnrichment');
+    expect(researchMode).not.toContain('value="databases"');
+    expect(researchMode).not.toContain('value="pathways"');
+  });
+
+  it('removes live links to unpublished research-computation surfaces', () => {
+    const search = read('../../pages/Search.jsx');
+    const dashboard = read('../../pages/Dashboard.jsx');
+    const onboarding = read('../../components/dashboard/OnboardingTour.jsx');
+
+    for (const source of [search, dashboard, onboarding]) {
+      expect(source).not.toContain('createPageUrl("VisualizationHub")');
+      expect(source).not.toContain('createPageUrl("GSEA")');
+      expect(source).not.toContain('createPageUrl("AIAssistants")');
+    }
   });
 
   it('gates every GeneCard clinical execution surface behind the hard flag', () => {
@@ -65,5 +83,10 @@ describe('clinical publishing boundary', () => {
     expect(terms).toContain('The published service does not accept personal medical records');
     expect(premium).toContain('Saved gene sets & research projects');
     expect(premium).not.toContain('VCF analysis & clinical tools');
+    expect(premium).not.toContain('All visualization tools');
+
+    const playListing = read('../../../../docs/play-store/listing.md');
+    expect(playListing).not.toContain('compare expression, interactions');
+    expect(playListing).not.toContain('Data Visualization Hub');
   });
 });
