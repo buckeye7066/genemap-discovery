@@ -76,6 +76,7 @@ describe('clinical publishing boundary', () => {
     const privacy = read('../../pages/PrivacyPolicy.jsx');
     const terms = read('../../pages/TermsOfService.jsx');
     const premium = read('../../pages/Premium.jsx');
+    const searchForm = read('../../components/search/SearchForm.jsx');
 
     expect(privacy).toContain('Publication-mode data boundary');
     expect(privacy).not.toContain('Health &amp; genetic data you upload');
@@ -84,6 +85,8 @@ describe('clinical publishing boundary', () => {
     expect(premium).toContain('Saved gene sets & research projects');
     expect(premium).not.toContain('VCF analysis & clinical tools');
     expect(premium).not.toContain('All visualization tools');
+    expect(searchForm).not.toContain('Premium Search');
+    expect(searchForm).not.toContain('handleSubmit(e, true)');
 
     const playListing = read('../../../../docs/play-store/listing.md');
     expect(playListing).not.toContain('compare expression, interactions');

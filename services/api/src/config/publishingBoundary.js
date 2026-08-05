@@ -98,7 +98,7 @@ function generationText(body) {
 }
 
 const CLINICAL_ACTION =
-  String.raw`(?:symptoms?|variants?|mutations?|genotyp\w*|vcf|diagnos\w*|personal risk|risk level|disease risk|medications?|medicines?|drugs?|dos(?:e|ing)|treatments?|therap(?:y|ies)|screen\w*|prognosis|metabolizer|pharmacogen\w*|pathogenic\w*|clinical management|urgent|emergency)`;
+  String.raw`(?:symptoms?|variants?|mutations?|genotyp\w*|vcf|diagnos\w*|risk(?:\s+level)?|medications?|medicines?|drugs?|dos(?:e|ing)|treatments?|therap(?:y|ies)|screen\w*|prognosis|metabolizer|pharmacogen\w*|pathogenic\w*|clinical management|urgent|emergency)`;
 const MY_CLINICAL = new RegExp(
   String.raw`\bmy\s+(?:own\s+)?(?:symptoms?|variants?|mutations?|genotyp\w*|vcf|diagnos\w*|personal risk|risk(?:\s+level)?|medications?|medicines?|drugs?|dos(?:e|ing)|treatments?|therap(?:y|ies)|screen\w*|prognosis|metabolizer|pharmacogen\w*|health|condition|care|results?)\b`,
   'i'
@@ -109,14 +109,19 @@ const CLINICAL_FOR_ME = new RegExp(
 );
 // First-person wording is not itself personal-clinical intent. Researchers
 // naturally say "I have WES data from 50 patients". Personal-care requests are
-// evaluated first; only explicit aggregate data ownership paired with a
-// cohort-level research output can neutralize the otherwise fail-closed
-// "I have ... clinical action" rule.
+// evaluated first; explicit aggregate research context can neutralize the
+// otherwise fail-closed first-person clinical rules.
 const FIRST_PERSON_DIAGNOSIS = /\bi\s+(?:was|have\s+been)\s+diagnosed\b/i;
+const NON_CLINICAL_TAKING_ACTIVITY =
+  String.raw`(?:(?:a|an|the|this|that|my)\s+)?(?:[\w-]+\s+){0,3}(?:course|class|lesson|notes?|break|walk|look|approach|position|survey|exam|test|route|train|bus|taxi|photos?|pictures?|samples?|measurements?|steps?|part|interest|issue|action|time)\b`;
+const FIRST_PERSON_MEDICATION_DISCLOSURE = new RegExp(
+  String.raw`\bi am taking\s+(?!${NON_CLINICAL_TAKING_ACTIVITY})\S+`,
+  'i'
+);
 const DIRECT_CARE_ACTION =
   String.raw`(?:diagnos\w*|personal risk|risk level|disease risk|medication(?:s| advice)?|medicine(?:s| advice)?|drug(?:s| advice)?|dos(?:e|ing)|treatment(?:s| options?)?|therap(?:y|ies)|screen\w*|prognosis|metabolizer|pharmacogen\w*|clinical management|medical advice|urgent|emergency)`;
 const DIRECT_PERSONAL_CARE_REQUEST = new RegExp(
-  String.raw`(?:\b(?:i|me|my|mine)\b[\s\S]{0,160}\b(?:want|need|tell me|advise me|how should i|what should i|should i|can i)\b[\s\S]{0,120}${DIRECT_CARE_ACTION}|\b(?:what|which)\s+dose\s+should\s+i\b|\bshould\s+i\s+(?:take|stop|start|change|increase|decrease)\b)`,
+  String.raw`(?:\b(?:i|me|my|mine)\b[\s\S]{0,160}\b(?:want|need|tell me|advise me|how should i|what should i|should i|can i)\b[\s\S]{0,120}${DIRECT_CARE_ACTION}|\b(?:what|which)\s+dose\s+should\s+i\b)`,
   'i'
 );
 const GENERIC_I_HAVE_CLINICAL = new RegExp(
@@ -136,7 +141,7 @@ const AGGREGATE_DATA_OWNERSHIP =
 const AGGREGATE_RESEARCH_EVIDENCE =
   /(?:\b(?:anonymized|de-identified|aggregate)\b|\b\d+\s+(?:patients?|participants?|subjects?|samples?)\b|\bpatients?\b[\s\S]{0,100}\bcontrols?\b|\bcohort\b|\bpopulation[- ]level\b|\bassociation research\b)/i;
 const COHORT_LEVEL_RESEARCH_OUTPUT =
-  /(?:\b(?:across|within|for|at)\s+(?:the\s+)?cohort\b|\bcohort[- ]level\b|\bpopulation[- ]level\b|\bassociation research\b|\bcompare\b[\s\S]{0,120}\b(?:cohort|patients?|controls?|samples?)\b|\bidentify\b[\s\S]{0,100}\b(?:variants?|mutations?|genes?|associations?)\b[\s\S]{0,100}\b(?:cohort|patients?|controls?|population)\b)/i;
+  /(?:\b(?:across|within|for|at)\s+(?:the\s+)?cohort\b|\bcohort[- ]level\b|\bpopulation[- ]level\b|\bassociation research\b|\bcompare\b[\s\S]{0,120}\b(?:cohort|patients?|controls?|samples?)\b|\bidentif(?:y|ying)\b[\s\S]{0,100}\b(?:variants?|mutations?|genes?|associations?)\b[\s\S]{0,100}\b(?:cohort|patients?|controls?|population)\b)/i;
 const RESEARCH_WORK_PRODUCT =
   /\b(?:pilot study|research (?:study|project|analysis)|case-control (?:study|analysis)|observational study|exploratory analysis)\b/i;
 const PATIENT_OR_FAMILY =
@@ -144,13 +149,12 @@ const PATIENT_OR_FAMILY =
 const PERSON_THEN_CLINICAL = new RegExp(`${PATIENT_OR_FAMILY}[\\s\\S]{0,240}${CLINICAL_ACTION}`, 'i');
 const CLINICAL_THEN_PERSON = new RegExp(`${CLINICAL_ACTION}[\\s\\S]{0,240}${PATIENT_OR_FAMILY}`, 'i');
 
-function isAggregateResearchOwnership(text) {
-  return AGGREGATE_DATA_OWNERSHIP.test(text)
-    && (
-      AGGREGATE_RESEARCH_EVIDENCE.test(text)
-      || COHORT_LEVEL_RESEARCH_OUTPUT.test(text)
-      || RESEARCH_WORK_PRODUCT.test(text)
-    )
+function isAggregateResearchContext(text) {
+  const hasAggregateEvidence = AGGREGATE_RESEARCH_EVIDENCE.test(text);
+  const hasCohortOutput = COHORT_LEVEL_RESEARCH_OUTPUT.test(text);
+  const hasOwnedResearchWork = AGGREGATE_DATA_OWNERSHIP.test(text)
+    && (hasAggregateEvidence || hasCohortOutput || RESEARCH_WORK_PRODUCT.test(text));
+  return (hasOwnedResearchWork || (hasAggregateEvidence && hasCohortOutput))
     && !DIRECT_PERSONAL_CARE_REQUEST.test(text);
 }
 
@@ -161,8 +165,9 @@ export function isPersonalClinicalPrompt(text) {
   return MY_CLINICAL.test(text)
     || CLINICAL_FOR_ME.test(text)
     || FIRST_PERSON_DIAGNOSIS.test(text)
-    || (GENERIC_I_HAVE_CLINICAL.test(text) && !isAggregateResearchOwnership(text))
-    || (FIRST_PERSON_CLINICAL_HELP.test(text) && !isAggregateResearchOwnership(text))
+    || FIRST_PERSON_MEDICATION_DISCLOSURE.test(text)
+    || (GENERIC_I_HAVE_CLINICAL.test(text) && !isAggregateResearchContext(text))
+    || (FIRST_PERSON_CLINICAL_HELP.test(text) && !isAggregateResearchContext(text))
     || SHOULD_I_CLINICAL.test(text)
     || PERSON_THEN_CLINICAL.test(text)
     || CLINICAL_THEN_PERSON.test(text);

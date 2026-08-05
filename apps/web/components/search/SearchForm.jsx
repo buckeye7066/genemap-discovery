@@ -1,9 +1,7 @@
 import React, { useState } from "react";
-import { useAuth } from '../../lib/AuthContext';
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
-import { Search, Crown, Sparkles, HelpCircle, Stethoscope } from "lucide-react";
+import { Search, Sparkles, Stethoscope } from "lucide-react";
 import AutocompleteSearch from "./AutocompleteSearch";
 import {
   Select,
@@ -12,17 +10,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-
 export default function SearchForm({ onSearch, isLoading, initialQuery = "" }) {
   const [query, setQuery] = useState(initialQuery);
   const [searchMode, setSearchMode] = useState("free_text");
-  const { user } = useAuth();
   
   React.useEffect(() => {
     setQuery(initialQuery);
@@ -50,17 +40,15 @@ export default function SearchForm({ onSearch, isLoading, initialQuery = "" }) {
     ]
   };
 
-  const handleSubmit = (e, isPremium = false) => {
+  const handleSubmit = (e) => {
     e.preventDefault();
     if (query.trim()) {
-      onSearch(query.trim(), isPremium);
+      onSearch(query.trim(), false);
     }
   };
 
-  const isAdmin = user?.role === "admin" || user?.role === "super_admin" || user?.entitlements?.isAdmin === true;
-
   return (
-    <form onSubmit={(e) => handleSubmit(e, false)} className="space-y-6">
+    <form onSubmit={handleSubmit} className="space-y-6">
       <div className="space-y-2">
         <Label htmlFor="phenotype-query" className="text-base font-medium">
           Search Query
@@ -192,30 +180,6 @@ export default function SearchForm({ onSearch, isLoading, initialQuery = "" }) {
           {isLoading ? "Searching..." : searchMode === "disease" ? "Generate Candidate Genes" : "Search (Free)"}
         </Button>
 
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                type="button"
-                variant="outline"
-                disabled={!query.trim() || isLoading}
-                onClick={(e) => handleSubmit(e, true)}
-                className="border-amber-200 hover:bg-amber-50 text-amber-700 w-full min-h-[48px] touch-manipulation"
-              >
-                <Crown className="w-4 h-4 mr-2" />
-                Premium Search
-                {isAdmin && <Badge className="ml-2 bg-amber-600 text-white text-xs">Admin</Badge>}
-                {!isAdmin && <HelpCircle className="w-3 h-3 ml-1" />}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p className="max-w-xs">
-                {isAdmin ? "You have admin access to all premium features" :
-                 "Use the expanded research workspace and save additional candidate-gene leads"}
-              </p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
       </div>
 
       <div className="bg-blue-50 p-4 rounded-lg">

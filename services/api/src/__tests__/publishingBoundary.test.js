@@ -136,6 +136,7 @@ const FIRST_PERSON_AGGREGATE_RESEARCH_PROMPTS = Object.freeze([
   'I have an anonymized aggregate cohort of 200 patients with genotype, symptom-frequency, and treatment-response variables for population-level association research.',
   'I have RNA-seq from 30 patients with symptoms and controls; compare variants at the cohort level.',
   'I have a pilot study with symptom counts and variant annotations for exploratory analysis.',
+  'I need help identifying variants across 50 patients for cohort-level research.',
 ]);
 
 describe('publishable education/research boundary', () => {
@@ -170,6 +171,8 @@ describe('publishable education/research boundary', () => {
   it.each([
     'Interpret my variant and tell me my personal risk level.',
     'I am taking warfarin; what dose should I use for my genotype?',
+    'I am taking warfarin.',
+    'What is the risk for my child?',
     'What diagnosis fits this patient and these symptoms?',
     'Explain the pharmacogenomic drug implications for my child.',
     'I have cancer and want treatment options.',
@@ -270,6 +273,12 @@ describe('publishable education/research boundary', () => {
     ['general PGx mechanism', '/llm/invoke', { prompt: 'Explain how CYP2D6 metabolizer phenotypes are defined.' }],
     ['ordinary education wording', '/education/chat', {
       messages: [{ role: 'user', content: 'I take a genetics course and want to understand Mendelian inheritance.' }],
+    }],
+    ['progressive education wording', '/education/chat', {
+      messages: [{ role: 'user', content: 'I am taking a genetics course and want to understand Mendelian inheritance.' }],
+    }],
+    ['education question wording', '/education/chat', {
+      messages: [{ role: 'user', content: 'Should I take a genetics course before studying inheritance?' }],
     }],
     ['ordinary research wording', '/llm/invoke', {
       prompt: 'I take notes while reviewing genetic variants across an aggregate cohort.',

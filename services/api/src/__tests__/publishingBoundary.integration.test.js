@@ -56,6 +56,10 @@ Do not infer diagnosis, personal genetic risk, treatment, or clinical action.`,
     'less-structured pilot study',
     'I have a pilot study with symptom counts and variant annotations for exploratory analysis.',
   ],
+  [
+    'cohort help request',
+    'I need help identifying variants across 50 patients for cohort-level research.',
+  ],
 ]);
 
 const DIRECT_PERSONAL_CARE_CASES = Object.freeze([
@@ -66,6 +70,8 @@ const DIRECT_PERSONAL_CARE_CASES = Object.freeze([
   ['symptom help', 'I need help with these symptoms.'],
   ['variant help', 'I need help interpreting these variants.'],
   ['personal genetic variants', 'I have genetic variants.'],
+  ['medication disclosure', 'I am taking warfarin.'],
+  ['family risk', 'What is the risk for my child?'],
 ]);
 
 async function buildBoundaryApp() {
@@ -278,6 +284,8 @@ describe('publishing boundary Fastify integration', () => {
 
   it.each([
     ['education course', 'I take a genetics course and want to understand Mendelian inheritance.'],
+    ['progressive education course', 'I am taking a genetics course and want to understand Mendelian inheritance.'],
+    ['education question', 'Should I take a genetics course before studying inheritance?'],
     ['research notes', 'I take notes while reviewing genetic variants across an aggregate cohort.'],
     ['condition labels', 'I have condition labels for 200 patients in an aggregate cohort for population-level association research.'],
     ['less-structured pilot study', 'I have a pilot study with symptom counts and variant annotations for exploratory analysis.'],
