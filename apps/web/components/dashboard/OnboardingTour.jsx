@@ -37,7 +37,7 @@ const tourSteps = [
   {
     id: "search",
     title: "Discover Genes by Phenotype",
-    description: "Search for candidate genes using phenotypes or clinical descriptions. Our AI-powered search connects you with relevant genomic data.",
+    description: "Use diseases, phenotypes, or HPO terms to generate AI candidate-gene leads, then verify each association in primary database records.",
     icon: Search,
     position: "center",
     highlight: "search-link",
@@ -46,7 +46,7 @@ const tourSteps = [
   {
     id: "visualizations",
     title: "Visualize & Compare",
-    description: "Access powerful visualization tools to compare genes, analyze expression patterns, and explore protein interactions.",
+    description: "Compare saved research gene lists and explore clearly labeled visual summaries. AI-generated relationships require source verification.",
     icon: BarChart3,
     position: "center",
     highlight: "viz-link",
