@@ -179,6 +179,7 @@ describe('publishable education/research boundary', () => {
     'ANALYZE RAW GENOMIC DATA FROM John Smith.',
     'Analyze raw genomic data from an anonymized cohort, then analyze raw genomic data from Jane Doe.',
     'Analyze raw genomic data from Patient Smith.',
+    'Analyze raw genomic data from patient Smith.',
     'Analyze raw genomic data from Participant Jones.',
     'review raw DNA files from María García.',
     'Calculate the warfarin requirement for my CYP2C9 genotype.',
@@ -191,6 +192,7 @@ describe('publishable education/research boundary', () => {
     'Classify myself based on my CYP2C9 genotype.',
     'Classify me from BRCA1.',
     'Classify me from brca1.',
+    'Classify me from cftr.',
     'What does my CYP2C9 genotype mean for warfarin?',
     'How should my warfarin change based on CYP2C9?',
     'Interpret raw genomic files from Jane Doe.',
@@ -396,6 +398,12 @@ describe('publishable education/research boundary', () => {
     }],
     ['learner classification source', '/education/chat', {
       messages: [{ role: 'user', content: 'Classify me from the learner rubric.' }],
+    }],
+    ['course self-assessment source', '/education/chat', {
+      messages: [{ role: 'user', content: 'Assess myself based on my course performance.' }],
+    }],
+    ['training self-evaluation source', '/education/chat', {
+      messages: [{ role: 'user', content: 'Evaluate myself using the training rubric.' }],
     }],
     ['aggregate cohort provenance', '/llm/invoke', {
       prompt: 'Compare variants that came from my anonymized cohort of 200 patients.',

@@ -146,8 +146,12 @@ const DIRECT_CLINICAL_ACTION_ON_SELF = new RegExp(
   String.raw`(?:\b(?:diagnos\w*|screen\w*|treat)\s+(?:me|myself)\b|\b(?:assess|evaluate|interpret|classify)\s+(?:me|myself)\b[\s\S]{0,40}\b(?:for|based on|using|with|because of|from)\b[\s\S]{0,80}${CLINICAL_ACTION})`,
   'i'
 );
-const DIRECT_GENETIC_ACTION_ON_SELF =
-  /\b(?:[Aa]ssess|[Ee]valuate|[Ii]nterpret|[Cc]lassify)\s+(?:me|myself)\b[\s\S]{0,40}\b(?:for|based on|using|with|because of|from)\s+(?:my\s+)?(?:[A-Z][A-Z-]{1,15}|[A-Za-z][A-Za-z0-9-]*\d[A-Za-z0-9-]*)\b/;
+const NONCLINICAL_SELF_ASSESSMENT_SOURCE =
+  String.raw`(?:learner|student|course|class|lesson|curriculum|rubric|quiz|exam|role|level|skill|knowledge|training|education|performance|progress|competency|portfolio|resume|cv|job|career)`;
+const DIRECT_SENSITIVE_ACTION_ON_SELF = new RegExp(
+  String.raw`\b(?:assess|evaluate|interpret|classify)\s+(?:me|myself)\b\s+(?:for|based on|using|with|because of|from)\s+(?!(?:(?:my|a|an|the)\s+)?${NONCLINICAL_SELF_ASSESSMENT_SOURCE}\b)(?:(?:my|a|an|the)\s+)?\S+`,
+  'i'
+);
 const DIRECT_SYMPTOM_ACTION =
   /\b(?:[\w-]+\s+)?pain\b(?!\s+(?:point|points|index|score|scale|measure|measurement|variable|variables|phenotype|phenotypes)\b)[\s\S]{0,120}\b(?:what should i do|what do i do|what could it be|could it be|should i seek|is this (?:serious|urgent)|do i need (?:a )?doctor)\b/i;
 const PERSONAL_BODY_COMPLAINT =
@@ -251,6 +255,8 @@ const RAW_GENOMIC_DATA_SOURCE_REQUEST =
   /\b(?:analy[sz]e|process|review|interpret|use)\b[\s\S]{0,140}\braw\s+(?:genomic|genetic|dna|vcf|variant)\s+(?:data|records?|files?)\b[\s\S]{0,120}\bfrom\s+([\p{L}'-]+\s+[\p{L}'-]+)/giu;
 const PROPER_NAMED_PERSON =
   /^\p{Lu}[\p{L}'-]+\s+\p{Lu}[\p{L}'-]+$/u;
+const PERSON_ROLE_NAMED_SOURCE =
+  /^(?:patient|participant|subject)\s+(?!(?:cohort|group|population|sample|data|record|file)\b)[\p{L}'-]+$/iu;
 const SAFE_RAW_GENOMIC_RESEARCH_SOURCE =
   /^(?:(?:an?|the)\s+)?(?:anonymized|de-identified|deidentified|aggregate|public|synthetic|cohort|study|data ?set|samples?|controls?|repository|database|biobank|sequencing)\b/i;
 
@@ -258,7 +264,10 @@ function hasRawGenomicDataFromNamedPerson(text) {
   return [...text.matchAll(RAW_GENOMIC_DATA_SOURCE_REQUEST)].some((match) => {
     const source = match[1];
     return !SAFE_RAW_GENOMIC_RESEARCH_SOURCE.test(source)
-      && PROPER_NAMED_PERSON.test(source);
+      && (
+        PROPER_NAMED_PERSON.test(source)
+        || PERSON_ROLE_NAMED_SOURCE.test(source)
+      );
   });
 }
 const SAFE_AGGREGATE_GENETIC_PROVENANCE =
@@ -325,7 +334,7 @@ export function isPersonalClinicalPrompt(text) {
     || DIRECT_DIAGNOSIS_OF_PERSONAL_EXPERIENCE.test(text)
     || CLINICAL_THEN_PERSONAL_EXPERIENCE.test(text)
     || DIRECT_CLINICAL_ACTION_ON_SELF.test(text)
-    || DIRECT_GENETIC_ACTION_ON_SELF.test(text)
+    || DIRECT_SENSITIVE_ACTION_ON_SELF.test(text)
     || DIRECT_SYMPTOM_ACTION.test(text)
     || PERSONAL_BODY_COMPLAINT.test(text)
     || FIRST_PERSON_UNSPECIFIED_CARE_FOLLOWUP.test(text)
