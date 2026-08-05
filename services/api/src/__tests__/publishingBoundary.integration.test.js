@@ -76,6 +76,7 @@ const DIRECT_PERSONAL_CARE_CASES = Object.freeze([
   ['variant-symptom link', "Could this mutation explain the pain I've been having?"],
   ['symptom-diagnosis question', 'Do these symptoms mean I have cancer?'],
   ['aggregate preface with personal treatment', 'We have 200 patient records; what treatment should I choose for myself?'],
+  ['aggregate boilerplate with personal treatment', 'We have 200 patient records and compare outcomes across the cohort; what treatment should I take?'],
   ['chest-pain cause', "I've got chest pain; what could be causing it?"],
   ['medication disclosure', 'I am taking warfarin.'],
   ['family risk', 'What is the risk for my child?'],

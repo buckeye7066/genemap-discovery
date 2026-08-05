@@ -122,6 +122,8 @@ const CARE_THEN_PERSONAL_DECISION = new RegExp(
   String.raw`${DIRECT_CARE_ACTION}[\s\S]{0,120}\b(?:should|can|could|would)\s+i\s+(?:choose|use|take|receive|start|stop|change|increase|decrease)\b`,
   'i'
 );
+const RESEARCH_DESIGN_CARE_SELECTION =
+  /\b(?:should|can|could|would)\s+i\s+(?:choose|use|include)\b[\s\S]{0,80}\bas\s+(?:an?\s+)?(?:[\w-]+\s+){0,2}(?:endpoint|outcome|covariate|variable)\b/i;
 const PERSONAL_VARIANT_INTERPRETATION =
   /\b(?:interpret|explain|assess|evaluate|classify)\w*\b[\s\S]{0,80}\b(?:my|this|these|that|those)\s+(?:genetic\s+)?(?:variants?|mutations?|vcf|results?)\b/i;
 const PERSONAL_RESULT_INTERPRETATION =
@@ -193,8 +195,13 @@ function isAggregateResearchIntent(text) {
 
 export function isPersonalClinicalPrompt(text) {
   if (typeof text !== 'string' || !text.trim()) return false;
+  const aggregateResearchIntent = isAggregateResearchIntent(text);
   if (
     DIRECT_PERSONAL_CARE_REQUEST.test(text)
+    || (
+      CARE_THEN_PERSONAL_DECISION.test(text)
+      && !(aggregateResearchIntent && RESEARCH_DESIGN_CARE_SELECTION.test(text))
+    )
     || PERSONAL_VARIANT_INTERPRETATION.test(text)
     || PERSONAL_RESULT_INTERPRETATION.test(text)
     || PERSONAL_VARIANT_SYMPTOM_LINK.test(text)
@@ -216,10 +223,9 @@ export function isPersonalClinicalPrompt(text) {
     )
   ) return true;
 
-  if (isAggregateResearchIntent(text)) return false;
+  if (aggregateResearchIntent) return false;
 
-  return CARE_THEN_PERSONAL_DECISION.test(text)
-    || GENERIC_I_HAVE_CLINICAL.test(text)
+  return GENERIC_I_HAVE_CLINICAL.test(text)
     || FIRST_PERSON_CLINICAL_HELP.test(text)
     || SHOULD_I_CARE.test(text)
     || SHOULD_I_UNKNOWN_MEDICATION.test(text)

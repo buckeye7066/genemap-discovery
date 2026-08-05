@@ -193,6 +193,7 @@ describe('publishable education/research boundary', () => {
     "Could this mutation explain the pain I've been having?",
     'Do these symptoms mean I have cancer?',
     'We have 200 patient records; what treatment should I choose for myself?',
+    'We have 200 patient records and compare outcomes across the cohort; what treatment should I take?',
     "I've got chest pain; what could be causing it?",
     'I am taking warfarin.',
     'What is the risk for my child?',
