@@ -174,6 +174,7 @@ describe('publishable education/research boundary', () => {
   it.each([
     'Can you diagnose the symptoms I am experiencing?',
     'Can you diagnose what I am experiencing?',
+    'Can you diagnose the problem I have been experiencing?',
     'analyze raw genomic data from Jane Doe.',
     'ANALYZE RAW GENOMIC DATA FROM John Smith.',
     'review raw DNA files from María García.',
@@ -245,6 +246,8 @@ describe('publishable education/research boundary', () => {
     'Calculate the warfarin requirement for my CYP2C9 genotype; sequencing depth is part of my study.',
     'Calculate sequencing depth for my study, then the warfarin requirement for my CYP2C9 genotype.',
     'Calculate the sequencing-depth requirement for my genotype study, then recommend a warfarin dose for my CYP2C9 genotype.',
+    'Calculate the sequencing-depth requirement for my genotype study, then calculate the warfarin requirement for my CYP2C9 genotype.',
+    'Calculate the warfarin requirement for my CYP2C9 genotype, then calculate the sequencing-depth requirement for my genotype study.',
   ])('blocks personalized clinical generation: %s', (prompt) => {
     expect(isPersonalClinicalPrompt(prompt)).toBe(true);
     expect(publicationBoundaryDecision({ url: '/education/chat', body: {
@@ -407,6 +410,9 @@ describe('publishable education/research boundary', () => {
     }],
     ['genotype-study sequencing requirement', '/llm/invoke', {
       prompt: 'Calculate the sequencing-depth requirement for my genotype study.',
+    }],
+    ['genotype-study sequencing amount', '/education/chat', {
+      messages: [{ role: 'user', content: 'Estimate the amount of sequencing depth for my genotype study.' }],
     }],
     ['upper-case anonymized raw-data research', '/llm/invoke', {
       prompt: 'ANALYZE RAW GENOMIC DATA FROM AN ANONYMIZED COHORT OF 200 SAMPLES.',

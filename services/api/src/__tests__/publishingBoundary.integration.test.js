@@ -61,6 +61,7 @@ Do not infer diagnosis, personal genetic risk, treatment, or clinical action.`,
 const DIRECT_PERSONAL_CARE_CASES = Object.freeze([
   ['second-person symptom diagnosis', 'Can you diagnose the symptoms I am experiencing?'],
   ['diagnosis of personal experience', 'Can you diagnose what I am experiencing?'],
+  ['diagnosis of described personal problem', 'Can you diagnose the problem I have been experiencing?'],
   ['lower-case named raw genomic record', 'analyze raw genomic data from Jane Doe.'],
   ['upper-case named raw genomic record', 'ANALYZE RAW GENOMIC DATA FROM John Smith.'],
   ['upper-case acronym named raw genomic files', 'review raw DNA files from María García.'],
@@ -128,6 +129,8 @@ const DIRECT_PERSONAL_CARE_CASES = Object.freeze([
   ['research-vocabulary personal dose calculation', 'Calculate the warfarin requirement for my CYP2C9 genotype; sequencing depth is part of my study.'],
   ['research-calculation preface plus personal requirement', 'Calculate sequencing depth for my study, then the warfarin requirement for my CYP2C9 genotype.'],
   ['research requirement plus personal dose', 'Calculate the sequencing-depth requirement for my genotype study, then recommend a warfarin dose for my CYP2C9 genotype.'],
+  ['research requirement plus personal requirement', 'Calculate the sequencing-depth requirement for my genotype study, then calculate the warfarin requirement for my CYP2C9 genotype.'],
+  ['personal requirement plus research requirement', 'Calculate the warfarin requirement for my CYP2C9 genotype, then calculate the sequencing-depth requirement for my genotype study.'],
 ]);
 
 const AGGREGATE_RESEARCH_CASES = Object.freeze([
@@ -175,6 +178,7 @@ const AGGREGATE_RESEARCH_CASES = Object.freeze([
   ['symptom-lesson learning difficulty', 'Explain symptom classification in this lesson; I am experiencing difficulty with the statistics.'],
   ['diagnosis-lesson learning difficulty', 'Explain diagnosis methods in this lesson; I am experiencing difficulty with the statistics.'],
   ['genotype-study sequencing requirement', 'Calculate the sequencing-depth requirement for my genotype study.'],
+  ['genotype-study sequencing amount', 'Estimate the amount of sequencing depth for my genotype study.'],
   ['upper-case anonymized raw-data research', 'ANALYZE RAW GENOMIC DATA FROM AN ANONYMIZED COHORT OF 200 SAMPLES.'],
 ]);
 

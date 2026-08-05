@@ -139,7 +139,7 @@ const PERSONAL_VARIANT_SYMPTOM_LINK =
 const PERSONAL_SYMPTOM_DIAGNOSIS_QUESTION =
   /\b(?:do|could|can|would)\s+(?:my|these|this)\s+(?:symptoms?|pain)\b[\s\S]{0,100}\b(?:mean|indicate|suggest|show)\b[\s\S]{0,80}\bi\s+(?:have|might have|could have)\b/i;
 const DIRECT_DIAGNOSIS_OF_PERSONAL_EXPERIENCE =
-  /\bdiagnos\w*\b[\s\S]{0,100}\bwhat\s+(?:i\s+(?:(?:am|was|have been)\s+)?(?:experienc(?:e|ed|ing)|feel(?:t|ing)?|hav(?:e|ing))|i(?:['’]ve)\s+been\s+(?:experiencing|feeling|having))\b/i;
+  /\bdiagnos\w*\b[\s\S]{0,100}\b(?:what(?:ever)?|the\s+(?:issue|problem|condition|thing))\s+(?:i\s+(?:(?:am|was|have been)\s+)?(?:experienc(?:e|ed|ing)|feel(?:t|ing)?|hav(?:e|ing))|i(?:['’]ve)\s+been\s+(?:experiencing|feeling|having))\b/i;
 const CLINICAL_THEN_PERSONAL_EXPERIENCE =
   /\b(?:symptoms?|pain)\b(?:\s+(?:that|which))?\s+i\s+(?:(?:am|was|have been)\s+)?(?:experienc(?:e|ed|ing)|feel(?:t|ing)?|hav(?:e|ing)\s+(?:symptoms?|pain))\b/i;
 const DIRECT_CLINICAL_ACTION_ON_SELF = new RegExp(
@@ -168,9 +168,8 @@ const PERSONAL_GENE_CAUSATION_QUESTION =
   /\b(?:is|could|does)\s+[a-z0-9_-]{2,20}\s+(?:the reason\s+)?why\s+i have\s+(?!no\s+(?:association|signal|result)\b)/i;
 const PERSONALIZED_DOSE_CALCULATION =
   /\b(?:calculate|determine|estimate|recommend|choose|adjust)\b[\s\S]{0,160}\b(?:dose|dosing|dosage|amount|requirement)\b[\s\S]{0,160}\b(?:for|based on)\s+my\b[\s\S]{0,80}\b(?:cyp[0-9a-z-]*|genotyp\w*|phenotyp\w*|variants?|mutations?|metabolizer|pharmacogen\w*)\b/i;
-const EXPLICIT_DOSE_TERM = /\b(?:dose|dosing|dosage)\b/i;
-const RESEARCH_DESIGN_AMOUNT_CALCULATION =
-  /\b(?:calculate|determine|estimate|recommend|choose|adjust)\b[\s\S]{0,120}\b(?:sequencing(?:[- ]depth)?|read(?:s| depth)?|coverage|depth|sample size|panel size|library size|assay size|replicates?|statistical power)\s+(?:amount|requirement)\b/i;
+const SAFE_RESEARCH_AMOUNT_CALCULATION =
+  /\b(?:calculate|determine|estimate|recommend|choose|adjust)\s+(?:the\s+)?(?:(?:sequencing(?:[- ]depth)?|read(?:s| depth)?|coverage|depth|sample size|panel size|library size|assay size|replicates?|statistical power)\s+(?:amount|requirement)|(?:amount|requirement)\s+(?:of|for)\s+(?:sequencing(?:[- ]depth)?|read(?:s| depth)?|coverage|depth|sample size|panel size|library size|assay size|replicates?|statistical power))\b[\s\S]{0,160}\b(?:for|based on)\s+my\b[\s\S]{0,80}\b(?:genotyp\w*|phenotyp\w*|genomic|genetic|transcriptomic|proteomic)\s+(?:study|data ?set|analysis|model|cohort|project|experiment)\b/gi;
 const PERSONAL_CARRIED_VARIANT_INTERPRETATION =
   /\b(?:assess|interpret|classify|evaluate|determine)\w*\b[\s\S]{0,140}\b(?:variants?|mutations?)\s+i\s+(?:carry|have|inherited)\b/i;
 const PERSONAL_INHERITED_VARIANT_CARE =
@@ -308,6 +307,7 @@ export function isPersonalClinicalPrompt(text) {
   const personalGeneticMaterialText = aggregateResearchIntent
     ? text.replace(SAFE_AGGREGATE_GENETIC_PROVENANCE, '')
     : text;
+  const personalizedDoseText = text.replace(SAFE_RESEARCH_AMOUNT_CALCULATION, '');
   if (
     exposesPatientLevelData
     || DIRECT_PERSONAL_CARE_REQUEST.test(text)
@@ -333,13 +333,7 @@ export function isPersonalClinicalPrompt(text) {
     || REPORTED_PERSONAL_CONDITION.test(text)
     || PERSONAL_HEREDITY_QUESTION.test(text)
     || PERSONAL_GENE_CAUSATION_QUESTION.test(text)
-    || (
-      PERSONALIZED_DOSE_CALCULATION.test(text)
-      && (
-        EXPLICIT_DOSE_TERM.test(text)
-        || !RESEARCH_DESIGN_AMOUNT_CALCULATION.test(text)
-      )
-    )
+    || PERSONALIZED_DOSE_CALCULATION.test(personalizedDoseText)
     || PERSONAL_CARRIED_VARIANT_INTERPRETATION.test(personalCarriedVariantText)
     || PERSONAL_INHERITED_VARIANT_CARE.test(text)
     || PERSONAL_GENETIC_MATERIAL_OWNERSHIP.test(personalGeneticMaterialText)
