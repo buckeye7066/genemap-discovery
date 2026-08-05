@@ -182,20 +182,27 @@ const IDENTIFIER =
   /\b(?:date of birth|dob|social security(?: number)?|ssn|medical record number|mrn|email address|phone number|home address)\b|\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i;
 const DATA_EXECUTION =
   /\b(?:analy[sz]e|process|review|interpret|classify|evaluate|assess|upload|use|summari[sz]e|annotate)\b/i;
-const SENSITIVE_DATA_MATERIAL =
-  /\b(?:raw\s+)?(?:patient|participant|subject|individual)[- ]level\b|\b(?:raw\s+)?(?:genomic|genetic|dna|vcf|variant|genotype|wes|wgs|rna[- ]?seq)\s+(?:data|records?|files?|results?)\b|\b(?:patient|participant|subject)\s+(?:records?|files?|data)\b/i;
+const GENOMIC_ARTIFACT = String.raw`(?:raw\s+)?(?:(?:g?vcf|bcf|bam|cram|sam|fastq|fasta)(?:\s+(?:data|records?|files?|results?|reads?))?|(?:structural\s+)?variant\s+calls?|snp\s+calls?|copy[- ]number\s+(?:variants?|calls?|profiles?)|variants?|mutations?|alleles?|haplotypes?|polymorphisms?|snps?|(?:genomic|genetic|dna|genotyp\w*|genome|exome|transcriptome|wes|wgs|rna[- ]?seq)(?:\s+(?:data|records?|files?|results?|reads?|sequences?|alignments?))?)`;
+const GENOMIC_DATA_ARTIFACT = String.raw`(?:raw\s+)?(?:(?:g?vcf|bcf|bam|cram|sam|fastq|fasta)(?:\s+(?:data|records?|files?|results?|reads?))?|(?:structural\s+)?variant\s+calls?|snp\s+calls?|copy[- ]number\s+(?:variants?|calls?|profiles?)|(?:genomic|genetic|dna|genotyp\w*)\s+(?:data|records?|files?|results?|reads?|sequences?|alignments?)|(?:genome|exome|transcriptome|wes|wgs|rna[- ]?seq)(?:\s+(?:data|records?|files?|results?|reads?|sequences?|alignments?))?)`;
+const SENSITIVE_DATA_MATERIAL = new RegExp(
+  String.raw`\b(?:raw\s+)?(?:patient|participant|subject|individual)[- ]level\b|\b${GENOMIC_DATA_ARTIFACT}\b|\b(?:patient|participant|subject)\s+(?:records?|files?|data)\b`,
+  'i'
+);
 const EXPLICITLY_IDENTIFIABLE =
   /\b(?:identifiable|identified|non[- ]anonymized|not anonymized)\b[\s\S]{0,100}\b(?:patient|participant|subject|individual|data|records?|files?)\b/i;
 const NAMED_SENSITIVE_SOURCE =
   /\bfrom\s+(?:(?:patient|participant|subject|dr)\.?\s+)?(?:\p{Lu}\.?|\p{Lu}[\p{Ll}'-]+)(?:\s+(?:\p{Lu}\.?|\p{Lu}[\p{Ll}'-]+)){1,2}\b/u;
-const GENOMIC_ARTIFACT =
-  String.raw`(?:raw\s+)?(?:vcf(?:\s+(?:data|records?|files?|results?))?|variant\s+calls?|variants?|mutations?|(?:genomic|genetic|dna|genotype|wes|wgs|rna[- ]?seq)\s+(?:data|records?|files?|results?))`;
 const POSSESSIVE_GENOMIC_ARTIFACT = new RegExp(
-  String.raw`([^,.;!?\n]{1,100})['’]s\s+${GENOMIC_ARTIFACT}\b`,
+  String.raw`([^,.;!?\n]{1,100})['’]s\s+(?:(?:gene|sample|specimen)\s+)?${GENOMIC_ARTIFACT}\b`,
   'giu'
 );
 const ATTRIBUTED_GENOMIC_ARTIFACT = new RegExp(
-  String.raw`\b${GENOMIC_ARTIFACT}\b[\s\S]{0,40}\b(?:belong(?:s|ing)?\s+to|owned\s+by)\s+([^,.;!?\n]{1,100}?)(?=\s+\b(?:alongside|across|within|then)\b|[,.;!?\n]|$)`,
+  String.raw`\b${GENOMIC_ARTIFACT}\b\s+(belong(?:s|ing)?\s+to|owned\s+by|submitted\s+by|provided\s+by|uploaded\s+by|of|for)\s+([^,.;!?\n]{1,100}?)(?=\s+\b(?:alongside|across|within|then)\b|[,.;!?\n]|$)`,
+  'giu'
+);
+const NAME_TOKEN = String.raw`(?:\p{L}\.|\p{L}[\p{L}'’.-]*)`;
+const NAMED_OWNER_BEFORE_GENOMIC_ARTIFACT = new RegExp(
+  String.raw`(?:\b(?:analy[sz]e|process|review|interpret|classify|evaluate|assess|upload|use|summari[sz]e|annotate|compare|explain)\s+|(?:^|[.;!?]\s*))(${NAME_TOKEN}(?:\s+${NAME_TOKEN}){1,2}?)\s+(?:(?:gene|sample|specimen)\s+)?${GENOMIC_ARTIFACT}\b`,
   'giu'
 );
 const OWNER_PREFIX_ACTION =
@@ -206,11 +213,48 @@ const GENERIC_EDUCATIONAL_OWNER =
   /^(?:(?:how|why|whether|when)\s+)?(?:(?:an?|the|this|that|each|any)\s+)?(?:(?:human|mouse|yeast|plant|model|target|candidate|reference|wild[- ]type|mutant|protein[- ]coding|tumou?r[- ]suppressor|dna[- ]repair)\s+){0,2}(?:gene|protein|enzyme|pathway|cell|tissue|organism|species|strain|model|study|research|laboratory|lab)\s*$/i;
 const NAMED_GENE_EDUCATIONAL_OWNER =
   /^(?:(?:how|why|whether|when)\s+)?(?:(?:an?|the|this|that)\s+)?[A-Z][A-Z0-9-]{1,9}\s+gene\s*$/u;
+const NON_PERSON_OWNER_WORDS = new Set([
+  'a', 'an', 'and', 'are', 'aggregate', 'analysis', 'analyze', 'anonymized', 'biobank', 'candidate',
+  'cohort', 'controls', 'data', 'dataset', 'deidentified', 'dna', 'explain',
+  'for', 'from', 'gene', 'genes', 'genetic', 'genetics', 'genomic', 'has', 'have', 'how', 'human', 'i', 'is', 'lab', 'laboratory', 'model',
+  'mouse', 'mutation', 'mutations', 'non-identifiable', 'pathway', 'population',
+  'protein', 'public', 'raw', 'reference', 'repository', 'research', 'review',
+  'our', 'rna', 'samples', 'student', 'students', 'study', 'synthetic', 'the', 'to', 'types', 'using', 'variant',
+  'variants', 'we', 'what', 'why', 'with', 'yeast', 'your',
+]);
 const FROM_SENSITIVE_SOURCE = /\bfrom\b/i;
 const EXPLICIT_AGGREGATE_DATA_SOURCE =
   /\bfrom\s+(?:(?:an?|the)\s+)?(?:(?:(?:anonymized|de-identified|deidentified|non-identifiable|aggregate|synthetic|public)\s+){1,3}(?:cohort|population|data ?set|data|records?|samples?|biobank|repository)|\d+(?:\s+|-)\s*(?:patients?|participants?|subjects?|samples?|controls?))\b/i;
-const EXPLICIT_AGGREGATE_SENSITIVE_CONTEXT =
-  /(?:\b(?:anonymized|de-identified|deidentified|non-identifiable|aggregate|synthetic|public)\b[\s\S]{0,100}\b(?:raw\s+)?(?:genomic|genetic|dna|vcf|variant|genotype|wes|wgs|rna[- ]?seq)\s+(?:data|records?|files?|results?)\b|\b(?:raw\s+)?(?:genomic|genetic|dna|vcf|variant|genotype|wes|wgs|rna[- ]?seq)\s+(?:data|records?|files?|results?)\b[\s\S]{0,100}\b(?:anonymized|de-identified|deidentified|non-identifiable|aggregate|synthetic|public)\b)/i;
+const EXPLICIT_AGGREGATE_SENSITIVE_CONTEXT = new RegExp(
+  String.raw`(?:\b(?:anonymized|de-identified|deidentified|non-identifiable|aggregate|synthetic|public)\b[\s\S]{0,100}\b${GENOMIC_DATA_ARTIFACT}\b|\b${GENOMIC_DATA_ARTIFACT}\b[\s\S]{0,100}\b(?:anonymized|de-identified|deidentified|non-identifiable|aggregate|synthetic|public)\b)`,
+  'i'
+);
+
+function looksLikeNamedIndividual(owner) {
+  const tokens = String(owner)
+    .trim()
+    .toLowerCase()
+    .replace(/[.’]$/g, '')
+    .split(/\s+/)
+    .filter(Boolean);
+  if (tokens.length < 2 || tokens.length > 3 || tokens.some((token) => /\d/.test(token))) {
+    return false;
+  }
+  if (/^(?:patient|participant|subject|dr)$/.test(tokens[0])) {
+    return !/^(?:data|records?|files?|samples?|cohort|population)$/.test(tokens[1]);
+  }
+  return tokens.every((token) => !NON_PERSON_OWNER_WORDS.has(token));
+}
+
+function containsNamedIndividual(owner) {
+  const tokens = String(owner).trim().split(/\s+/).filter(Boolean);
+  for (const size of [3, 2]) {
+    for (let index = 0; index + size <= tokens.length; index += 1) {
+      if (looksLikeNamedIndividual(tokens.slice(index, index + size).join(' '))) return true;
+    }
+  }
+  return false;
+}
 
 function hasIndividualGenomicOwnership(text) {
   // Ownership is a separate fail-closed boundary from generic sensitive-data
@@ -235,7 +279,13 @@ function hasIndividualGenomicOwnership(text) {
     // The complete captured owner—not merely its prefix—must be an explicit
     // aggregate form. "an anonymized cohort and Jane Doe" therefore cannot be
     // laundered by the safe words at its start.
-    if (!SAFE_AGGREGATE_OWNER.test(match[1].trim())) return true;
+    const relation = match[1].toLowerCase();
+    const owner = match[2].trim();
+    if (SAFE_AGGREGATE_OWNER.test(owner)) continue;
+    if (!/^(?:of|for)$/.test(relation) || containsNamedIndividual(owner)) return true;
+  }
+  for (const match of String(text).matchAll(NAMED_OWNER_BEFORE_GENOMIC_ARTIFACT)) {
+    if (looksLikeNamedIndividual(match[1])) return true;
   }
   return false;
 }
