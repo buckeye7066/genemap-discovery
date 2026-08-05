@@ -10,9 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import DnaIcon from "../components/icons/DnaIcon";
-import { Search, AlertCircle, GitCompare, BookmarkPlus, Library, Sparkles, BarChart3, Brain } from "lucide-react";
-import { Link } from "react-router-dom";
-import { createPageUrl } from "@/utils";
+import { Search, AlertCircle, GitCompare, BookmarkPlus, Library, Sparkles, Brain } from "lucide-react";
 
 import SearchForm from "../components/search/SearchForm";
 import GeneResults from "../components/search/GeneResults";
@@ -257,26 +255,8 @@ export default function SearchPage() {
             Phenotype → Gene Discovery
           </h1>
           <p className="text-base sm:text-lg text-slate-600 max-w-2xl mx-auto px-4">
-            Search phenotypes or input genes of interest for comprehensive analysis
+            Generate exploratory candidate-gene leads and verify them in primary sources
           </p>
-          
-          {/* Quick Actions */}
-          {selectedGenes.length > 0 && (
-            <div className="mt-4 flex gap-2 justify-center">
-              <Link to={createPageUrl("VisualizationHub")}>
-                <Button variant="outline" className="gap-2">
-                  <BarChart3 className="w-4 h-4" />
-                  Visualization Hub
-                </Button>
-              </Link>
-              <Link to={createPageUrl("AIAssistants")}>
-                <Button variant="outline" className="gap-2">
-                  <Brain className="w-4 h-4" />
-                  AI Tools
-                </Button>
-              </Link>
-            </div>
-          )}
         </div>
 
         {!showComparison && !showSavedSets && !showComparativeGenomics && (
@@ -347,7 +327,7 @@ export default function SearchPage() {
               <Alert className="mb-4 bg-blue-50 border-blue-200">
                 <Brain className="h-4 w-4 text-blue-600 animate-pulse" />
                 <AlertDescription className="text-blue-900">
-                  Genes found — adding summaries, phenotypes, and tissue expression…
+                  Genes found — adding exploratory summaries and candidate phenotype terms…
                 </AlertDescription>
               </Alert>
             )}
