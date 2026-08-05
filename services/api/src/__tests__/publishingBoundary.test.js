@@ -188,6 +188,10 @@ describe('publishable education/research boundary', () => {
     'I take warfarin.',
     'I am using warfarin.',
     'I am using a variant-calling method; provide warfarin dosing guidance.',
+    'I am using a method to analyze 50 patients; how much warfarin is right for me?',
+    'I am using a tool to compare 200 patients; tell me what medicine I should take.',
+    'I am using software to model an anonymized cohort; what should I do about my lupus?',
+    'Analyzing anonymized variants across this patient cohort of 500 participants; what is the risk for my child?',
     'My chest hurts. What could it be?',
     'Chest pain—what should I do?',
     'What does my BRCA1 result mean for me?',
@@ -206,6 +210,7 @@ describe('publishable education/research boundary', () => {
     'I am positive for taking warfarin.',
     'Here are my raw DNA results—what do they mean?',
     'I was told I have raw patient-level WES records from 50 patients and need to compare variants across the cohort.',
+    'Analyze these identifiable patient-level genotype records from 50 patients.',
     'We have data from 200 patients; what treatment should I take?',
     'We have data from 200 patients; what treatment should I use?',
     'We have 200 patient records and compare outcomes across the cohort; what treatment should I take?',
@@ -287,6 +292,8 @@ describe('publishable education/research boundary', () => {
     ['PhenotypeSearchService personal treatment', buildPhenotypeWrapper('I need a diagnosis and treatment for these symptoms.')],
     ['HypothesisGenerator medication disclosure', buildHypothesisWrapper('I am taking warfarin.')],
     ['HypothesisGenerator method-prefaced dosing', buildHypothesisWrapper('I am using a variant-calling method; provide warfarin dosing guidance.')],
+    ['HypothesisGenerator mixed method/dosing', buildHypothesisWrapper('I am using a method to analyze 50 patients; how much warfarin is right for me?')],
+    ['HypothesisGenerator raw patient-level WES', buildHypothesisWrapper('I was told I have raw patient-level WES records from 50 patients and need to compare variants across the cohort.')],
     ['PhenotypeSearchService family risk', buildPhenotypeWrapper('What is the risk for my child?')],
     ['Dashboard symptom guidance', buildDashboardWrapper(['I need guidance on this chest pain.'])],
     ['HypothesisGenerator future disease', buildHypothesisWrapper('I need to know if BRCA1 means I will get cancer.')],
@@ -354,7 +361,7 @@ describe('publishable education/research boundary', () => {
       prompt: 'I was told to compare two cohort models.',
     }],
     ['reported WES research material', '/llm/invoke', {
-      prompt: 'I was told I have anonymized aggregate WES data from 50 patients and need to compare variants across the cohort.',
+      prompt: 'I was told I have WES data from 50 patients and need to compare variants across the cohort.',
     }],
     ['doctor-reported cohort material', '/education/chat', {
       messages: [{ role: 'user', content: 'The doctor says I have an anonymized cohort of 200 patients; compare genotype variables at the population level.' }],
@@ -368,11 +375,17 @@ describe('publishable education/research boundary', () => {
     ['positive-for genetics course', '/education/chat', {
       messages: [{ role: 'user', content: 'I am positive for taking a genetics course.' }],
     }],
+    ['aggregate tool with model follow-up', '/education/chat', {
+      messages: [{ role: 'user', content: 'I am using a tool to compare 200 patients; what should I do about my model?' }],
+    }],
     ['patient-cohort variant analysis', '/llm/invoke', {
       prompt: 'Analyzing anonymized variants across this patient cohort of 500 participants.',
     }],
     ['de-identified result summary', '/education/chat', {
       messages: [{ role: 'user', content: 'Summarize my results for the de-identified cohort of 200 samples.' }],
+    }],
+    ['anonymized reported WES material', '/llm/invoke', {
+      prompt: 'I was told I have anonymized aggregate WES data from 50 patients and need to compare variants across the cohort.',
     }],
     ['ordinary note-taking question', '/education/chat', {
       messages: [{ role: 'user', content: 'Should I take notes while learning how variants are classified?' }],

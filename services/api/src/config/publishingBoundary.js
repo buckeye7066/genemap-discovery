@@ -124,6 +124,12 @@ const CARE_THEN_PERSONAL_DECISION = new RegExp(
 );
 const RESEARCH_DESIGN_CARE_SELECTION =
   /\b(?:should|can|could|would)\s+i\s+(?:choose|use|include)\b[\s\S]{0,80}\bas\s+(?:an?\s+)?(?:[\w-]+\s+){0,2}(?:endpoint|outcome|covariate|variable)\b/i;
+const NONCLINICAL_PERSONAL_TARGET =
+  String.raw`(?:data|data ?sets?|samples?|sample size|statistical power|power|variance|coverage|replicates?|controls?|models?|stud(?:y|ies)|analys(?:is|es)|experiments?|research|projects?|workflows?|tools?|methods?|software|courses?|classes?|lessons?|notes?|code|scripts?|pipelines?|results? tables?|figures?|plots?)`;
+const EXPLICIT_PERSONAL_CARE_FOLLOWUP = new RegExp(
+  String.raw`(?:\b(?:tell me\s+)?how much\s+(?!${NONCLINICAL_PERSONAL_TARGET}\b)(?=[\s\S]{0,100}\b(?:safe|right|appropriate|recommended|best)\b)(?=[\s\S]{0,120}\bfor (?:me|myself)\b)|\b(?:choose|select|recommend)\s+(?:(?:the|a)\s+)?(?:(?:right|best|appropriate)\s+)?(?!${NONCLINICAL_PERSONAL_TARGET}\b)(?=[\s\S]{0,100}\bfor (?:me|myself)\b)|\bwhat should i do\s+(?:about|with|for)\s+my\s+(?!${NONCLINICAL_PERSONAL_TARGET}\b)|\b(?:medication|medicine|drug|treatment)\b[\s\S]{0,80}\b(?:should i|i should)\s+(?:take|use|choose|start|stop|change)\b)`,
+  'i'
+);
 const PERSONAL_VARIANT_INTERPRETATION =
   /\b(?:interpret|explain|assess|evaluate|classify)\w*\b[\s\S]{0,80}\b(?:my|this|these|that|those)\s+(?:genetic\s+)?(?:variants?|mutations?|vcf|results?)\b/i;
 const PERSONAL_RESULT_INTERPRETATION =
@@ -137,7 +143,7 @@ const DIRECT_SYMPTOM_ACTION =
 const PERSONAL_BODY_COMPLAINT =
   /\bmy\s+(?:[\w-]+\s+){0,2}(?:hurts?|aches?|is painful)\b/i;
 const NONCLINICAL_I_HAVE_OBJECT =
-  String.raw`(?:a\s+(?:question|course|class|lesson|study|project|dataset|data set|model|analysis|research task)|(?:(?:anonymized|de-identified|aggregate)(?:\s+aggregate)?\s+)?(?:wes|wgs|rna[- ]?seq|genotype|genomic|transcriptomic|proteomic)\s+data|(?:(?:an?|the)\s+)?(?:anonymized|de-identified|aggregate)(?:\s+aggregate)?\s+cohort|pilot study|condition labels)`;
+  String.raw`(?:a\s+(?:question|course|class|lesson|study|project|dataset|data set|model|analysis|research task)|(?:(?:anonymized|de-identified|deidentified|aggregate)(?:\s+aggregate)?\s+)?(?:wes|wgs|rna[- ]?seq|genotype|genomic|transcriptomic|proteomic)\s+data|(?:(?:an?|the)\s+)?(?:anonymized|de-identified|deidentified|aggregate)(?:\s+aggregate)?\s+cohort|pilot study|condition labels)`;
 const FIRST_PERSON_UNSPECIFIED_CARE_FOLLOWUP = new RegExp(
   String.raw`\bi have\s+(?!${NONCLINICAL_I_HAVE_OBJECT}\b)[\s\S]{0,140}\b(?:what are my options|what can i do|what should i do|what now|what does that mean|what do they mean|explain it)\b`,
   'i'
@@ -150,20 +156,18 @@ const PERSONAL_HEREDITY_QUESTION =
   /\b(?:could|can|might)\s+my\s+(?!(?:dataset|data|model|study|analysis|experiment|lab|research|project)\b)[\w -]{1,60}\s+be\s+(?:genetic|hereditary|inherited)\b/i;
 const PERSONAL_GENE_CAUSATION_QUESTION =
   /\b(?:is|could|does)\s+[a-z0-9_-]{2,20}\s+(?:the reason\s+)?why\s+i have\s+(?!no\s+(?:association|signal|result)\b)/i;
+const NONCLINICAL_TAKING_ACTIVITY =
+  String.raw`(?:(?:a|an|the|this|that|my)\s+)?(?:[\w-]+\s+){0,3}(?:course|class|workshop|lesson|training|notes?|break|walk|look|approach|position|survey|exam|test|route|train|bus|taxi|photos?|pictures?|samples?|measurements?|data|dataset|steps?|part|interest|issue|action|time|study|project|analysis|research|experiment|tool|method|software|package|library|algorithm|protocol|assay|code|script|pipeline|workflow|search|review|reading|writing|calculation|simulation|model|modeling|size|coverage|power|resolution|quality|replicates?|controls?|design)\b`;
 const NONCLINICAL_POSITIVE_FOR_OBJECT =
-  String.raw`(?:(?:(?:a|an|the|this|that|my)\s+)?(?:course|class|workshop|lesson|training|study|project|analysis|research|approach|method|tool|software|model|workflow|policy|plan|idea)\b|(?:using|taking|including|adding|choosing|adopting|trying|running|continuing|supporting|keeping|reviewing|comparing|studying|learning|researching)\s+(?:(?:a|an|the|this|that|my|our)\s+)?(?:[\w-]+\s+){0,3}(?:course|class|workshop|lesson|training|study|project|analysis|research|approach|method|tool|software|model|workflow|policy|plan|idea)\b)`;
+  String.raw`(?:(?:using|taking)\s+)?${NONCLINICAL_TAKING_ACTIVITY}`;
 const PERSONAL_TEST_OR_RESULT = new RegExp(
   String.raw`(?:\bmy\s+(?:raw\s+)?(?:(?:lab|dna|genetic|genomic)\s+)?(?:report|results?|test)\b[\s\S]{0,160}\b(?:shows?|found|positive|mean|interpret|explain)\b|\bhere (?:are|is) my\s+(?:raw\s+)?(?:dna|genetic|genomic)\s+(?:report|results?|test)\b[\s\S]{0,120}\b(?:mean|interpret|explain)\b|\bi am positive for\s+(?!${NONCLINICAL_POSITIVE_FOR_OBJECT})\S+)`,
   'i'
 );
-const IDENTIFIABLE_PATIENT_LEVEL_DATA =
-  /(?:\b(?:raw|identifiable|identified|non[- ]anonymized|not anonymized)\s+(?:patient|participant|subject)[- ]level\b|\b(?:raw|identifiable|identified|non[- ]anonymized|not anonymized)\b[\s\S]{0,80}\b(?:patient|participant|subject)\s+(?:records?|files?|data)\b|\b(?:patient|participant|subject)[- ]level\s+(?:wes|wgs|rna[- ]?seq|genomic|genetic|medical|health|records?|data)\b)/i;
 const FIRST_PERSON_FUTURE_DISEASE =
   /(?:\bi\s+need\s+to\s+know\b[\s\S]{0,180}\bi\s+(?:will|might|could|may)\s+(?:get|develop|have|be diagnosed)|\b(?:will|might|could|may)\s+i\s+(?:get|develop|have|be diagnosed))/i;
 const DIRECT_PERSONAL_CLINICAL_HELP =
   /(?:\bi need\s+(?:help|advice|guidance)\s+(?:(?:with|on|for)\s+)?(?:(?:these|this|my)\s+)?(?:\w+\s+)?(?:symptoms?|pain)\b|\bi need\s+(?:symptoms?|pain)\s+(?:help|advice|guidance)\b)/i;
-const NONCLINICAL_TAKING_ACTIVITY =
-  String.raw`(?:(?:a|an|the|this|that|my)\s+)?(?:[\w-]+\s+){0,3}(?:course|class|workshop|lesson|training|notes?|break|walk|look|approach|position|survey|exam|test|route|train|bus|taxi|photos?|pictures?|samples?|measurements?|data|dataset|steps?|part|interest|issue|action|time|study|project|analysis|research|experiment|tool|method|software|package|library|algorithm|protocol|assay|code|script|pipeline|workflow|search|review|reading|writing|calculation|simulation|model|modeling|size|coverage|power|resolution|quality|replicates?|controls?|design)\b`;
 const CLEAR_NONCLINICAL_TAKING = new RegExp(
   String.raw`\bi(?:['’]m| am)\s+(?:currently\s+)?taking\s+${NONCLINICAL_TAKING_ACTIVITY}`,
   'i'
@@ -205,8 +209,16 @@ const RESEARCH_WORK_PRODUCT =
   /\b(?:pilot study|research (?:study|project|analysis)|case-control (?:study|analysis)|observational study|exploratory analysis)\b/i;
 const STRUCTURED_RESEARCH_MATERIAL =
   /\b(?:data|data ?sets?|counts?|annotations?|variables?|samples?|cohort|controls?|case-control|population[- ]level)\b/i;
+const EXPLICIT_IDENTIFIABLE_PATIENT_DATA =
+  /\b(?:identifiable|non[- ]anonymized|not anonymized|raw\s+(?:patient|participant|subject|individual)[- ]level|raw\s+(?:patient|participant|subject|individual)\s+records?)\b/i;
+const PATIENT_LEVEL_DATA =
+  /\b(?:patient|participant|subject|individual)[- ]level\b[\s\S]{0,100}\b(?:data|records?|wes|wgs|rna[- ]?seq|genotyp\w*|variants?)\b/i;
+const EXPLICIT_DEIDENTIFICATION =
+  /\b(?:anonymized|de-identified|deidentified|aggregate)\b/i;
+const SAFE_AGGREGATE_MY_RESULTS =
+  /\bmy results?\b[\s\S]{0,100}\b(?:anonymized|de-identified|deidentified|aggregate)\b[\s\S]{0,80}\b(?:cohort|samples?|data)\b/i;
 const PATIENT_OR_FAMILY =
-  String.raw`(?:\bthis patient\b|\bmy patient(?:['’]s)?\b|\bthe patient['’]s\b|\bpatient['’]s\b|\bmy (?:child|son|daughter|mother|father|parent|sibling|brother|sister|spouse|partner|family member)(?:['’]s)?\b)`;
+  String.raw`(?:\bthis patient\b(?!\s+(?:cohort|group|population|sample|data ?set|data|records?)\b)|\bmy patient(?:['’]s)?\b|\bthe patient['’]s\b|\bpatient['’]s\b|\bmy (?:child|son|daughter|mother|father|parent|sibling|brother|sister|spouse|partner|family member)(?:['’]s)?\b)`;
 const PERSON_THEN_CLINICAL = new RegExp(`${PATIENT_OR_FAMILY}[\\s\\S]{0,240}${CLINICAL_ACTION}`, 'i');
 const CLINICAL_THEN_PERSON = new RegExp(`${CLINICAL_ACTION}[\\s\\S]{0,240}${PATIENT_OR_FAMILY}`, 'i');
 
@@ -224,10 +236,17 @@ export function isPersonalClinicalPrompt(text) {
   const aggregateResearchIntent = isAggregateResearchIntent(text);
   const clearNonclinicalProgressiveActivity = CLEAR_NONCLINICAL_TAKING.test(text)
     || (aggregateResearchIntent && CLEAR_NONCLINICAL_USING.test(text));
+  const exposesPatientLevelData = EXPLICIT_IDENTIFIABLE_PATIENT_DATA.test(text)
+    || (PATIENT_LEVEL_DATA.test(text) && !EXPLICIT_DEIDENTIFICATION.test(text));
   if (
-    DIRECT_PERSONAL_CARE_REQUEST.test(text)
+    exposesPatientLevelData
+    || DIRECT_PERSONAL_CARE_REQUEST.test(text)
     || (
       CARE_THEN_PERSONAL_DECISION.test(text)
+      && !(aggregateResearchIntent && RESEARCH_DESIGN_CARE_SELECTION.test(text))
+    )
+    || (
+      EXPLICIT_PERSONAL_CARE_FOLLOWUP.test(text)
       && !(aggregateResearchIntent && RESEARCH_DESIGN_CARE_SELECTION.test(text))
     )
     || PERSONAL_VARIANT_INTERPRETATION.test(text)
@@ -241,11 +260,13 @@ export function isPersonalClinicalPrompt(text) {
     || PERSONAL_HEREDITY_QUESTION.test(text)
     || PERSONAL_GENE_CAUSATION_QUESTION.test(text)
     || PERSONAL_TEST_OR_RESULT.test(text)
-    || IDENTIFIABLE_PATIENT_LEVEL_DATA.test(text)
     || FIRST_PERSON_FUTURE_DISEASE.test(text)
     || DIRECT_PERSONAL_CLINICAL_HELP.test(text)
     || FIRST_PERSON_DIAGNOSIS.test(text)
+    || (MY_CLINICAL.test(text) && !(aggregateResearchIntent && SAFE_AGGREGATE_MY_RESULTS.test(text)))
     || CLINICAL_FOR_ME.test(text)
+    || PERSON_THEN_CLINICAL.test(text)
+    || CLINICAL_THEN_PERSON.test(text)
     || SIMPLE_MEDICATION_DISCLOSURE.test(text)
     || SIMPLE_MEDICATION_DECISION.test(text)
     || (
@@ -256,10 +277,7 @@ export function isPersonalClinicalPrompt(text) {
 
   if (aggregateResearchIntent) return false;
 
-  return MY_CLINICAL.test(text)
-    || PERSON_THEN_CLINICAL.test(text)
-    || CLINICAL_THEN_PERSON.test(text)
-    || GENERIC_I_HAVE_CLINICAL.test(text)
+  return GENERIC_I_HAVE_CLINICAL.test(text)
     || FIRST_PERSON_CLINICAL_HELP.test(text)
     || SHOULD_I_CARE.test(text)
     || SHOULD_I_UNKNOWN_MEDICATION.test(text)
