@@ -172,6 +172,7 @@ describe('publishable education/research boundary', () => {
     'Interpret my variant and tell me my personal risk level.',
     'I am taking warfarin; what dose should I use for my genotype?',
     'I am taking warfarin.',
+    'Should I take warfarin?',
     'What is the risk for my child?',
     'What diagnosis fits this patient and these symptoms?',
     'Explain the pharmacogenomic drug implications for my child.',
@@ -181,6 +182,7 @@ describe('publishable education/research boundary', () => {
     'I have a BRCA1 mutation; how should I be screened?',
     'I need help with these symptoms.',
     'I need help interpreting these variants.',
+    'I need help with these symptoms; also identify variants across 50 patients for cohort-level research.',
     'I have genetic variants.',
   ])('blocks personalized clinical generation: %s', (prompt) => {
     expect(isPersonalClinicalPrompt(prompt)).toBe(true);
@@ -279,6 +281,9 @@ describe('publishable education/research boundary', () => {
     }],
     ['education question wording', '/education/chat', {
       messages: [{ role: 'user', content: 'Should I take a genetics course before studying inheritance?' }],
+    }],
+    ['research-design question wording', '/education/chat', {
+      messages: [{ role: 'user', content: 'Should I increase sample size for this cohort study?' }],
     }],
     ['ordinary research wording', '/llm/invoke', {
       prompt: 'I take notes while reviewing genetic variants across an aggregate cohort.',

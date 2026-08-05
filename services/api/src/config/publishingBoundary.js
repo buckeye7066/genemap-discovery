@@ -113,9 +113,13 @@ const CLINICAL_FOR_ME = new RegExp(
 // otherwise fail-closed first-person clinical rules.
 const FIRST_PERSON_DIAGNOSIS = /\bi\s+(?:was|have\s+been)\s+diagnosed\b/i;
 const NON_CLINICAL_TAKING_ACTIVITY =
-  String.raw`(?:(?:a|an|the|this|that|my)\s+)?(?:[\w-]+\s+){0,3}(?:course|class|lesson|notes?|break|walk|look|approach|position|survey|exam|test|route|train|bus|taxi|photos?|pictures?|samples?|measurements?|steps?|part|interest|issue|action|time)\b`;
+  String.raw`(?:(?:a|an|the|this|that|my)\s+)?(?:[\w-]+\s+){0,3}(?:course|class|lesson|notes?|break|walk|look|approach|position|survey|exam|test|route|train|bus|taxi|photos?|pictures?|samples?|measurements?|steps?|part|interest|issue|action|time|study|project|analysis|research|experiment|pipeline|workflow|search|review|reading|writing|calculation|simulation|model|modeling|size|coverage|power|resolution|quality|replicates?|controls?|design)\b`;
 const FIRST_PERSON_MEDICATION_DISCLOSURE = new RegExp(
   String.raw`\bi am taking\s+(?!${NON_CLINICAL_TAKING_ACTIVITY})\S+`,
+  'i'
+);
+const SHOULD_I_CHANGE_PERSONAL_SUBSTANCE = new RegExp(
+  String.raw`\bshould i\s+(?:take|stop|start|change|increase|decrease)\s+(?!${NON_CLINICAL_TAKING_ACTIVITY})\S+`,
   'i'
 );
 const DIRECT_CARE_ACTION =
@@ -130,6 +134,10 @@ const GENERIC_I_HAVE_CLINICAL = new RegExp(
 );
 const FIRST_PERSON_CLINICAL_HELP = new RegExp(
   String.raw`\bi need\b[\s\S]{0,80}\b(?:help|advice|guidance)\b[\s\S]{0,100}${CLINICAL_ACTION}`,
+  'i'
+);
+const AGGREGATE_RESEARCH_HELP = new RegExp(
+  String.raw`\bi need\s+(?:help|advice|guidance)\s+(?:with\s+)?(?:identif(?:y|ying)|analy[sz](?:e|ing)|compar(?:e|ing)|evaluat(?:e|ing)|prioritiz(?:e|ing))\b[\s\S]{0,100}(?:variants?|mutations?|genes?|associations?|symptom counts?|data|samples?)[\s\S]{0,100}(?:\b\d+\s+(?:patients?|participants?|subjects?|samples?)\b|\b(?:anonymized|de-identified|aggregate)\b|\bcohort\b|\bpopulation[- ]level\b)`,
   'i'
 );
 const SHOULD_I_CLINICAL = new RegExp(
@@ -149,12 +157,11 @@ const PATIENT_OR_FAMILY =
 const PERSON_THEN_CLINICAL = new RegExp(`${PATIENT_OR_FAMILY}[\\s\\S]{0,240}${CLINICAL_ACTION}`, 'i');
 const CLINICAL_THEN_PERSON = new RegExp(`${CLINICAL_ACTION}[\\s\\S]{0,240}${PATIENT_OR_FAMILY}`, 'i');
 
-function isAggregateResearchContext(text) {
+function isAggregateResearchOwnership(text) {
   const hasAggregateEvidence = AGGREGATE_RESEARCH_EVIDENCE.test(text);
   const hasCohortOutput = COHORT_LEVEL_RESEARCH_OUTPUT.test(text);
-  const hasOwnedResearchWork = AGGREGATE_DATA_OWNERSHIP.test(text)
-    && (hasAggregateEvidence || hasCohortOutput || RESEARCH_WORK_PRODUCT.test(text));
-  return (hasOwnedResearchWork || (hasAggregateEvidence && hasCohortOutput))
+  return AGGREGATE_DATA_OWNERSHIP.test(text)
+    && (hasAggregateEvidence || hasCohortOutput || RESEARCH_WORK_PRODUCT.test(text))
     && !DIRECT_PERSONAL_CARE_REQUEST.test(text);
 }
 
@@ -166,8 +173,9 @@ export function isPersonalClinicalPrompt(text) {
     || CLINICAL_FOR_ME.test(text)
     || FIRST_PERSON_DIAGNOSIS.test(text)
     || FIRST_PERSON_MEDICATION_DISCLOSURE.test(text)
-    || (GENERIC_I_HAVE_CLINICAL.test(text) && !isAggregateResearchContext(text))
-    || (FIRST_PERSON_CLINICAL_HELP.test(text) && !isAggregateResearchContext(text))
+    || SHOULD_I_CHANGE_PERSONAL_SUBSTANCE.test(text)
+    || (GENERIC_I_HAVE_CLINICAL.test(text) && !isAggregateResearchOwnership(text))
+    || (FIRST_PERSON_CLINICAL_HELP.test(text) && !AGGREGATE_RESEARCH_HELP.test(text))
     || SHOULD_I_CLINICAL.test(text)
     || PERSON_THEN_CLINICAL.test(text)
     || CLINICAL_THEN_PERSON.test(text);

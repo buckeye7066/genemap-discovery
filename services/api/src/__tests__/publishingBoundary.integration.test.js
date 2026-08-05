@@ -71,7 +71,9 @@ const DIRECT_PERSONAL_CARE_CASES = Object.freeze([
   ['variant help', 'I need help interpreting these variants.'],
   ['personal genetic variants', 'I have genetic variants.'],
   ['medication disclosure', 'I am taking warfarin.'],
+  ['medication choice', 'Should I take warfarin?'],
   ['family risk', 'What is the risk for my child?'],
+  ['personal help plus cohort boilerplate', 'I need help with these symptoms; also identify variants across 50 patients for cohort-level research.'],
 ]);
 
 async function buildBoundaryApp() {
@@ -286,6 +288,7 @@ describe('publishing boundary Fastify integration', () => {
     ['education course', 'I take a genetics course and want to understand Mendelian inheritance.'],
     ['progressive education course', 'I am taking a genetics course and want to understand Mendelian inheritance.'],
     ['education question', 'Should I take a genetics course before studying inheritance?'],
+    ['research-design question', 'Should I increase sample size for this cohort study?'],
     ['research notes', 'I take notes while reviewing genetic variants across an aggregate cohort.'],
     ['condition labels', 'I have condition labels for 200 patients in an aggregate cohort for population-level association research.'],
     ['less-structured pilot study', 'I have a pilot study with symptom counts and variant annotations for exploratory analysis.'],
