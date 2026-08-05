@@ -13,13 +13,11 @@ import {
   Lightbulb,
   Shield,
   TrendingUp,
-  FileStack,
   Lock,
   Beaker
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-const BulkVCFAnalysis = lazy(() => import("../components/research/BulkVCFAnalysis"));
 const ExternalDatabaseIntegration = lazy(() => import("../components/research/ExternalDatabaseIntegration"));
 const PathwayEnrichment = lazy(() => import("../components/research/PathwayEnrichment"));
 const HypothesisGenerator = lazy(() => import("../components/research/HypothesisGenerator"));
@@ -93,10 +91,10 @@ export default function ResearchMode() {
                 <h3 className="font-semibold text-slate-900">Research Mode Includes:</h3>
                 <div className="grid md:grid-cols-2 gap-3">
                   <div className="flex items-start gap-2">
-                    <FileStack className="w-5 h-5 text-blue-600 mt-0.5" />
+                    <Database className="w-5 h-5 text-blue-600 mt-0.5" />
                     <div>
-                      <p className="font-medium text-slate-900 text-sm">Bulk VCF Analysis</p>
-                      <p className="text-xs text-slate-600">Process multiple VCF files for cohort studies</p>
+                      <p className="font-medium text-slate-900 text-sm">Research Projects</p>
+                      <p className="text-xs text-slate-600">Organize source-checked gene lists and notes</p>
                     </div>
                   </div>
                   <div className="flex items-start gap-2">
@@ -150,7 +148,7 @@ export default function ResearchMode() {
             Research Mode
           </h1>
           <p className="text-lg text-slate-600 max-w-3xl mx-auto">
-            Advanced genomic research tools for cohort studies, pathway analysis, and hypothesis generation
+            Exploratory tools for database follow-up, pathway questions, hypothesis generation, and project organization
           </p>
           <div className="flex justify-center gap-2 mt-4">
             <Badge className="bg-indigo-600 text-white">
@@ -165,12 +163,8 @@ export default function ResearchMode() {
         </div>
 
         {/* Feature Tabs */}
-        <Tabs defaultValue="bulk-vcf" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-2 lg:grid-cols-5 h-auto"> {/* Changed to lg:grid-cols-5 */}
-            <TabsTrigger value="bulk-vcf" className="flex-col gap-1 py-3">
-              <FileStack className="w-5 h-5" />
-              <span className="text-xs">Bulk VCF</span>
-            </TabsTrigger>
+        <Tabs defaultValue="databases" className="space-y-6">
+          <TabsList className="grid w-full grid-cols-2 lg:grid-cols-4 h-auto">
             <TabsTrigger value="databases" className="flex-col gap-1 py-3">
               <Database className="w-5 h-5" />
               <span className="text-xs">Databases</span>
@@ -190,12 +184,6 @@ export default function ResearchMode() {
               <Badge className="bg-green-600 text-white text-[10px] px-1">New</Badge>
             </TabsTrigger>
           </TabsList>
-
-          <TabsContent value="bulk-vcf">
-            <Suspense fallback={<TabLoading />}>
-              <BulkVCFAnalysis userEducationLevel={user?.education_level} />
-            </Suspense>
-          </TabsContent>
 
           <TabsContent value="databases">
             <Suspense fallback={<TabLoading />}>
