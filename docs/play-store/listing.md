@@ -15,7 +15,7 @@ record exists in Play Console and the service account has app access +
 | Contact email | dr.johnwhite@axiombiolabs.org |
 | Contact website | https://genemap-discovery.vercel.app |
 | Privacy policy URL | https://genemap-discovery.vercel.app/PrivacyPolicy |
-| Category | Education (or Medical) |
+| Category | Education |
 
 ## Short description (80 chars max)
 
@@ -39,12 +39,12 @@ TEST YOURSELF
 • Immediate, level-appropriate feedback
 
 DISCOVER GENES AND PHENOTYPES
-• Phenotype → Gene Discovery: search a disease or trait (e.g. "Cystic Fibrosis", "polydactyly") and find associated genes with plain-language explanations
+• Phenotype → Gene Discovery: search a disease or trait (e.g. "Cystic Fibrosis", "polydactyly") and generate candidate-gene leads for follow-up in primary sources
 • Data Visualization Hub: add genes (BRCA1, TP53, CFTR…) and compare expression, interactions, and more side by side
-• VCF analysis and research tools for advanced users
+• Save candidate gene sets and organize exploratory research projects
 
 BUILT FOR HONEST SCIENCE
-GeneMap's AI is guided to stay scientifically careful — it explains what is known, flags uncertainty, and does not fabricate clinical claims. GeneMap is an educational and research tool, not a medical diagnosis or treatment service.
+GeneMap clearly labels AI-generated leads and distinguishes them from identifiers and coordinates resolved through external databases. AI output can be incomplete or wrong and must be checked in primary sources. GeneMap is an educational and exploratory research tool, not a medical diagnosis, variant-interpretation, pharmacogenomic, or treatment service.
 
 Subscriptions for premium features are available on the web.
 ```
@@ -63,9 +63,8 @@ to the Capacitor build) at a Pixel-class viewport.
 ## Data safety form — answers consistent with /PrivacyPolicy
 
 - Collects: email address + name (account management); optional demographic
-  info the user chooses to enter; user-generated learning content. Medical/
-  genomic data a user chooses to analyze is encrypted at rest
-  (MEDICAL_DATA_ENCRYPTION_KEY) and in transit.
+  info the user chooses to enter; user-generated learning and research content.
+  The publishable build does not accept medical records or personal VCF data.
 - Shares with processors only: OpenAI / Anthropic (AI explanations & quizzes),
   Stripe (web payments only — no in-app purchases), Vercel/Railway (hosting),
   Sentry (error monitoring).
@@ -76,9 +75,9 @@ to the Capacitor build) at a Pixel-class viewport.
 ## Content rating questionnaire hints
 
 Educational/reference science app. No ads, no gambling, no violence/sexual
-content. Health/medical education context — answer the medical/health section
-truthfully: it provides genetics education and research tooling, NOT diagnosis
-or treatment. Target audience: because learning levels start at "Elementary
+content. Genetics education may discuss diseases in a general academic context,
+but the app does not provide diagnosis, personal variant interpretation,
+pharmacogenomics, dosing, or treatment. Target audience: because learning levels start at "Elementary
 School", the app is suitable for a general/teen audience, but do NOT enroll it
 in the "Designed for Families" / Teacher-Approved program unless you complete
 those extra requirements; simplest path is a 13+ target audience.
