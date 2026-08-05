@@ -77,6 +77,7 @@ describe('clinical publishing boundary', () => {
     const terms = read('../../pages/TermsOfService.jsx');
     const premium = read('../../pages/Premium.jsx');
     const searchForm = read('../../components/search/SearchForm.jsx');
+    const phenotypeSearch = read('../../components/search/PhenotypeSearchService.jsx');
 
     expect(privacy).toContain('Publication-mode data boundary');
     expect(privacy).not.toContain('Health &amp; genetic data you upload');
@@ -87,6 +88,13 @@ describe('clinical publishing boundary', () => {
     expect(premium).not.toContain('All visualization tools');
     expect(searchForm).not.toContain('Premium Search');
     expect(searchForm).not.toContain('handleSubmit(e, true)');
+    expect(phenotypeSearch).not.toContain('Use your knowledge of genetics and genomics databases');
+    expect(phenotypeSearch).toContain('Treat OMIM, ClinVar, HPO, UniProt, HPA, GTEx, and PubMed as follow-up');
+
+    const capIndex = phenotypeSearch.indexOf('candidateGenes = candidateGenes.slice(0, maxCandidateLeads)');
+    const enrichIndex = phenotypeSearch.indexOf('await this.safeEnrich(symbols, [])');
+    expect(capIndex).toBeGreaterThan(-1);
+    expect(enrichIndex).toBeGreaterThan(capIndex);
 
     const playListing = read('../../../../docs/play-store/listing.md');
     expect(playListing).not.toContain('compare expression, interactions');

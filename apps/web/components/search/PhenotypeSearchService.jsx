@@ -54,6 +54,11 @@ export class PhenotypeSearchService {
         candidateGenes = await this.findCandidateGenes(analysis, effectivePremium, phenotypeQuery);
       }
 
+      // LLM output is untrusted: enforce the promised lead limits before any
+      // authoritative or per-gene enrichment can fan out into external calls.
+      const maxCandidateLeads = analysis.isDisease || analysis.queryType === 'disease' ? 15 : 8;
+      candidateGenes = candidateGenes.slice(0, maxCandidateLeads);
+
       const symbols = candidateGenes.map((g) => g.symbol).filter(Boolean);
       const { genes: authGenes } = await this.safeEnrich(symbols, []);
 
@@ -373,7 +378,7 @@ ${phenotypeAnalysis.inheritancePattern ? `\nNote: Inheritance pattern is ${pheno
 Based on the phenotype features: ${phenotypeTarget}
 
 Find candidate genes that could be associated with these phenotypes.
-Use your knowledge of genetics and genomics databases like OMIM, ClinVar, HPO, UniProt, HPA (Human Protein Atlas), and GTEx (Genotype-Tissue Expression).
+Use general genomics knowledge to generate exploratory research leads.
 
 For each gene, provide:
 - Gene symbol and full name
@@ -384,6 +389,10 @@ For each gene, provide:
 - Evidence species: human, animal, computational, mixed, or unknown
 
 Return 3-8 candidate leads ranked by model-estimated relevance for source verification.
+Treat OMIM, ClinVar, HPO, UniProt, HPA, GTEx, and PubMed as follow-up
+destinations. Do not imply that you queried them and do not invent citations,
+record identifiers, or evidence grades. These are candidate leads for independent
+source verification, not confirmed findings.
 `;
     }
 
