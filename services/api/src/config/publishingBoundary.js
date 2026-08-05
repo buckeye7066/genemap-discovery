@@ -17,10 +17,71 @@ const HIDDEN_PATH_PREFIXES = Object.freeze([
 ]);
 
 const HIGH_RISK_AGENT_IDS = new Set(['robert', 'anastasia']);
-const GENERATION_PATH_PREFIXES = Object.freeze(['/llm/', '/education/']);
+const GENERATION_PATH_PREFIXES = Object.freeze(['/llm', '/education']);
+const MAX_PATH_DECODE_PASSES = 2;
 
-function pathname(url = '') {
-  return String(url).split('?')[0] || '/';
+function rawPathname(url = '') {
+  return String(url).split('?')[0].split('#')[0] || '/';
+}
+
+function decodeAsciiEscapes(value) {
+  return value.replace(/%([0-9a-f]{2})/gi, (match, hex) => {
+    const codePoint = Number.parseInt(hex, 16);
+    return codePoint >= 0x20 && codePoint <= 0x7e
+      ? String.fromCharCode(codePoint)
+      : match;
+  });
+}
+
+// Decode a bounded number of times so encoded route letters, encoded slashes,
+// and one layer of double-encoding cannot bypass the boundary. A malformed
+// escape must never throw from a request hook; in that case, decode only valid
+// ASCII escapes and leave the malformed bytes untouched for Fastify's normal
+// 400/404 handling.
+function safeDecodePath(value) {
+  let current = value;
+  for (let pass = 0; pass < MAX_PATH_DECODE_PASSES; pass += 1) {
+    let decoded;
+    try {
+      decoded = decodeURIComponent(current);
+    } catch {
+      decoded = decodeAsciiEscapes(current);
+    }
+    if (decoded === current) break;
+    current = decoded;
+  }
+  return current;
+}
+
+function normalizeDotSegments(value) {
+  const segments = [];
+  for (const segment of value.split('/')) {
+    if (!segment || segment === '.') continue;
+    if (segment === '..') {
+      segments.pop();
+      continue;
+    }
+    segments.push(segment);
+  }
+  return `/${segments.join('/')}`;
+}
+
+function normalizePath(value = '') {
+  const decoded = safeDecodePath(rawPathname(value)).replace(/\/{2,}/g, '/');
+  return normalizeDotSegments(decoded).toLowerCase();
+}
+
+// In preHandler, Fastify has already matched the route. Its route template is
+// the authoritative path (for example `/clinical-trials/:trialId`) even when
+// the raw URL encoded route letters. Wildcard/not-found routes are not
+// authoritative, so they fall back to bounded, safe raw-path normalization.
+function policyPath({ routeUrl, url } = {}) {
+  const matchedRoute = typeof routeUrl === 'string'
+    && routeUrl.startsWith('/')
+    && !routeUrl.includes('*')
+    ? routeUrl
+    : null;
+  return normalizePath(matchedRoute || url);
 }
 
 function hasPathPrefix(path, prefix) {
@@ -36,26 +97,38 @@ function generationText(body) {
   return values.filter((value) => typeof value === 'string').join('\n');
 }
 
-// Two-sided patterns catch both “my variant ... risk” and “risk ... for me”.
-// They intentionally require personal/patient context AND a clinical-action
-// concept so general coursework such as “What is pharmacogenomics?” remains
-// available.
-const PERSONAL_CONTEXT =
-  String.raw`(?:\bmy\b|\bmine\b|\bfor me\b|\bi have\b|\bi was diagnosed\b|\bi am taking\b|\bpatient(?:'s)?\b|\bthis patient\b|\bmy (?:child|mother|father|spouse)\b)`;
 const CLINICAL_ACTION =
-  String.raw`(?:symptoms?|variants?|vcf|diagnos\w*|personal risk|risk level|medications?|medicines?|drugs?|dos(?:e|ing)|treatments?|therap(?:y|ies)|screening|prognosis|metabolizer|pharmacogen\w*|pathogenic\w*|clinical management|urgent|emergency)`;
-const PERSONAL_THEN_CLINICAL = new RegExp(`${PERSONAL_CONTEXT}[\\s\\S]{0,180}${CLINICAL_ACTION}`, 'i');
-const CLINICAL_THEN_PERSONAL = new RegExp(`${CLINICAL_ACTION}[\\s\\S]{0,180}${PERSONAL_CONTEXT}`, 'i');
+  String.raw`(?:symptoms?|variants?|genotyp\w*|vcf|diagnos\w*|personal risk|risk level|disease risk|medications?|medicines?|drugs?|dos(?:e|ing)|treatments?|therap(?:y|ies)|screening|prognosis|metabolizer|pharmacogen\w*|pathogenic\w*|clinical management|urgent|emergency)`;
+const MY_CLINICAL = new RegExp(
+  String.raw`\bmy\s+(?:own\s+)?(?:symptoms?|variants?|genotyp\w*|vcf|diagnos\w*|personal risk|risk(?:\s+level)?|medications?|medicines?|drugs?|dos(?:e|ing)|treatments?|therap(?:y|ies)|screening|prognosis|metabolizer|pharmacogen\w*|health|condition|care|results?)\b`,
+  'i'
+);
+const CLINICAL_FOR_ME = new RegExp(
+  `${CLINICAL_ACTION}[\\s\\S]{0,120}(?:\\bfor me\\b|\\bmine\\b)`,
+  'i'
+);
+const FIRST_PERSON_CLINICAL = new RegExp(
+  String.raw`\b(?:i have|i was diagnosed|i am taking|i take|i need|should i)\b[\s\S]{0,180}(?:symptoms?|variants?|genotyp\w*|diagnos\w*|risk|medications?|medicines?|drugs?|dos(?:e|ing)|treatments?|therap(?:y|ies)|screening|prognosis|metabolizer|pharmacogen\w*|pathogenic\w*)`,
+  'i'
+);
+const PATIENT_OR_FAMILY =
+  String.raw`(?:\bthis patient\b|\bmy patient(?:['’]s)?\b|\bthe patient['’]s\b|\bpatient['’]s\b|\bmy (?:child|son|daughter|mother|father|parent|sibling|brother|sister|spouse|partner|family member)(?:['’]s)?\b)`;
+const PERSON_THEN_CLINICAL = new RegExp(`${PATIENT_OR_FAMILY}[\\s\\S]{0,240}${CLINICAL_ACTION}`, 'i');
+const CLINICAL_THEN_PERSON = new RegExp(`${CLINICAL_ACTION}[\\s\\S]{0,240}${PATIENT_OR_FAMILY}`, 'i');
 
 export function isPersonalClinicalPrompt(text) {
   if (typeof text !== 'string' || !text.trim()) return false;
-  return PERSONAL_THEN_CLINICAL.test(text) || CLINICAL_THEN_PERSONAL.test(text);
+  return MY_CLINICAL.test(text)
+    || CLINICAL_FOR_ME.test(text)
+    || FIRST_PERSON_CLINICAL.test(text)
+    || PERSON_THEN_CLINICAL.test(text)
+    || CLINICAL_THEN_PERSON.test(text);
 }
 
-export function publicationBoundaryDecision({ url, body } = {}) {
+export function publicationBoundaryDecision({ url, routeUrl, body } = {}) {
   if (HIGH_RISK_CLINICAL_FEATURES_ENABLED) return null;
 
-  const path = pathname(url);
+  const path = policyPath({ routeUrl, url });
   if (HIDDEN_PATH_PREFIXES.some((prefix) => hasPathPrefix(path, prefix))) {
     return {
       statusCode: 404,
@@ -64,7 +137,7 @@ export function publicationBoundaryDecision({ url, body } = {}) {
     };
   }
 
-  if (!GENERATION_PATH_PREFIXES.some((prefix) => path.startsWith(prefix))) {
+  if (!GENERATION_PATH_PREFIXES.some((prefix) => hasPathPrefix(path, prefix))) {
     return null;
   }
 
@@ -89,14 +162,17 @@ export function publicationBoundaryDecision({ url, body } = {}) {
 }
 
 export async function enforcePublishingBoundary(request, reply) {
+  const rawUrl = request?.raw?.url || request?.url;
+  const routeUrl = request?.routeOptions?.url;
   const decision = publicationBoundaryDecision({
-    url: request?.raw?.url || request?.url,
+    url: rawUrl,
+    routeUrl,
     body: request?.body,
   });
   if (!decision) return undefined;
 
   request?.log?.info?.(
-    { path: pathname(request?.raw?.url || request?.url), boundaryCode: decision.code },
+    { path: policyPath({ routeUrl, url: rawUrl }), boundaryCode: decision.code },
     'publication boundary blocked request'
   );
   return reply.code(decision.statusCode).send({
@@ -108,8 +184,9 @@ export async function enforcePublishingBoundary(request, reply) {
 
 export const __test = {
   generationText,
-  pathname,
+  normalizePath,
+  policyPath,
+  safeDecodePath,
   HIDDEN_PATH_PREFIXES,
   HIGH_RISK_AGENT_IDS,
 };
-
