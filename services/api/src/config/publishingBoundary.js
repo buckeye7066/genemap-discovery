@@ -202,7 +202,7 @@ const ATTRIBUTED_GENOMIC_ARTIFACT = new RegExp(
 );
 const NAME_TOKEN = String.raw`(?:\p{L}\.|\p{L}[\p{L}'’.-]*)`;
 const NAMED_OWNER_BEFORE_GENOMIC_ARTIFACT = new RegExp(
-  String.raw`(?:\b(?:analy[sz]e|process|review|interpret|classify|evaluate|assess|upload|use|summari[sz]e|annotate|compare|explain)\s+|(?:^|[.;!?]\s*))(${NAME_TOKEN}(?:\s+${NAME_TOKEN}){1,2}?)\s+(?:(?:gene|sample|specimen)\s+)?${GENOMIC_DATA_ARTIFACT}\b`,
+  String.raw`(?:\b(?:analy[sz]e|process|review|interpret|classify|evaluate|assess|upload|use|summari[sz]e|annotate|compare|explain)\s+|(?:^|[.;!?]\s*)(?!(?:analy[sz]e|process|review|interpret|classify|evaluate|assess|upload|use|summari[sz]e|annotate|compare|explain)\b))(${NAME_TOKEN}(?:\s+${NAME_TOKEN}){0,2}?)\s+(?:(?:gene|sample|specimen)\s+)?${GENOMIC_ARTIFACT}\b`,
   'giu'
 );
 const OWNER_PREFIX_ACTION =
@@ -217,15 +217,8 @@ const GENERIC_ATTRIBUTION_OWNER =
   /^(?:(?:an?|the|this|that|each|any)\s+)?(?:(?:general|human|mouse|yeast|plant|model|target|candidate|reference|disease[- ]associated|protein[- ]coding|tumou?r[- ]suppressor|dna[- ]repair|genetic|genomic)\s+){0,2}(?:genes?|proteins?|enzymes?|pathways?|cells?|tissues?|organisms?|species|strains?|models?|studies|research|genetics?\s+(?:students?|education|lessons?|courses?))(?:\s+in\s+general\s+genetics\s+education)?\s*$/i;
 const NAMED_GENE_ATTRIBUTION_OWNER =
   /^(?:(?:an?|the|this|that)\s+)?[A-Z][A-Z0-9-]{1,9}\s+gene(?:\s+in\s+general\s+genetics\s+education)?\s*$/u;
-const NON_PERSON_OWNER_WORDS = new Set([
-  'a', 'an', 'and', 'are', 'aggregate', 'analysis', 'analyze', 'anonymized', 'biobank', 'candidate',
-  'cohort', 'controls', 'data', 'dataset', 'deidentified', 'dna', 'explain',
-  'for', 'from', 'gene', 'genes', 'genetic', 'genetics', 'genomic', 'has', 'have', 'how', 'human', 'i', 'is', 'lab', 'laboratory', 'model',
-  'mouse', 'mutation', 'mutations', 'non-identifiable', 'pathway', 'population',
-  'protein', 'public', 'raw', 'reference', 'repository', 'research', 'review',
-  'our', 'rna', 'samples', 'student', 'students', 'study', 'synthetic', 'the', 'to', 'types', 'using', 'variant',
-  'variants', 'we', 'what', 'why', 'with', 'yeast', 'your',
-]);
+const SAFE_BARE_ARTIFACT_PREFIX =
+  /^(?:i have|we have|what (?:is|are)|types of|the human|raw|how (?:an?|the|does|do)(?:\s+(?:gene|protein|pathway)['’]s)?|(?:(?:an?|the)\s+)?(?:aggregate|anonymized|deidentified|public|synthetic)\s+cohort['’]s|(?:an?|the) (?:gene|protein|pathway)|(?:rare|common|novel|known|candidate|putative|predicted|pathogenic|benign|coding|noncoding|germline|somatic|structural|genetic|genomic|human|mouse|yeast|aggregate|anonymized|deidentified|public|synthetic|reference|target|disease[- ]associated|protein[- ]altering|early[- ]onset|late[- ]onset|loss[- ]of[- ]function|gain[- ]of[- ]function|population[- ]level|cohort[- ]level|treatment[- ]response)(?:\s+(?:disease|associated|gene|genes|cohort|population|level|variants?|mutations?|calls?|data|results?|response|function))?)$/i;
 const FROM_SENSITIVE_SOURCE = /\bfrom\b/i;
 const EXPLICIT_AGGREGATE_DATA_SOURCE =
   /\bfrom\s+(?:(?:an?|the)\s+)?(?:(?:(?:anonymized|de-identified|deidentified|non-identifiable|aggregate|synthetic|public)\s+){1,3}(?:cohort|population|data ?set|data|records?|samples?|biobank|repository)|\d+(?:\s+|-)\s*(?:patients?|participants?|subjects?|samples?|controls?))\b/i;
@@ -233,22 +226,6 @@ const EXPLICIT_AGGREGATE_SENSITIVE_CONTEXT = new RegExp(
   String.raw`(?:\b(?:anonymized|de-identified|deidentified|non-identifiable|aggregate|synthetic|public)\b[\s\S]{0,100}\b${GENOMIC_DATA_ARTIFACT}\b|\b${GENOMIC_DATA_ARTIFACT}\b[\s\S]{0,100}\b(?:anonymized|de-identified|deidentified|non-identifiable|aggregate|synthetic|public)\b)`,
   'i'
 );
-
-function looksLikeNamedIndividual(owner) {
-  const tokens = String(owner)
-    .trim()
-    .toLowerCase()
-    .replace(/[.’]$/g, '')
-    .split(/\s+/)
-    .filter(Boolean);
-  if (tokens.length < 2 || tokens.length > 3 || tokens.some((token) => /\d/.test(token))) {
-    return false;
-  }
-  if (/^(?:patient|participant|subject|dr)$/.test(tokens[0])) {
-    return !/^(?:data|records?|files?|samples?|cohort|population)$/.test(tokens[1]);
-  }
-  return tokens.every((token) => !NON_PERSON_OWNER_WORDS.has(token));
-}
 
 function hasIndividualGenomicOwnership(text) {
   // Ownership is a separate fail-closed boundary from generic sensitive-data
@@ -285,7 +262,11 @@ function hasIndividualGenomicOwnership(text) {
     return true;
   }
   for (const match of String(text).matchAll(NAMED_OWNER_BEFORE_GENOMIC_ARTIFACT)) {
-    if (looksLikeNamedIndividual(match[1])) return true;
+    // Bare words before an artifact are treated as an owner unless they match
+    // a bounded, non-person research/education descriptor. This blocks names
+    // in any casing without trying to infer a name lexicon, while keeping
+    // explicit phrases such as "rare disease variants" publishable.
+    if (!SAFE_BARE_ARTIFACT_PREFIX.test(match[1].trim())) return true;
   }
   return false;
 }

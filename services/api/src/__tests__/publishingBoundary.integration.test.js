@@ -137,6 +137,11 @@ const ALLOWED_CASES = Object.freeze([
     prompt: 'Analyze disease-associated variants across an anonymized cohort of 50 patients.',
   },
   {
+    label: 'aggregate rare disease variants',
+    task: PUBLICATION_TASKS.AGGREGATE_GENOMICS_RESEARCH,
+    prompt: 'Analyze rare disease variants across an anonymized cohort of 50 patients.',
+  },
+  {
     label: 'non-medication taking phrase',
     task: PUBLICATION_TASKS.GENETICS_EDUCATION,
     prompt: 'I take this course; explain how BRCA1 functions in DNA repair.',
@@ -226,6 +231,9 @@ const BLOCKED_CASES = Object.freeze([
   ['possessive person sample VCF', "Analyze Jane Doe's sample VCF alongside 50 patients across the cohort."],
   ['VCF of single-token name', 'Analyze VCF of John alongside 50 patients across the cohort.'],
   ['VCF for first-person pronoun', 'Analyze VCF for me alongside 50 patients across the cohort.'],
+  ['bare named variants', 'Analyze Jane Doe variants alongside 50 patients across the cohort.'],
+  ['lowercase bare named variants', 'Analyze jane doe variants alongside 50 patients across the cohort.'],
+  ['all-caps bare named variants', 'ANALYZE JANE DOE VARIANTS ALONGSIDE 50 PATIENTS ACROSS THE COHORT.'],
   ['initialed named raw genomics', 'Analyze raw genomic data from J. Doe.'],
   ['middle-initial raw genomics', 'Analyze raw genomic data from Jane Q. Doe.'],
   ['role-named raw genomics', 'Analyze raw genomic data from Patient Smith.'],
