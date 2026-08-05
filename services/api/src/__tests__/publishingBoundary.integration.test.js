@@ -113,6 +113,8 @@ const AGGREGATE_RESEARCH_CASES = Object.freeze([
   ['doctor-reported cohort material', 'The doctor says I have an anonymized cohort of 200 patients; compare genotype variables at the population level.'],
   ['laboratory research description', 'My lab studies DNA repair in yeast.'],
   ['positive-for research approach', 'I am positive for using a cohort study approach.'],
+  ['patient-cohort variant analysis', 'Analyzing anonymized variants across this patient cohort of 500 participants.'],
+  ['de-identified result summary', 'Summarize my results for the de-identified cohort of 200 samples.'],
 ]);
 
 async function buildBoundaryApp() {

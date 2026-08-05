@@ -242,10 +242,7 @@ export function isPersonalClinicalPrompt(text) {
     || FIRST_PERSON_FUTURE_DISEASE.test(text)
     || DIRECT_PERSONAL_CLINICAL_HELP.test(text)
     || FIRST_PERSON_DIAGNOSIS.test(text)
-    || MY_CLINICAL.test(text)
     || CLINICAL_FOR_ME.test(text)
-    || PERSON_THEN_CLINICAL.test(text)
-    || CLINICAL_THEN_PERSON.test(text)
     || SIMPLE_MEDICATION_DISCLOSURE.test(text)
     || SIMPLE_MEDICATION_DECISION.test(text)
     || (
@@ -256,7 +253,10 @@ export function isPersonalClinicalPrompt(text) {
 
   if (aggregateResearchIntent) return false;
 
-  return GENERIC_I_HAVE_CLINICAL.test(text)
+  return MY_CLINICAL.test(text)
+    || PERSON_THEN_CLINICAL.test(text)
+    || CLINICAL_THEN_PERSON.test(text)
+    || GENERIC_I_HAVE_CLINICAL.test(text)
     || FIRST_PERSON_CLINICAL_HELP.test(text)
     || SHOULD_I_CARE.test(text)
     || SHOULD_I_UNKNOWN_MEDICATION.test(text)

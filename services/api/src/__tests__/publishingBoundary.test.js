@@ -366,6 +366,12 @@ describe('publishable education/research boundary', () => {
     ['positive-for genetics course', '/education/chat', {
       messages: [{ role: 'user', content: 'I am positive for taking a genetics course.' }],
     }],
+    ['patient-cohort variant analysis', '/llm/invoke', {
+      prompt: 'Analyzing anonymized variants across this patient cohort of 500 participants.',
+    }],
+    ['de-identified result summary', '/education/chat', {
+      messages: [{ role: 'user', content: 'Summarize my results for the de-identified cohort of 200 samples.' }],
+    }],
     ['ordinary note-taking question', '/education/chat', {
       messages: [{ role: 'user', content: 'Should I take notes while learning how variants are classified?' }],
     }],
