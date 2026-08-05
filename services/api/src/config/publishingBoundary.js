@@ -188,14 +188,48 @@ const EXPLICITLY_IDENTIFIABLE =
   /\b(?:identifiable|identified|non[- ]anonymized|not anonymized)\b[\s\S]{0,100}\b(?:patient|participant|subject|individual|data|records?|files?)\b/i;
 const NAMED_SENSITIVE_SOURCE =
   /\bfrom\s+(?:(?:patient|participant|subject|dr)\.?\s+)?(?:\p{Lu}\.?|\p{Lu}[\p{Ll}'-]+)(?:\s+(?:\p{Lu}\.?|\p{Lu}[\p{Ll}'-]+)){1,2}\b/u;
+const GENOMIC_ARTIFACT =
+  String.raw`(?:raw\s+)?(?:vcf(?:\s+(?:data|records?|files?|results?))?|variant\s+calls?|variants?|mutations?|(?:genomic|genetic|dna|genotype|wes|wgs|rna[- ]?seq)\s+(?:data|records?|files?|results?))`;
+const POSSESSIVE_GENOMIC_ARTIFACT = new RegExp(
+  String.raw`([^,.;!?\n]{1,100})['’]s\s+${GENOMIC_ARTIFACT}\b`,
+  'giu'
+);
+const ATTRIBUTED_GENOMIC_ARTIFACT = new RegExp(
+  String.raw`\b${GENOMIC_ARTIFACT}\b[\s\S]{0,40}\b(?:belong(?:s|ing)?\s+to|owned\s+by)\s+([^,.;!?\n]{1,100})`,
+  'giu'
+);
+const SAFE_AGGREGATE_OWNER_AT_END =
+  /(?:^|\s)(?:(?:an?|the)\s+)?(?:(?:(?:anonymized|de-identified|deidentified|non-identifiable|aggregate|synthetic|public)\s+){1,3})?(?:cohort|population|data ?set|biobank|repository|\d+(?:\s+|-)\s*(?:patients?|participants?|subjects?|samples?|controls?))\s*$/i;
+const SAFE_AGGREGATE_OWNER_AT_START =
+  /^(?:(?:an?|the)\s+)?(?:(?:(?:anonymized|de-identified|deidentified|non-identifiable|aggregate|synthetic|public)\s+){1,3})?(?:cohort|population|data ?set|biobank|repository|\d+(?:\s+|-)\s*(?:patients?|participants?|subjects?|samples?|controls?))\b/i;
 const FROM_SENSITIVE_SOURCE = /\bfrom\b/i;
 const EXPLICIT_AGGREGATE_DATA_SOURCE =
   /\bfrom\s+(?:(?:an?|the)\s+)?(?:(?:(?:anonymized|de-identified|deidentified|non-identifiable|aggregate|synthetic|public)\s+){1,3}(?:cohort|population|data ?set|data|records?|samples?|biobank|repository)|\d+(?:\s+|-)\s*(?:patients?|participants?|subjects?|samples?|controls?))\b/i;
 const EXPLICIT_AGGREGATE_SENSITIVE_CONTEXT =
   /(?:\b(?:anonymized|de-identified|deidentified|non-identifiable|aggregate|synthetic|public)\b[\s\S]{0,100}\b(?:raw\s+)?(?:genomic|genetic|dna|vcf|variant|genotype|wes|wgs|rna[- ]?seq)\s+(?:data|records?|files?|results?)\b|\b(?:raw\s+)?(?:genomic|genetic|dna|vcf|variant|genotype|wes|wgs|rna[- ]?seq)\s+(?:data|records?|files?|results?)\b[\s\S]{0,100}\b(?:anonymized|de-identified|deidentified|non-identifiable|aggregate|synthetic|public)\b)/i;
 
+function hasIndividualGenomicOwnership(text) {
+  // Ownership is a separate fail-closed boundary from generic sensitive-data
+  // wording. A standalone VCF or set of variant calls is still an individual
+  // genomic artifact when it is attributed to a person; a later cohort count
+  // cannot sanitize that ownership. Only explicitly aggregate owners pass.
+  for (const match of String(text).matchAll(POSSESSIVE_GENOMIC_ARTIFACT)) {
+    if (!SAFE_AGGREGATE_OWNER_AT_END.test(match[1].trim())) return true;
+  }
+  for (const match of String(text).matchAll(ATTRIBUTED_GENOMIC_ARTIFACT)) {
+    if (!SAFE_AGGREGATE_OWNER_AT_START.test(match[1].trim())) return true;
+  }
+  return false;
+}
+
 function hasUnsafeSensitiveData(text) {
-  if (IDENTIFIER.test(text) || EXPLICITLY_IDENTIFIABLE.test(text)) return true;
+  if (
+    IDENTIFIER.test(text) ||
+    EXPLICITLY_IDENTIFIABLE.test(text) ||
+    hasIndividualGenomicOwnership(text)
+  ) {
+    return true;
+  }
 
   return splitIntentClauses(text).some((clause) => {
     if (!DATA_EXECUTION.test(clause) || !SENSITIVE_DATA_MATERIAL.test(clause)) return false;
@@ -476,6 +510,7 @@ export async function enforcePublishingBoundary(request, reply) {
 export const __test = {
   generationText,
   hasDirectPersonalOrClinicalExecution,
+  hasIndividualGenomicOwnership,
   hasUnsafeSensitiveData,
   isAggregateResearchIntent,
   isCatalogEducationConversation,
