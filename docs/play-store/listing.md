@@ -40,7 +40,7 @@ TEST YOURSELF
 
 DISCOVER GENES AND PHENOTYPES
 • Phenotype → Gene Discovery: search a disease or trait (e.g. "Cystic Fibrosis", "polydactyly") and generate candidate-gene leads for follow-up in primary sources
-• Data Visualization Hub: add genes (BRCA1, TP53, CFTR…) and compare expression, interactions, and more side by side
+• Review clearly labeled AI candidate-gene summaries alongside deterministic links to NCBI Gene, ClinVar, UniProt, and PubMed searches
 • Save candidate gene sets and organize exploratory research projects
 
 BUILT FOR HONEST SCIENCE
