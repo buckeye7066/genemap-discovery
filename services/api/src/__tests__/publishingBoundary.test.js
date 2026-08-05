@@ -171,6 +171,10 @@ describe('publishable education/research boundary', () => {
     'I am taking warfarin; what dose should I use for my genotype?',
     'What diagnosis fits this patient and these symptoms?',
     'Explain the pharmacogenomic drug implications for my child.',
+    'I have cancer and want treatment options.',
+    'I have diabetes and want medication advice.',
+    'I have chest pain; tell me what diagnosis this is.',
+    'I have a BRCA1 mutation; how should I be screened?',
   ])('blocks personalized clinical generation: %s', (prompt) => {
     expect(isPersonalClinicalPrompt(prompt)).toBe(true);
     expect(publicationBoundaryDecision({ url: '/education/chat', body: {
@@ -188,6 +192,15 @@ describe('publishable education/research boundary', () => {
       })).toBeNull();
     }
   );
+
+  it('does not let aggregate vocabulary override a later personal-care request', () => {
+    const prompt = `${FIRST_PERSON_AGGREGATE_RESEARCH_PROMPTS[0]} I also have cancer and want treatment options for me.`;
+    expect(isPersonalClinicalPrompt(prompt)).toBe(true);
+    expect(publicationBoundaryDecision({ url: '/llm/invoke', body: { prompt } })).toMatchObject({
+      statusCode: 403,
+      code: 'EDUCATION_RESEARCH_BOUNDARY',
+    });
+  });
 
   it.each([
     ['HypothesisGenerator', buildHypothesisWrapper(FIRST_PERSON_AGGREGATE_RESEARCH_PROMPTS[0])],

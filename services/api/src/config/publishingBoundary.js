@@ -98,9 +98,9 @@ function generationText(body) {
 }
 
 const CLINICAL_ACTION =
-  String.raw`(?:symptoms?|variants?|genotyp\w*|vcf|diagnos\w*|personal risk|risk level|disease risk|medications?|medicines?|drugs?|dos(?:e|ing)|treatments?|therap(?:y|ies)|screening|prognosis|metabolizer|pharmacogen\w*|pathogenic\w*|clinical management|urgent|emergency)`;
+  String.raw`(?:symptoms?|variants?|mutations?|genotyp\w*|vcf|diagnos\w*|personal risk|risk level|disease risk|medications?|medicines?|drugs?|dos(?:e|ing)|treatments?|therap(?:y|ies)|screen\w*|prognosis|metabolizer|pharmacogen\w*|pathogenic\w*|clinical management|urgent|emergency)`;
 const MY_CLINICAL = new RegExp(
-  String.raw`\bmy\s+(?:own\s+)?(?:symptoms?|variants?|genotyp\w*|vcf|diagnos\w*|personal risk|risk(?:\s+level)?|medications?|medicines?|drugs?|dos(?:e|ing)|treatments?|therap(?:y|ies)|screening|prognosis|metabolizer|pharmacogen\w*|health|condition|care|results?)\b`,
+  String.raw`\bmy\s+(?:own\s+)?(?:symptoms?|variants?|mutations?|genotyp\w*|vcf|diagnos\w*|personal risk|risk(?:\s+level)?|medications?|medicines?|drugs?|dos(?:e|ing)|treatments?|therap(?:y|ies)|screen\w*|prognosis|metabolizer|pharmacogen\w*|health|condition|care|results?)\b`,
   'i'
 );
 const CLINICAL_FOR_ME = new RegExp(
@@ -108,36 +108,52 @@ const CLINICAL_FOR_ME = new RegExp(
   'i'
 );
 // First-person wording is not itself personal-clinical intent. Researchers
-// naturally say "I have WES data from 50 patients" or "I need to identify
-// variants across the cohort." Keep the personal anchors explicit so those
-// aggregate-research requests are not rejected merely because clinical words
-// appear later in a long UI prompt wrapper.
+// naturally say "I have WES data from 50 patients". Personal-care requests are
+// evaluated first; only explicit aggregate data ownership paired with a
+// cohort-level research output can neutralize the otherwise fail-closed
+// "I have ... clinical action" rule.
 const FIRST_PERSON_DIAGNOSIS_OR_MEDICATION =
   /\bi\s+(?:(?:was|have\s+been)\s+diagnosed\b|(?:am\s+taking|take)\b)/i;
-const I_HAVE_PERSONAL_CLINICAL = new RegExp(
-  String.raw`\bi have\s+(?:(?:been experiencing|experienced|tested positive for|a|an|the|my|these|those|some|several|multiple|one|two|three|new|recent|current|chronic|severe|recurrent|unexplained|known|suspected)\s+){0,5}(?:symptoms?|variants?|genotyp\w*|vcf|diagnos\w*|personal risk|risk level|disease risk|medications?|medicines?|drugs?|dos(?:e|ing)|treatments?|therap(?:y|ies)|screening|prognosis|metabolizer|pharmacogen\w*|pathogenic\w*|health condition|condition|results?)\b`,
+const DIRECT_CARE_ACTION =
+  String.raw`(?:diagnos\w*|personal risk|risk level|disease risk|medication(?:s| advice)?|medicine(?:s| advice)?|drug(?:s| advice)?|dos(?:e|ing)|treatment(?:s| options?)?|therap(?:y|ies)|screen\w*|prognosis|metabolizer|pharmacogen\w*|clinical management|medical advice|urgent|emergency)`;
+const DIRECT_PERSONAL_CARE_REQUEST = new RegExp(
+  String.raw`\b(?:i|me|my|mine)\b[\s\S]{0,160}\b(?:want|need|tell me|advise me|how should i|what should i|should i|can i)\b[\s\S]{0,120}${DIRECT_CARE_ACTION}`,
   'i'
 );
-const I_NEED_PERSONAL_CLINICAL = new RegExp(
-  String.raw`\bi need(?:\s+to\s+(?:know|understand|decide|find(?: out)?|get|choose))?[\s\S]{0,60}(?:diagnos\w*|personal risk|risk level|disease risk|medications?|medicines?|drugs?|dos(?:e|ing)|treatments?|therap(?:y|ies)|screening|prognosis|clinical management)\b`,
+const GENERIC_I_HAVE_CLINICAL = new RegExp(
+  String.raw`\bi have\b[\s\S]{0,320}${CLINICAL_ACTION}`,
   'i'
 );
 const SHOULD_I_CLINICAL = new RegExp(
-  String.raw`\bshould i\b[\s\S]{0,180}(?:symptoms?|variants?|genotyp\w*|diagnos\w*|risk|medications?|medicines?|drugs?|dos(?:e|ing)|treatments?|therap(?:y|ies)|screening|prognosis|metabolizer|pharmacogen\w*|pathogenic\w*)`,
+  String.raw`\bshould i\b[\s\S]{0,180}(?:symptoms?|variants?|mutations?|genotyp\w*|diagnos\w*|risk|medications?|medicines?|drugs?|dos(?:e|ing)|treatments?|therap(?:y|ies)|screen\w*|prognosis|metabolizer|pharmacogen\w*|pathogenic\w*)`,
   'i'
 );
+const AGGREGATE_DATA_OWNERSHIP =
+  /\bi have\b[\s\S]{0,140}(?:\b(?:wes|whole[- ]exome|whole[- ]genome|wgs|rna[- ]?seq|transcriptom\w*|genom\w*|proteom\w*|metabolom\w*)\b(?:\s+data)?|\bdata ?sets?\b|\b(?:anonymized|de-identified|aggregate)\s+cohort\b)/i;
+const AGGREGATE_RESEARCH_EVIDENCE =
+  /(?:\b(?:anonymized|de-identified|aggregate)\b|\b\d+\s+(?:patients?|participants?|subjects?|samples?)\b|\bpatients?\b[\s\S]{0,100}\bcontrols?\b|\bcohort\b|\bpopulation[- ]level\b|\bassociation research\b)/i;
+const COHORT_LEVEL_RESEARCH_OUTPUT =
+  /(?:\b(?:across|within|for|at)\s+(?:the\s+)?cohort\b|\bcohort[- ]level\b|\bpopulation[- ]level\b|\bassociation research\b|\bcompare\b[\s\S]{0,120}\b(?:cohort|patients?|controls?|samples?)\b|\bidentify\b[\s\S]{0,100}\b(?:variants?|mutations?|genes?|associations?)\b[\s\S]{0,100}\b(?:cohort|patients?|controls?|population)\b)/i;
 const PATIENT_OR_FAMILY =
   String.raw`(?:\bthis patient\b|\bmy patient(?:['’]s)?\b|\bthe patient['’]s\b|\bpatient['’]s\b|\bmy (?:child|son|daughter|mother|father|parent|sibling|brother|sister|spouse|partner|family member)(?:['’]s)?\b)`;
 const PERSON_THEN_CLINICAL = new RegExp(`${PATIENT_OR_FAMILY}[\\s\\S]{0,240}${CLINICAL_ACTION}`, 'i');
 const CLINICAL_THEN_PERSON = new RegExp(`${CLINICAL_ACTION}[\\s\\S]{0,240}${PATIENT_OR_FAMILY}`, 'i');
 
+function isAggregateResearchOwnership(text) {
+  return AGGREGATE_DATA_OWNERSHIP.test(text)
+    && AGGREGATE_RESEARCH_EVIDENCE.test(text)
+    && COHORT_LEVEL_RESEARCH_OUTPUT.test(text)
+    && !DIRECT_PERSONAL_CARE_REQUEST.test(text);
+}
+
 export function isPersonalClinicalPrompt(text) {
   if (typeof text !== 'string' || !text.trim()) return false;
+  if (DIRECT_PERSONAL_CARE_REQUEST.test(text)) return true;
+
   return MY_CLINICAL.test(text)
     || CLINICAL_FOR_ME.test(text)
     || FIRST_PERSON_DIAGNOSIS_OR_MEDICATION.test(text)
-    || I_HAVE_PERSONAL_CLINICAL.test(text)
-    || I_NEED_PERSONAL_CLINICAL.test(text)
+    || (GENERIC_I_HAVE_CLINICAL.test(text) && !isAggregateResearchOwnership(text))
     || SHOULD_I_CLINICAL.test(text)
     || PERSON_THEN_CLINICAL.test(text)
     || CLINICAL_THEN_PERSON.test(text);

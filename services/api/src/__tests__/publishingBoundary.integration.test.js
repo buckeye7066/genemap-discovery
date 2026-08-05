@@ -54,6 +54,13 @@ Do not infer diagnosis, personal genetic risk, treatment, or clinical action.`,
   ],
 ]);
 
+const DIRECT_PERSONAL_CARE_CASES = Object.freeze([
+  ['cancer treatment', 'I have cancer and want treatment options.'],
+  ['diabetes medication', 'I have diabetes and want medication advice.'],
+  ['chest-pain diagnosis', 'I have chest pain; tell me what diagnosis this is.'],
+  ['BRCA1 screening', 'I have a BRCA1 mutation; how should I be screened?'],
+]);
+
 async function buildBoundaryApp() {
   const app = Fastify({ logger: false });
   const handler = vi.fn(async () => ({ ok: true }));
@@ -238,6 +245,24 @@ describe('publishing boundary Fastify integration', () => {
       });
       expect(response.statusCode).toBe(403);
       expect(response.json()).toMatchObject({ code: 'EDUCATION_RESEARCH_BOUNDARY' });
+      expect(handler).not.toHaveBeenCalled();
+    } finally {
+      await app.close();
+    }
+  });
+
+  it.each(DIRECT_PERSONAL_CARE_CASES.flatMap(([label, prompt]) => [
+    [label, '/llm/invoke', { prompt }],
+    [label, '/education/chat', { messages: [{ role: 'user', content: prompt }] }],
+  ]))('blocks %s end-to-end on %s without executing the handler', async (_label, url, payload) => {
+    const { app, handler } = await buildBoundaryApp();
+    try {
+      const response = await app.inject({ method: 'POST', url, payload });
+      expect(response.statusCode).toBe(403);
+      expect(response.json()).toMatchObject({
+        code: 'EDUCATION_RESEARCH_BOUNDARY',
+        publicationMode: 'education_research',
+      });
       expect(handler).not.toHaveBeenCalled();
     } finally {
       await app.close();
