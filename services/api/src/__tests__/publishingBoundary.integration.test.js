@@ -97,6 +97,16 @@ const ALLOWED_CASES = Object.freeze([
     prompt: 'Explain how CYP2C9 affects warfarin metabolism in general pharmacogenomics education.',
   },
   {
+    label: 'generic gene possessive education',
+    task: PUBLICATION_TASKS.GENETICS_EDUCATION,
+    prompt: "Explain how a gene's mutations alter protein function in general genetics education.",
+  },
+  {
+    label: 'named gene possessive education',
+    task: PUBLICATION_TASKS.GENETICS_EDUCATION,
+    prompt: "Explain how BRCA1 gene's variants are studied in general genetics education.",
+  },
+  {
     label: 'non-medication taking phrase',
     task: PUBLICATION_TASKS.GENETICS_EDUCATION,
     prompt: 'I take this course; explain how BRCA1 functions in DNA repair.',
@@ -157,6 +167,11 @@ const BLOCKED_CASES = Object.freeze([
   ['initialed standalone VCF plus cohort', "Analyze J. Doe's VCF alongside 50 patients across the cohort."],
   ['middle-initial standalone VCF plus cohort', "Analyze Jane Q. Doe's VCF alongside 50 patients across the cohort."],
   ['accented standalone VCF plus cohort', "Analyze María García's VCF alongside 50 patients across the cohort."],
+  ['safe-prefix owner plus individual', 'Analyze variant calls belonging to an anonymized cohort and Jane Doe alongside 50 patients across the cohort.'],
+  ['safe-prefix owner containing individual', 'Analyze variant calls belonging to an anonymized cohort of Jane Doe and 50 patients across the cohort.'],
+  ['individual beside safe possessive owner', "Analyze John Smith and an anonymized cohort's VCF alongside 50 patients across the cohort."],
+  ['safe phrase before individual possessive owner', "Analyze the anonymized cohort and Jane Doe's VCF alongside 50 patients across the cohort."],
+  ['nested individual gene ownership', "Analyze Jane Doe's gene's variants alongside 50 patients across the cohort."],
   ['initialed named raw genomics', 'Analyze raw genomic data from J. Doe.'],
   ['middle-initial raw genomics', 'Analyze raw genomic data from Jane Q. Doe.'],
   ['role-named raw genomics', 'Analyze raw genomic data from Patient Smith.'],

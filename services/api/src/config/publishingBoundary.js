@@ -195,13 +195,15 @@ const POSSESSIVE_GENOMIC_ARTIFACT = new RegExp(
   'giu'
 );
 const ATTRIBUTED_GENOMIC_ARTIFACT = new RegExp(
-  String.raw`\b${GENOMIC_ARTIFACT}\b[\s\S]{0,40}\b(?:belong(?:s|ing)?\s+to|owned\s+by)\s+([^,.;!?\n]{1,100})`,
+  String.raw`\b${GENOMIC_ARTIFACT}\b[\s\S]{0,40}\b(?:belong(?:s|ing)?\s+to|owned\s+by)\s+([^,.;!?\n]{1,100}?)(?=\s+\b(?:alongside|across|within|then)\b|[,.;!?\n]|$)`,
   'giu'
 );
-const SAFE_AGGREGATE_OWNER_AT_END =
-  /(?:^|\s)(?:(?:an?|the)\s+)?(?:(?:(?:anonymized|de-identified|deidentified|non-identifiable|aggregate|synthetic|public)\s+){1,3})?(?:cohort|population|data ?set|biobank|repository|\d+(?:\s+|-)\s*(?:patients?|participants?|subjects?|samples?|controls?))\s*$/i;
-const SAFE_AGGREGATE_OWNER_AT_START =
-  /^(?:(?:an?|the)\s+)?(?:(?:(?:anonymized|de-identified|deidentified|non-identifiable|aggregate|synthetic|public)\s+){1,3})?(?:cohort|population|data ?set|biobank|repository|\d+(?:\s+|-)\s*(?:patients?|participants?|subjects?|samples?|controls?))\b/i;
+const OWNER_PREFIX_ACTION =
+  /^[\s\S]*\b(?:analy[sz]e|process|review|interpret|classify|evaluate|assess|upload|use|summari[sz]e|annotate|compare|explain)\s+/i;
+const SAFE_AGGREGATE_OWNER =
+  /^(?:(?:an?|the)\s+)?(?:(?:(?:anonymized|de-identified|deidentified|non-identifiable|aggregate|synthetic|public)\s+){1,3})?(?:cohort|population|data ?set|biobank|repository|\d+(?:\s+|-)\s*(?:patients?|participants?|subjects?|samples?|controls?))(?:\s+(?:of|with|containing|including)\s+\d+(?:\s+|-)\s*(?:patients?|participants?|subjects?|samples?|controls?))?\s*$/i;
+const GENERIC_EDUCATIONAL_OWNER =
+  /^(?:[\p{L}\p{N}-]+\s+){0,4}(?:gene|protein|enzyme|pathway|cell|tissue|organism|species|strain|yeast|mouse|model|study|research|laboratory|lab)\s*$/iu;
 const FROM_SENSITIVE_SOURCE = /\bfrom\b/i;
 const EXPLICIT_AGGREGATE_DATA_SOURCE =
   /\bfrom\s+(?:(?:an?|the)\s+)?(?:(?:(?:anonymized|de-identified|deidentified|non-identifiable|aggregate|synthetic|public)\s+){1,3}(?:cohort|population|data ?set|data|records?|samples?|biobank|repository)|\d+(?:\s+|-)\s*(?:patients?|participants?|subjects?|samples?|controls?))\b/i;
@@ -214,10 +216,19 @@ function hasIndividualGenomicOwnership(text) {
   // genomic artifact when it is attributed to a person; a later cohort count
   // cannot sanitize that ownership. Only explicitly aggregate owners pass.
   for (const match of String(text).matchAll(POSSESSIVE_GENOMIC_ARTIFACT)) {
-    if (!SAFE_AGGREGATE_OWNER_AT_END.test(match[1].trim())) return true;
+    const owner = match[1].replace(OWNER_PREFIX_ACTION, '').trim();
+    if (SAFE_AGGREGATE_OWNER.test(owner)) continue;
+    // Possessive descriptions of a gene/protein/pathway are ordinary genetics
+    // education, not patient ownership. Nested possession (for example,
+    // "Jane Doe's gene's variants") is never eligible for this exemption.
+    if (!/['’]s\b/i.test(owner) && GENERIC_EDUCATIONAL_OWNER.test(owner)) continue;
+    return true;
   }
   for (const match of String(text).matchAll(ATTRIBUTED_GENOMIC_ARTIFACT)) {
-    if (!SAFE_AGGREGATE_OWNER_AT_START.test(match[1].trim())) return true;
+    // The complete captured owner—not merely its prefix—must be an explicit
+    // aggregate form. "an anonymized cohort and Jane Doe" therefore cannot be
+    // laundered by the safe words at its start.
+    if (!SAFE_AGGREGATE_OWNER.test(match[1].trim())) return true;
   }
   return false;
 }
