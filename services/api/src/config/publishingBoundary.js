@@ -212,13 +212,17 @@ const STRUCTURED_RESEARCH_MATERIAL =
 const SENSITIVE_PATIENT_DATA_ACTION =
   String.raw`(?:\b(?:i|we)\s+(?:have|hold|possess|received)\b|\bi was told\s+(?:that\s+)?i have\b|\b(?:analy[sz]e|process|use|review|summari[sz]e|upload|interpret)\s+(?:these|this|the|my|our)\b|\bhere (?:are|is)\b|\b(?:these|this) (?:are|is)\b)`;
 const SENSITIVE_PATIENT_DATA_OBJECT =
-  String.raw`(?:\b(?:identifiable|non[- ]anonymized|not anonymized)\b[\s\S]{0,100}\b(?:patient|participant|subject|individual|data|records?|files?|wes|wgs|rna[- ]?seq|genotyp\w*|variants?)\b|\braw\s+(?:patient|participant|subject|individual)[- ]level\b[\s\S]{0,100}\b(?:data|records?|files?|wes|wgs|rna[- ]?seq|genotyp\w*|variants?)\b)`;
+  String.raw`(?:(?:(?<!\bnon-)(?<!\bnon )(?<!\bnot )\bidentifiable\b|\b(?:non[- ]anonymized|not anonymized)\b)[\s\S]{0,100}\b(?:patient|participant|subject|individual|data|records?|files?|wes|wgs|rna[- ]?seq|genotyp\w*|variants?)\b|\braw\s+(?:patient|participant|subject|individual)[- ]level\b[\s\S]{0,100}\b(?:data|records?|files?|wes|wgs|rna[- ]?seq|genotyp\w*|variants?)\b)`;
 const EXPLICIT_IDENTIFIABLE_PATIENT_DATA = new RegExp(
   String.raw`(?:${SENSITIVE_PATIENT_DATA_ACTION}[\s\S]{0,240}${SENSITIVE_PATIENT_DATA_OBJECT}|${SENSITIVE_PATIENT_DATA_OBJECT}[\s\S]{0,240}${SENSITIVE_PATIENT_DATA_ACTION})`,
   'i'
 );
 const SAFE_AGGREGATE_MY_RESULTS =
-  /\bmy results?\b[\s\S]{0,100}\b(?:anonymized|de-identified|deidentified|aggregate)\b[\s\S]{0,80}\b(?:cohort|samples?|data)\b/i;
+  /\bmy results?\b[\s\S]{0,100}\b(?:anonymized|de-identified|deidentified|aggregate)\b[\s\S]{0,80}\b(?:cohort|samples?|data)\b/gi;
+const SAFE_AGGREGATE_MY_RESEARCH_MEASURE =
+  /\bmy\s+(?:(?:genetic\s+)?(?:variants?|mutations?|genotyp\w*|symptoms?|conditions?|treatments?|medications?|drugs?)[- ](?:data|annotations?|counts?|labels?|variables?|covariates?|responses?|endpoints?|outcomes?|tables?|models?)|(?:treatment|medication|drug)[- ]responses?(?:\s+(?:data|variables?|covariates?|endpoints?|outcomes?|tables?|models?))?)\b/gi;
+const SAFE_AGGREGATE_PATIENT_RESEARCH_MEASURE =
+  /\b(?:each|every|the)\s+patient(?:['’]s)\s+(?:(?:genetic\s+)?(?:variants?|mutations?|genotyp\w*|symptoms?|conditions?|treatments?|medications?|drugs?)[- ](?:data|annotations?|counts?|labels?|variables?|covariates?|responses?|endpoints?|outcomes?|tables?|models?)|(?:treatment|medication|drug)[- ]responses?(?:\s+(?:data|variables?|covariates?|endpoints?|outcomes?|tables?|models?))?)\b/gi;
 const PATIENT_OR_FAMILY =
   String.raw`(?:\bthis patient\b(?!\s+(?:cohort|group|population|sample|data ?set|data|records?)\b)|\bmy patient(?:['’]s)?\b|\bthe patient['’]s\b|\bpatient['’]s\b|\bmy (?:child|son|daughter|mother|father|parent|sibling|brother|sister|spouse|partner|family member)(?:['’]s)?\b)`;
 const PERSON_THEN_CLINICAL = new RegExp(`${PATIENT_OR_FAMILY}[\\s\\S]{0,240}${CLINICAL_ACTION}`, 'i');
@@ -239,6 +243,12 @@ export function isPersonalClinicalPrompt(text) {
   const clearNonclinicalProgressiveActivity = CLEAR_NONCLINICAL_TAKING.test(text)
     || (aggregateResearchIntent && CLEAR_NONCLINICAL_USING.test(text));
   const exposesPatientLevelData = EXPLICIT_IDENTIFIABLE_PATIENT_DATA.test(text);
+  const broadClinicalText = aggregateResearchIntent
+    ? text
+      .replace(SAFE_AGGREGATE_MY_RESULTS, '')
+      .replace(SAFE_AGGREGATE_MY_RESEARCH_MEASURE, '')
+      .replace(SAFE_AGGREGATE_PATIENT_RESEARCH_MEASURE, '')
+    : text;
   if (
     exposesPatientLevelData
     || DIRECT_PERSONAL_CARE_REQUEST.test(text)
@@ -264,10 +274,10 @@ export function isPersonalClinicalPrompt(text) {
     || FIRST_PERSON_FUTURE_DISEASE.test(text)
     || DIRECT_PERSONAL_CLINICAL_HELP.test(text)
     || FIRST_PERSON_DIAGNOSIS.test(text)
-    || (MY_CLINICAL.test(text) && !(aggregateResearchIntent && SAFE_AGGREGATE_MY_RESULTS.test(text)))
+    || MY_CLINICAL.test(broadClinicalText)
     || CLINICAL_FOR_ME.test(text)
-    || PERSON_THEN_CLINICAL.test(text)
-    || CLINICAL_THEN_PERSON.test(text)
+    || PERSON_THEN_CLINICAL.test(broadClinicalText)
+    || CLINICAL_THEN_PERSON.test(broadClinicalText)
     || SIMPLE_MEDICATION_DISCLOSURE.test(text)
     || SIMPLE_MEDICATION_DECISION.test(text)
     || (

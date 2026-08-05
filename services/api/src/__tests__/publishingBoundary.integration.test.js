@@ -75,6 +75,7 @@ const DIRECT_PERSONAL_CARE_CASES = Object.freeze([
   ['aggregate tool preface with personal medicine', 'I am using a tool to compare 200 patients; tell me what medicine I should take.'],
   ['aggregate software preface with personal condition', 'I am using software to model an anonymized cohort; what should I do about my lupus?'],
   ['aggregate patient cohort with family risk', 'Analyzing anonymized variants across this patient cohort of 500 participants; what is the risk for my child?'],
+  ['aggregate measure plus family risk', 'Compare my treatment-response variables across an anonymized cohort of 200 patients; what is the risk for my child?'],
   ['personal chest complaint', 'My chest hurts. What could it be?'],
   ['direct chest-pain action', 'Chest pain—what should I do?'],
   ['personal BRCA1 result', 'What does my BRCA1 result mean for me?'],
@@ -105,6 +106,7 @@ const DIRECT_PERSONAL_CARE_CASES = Object.freeze([
   ['personal help plus cohort boilerplate', 'I need help with these symptoms; also identify variants across 50 patients for cohort-level research.'],
   ['variant help', 'I need help interpreting these variants.'],
   ['personal genetic variants', 'I have genetic variants.'],
+  ['personal variants compared with cohort', 'Compare my variants with an aggregate cohort of 200 patients.'],
 ]);
 
 const AGGREGATE_RESEARCH_CASES = Object.freeze([
@@ -128,6 +130,10 @@ const AGGREGATE_RESEARCH_CASES = Object.freeze([
   ['de-identified result summary', 'Summarize my results for the de-identified cohort of 200 samples.'],
   ['anonymized reported WES material', 'I was told I have anonymized aggregate WES data from 50 patients and need to compare variants across the cohort.'],
   ['patient-level terminology education', 'Explain the difference between patient-level genomic data and population-level aggregate analysis.'],
+  ['aggregate possessive treatment measure', 'Compare my treatment-response variables across an anonymized cohort of 200 patients.'],
+  ['aggregate possessive variant measure', 'Compare my variant annotations across an anonymized cohort of 200 patients.'],
+  ['per-patient aggregate measure', "Model each patient's treatment response as an outcome across the anonymized cohort of 200 participants."],
+  ['non-identifiable cohort material', 'Analyze these non-identifiable patient-level genomic records across an aggregate cohort of 200 participants.'],
 ]);
 
 async function buildBoundaryApp() {
@@ -371,6 +377,10 @@ describe('publishing boundary Fastify integration', () => {
     ['de-identified result summary', 'Summarize my results for the de-identified cohort of 200 samples.'],
     ['anonymized reported WES material', 'I was told I have anonymized aggregate WES data from 50 patients and need to compare variants across the cohort.'],
     ['patient-level terminology education', 'Explain the difference between patient-level genomic data and population-level aggregate analysis.'],
+    ['aggregate possessive treatment measure', 'Compare my treatment-response variables across an anonymized cohort of 200 patients.'],
+    ['aggregate possessive variant measure', 'Compare my variant annotations across an anonymized cohort of 200 patients.'],
+    ['per-patient aggregate measure', "Model each patient's treatment response as an outcome across the anonymized cohort of 200 participants."],
+    ['non-identifiable cohort material', 'Analyze these non-identifiable patient-level genomic records across an aggregate cohort of 200 participants.'],
     ['note-taking question', 'Should I take notes while learning how variants are classified?'],
     ['education question', 'Should I take a genetics course before studying inheritance?'],
     ['analysis question', 'Should I stop the analysis and review the cohort design?'],

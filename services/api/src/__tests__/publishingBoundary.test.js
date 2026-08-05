@@ -192,6 +192,7 @@ describe('publishable education/research boundary', () => {
     'I am using a tool to compare 200 patients; tell me what medicine I should take.',
     'I am using software to model an anonymized cohort; what should I do about my lupus?',
     'Analyzing anonymized variants across this patient cohort of 500 participants; what is the risk for my child?',
+    'Compare my treatment-response variables across an anonymized cohort of 200 patients; what is the risk for my child?',
     'My chest hurts. What could it be?',
     'Chest pain—what should I do?',
     'What does my BRCA1 result mean for me?',
@@ -222,6 +223,7 @@ describe('publishable education/research boundary', () => {
     'I need help with these symptoms; also identify variants across 50 patients for cohort-level research.',
     'I need help interpreting these variants.',
     'I have genetic variants.',
+    'Compare my variants with an aggregate cohort of 200 patients.',
   ])('blocks personalized clinical generation: %s', (prompt) => {
     expect(isPersonalClinicalPrompt(prompt)).toBe(true);
     expect(publicationBoundaryDecision({ url: '/education/chat', body: {
@@ -389,6 +391,18 @@ describe('publishable education/research boundary', () => {
     }],
     ['patient-level terminology education', '/education/chat', {
       messages: [{ role: 'user', content: 'Explain the difference between patient-level genomic data and population-level aggregate analysis.' }],
+    }],
+    ['aggregate possessive treatment measure', '/llm/invoke', {
+      prompt: 'Compare my treatment-response variables across an anonymized cohort of 200 patients.',
+    }],
+    ['aggregate possessive variant measure', '/education/chat', {
+      messages: [{ role: 'user', content: 'Compare my variant annotations across an anonymized cohort of 200 patients.' }],
+    }],
+    ['per-patient aggregate measure', '/llm/invoke', {
+      prompt: "Model each patient's treatment response as an outcome across the anonymized cohort of 200 participants.",
+    }],
+    ['non-identifiable cohort material', '/education/chat', {
+      messages: [{ role: 'user', content: 'Analyze these non-identifiable patient-level genomic records across an aggregate cohort of 200 participants.' }],
     }],
     ['ordinary note-taking question', '/education/chat', {
       messages: [{ role: 'user', content: 'Should I take notes while learning how variants are classified?' }],
