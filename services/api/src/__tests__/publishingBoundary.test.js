@@ -321,6 +321,12 @@ describe('publishable education/research boundary', () => {
     ['aggregate research model usage', '/education/chat', {
       messages: [{ role: 'user', content: 'I am using a regression model to compare medication response in 200 patients.' }],
     }],
+    ['aggregate treatment endpoint', '/llm/invoke', {
+      prompt: 'In a 200-patient study, what treatment should I use as an endpoint for the cohort analysis?',
+    }],
+    ['figurative engineering pain point', '/education/chat', {
+      messages: [{ role: 'user', content: 'This workflow has a pain point; what should I do next to debug it?' }],
+    }],
     ['ordinary note-taking question', '/education/chat', {
       messages: [{ role: 'user', content: 'Should I take notes while learning how variants are classified?' }],
     }],

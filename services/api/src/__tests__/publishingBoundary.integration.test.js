@@ -91,6 +91,8 @@ const AGGREGATE_RESEARCH_CASES = Object.freeze([
   ['cohort help request', 'I need help identifying variants across 50 patients for cohort-level research.'],
   ['cohort covariate question', 'Should I include treatment response as a covariate in this 200-patient cohort study?'],
   ['cohort medication-response analysis', 'I have genotype data from 200 patients and need to compare medication response across the cohort.'],
+  ['cohort treatment endpoint', 'In a 200-patient study, what treatment should I use as an endpoint for the cohort analysis?'],
+  ['figurative engineering pain point', 'This workflow has a pain point; what should I do next to debug it?'],
 ]);
 
 async function buildBoundaryApp() {

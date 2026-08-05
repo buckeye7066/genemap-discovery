@@ -131,7 +131,7 @@ const PERSONAL_VARIANT_SYMPTOM_LINK =
 const PERSONAL_SYMPTOM_DIAGNOSIS_QUESTION =
   /\b(?:do|could|can|would)\s+(?:my|these|this)\s+(?:symptoms?|pain)\b[\s\S]{0,100}\b(?:mean|indicate|suggest|show)\b[\s\S]{0,80}\bi\s+(?:have|might have|could have)\b/i;
 const DIRECT_SYMPTOM_ACTION =
-  /\b(?:[\w-]+\s+)?pain\b[\s\S]{0,120}\b(?:what should i do|what do i do|what could it be|could it be|should i seek|is this (?:serious|urgent)|do i need (?:a )?doctor)\b/i;
+  /\b(?:[\w-]+\s+)?pain\b(?!\s+(?:point|points|index|score|scale|measure|measurement|variable|variables|phenotype|phenotypes)\b)[\s\S]{0,120}\b(?:what should i do|what do i do|what could it be|could it be|should i seek|is this (?:serious|urgent)|do i need (?:a )?doctor)\b/i;
 const PERSONAL_BODY_COMPLAINT =
   /\bmy\s+(?:[\w-]+\s+){0,2}(?:hurts?|aches?|is painful)\b/i;
 const FIRST_PERSON_FUTURE_DISEASE =
@@ -172,7 +172,7 @@ const SHOULD_I_UNKNOWN_MEDICATION =
 const AGGREGATE_RESEARCH_EVIDENCE =
   /(?:\b(?:anonymized|de-identified|deidentified|aggregate)\b|\b\d+(?:\s+|-)\s*(?:patients?|participants?|subjects?|samples?|controls?)\b|\bpatients?\b[\s\S]{0,100}\bcontrols?\b|\bcohort\b|\bpopulation[- ]level\b|\bassociation research\b)/i;
 const COHORT_RESEARCH_OPERATION =
-  /\b(?:analy[sz](?:e|ing|is)|compar(?:e|ing|ison)|identif(?:y|ying)|associat(?:e|ion)|model(?:ing)?|estimat(?:e|ing)|test(?:ing)?|evaluat(?:e|ing|ion)|explor(?:e|ing|atory)|investigat(?:e|ing|ion)|includ(?:e|ing)|review(?:ing)?|summari[sz](?:e|ing)|prioriti[sz](?:e|ing)|annotat(?:e|ing|ion)|covariates?|variables?|data ?sets?|cohort[- ]level|population[- ]level|variant calling)\b/i;
+  /\b(?:analy[sz](?:e|ing|is)|compar(?:e|ing|ison)|identif(?:y|ying)|associat(?:e|ion)|model(?:ing)?|estimat(?:e|ing)|test(?:ing)?|evaluat(?:e|ing|ion)|explor(?:e|ing|atory)|investigat(?:e|ing|ion)|includ(?:e|ing)|review(?:ing)?|summari[sz](?:e|ing)|prioriti[sz](?:e|ing)|annotat(?:e|ing|ion)|covariates?|endpoints?|outcomes?|variables?|data ?sets?|cohort[- ]level|population[- ]level|variant calling)\b/i;
 const RESEARCH_WORK_PRODUCT =
   /\b(?:pilot study|research (?:study|project|analysis)|case-control (?:study|analysis)|observational study|exploratory analysis)\b/i;
 const STRUCTURED_RESEARCH_MATERIAL =
@@ -195,7 +195,6 @@ export function isPersonalClinicalPrompt(text) {
   if (typeof text !== 'string' || !text.trim()) return false;
   if (
     DIRECT_PERSONAL_CARE_REQUEST.test(text)
-    || CARE_THEN_PERSONAL_DECISION.test(text)
     || PERSONAL_VARIANT_INTERPRETATION.test(text)
     || PERSONAL_RESULT_INTERPRETATION.test(text)
     || PERSONAL_VARIANT_SYMPTOM_LINK.test(text)
@@ -219,7 +218,8 @@ export function isPersonalClinicalPrompt(text) {
 
   if (isAggregateResearchIntent(text)) return false;
 
-  return GENERIC_I_HAVE_CLINICAL.test(text)
+  return CARE_THEN_PERSONAL_DECISION.test(text)
+    || GENERIC_I_HAVE_CLINICAL.test(text)
     || FIRST_PERSON_CLINICAL_HELP.test(text)
     || SHOULD_I_CARE.test(text)
     || SHOULD_I_UNKNOWN_MEDICATION.test(text)
