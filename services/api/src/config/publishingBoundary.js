@@ -202,7 +202,7 @@ const ATTRIBUTED_GENOMIC_ARTIFACT = new RegExp(
 );
 const NAME_TOKEN = String.raw`(?:\p{L}\.|\p{L}[\p{L}'’.-]*)`;
 const NAMED_OWNER_BEFORE_GENOMIC_ARTIFACT = new RegExp(
-  String.raw`(?:\b(?:analy[sz]e|process|review|interpret|classify|evaluate|assess|upload|use|summari[sz]e|annotate|compare|explain)\s+|(?:^|[.;!?]\s*))(${NAME_TOKEN}(?:\s+${NAME_TOKEN}){1,2}?)\s+(?:(?:gene|sample|specimen)\s+)?${GENOMIC_ARTIFACT}\b`,
+  String.raw`(?:\b(?:analy[sz]e|process|review|interpret|classify|evaluate|assess|upload|use|summari[sz]e|annotate|compare|explain)\s+|(?:^|[.;!?]\s*))(${NAME_TOKEN}(?:\s+${NAME_TOKEN}){1,2}?)\s+(?:(?:gene|sample|specimen)\s+)?${GENOMIC_DATA_ARTIFACT}\b`,
   'giu'
 );
 const OWNER_PREFIX_ACTION =
@@ -213,6 +213,10 @@ const GENERIC_EDUCATIONAL_OWNER =
   /^(?:(?:how|why|whether|when)\s+)?(?:(?:an?|the|this|that|each|any)\s+)?(?:(?:human|mouse|yeast|plant|model|target|candidate|reference|wild[- ]type|mutant|protein[- ]coding|tumou?r[- ]suppressor|dna[- ]repair)\s+){0,2}(?:gene|protein|enzyme|pathway|cell|tissue|organism|species|strain|model|study|research|laboratory|lab)\s*$/i;
 const NAMED_GENE_EDUCATIONAL_OWNER =
   /^(?:(?:how|why|whether|when)\s+)?(?:(?:an?|the|this|that)\s+)?[A-Z][A-Z0-9-]{1,9}\s+gene\s*$/u;
+const GENERIC_ATTRIBUTION_OWNER =
+  /^(?:(?:an?|the|this|that|each|any)\s+)?(?:(?:general|human|mouse|yeast|plant|model|target|candidate|reference|disease[- ]associated|protein[- ]coding|tumou?r[- ]suppressor|dna[- ]repair|genetic|genomic)\s+){0,2}(?:genes?|proteins?|enzymes?|pathways?|cells?|tissues?|organisms?|species|strains?|models?|studies|research|genetics?\s+(?:students?|education|lessons?|courses?))(?:\s+in\s+general\s+genetics\s+education)?\s*$/i;
+const NAMED_GENE_ATTRIBUTION_OWNER =
+  /^(?:(?:an?|the|this|that)\s+)?[A-Z][A-Z0-9-]{1,9}\s+gene(?:\s+in\s+general\s+genetics\s+education)?\s*$/u;
 const NON_PERSON_OWNER_WORDS = new Set([
   'a', 'an', 'and', 'are', 'aggregate', 'analysis', 'analyze', 'anonymized', 'biobank', 'candidate',
   'cohort', 'controls', 'data', 'dataset', 'deidentified', 'dna', 'explain',
@@ -246,16 +250,6 @@ function looksLikeNamedIndividual(owner) {
   return tokens.every((token) => !NON_PERSON_OWNER_WORDS.has(token));
 }
 
-function containsNamedIndividual(owner) {
-  const tokens = String(owner).trim().split(/\s+/).filter(Boolean);
-  for (const size of [3, 2]) {
-    for (let index = 0; index + size <= tokens.length; index += 1) {
-      if (looksLikeNamedIndividual(tokens.slice(index, index + size).join(' '))) return true;
-    }
-  }
-  return false;
-}
-
 function hasIndividualGenomicOwnership(text) {
   // Ownership is a separate fail-closed boundary from generic sensitive-data
   // wording. A standalone VCF or set of variant calls is still an individual
@@ -282,7 +276,13 @@ function hasIndividualGenomicOwnership(text) {
     const relation = match[1].toLowerCase();
     const owner = match[2].trim();
     if (SAFE_AGGREGATE_OWNER.test(owner)) continue;
-    if (!/^(?:of|for)$/.test(relation) || containsNamedIndividual(owner)) return true;
+    if (
+      /^(?:of|for)$/.test(relation) &&
+      (GENERIC_ATTRIBUTION_OWNER.test(owner) || NAMED_GENE_ATTRIBUTION_OWNER.test(owner))
+    ) {
+      continue;
+    }
+    return true;
   }
   for (const match of String(text).matchAll(NAMED_OWNER_BEFORE_GENOMIC_ARTIFACT)) {
     if (looksLikeNamedIndividual(match[1])) return true;

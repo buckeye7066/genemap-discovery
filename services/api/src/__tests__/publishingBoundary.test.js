@@ -223,6 +223,21 @@ const ALLOWED_CASES = Object.freeze([
     prompt: "Explain how BRCA1 gene's variants are studied in general genetics education.",
   },
   {
+    label: 'disease-associated variant education',
+    task: PUBLICATION_TASKS.GENETICS_EDUCATION,
+    prompt: 'Explain disease-associated variants in general genetics education.',
+  },
+  {
+    label: 'named gene variant attribution education',
+    task: PUBLICATION_TASKS.GENETICS_EDUCATION,
+    prompt: 'Explain variants of the BRCA1 gene in general genetics education.',
+  },
+  {
+    label: 'aggregate disease-associated variants',
+    task: PUBLICATION_TASKS.AGGREGATE_GENOMICS_RESEARCH,
+    prompt: 'Analyze disease-associated variants across an anonymized cohort of 50 patients.',
+  },
+  {
     label: 'non-medication taking phrase',
     task: PUBLICATION_TASKS.GENETICS_EDUCATION,
     prompt: 'I take this course; explain how CYP2D6 works in pharmacogenomics.',
@@ -321,8 +336,10 @@ const BLOCKED_CASES = Object.freeze([
   ['exome of named individual', 'Analyze the exome of Jane Doe alongside 50 patients across the cohort.'],
   ['genome sequence provided by person', 'Analyze a genome sequence provided by Jane Doe alongside 50 patients across the cohort.'],
   ['possessive person gene variants', "Analyze Jane Doe's gene variants alongside 50 patients across the cohort."],
-  ['bare person gene variants', 'Analyze Jane Doe gene variants alongside 50 patients across the cohort.'],
+  ['bare person gene variant calls', 'Analyze Jane Doe gene variant calls alongside 50 patients across the cohort.'],
   ['possessive person sample VCF', "Analyze Jane Doe's sample VCF alongside 50 patients across the cohort."],
+  ['VCF of single-token name', 'Analyze VCF of John alongside 50 patients across the cohort.'],
+  ['VCF for first-person pronoun', 'Analyze VCF for me alongside 50 patients across the cohort.'],
   ['initialed named raw data', 'Analyze raw genomic data from J. Doe.'],
   ['middle-initial named raw data', 'Analyze raw genomic data from Jane Q. Doe.'],
   ['role-named raw data', 'Analyze raw genomic data from Patient Smith.'],
