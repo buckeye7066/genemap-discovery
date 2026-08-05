@@ -384,8 +384,10 @@ ${phenotypeAnalysis.inheritancePattern ? `\nNote: Inheritance pattern is ${pheno
       prompt = `
 Based on the phenotype features: ${phenotypeTarget}
 
-Find candidate genes that could be associated with these phenotypes.
-Use general genomics knowledge to generate exploratory research leads.
+Generate candidate-gene research leads from general genomics knowledge. Treat
+OMIM, ClinVar, HPO, UniProt, HPA, GTEx, and PubMed only as follow-up destinations;
+do not imply that you queried them and do not invent citations, record identifiers,
+evidence grades, expression values, prevalence, or clinical significance.
 
 For each gene, provide:
 - Gene symbol and full name
@@ -396,10 +398,6 @@ For each gene, provide:
 - Evidence species: human, animal, computational, mixed, or unknown
 
 Return 3-8 candidate leads ranked by model-estimated relevance for source verification.
-Treat OMIM, ClinVar, HPO, UniProt, HPA, GTEx, and PubMed as follow-up
-destinations. Do not imply that you queried them and do not invent citations,
-record identifiers, or evidence grades. These are candidate leads for independent
-source verification, not confirmed findings.
 `;
     }
 
@@ -564,8 +562,10 @@ Provide a 2-3 sentence summary covering:
 2. Key disease associations
 3. Molecular mechanism (adjust depth based on audience)
 
-Keep it factual and source-aware. Reference data from UniProt, HPA, or GTEx if relevant.
-Match the complexity and terminology to the reader's background.
+Keep it explicitly exploratory and match the complexity and terminology to the
+reader's background. Treat UniProt, HPA, GTEx, and PubMed as follow-up search
+destinations only; do not imply they were queried and do not invent citations,
+record identifiers, evidence grades, expression values, or clinical significance.
 `;
 
     const response = await apiClient.invokeLLM(prompt, {

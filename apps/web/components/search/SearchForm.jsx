@@ -40,15 +40,15 @@ export default function SearchForm({ onSearch, isLoading, initialQuery = "" }) {
     ]
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = (e, isPremium = false) => {
     e.preventDefault();
     if (query.trim()) {
-      onSearch(query.trim(), false);
+      onSearch(query.trim(), isPremium);
     }
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form onSubmit={(e) => handleSubmit(e, false)} className="space-y-6">
       <div className="space-y-2">
         <Label htmlFor="phenotype-query" className="text-base font-medium">
           Search Query
@@ -170,7 +170,7 @@ export default function SearchForm({ onSearch, isLoading, initialQuery = "" }) {
         </div>
       )}
 
-      <div className="flex flex-col gap-4">
+      <div>
         <Button
           type="submit"
           disabled={!query.trim() || isLoading}
@@ -179,7 +179,6 @@ export default function SearchForm({ onSearch, isLoading, initialQuery = "" }) {
           <Search className="w-4 h-4 mr-2" />
           {isLoading ? "Searching..." : searchMode === "disease" ? "Generate Candidate Genes" : "Search (Free)"}
         </Button>
-
       </div>
 
       <div className="bg-blue-50 p-4 rounded-lg">

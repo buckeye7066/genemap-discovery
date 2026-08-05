@@ -98,7 +98,7 @@ function generationText(body) {
 }
 
 const CLINICAL_ACTION =
-  String.raw`(?:symptoms?|variants?|mutations?|genotyp\w*|vcf|diagnos\w*|risk(?:\s+level)?|medications?|medicines?|drugs?|dos(?:e|ing)|treatments?|therap(?:y|ies)|screen\w*|prognosis|metabolizer|pharmacogen\w*|pathogenic\w*|clinical management|urgent|emergency)`;
+  String.raw`(?:pain|symptoms?|variants?|mutations?|genotyp\w*|vcf|diagnos\w*|risk(?:\s+level)?|disease risk|medications?|medicines?|drugs?|dos(?:e|ing)|treatments?|therap(?:y|ies)|screen\w*|prognosis|metabolizer|pharmacogen\w*|pathogenic\w*|clinical management|urgent|emergency)`;
 const MY_CLINICAL = new RegExp(
   String.raw`\bmy\s+(?:own\s+)?(?:symptoms?|variants?|mutations?|genotyp\w*|vcf|diagnos\w*|personal risk|risk(?:\s+level)?|medications?|medicines?|drugs?|dos(?:e|ing)|treatments?|therap(?:y|ies)|screen\w*|prognosis|metabolizer|pharmacogen\w*|health|condition|care|results?)\b`,
   'i'
@@ -108,77 +108,97 @@ const CLINICAL_FOR_ME = new RegExp(
   'i'
 );
 // First-person wording is not itself personal-clinical intent. Researchers
-// naturally say "I have WES data from 50 patients". Personal-care requests are
-// evaluated first; explicit aggregate research context can neutralize the
-// otherwise fail-closed first-person clinical rules.
+// naturally say "I have WES data from 50 patients". Classify high-specificity
+// personal-care requests first, then allow only explicit aggregate research
+// context paired with a cohort-level operation. All remaining first-person
+// clinical wording fails closed.
 const FIRST_PERSON_DIAGNOSIS = /\bi\s+(?:was|have\s+been)\s+diagnosed\b/i;
-const NON_CLINICAL_TAKING_ACTIVITY =
-  String.raw`(?:(?:a|an|the|this|that|my)\s+)?(?:[\w-]+\s+){0,3}(?:course|class|lesson|notes?|break|walk|look|approach|position|survey|exam|test|route|train|bus|taxi|photos?|pictures?|samples?|measurements?|steps?|part|interest|issue|action|time|study|project|analysis|research|experiment|pipeline|workflow|search|review|reading|writing|calculation|simulation|model|modeling|size|coverage|power|resolution|quality|replicates?|controls?|design)\b`;
-const FIRST_PERSON_MEDICATION_DISCLOSURE = new RegExp(
-  String.raw`\bi am taking\s+(?!${NON_CLINICAL_TAKING_ACTIVITY})\S+`,
-  'i'
-);
-const SHOULD_I_CHANGE_PERSONAL_SUBSTANCE = new RegExp(
-  String.raw`\bshould i\s+(?:take|stop|start|change|increase|decrease)\s+(?!${NON_CLINICAL_TAKING_ACTIVITY})\S+`,
-  'i'
-);
-const DIRECT_CARE_ACTION =
-  String.raw`(?:diagnos\w*|personal risk|risk level|disease risk|medication(?:s| advice)?|medicine(?:s| advice)?|drug(?:s| advice)?|dos(?:e|ing)|treatment(?:s| options?)?|therap(?:y|ies)|screen\w*|prognosis|metabolizer|pharmacogen\w*|clinical management|medical advice|urgent|emergency)`;
+const DIRECT_CARE_ACTION = String.raw`(?:diagnos\w*|personal risk|risk level|disease risk|medication advice|medicine advice|drug advice|dos(?:e|ing)|treatment(?:s| options?)?(?!\s+response)|therap(?:y|ies)|screen\w*|prognosis|metabolizer|pharmacogen\w*|clinical management|medical advice|urgent|emergency)`;
 const DIRECT_PERSONAL_CARE_REQUEST = new RegExp(
-  String.raw`(?:\b(?:i|me|my|mine)\b[\s\S]{0,160}\b(?:want|need|tell me|advise me|how should i|what should i|should i|can i)\b[\s\S]{0,120}${DIRECT_CARE_ACTION}|\b(?:what|which)\s+dose\s+should\s+i\b)`,
+  String.raw`(?:\b(?:i|me|my|mine)\b[\s\S]{0,160}\b(?:want|need|tell me|advise me|how should i|what should i|should i|can i|could i)\b[\s\S]{0,120}${DIRECT_CARE_ACTION}|\b(?:what|which)\s+dose\s+should\s+i\b)`,
   'i'
 );
+const PERSONAL_VARIANT_INTERPRETATION =
+  /\b(?:interpret|explain|assess|evaluate|classify)\w*\b[\s\S]{0,80}\b(?:my|this|these|that|those)\s+(?:genetic\s+)?(?:variants?|mutations?|vcf|results?)\b/i;
+const FIRST_PERSON_FUTURE_DISEASE =
+  /(?:\bi\s+need\s+to\s+know\b[\s\S]{0,180}\bi\s+(?:will|might|could|may)\s+(?:get|develop|have|be diagnosed)|\b(?:will|might|could|may)\s+i\s+(?:get|develop|have|be diagnosed))/i;
+const DIRECT_PERSONAL_CLINICAL_HELP =
+  /(?:\bi need\s+(?:help|advice|guidance)\s+(?:(?:with|on|for)\s+)?(?:(?:these|this|my)\s+)?(?:\w+\s+)?(?:symptoms?|pain)\b|\bi need\s+(?:symptoms?|pain)\s+(?:help|advice|guidance)\b)/i;
+const NONCLINICAL_TAKING_ACTIVITY =
+  String.raw`(?:(?:a|an|the|this|that|my)\s+)?(?:[\w-]+\s+){0,3}(?:course|class|workshop|lesson|training|notes?|break|walk|look|approach|position|survey|exam|test|route|train|bus|taxi|photos?|pictures?|samples?|measurements?|data|dataset|steps?|part|interest|issue|action|time|study|project|analysis|research|experiment|pipeline|workflow|search|review|reading|writing|calculation|simulation|model|modeling|size|coverage|power|resolution|quality|replicates?|controls?|design)\b`;
+const CLEAR_NONCLINICAL_TAKING = new RegExp(
+  String.raw`\bi(?:['’]m| am)\s+(?:currently\s+)?taking\s+${NONCLINICAL_TAKING_ACTIVITY}`,
+  'i'
+);
+const PROGRESSIVE_MEDICATION_DISCLOSURE =
+  /\bi(?:['’]m| am)\s+(?:currently\s+)?(?:taking|using)\b/i;
+const SIMPLE_MEDICATION_DECISION =
+  /\bi\s+(?:take|use)\b[\s\S]{0,160}\b(?:how much|what dose|which dose|dos(?:e|ing)|tonight|today|each day|per day|should i|can i|could i|stop|start|increase|decrease)\b/i;
 const GENERIC_I_HAVE_CLINICAL = new RegExp(
   String.raw`\bi have\b[\s\S]{0,320}${CLINICAL_ACTION}`,
   'i'
 );
 const FIRST_PERSON_CLINICAL_HELP = new RegExp(
-  String.raw`\bi need\b[\s\S]{0,80}\b(?:help|advice|guidance)\b[\s\S]{0,100}${CLINICAL_ACTION}`,
+  String.raw`\bi need\b(?=[\s\S]{0,220}${CLINICAL_ACTION})(?=[\s\S]{0,220}\b(?:help|advice|guidance)\b)`,
   'i'
 );
-const AGGREGATE_RESEARCH_HELP = new RegExp(
-  String.raw`\bi need\s+(?:help|advice|guidance)\s+(?:with\s+)?(?:identif(?:y|ying)|analy[sz](?:e|ing)|compar(?:e|ing)|evaluat(?:e|ing)|prioritiz(?:e|ing))\b[\s\S]{0,100}(?:variants?|mutations?|genes?|associations?|symptom counts?|data|samples?)[\s\S]{0,100}(?:\b\d+\s+(?:patients?|participants?|subjects?|samples?)\b|\b(?:anonymized|de-identified|aggregate)\b|\bcohort\b|\bpopulation[- ]level\b)`,
+const SHOULD_I_CARE = new RegExp(
+  String.raw`\bshould i\b[\s\S]{0,180}(?:pain|symptoms?|diagnos\w*|risk(?:\s+level)?|medications?|medicines?|drugs?|dos(?:e|ing)|treatments?(?!\s+response)|therap(?:y|ies)|screen\w*|prognosis|metabolizer|pharmacogen\w*|pathogenic\w*)`,
   'i'
 );
-const SHOULD_I_CLINICAL = new RegExp(
-  String.raw`\bshould i\b[\s\S]{0,180}(?:symptoms?|variants?|mutations?|genotyp\w*|diagnos\w*|risk|medications?|medicines?|drugs?|dos(?:e|ing)|treatments?|therap(?:y|ies)|screen\w*|prognosis|metabolizer|pharmacogen\w*|pathogenic\w*)`,
-  'i'
-);
-const AGGREGATE_DATA_OWNERSHIP =
-  /\bi have\b[\s\S]{0,140}(?:\b(?:wes|whole[- ]exome|whole[- ]genome|wgs|rna[- ]?seq|transcriptom\w*|genom\w*|proteom\w*|metabolom\w*)\b(?:\s+data)?|\bdata ?sets?\b|\b(?:anonymized|de-identified|aggregate)\s+cohort\b|\b(?:(?:pilot|research|case-control|observational|exploratory)\s+)?(?:study|project|analysis)\b)/i;
+const SHOULD_I_UNKNOWN_MEDICATION =
+  new RegExp(
+    String.raw`\bshould i\s+(?:take|stop|start|change|increase|decrease)\s+(?!${NONCLINICAL_TAKING_ACTIVITY})\S+`,
+    'i'
+  );
 const AGGREGATE_RESEARCH_EVIDENCE =
-  /(?:\b(?:anonymized|de-identified|aggregate)\b|\b\d+\s+(?:patients?|participants?|subjects?|samples?)\b|\bpatients?\b[\s\S]{0,100}\bcontrols?\b|\bcohort\b|\bpopulation[- ]level\b|\bassociation research\b)/i;
-const COHORT_LEVEL_RESEARCH_OUTPUT =
-  /(?:\b(?:across|within|for|at)\s+(?:the\s+)?cohort\b|\bcohort[- ]level\b|\bpopulation[- ]level\b|\bassociation research\b|\bcompare\b[\s\S]{0,120}\b(?:cohort|patients?|controls?|samples?)\b|\bidentif(?:y|ying)\b[\s\S]{0,100}\b(?:variants?|mutations?|genes?|associations?)\b[\s\S]{0,100}\b(?:cohort|patients?|controls?|population)\b)/i;
+  /(?:\b(?:anonymized|de-identified|deidentified|aggregate)\b|\b\d+(?:\s+|-)\s*(?:patients?|participants?|subjects?|samples?|controls?)\b|\bpatients?\b[\s\S]{0,100}\bcontrols?\b|\bcohort\b|\bpopulation[- ]level\b|\bassociation research\b)/i;
+const COHORT_RESEARCH_OPERATION =
+  /\b(?:analy[sz](?:e|ing|is)|compar(?:e|ing|ison)|identif(?:y|ying)|associat(?:e|ion)|model(?:ing)?|estimat(?:e|ing)|test(?:ing)?|evaluat(?:e|ing|ion)|explor(?:e|ing|atory)|investigat(?:e|ing|ion)|includ(?:e|ing)|review(?:ing)?|summari[sz](?:e|ing)|prioriti[sz](?:e|ing)|annotat(?:e|ing|ion)|covariates?|variables?|data ?sets?|cohort[- ]level|population[- ]level|variant calling)\b/i;
 const RESEARCH_WORK_PRODUCT =
   /\b(?:pilot study|research (?:study|project|analysis)|case-control (?:study|analysis)|observational study|exploratory analysis)\b/i;
+const STRUCTURED_RESEARCH_MATERIAL =
+  /\b(?:data|data ?sets?|counts?|annotations?|variables?|samples?|cohort|controls?|case-control|population[- ]level)\b/i;
 const PATIENT_OR_FAMILY =
   String.raw`(?:\bthis patient\b|\bmy patient(?:['’]s)?\b|\bthe patient['’]s\b|\bpatient['’]s\b|\bmy (?:child|son|daughter|mother|father|parent|sibling|brother|sister|spouse|partner|family member)(?:['’]s)?\b)`;
 const PERSON_THEN_CLINICAL = new RegExp(`${PATIENT_OR_FAMILY}[\\s\\S]{0,240}${CLINICAL_ACTION}`, 'i');
 const CLINICAL_THEN_PERSON = new RegExp(`${CLINICAL_ACTION}[\\s\\S]{0,240}${PATIENT_OR_FAMILY}`, 'i');
 
-function isAggregateResearchOwnership(text) {
-  const hasAggregateEvidence = AGGREGATE_RESEARCH_EVIDENCE.test(text);
-  const hasCohortOutput = COHORT_LEVEL_RESEARCH_OUTPUT.test(text);
-  return AGGREGATE_DATA_OWNERSHIP.test(text)
-    && (hasAggregateEvidence || hasCohortOutput || RESEARCH_WORK_PRODUCT.test(text))
-    && !DIRECT_PERSONAL_CARE_REQUEST.test(text);
+function isAggregateResearchIntent(text) {
+  const explicitCohortWork = AGGREGATE_RESEARCH_EVIDENCE.test(text)
+    && COHORT_RESEARCH_OPERATION.test(text);
+  const structuredResearchWorkProduct = RESEARCH_WORK_PRODUCT.test(text)
+    && STRUCTURED_RESEARCH_MATERIAL.test(text)
+    && COHORT_RESEARCH_OPERATION.test(text);
+  return explicitCohortWork || structuredResearchWorkProduct;
 }
 
 export function isPersonalClinicalPrompt(text) {
   if (typeof text !== 'string' || !text.trim()) return false;
-  if (DIRECT_PERSONAL_CARE_REQUEST.test(text)) return true;
-
-  return MY_CLINICAL.test(text)
-    || CLINICAL_FOR_ME.test(text)
+  if (
+    DIRECT_PERSONAL_CARE_REQUEST.test(text)
+    || PERSONAL_VARIANT_INTERPRETATION.test(text)
+    || FIRST_PERSON_FUTURE_DISEASE.test(text)
+    || DIRECT_PERSONAL_CLINICAL_HELP.test(text)
     || FIRST_PERSON_DIAGNOSIS.test(text)
-    || FIRST_PERSON_MEDICATION_DISCLOSURE.test(text)
-    || SHOULD_I_CHANGE_PERSONAL_SUBSTANCE.test(text)
-    || (GENERIC_I_HAVE_CLINICAL.test(text) && !isAggregateResearchOwnership(text))
-    || (FIRST_PERSON_CLINICAL_HELP.test(text) && !AGGREGATE_RESEARCH_HELP.test(text))
-    || SHOULD_I_CLINICAL.test(text)
+    || MY_CLINICAL.test(text)
+    || CLINICAL_FOR_ME.test(text)
     || PERSON_THEN_CLINICAL.test(text)
-    || CLINICAL_THEN_PERSON.test(text);
+    || CLINICAL_THEN_PERSON.test(text)
+    || SIMPLE_MEDICATION_DECISION.test(text)
+    || (
+      PROGRESSIVE_MEDICATION_DISCLOSURE.test(text)
+      && !CLEAR_NONCLINICAL_TAKING.test(text)
+    )
+  ) return true;
+
+  if (isAggregateResearchIntent(text)) return false;
+
+  return GENERIC_I_HAVE_CLINICAL.test(text)
+    || FIRST_PERSON_CLINICAL_HELP.test(text)
+    || SHOULD_I_CARE.test(text)
+    || SHOULD_I_UNKNOWN_MEDICATION.test(text)
+    || /\bi(?:['’]ve| have)\s+got\b[\s\S]{0,160}(?:pain|symptoms?|variants?|mutations?|diagnos\w*|risk|condition|disease)/i.test(text);
 }
 
 export function publicationBoundaryDecision({ url, routeUrl, body } = {}) {

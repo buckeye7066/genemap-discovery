@@ -136,7 +136,10 @@ const FIRST_PERSON_AGGREGATE_RESEARCH_PROMPTS = Object.freeze([
   'I have an anonymized aggregate cohort of 200 patients with genotype, symptom-frequency, and treatment-response variables for population-level association research.',
   'I have RNA-seq from 30 patients with symptoms and controls; compare variants at the cohort level.',
   'I have a pilot study with symptom counts and variant annotations for exploratory analysis.',
+  'I need help comparing genetic variants across 50 patients in an anonymized cohort.',
   'I need help identifying variants across 50 patients for cohort-level research.',
+  'Should I include treatment response as a covariate in this 200-patient cohort study?',
+  'I have genotype data from 200 patients and need to compare medication response across the cohort.',
 ]);
 
 describe('publishable education/research boundary', () => {
@@ -171,9 +174,6 @@ describe('publishable education/research boundary', () => {
   it.each([
     'Interpret my variant and tell me my personal risk level.',
     'I am taking warfarin; what dose should I use for my genotype?',
-    'I am taking warfarin.',
-    'Should I take warfarin?',
-    'What is the risk for my child?',
     'What diagnosis fits this patient and these symptoms?',
     'Explain the pharmacogenomic drug implications for my child.',
     'I have cancer and want treatment options.',
@@ -181,8 +181,17 @@ describe('publishable education/research boundary', () => {
     'I have chest pain; tell me what diagnosis this is.',
     'I have a BRCA1 mutation; how should I be screened?',
     'I need help with these symptoms.',
-    'I need help interpreting these variants.',
+    'I need symptom help.',
+    'I need guidance on this chest pain.',
+    'I need to know if BRCA1 means I will get cancer.',
+    'I take warfarin; could CYP2C9 change how much I need tonight?',
+    "I've got chest pain; what could be causing it?",
+    'I am taking warfarin.',
+    'What is the risk for my child?',
+    'I have a pilot study and need help interpreting this mutation.',
+    'I have an exploratory analysis; explain this genetic variant.',
     'I need help with these symptoms; also identify variants across 50 patients for cohort-level research.',
+    'I need help interpreting these variants.',
     'I have genetic variants.',
   ])('blocks personalized clinical generation: %s', (prompt) => {
     expect(isPersonalClinicalPrompt(prompt)).toBe(true);
@@ -215,6 +224,10 @@ describe('publishable education/research boundary', () => {
     ['HypothesisGenerator', buildHypothesisWrapper(FIRST_PERSON_AGGREGATE_RESEARCH_PROMPTS[0])],
     ['PhenotypeSearchService', buildPhenotypeWrapper(FIRST_PERSON_AGGREGATE_RESEARCH_PROMPTS[1])],
     ['Dashboard', buildDashboardWrapper([FIRST_PERSON_AGGREGATE_RESEARCH_PROMPTS[2]])],
+    ['HypothesisGenerator cohort comparison', buildHypothesisWrapper(FIRST_PERSON_AGGREGATE_RESEARCH_PROMPTS[4])],
+    ['HypothesisGenerator cohort help', buildHypothesisWrapper(FIRST_PERSON_AGGREGATE_RESEARCH_PROMPTS[5])],
+    ['PhenotypeSearchService cohort covariate', buildPhenotypeWrapper(FIRST_PERSON_AGGREGATE_RESEARCH_PROMPTS[6])],
+    ['Dashboard medication-response cohort', buildDashboardWrapper([FIRST_PERSON_AGGREGATE_RESEARCH_PROMPTS[7]])],
   ])('allows first-person aggregate research inside the complete %s wrapper', (_surface, prompt) => {
     expect(isPersonalClinicalPrompt(prompt)).toBe(false);
     expect(publicationBoundaryDecision({ url: '/llm/invoke', body: { prompt } })).toBeNull();
@@ -248,6 +261,12 @@ describe('publishable education/research boundary', () => {
     ['Dashboard family diagnosis', buildDashboardWrapper(['What diagnosis fits my child and these symptoms?'])],
     ['HypothesisGenerator personal symptoms', buildHypothesisWrapper('I have severe recurrent symptoms and a pathogenic variant; what diagnosis fits me?')],
     ['PhenotypeSearchService personal treatment', buildPhenotypeWrapper('I need a diagnosis and treatment for these symptoms.')],
+    ['HypothesisGenerator medication disclosure', buildHypothesisWrapper('I am taking warfarin.')],
+    ['PhenotypeSearchService family risk', buildPhenotypeWrapper('What is the risk for my child?')],
+    ['Dashboard symptom guidance', buildDashboardWrapper(['I need guidance on this chest pain.'])],
+    ['HypothesisGenerator future disease', buildHypothesisWrapper('I need to know if BRCA1 means I will get cancer.')],
+    ['PhenotypeSearchService chest pain', buildPhenotypeWrapper("I've got chest pain; what could be causing it?")],
+    ['Dashboard dosing context', buildDashboardWrapper(['I take warfarin; could CYP2C9 change how much I need tonight?'])],
   ])('blocks personal clinical intent inside complete wrapper: %s', (_label, prompt) => {
     expect(isPersonalClinicalPrompt(prompt)).toBe(true);
     expect(publicationBoundaryDecision({ url: '/llm/invoke', body: { prompt } })).toMatchObject({
@@ -276,17 +295,23 @@ describe('publishable education/research boundary', () => {
     ['ordinary education wording', '/education/chat', {
       messages: [{ role: 'user', content: 'I take a genetics course and want to understand Mendelian inheritance.' }],
     }],
-    ['progressive education wording', '/education/chat', {
+    ['progressive ordinary education wording', '/education/chat', {
       messages: [{ role: 'user', content: 'I am taking a genetics course and want to understand Mendelian inheritance.' }],
-    }],
-    ['education question wording', '/education/chat', {
-      messages: [{ role: 'user', content: 'Should I take a genetics course before studying inheritance?' }],
-    }],
-    ['research-design question wording', '/education/chat', {
-      messages: [{ role: 'user', content: 'Should I increase sample size for this cohort study?' }],
     }],
     ['ordinary research wording', '/llm/invoke', {
       prompt: 'I take notes while reviewing genetic variants across an aggregate cohort.',
+    }],
+    ['ordinary note-taking question', '/education/chat', {
+      messages: [{ role: 'user', content: 'Should I take notes while learning how variants are classified?' }],
+    }],
+    ['ordinary course question', '/education/chat', {
+      messages: [{ role: 'user', content: 'Should I take a genetics course before studying inheritance?' }],
+    }],
+    ['ordinary analysis question', '/llm/invoke', {
+      prompt: 'Should I stop the analysis and review the cohort design?',
+    }],
+    ['ordinary sample-size question', '/llm/invoke', {
+      prompt: 'Should I increase sample size for this cohort study?',
     }],
     ['aggregate condition-label wording', '/llm/invoke', {
       prompt: 'I have condition labels for 200 patients in an aggregate cohort for population-level association research.',

@@ -56,10 +56,6 @@ Do not infer diagnosis, personal genetic risk, treatment, or clinical action.`,
     'less-structured pilot study',
     'I have a pilot study with symptom counts and variant annotations for exploratory analysis.',
   ],
-  [
-    'cohort help request',
-    'I need help identifying variants across 50 patients for cohort-level research.',
-  ],
 ]);
 
 const DIRECT_PERSONAL_CARE_CASES = Object.freeze([
@@ -68,12 +64,25 @@ const DIRECT_PERSONAL_CARE_CASES = Object.freeze([
   ['chest-pain diagnosis', 'I have chest pain; tell me what diagnosis this is.'],
   ['BRCA1 screening', 'I have a BRCA1 mutation; how should I be screened?'],
   ['symptom help', 'I need help with these symptoms.'],
+  ['short symptom help', 'I need symptom help.'],
+  ['chest-pain guidance', 'I need guidance on this chest pain.'],
+  ['future disease risk', 'I need to know if BRCA1 means I will get cancer.'],
+  ['warfarin amount', 'I take warfarin; could CYP2C9 change how much I need tonight?'],
+  ['chest-pain cause', "I've got chest pain; what could be causing it?"],
+  ['medication disclosure', 'I am taking warfarin.'],
+  ['family risk', 'What is the risk for my child?'],
+  ['research-prefixed personal mutation', 'I have a pilot study and need help interpreting this mutation.'],
+  ['research-prefixed personal variant', 'I have an exploratory analysis; explain this genetic variant.'],
+  ['personal help plus cohort boilerplate', 'I need help with these symptoms; also identify variants across 50 patients for cohort-level research.'],
   ['variant help', 'I need help interpreting these variants.'],
   ['personal genetic variants', 'I have genetic variants.'],
-  ['medication disclosure', 'I am taking warfarin.'],
-  ['medication choice', 'Should I take warfarin?'],
-  ['family risk', 'What is the risk for my child?'],
-  ['personal help plus cohort boilerplate', 'I need help with these symptoms; also identify variants across 50 patients for cohort-level research.'],
+]);
+
+const AGGREGATE_RESEARCH_CASES = Object.freeze([
+  ['cohort variant help', 'I need help comparing genetic variants across 50 patients in an anonymized cohort.'],
+  ['cohort help request', 'I need help identifying variants across 50 patients for cohort-level research.'],
+  ['cohort covariate question', 'Should I include treatment response as a covariate in this 200-patient cohort study?'],
+  ['cohort medication-response analysis', 'I have genotype data from 200 patients and need to compare medication response across the cohort.'],
 ]);
 
 async function buildBoundaryApp() {
@@ -284,12 +293,29 @@ describe('publishing boundary Fastify integration', () => {
     }
   });
 
+  it.each(AGGREGATE_RESEARCH_CASES.flatMap(([label, prompt]) => [
+    [label, '/llm/invoke', { prompt }],
+    [label, '/education/chat', { messages: [{ role: 'user', content: prompt }] }],
+  ]))('allows %s end-to-end on %s and executes the handler', async (_label, url, payload) => {
+    const { app, handler } = await buildBoundaryApp();
+    try {
+      const response = await app.inject({ method: 'POST', url, payload });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ ok: true });
+      expect(handler).toHaveBeenCalledTimes(1);
+    } finally {
+      await app.close();
+    }
+  });
+
   it.each([
     ['education course', 'I take a genetics course and want to understand Mendelian inheritance.'],
     ['progressive education course', 'I am taking a genetics course and want to understand Mendelian inheritance.'],
-    ['education question', 'Should I take a genetics course before studying inheritance?'],
-    ['research-design question', 'Should I increase sample size for this cohort study?'],
     ['research notes', 'I take notes while reviewing genetic variants across an aggregate cohort.'],
+    ['note-taking question', 'Should I take notes while learning how variants are classified?'],
+    ['education question', 'Should I take a genetics course before studying inheritance?'],
+    ['analysis question', 'Should I stop the analysis and review the cohort design?'],
+    ['research-design question', 'Should I increase sample size for this cohort study?'],
     ['condition labels', 'I have condition labels for 200 patients in an aggregate cohort for population-level association research.'],
     ['less-structured pilot study', 'I have a pilot study with symptom counts and variant annotations for exploratory analysis.'],
   ])('allows ordinary non-clinical research wording from %s', async (_label, prompt) => {

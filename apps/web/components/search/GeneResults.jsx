@@ -3,7 +3,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import DnaIcon from "../icons/DnaIcon";
 import {
-  Crown,
   Star,
   TrendingUp,
   CheckSquare
@@ -113,12 +112,6 @@ export default function GeneResults({ results, selectedGenes = [], onGeneSelect 
               </p>
             </div>
 
-            {isPremium && (
-              <Badge className="bg-amber-100 text-amber-800 border-amber-200">
-                <Crown className="w-3 h-3 mr-1" />
-                Premium Search
-              </Badge>
-            )}
           </div>
         </CardHeader>
         <CardContent>

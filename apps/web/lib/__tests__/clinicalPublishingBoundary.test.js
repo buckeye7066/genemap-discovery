@@ -76,8 +76,6 @@ describe('clinical publishing boundary', () => {
     const privacy = read('../../pages/PrivacyPolicy.jsx');
     const terms = read('../../pages/TermsOfService.jsx');
     const premium = read('../../pages/Premium.jsx');
-    const searchForm = read('../../components/search/SearchForm.jsx');
-    const phenotypeSearch = read('../../components/search/PhenotypeSearchService.jsx');
 
     expect(privacy).toContain('Publication-mode data boundary');
     expect(privacy).not.toContain('Health &amp; genetic data you upload');
@@ -86,20 +84,30 @@ describe('clinical publishing boundary', () => {
     expect(premium).toContain('Saved gene sets & research projects');
     expect(premium).not.toContain('VCF analysis & clinical tools');
     expect(premium).not.toContain('All visualization tools');
-    expect(searchForm).not.toContain('Premium Search');
-    expect(searchForm).not.toContain('handleSubmit(e, true)');
-    expect(phenotypeSearch).not.toContain('Use your knowledge of genetics and genomics databases');
-    expect(phenotypeSearch).toContain('Treat OMIM, ClinVar, HPO, UniProt, HPA, GTEx, and PubMed as follow-up');
-
-    const capIndex = phenotypeSearch.indexOf('candidateGenes = candidateGenes.slice(0, maxCandidateLeads)');
-    const enrichIndex = phenotypeSearch.indexOf('await this.safeEnrich(symbols, [])');
-    expect(capIndex).toBeGreaterThan(-1);
-    expect(enrichIndex).toBeGreaterThan(capIndex);
-    expect(phenotypeSearch).toContain('usedFallback && this.usesDiseaseCandidatePrompt');
-    expect(phenotypeSearch).toContain('if (this.usesDiseaseCandidatePrompt(phenotypeAnalysis, originalQuery))');
 
     const playListing = read('../../../../docs/play-store/listing.md');
     expect(playListing).not.toContain('compare expression, interactions');
     expect(playListing).not.toContain('Data Visualization Hub');
+  });
+
+  it('keeps candidate-search scope and provenance truthful', () => {
+    const searchForm = read('../../components/search/SearchForm.jsx');
+    const geneResults = read('../../components/search/GeneResults.jsx');
+    const searchService = read('../../components/search/PhenotypeSearchService.jsx');
+
+    expect(searchForm).not.toContain('Premium Search');
+    expect(searchForm).not.toContain('expanded research workspace');
+    expect(searchForm).not.toContain('all premium features');
+    expect(geneResults).not.toContain('Premium Search');
+    expect(searchService).not.toContain('Use your knowledge of genetics and genomics databases');
+    expect(searchService).not.toContain('Reference data from UniProt, HPA, or GTEx');
+    expect(searchService).toContain('do not imply that you queried them');
+
+    const capIndex = searchService.indexOf('candidateGenes = candidateGenes.slice(0, maxCandidateLeads)');
+    const enrichmentIndex = searchService.indexOf('this.safeEnrich(symbols, [])');
+    expect(capIndex).toBeGreaterThan(-1);
+    expect(enrichmentIndex).toBeGreaterThan(capIndex);
+    expect(searchService).toContain('usedFallback && this.usesDiseaseCandidatePrompt');
+    expect(searchService).toContain('if (this.usesDiseaseCandidatePrompt(phenotypeAnalysis, originalQuery))');
   });
 });
