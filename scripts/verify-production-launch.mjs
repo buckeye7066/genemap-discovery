@@ -28,7 +28,7 @@ function isBlank(value) {
 }
 
 function isPlaceholder(value) {
-  return isBlank(value) || /\b(?:REPLACE|TODO|TBD|UNKNOWN)\b/iu.test(value);
+  return isBlank(value) || /(?:REPLACE|TODO|TBD|UNKNOWN)/iu.test(value);
 }
 
 function checkEvidenceReference(id, value) {
