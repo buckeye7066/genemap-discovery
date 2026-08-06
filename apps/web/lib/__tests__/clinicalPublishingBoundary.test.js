@@ -284,9 +284,22 @@ describe('clinical publishing boundary', () => {
         "'@genemap/shared': path.resolve(__dirname, '../../packages/shared/src/index.ts')",
       );
     }
-    expect(registryTest).toContain(
-      "from '../../../../packages/shared/src/agentRegistry.ts'",
-    );
+    expect(registryTest).not.toContain('agentRegistry');
+    expect(registryTest).not.toContain("agent: 'robert'");
+    expect(registryTest).not.toContain("agent: 'anastasia'");
+  });
+
+  it('removes retired persona and agent-mesh contracts from runtime source', () => {
+    const sharedIndex = read('../../../../packages/shared/src/index.ts');
+    const sharedClient = read('../../../../packages/shared/src/client.ts');
+    const llmRoute = read('../../../../services/api/src/routes/llm.js');
+
+    expect(sharedIndex).not.toContain('agentRegistry');
+    expect(sharedClient).not.toContain('options.agent');
+    expect(sharedClient).not.toContain('agentRegistry');
+    expect(llmRoute).not.toContain('agentMesh');
+    expect(llmRoute).not.toContain('resolveAgent');
+    expect(llmRoute).not.toContain('peerNote');
   });
 
   it('keeps public policy and subscription claims inside the same boundary', () => {
