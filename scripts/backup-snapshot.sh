@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 
 # GeneMap Discovery - manual backup snapshot
-# Database-bearing archives are fail-closed and encrypted before they leave
-# the temporary workspace. Set BACKUP_CODE_ONLY=true to explicitly create a
-# source-only ZIP when no database URL is available.
+# Database-bearing snapshots fail closed and use authenticated age encryption.
+# Set BACKUP_CODE_ONLY=true to explicitly create a tracked-source-only archive.
 
 set -Eeuo pipefail
 umask 077
@@ -15,9 +14,8 @@ TIMESTAMP=$(date -u +%Y%m%d-%H%M%S)
 BACKUP_NAME="genemap-backup-${TIMESTAMP}"
 TEMP_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/genemap-backup.XXXXXX")
 STAGING_DIR="${TEMP_ROOT}/${BACKUP_NAME}"
-PLAIN_ARCHIVE="${TEMP_ROOT}/${BACKUP_NAME}.zip"
 DATABASE_INCLUDED=false
-FINAL_EXTENSION="zip"
+FINAL_EXTENSION="tar.gz"
 
 cleanup() {
   rm -rf -- "${TEMP_ROOT}"
@@ -31,56 +29,61 @@ require_command() {
   fi
 }
 
+assert_tracked_source_is_safe() {
+  local unsafe_paths
+  unsafe_paths=$(git -C "${REPO_ROOT}" ls-tree -r --name-only HEAD \
+    | grep -E '(^|/)(\.env($|\.)|\.npmrc$|credentials\.json$|service-account[^/]*\.json$|[^/]+\.(pem|key)$)' \
+    | grep -Ev '(^|/)\.env(\.[^/]*)?\.example$' \
+    || true)
+  if [[ -n "${unsafe_paths}" ]]; then
+    echo "Error: refusing to archive tracked credential-like files:" >&2
+    printf '%s\n' "${unsafe_paths}" >&2
+    exit 1
+  fi
+}
+
 echo "=== GeneMap Discovery Backup Script ==="
 echo "Timestamp (UTC): ${TIMESTAMP}"
 
-require_command rsync
-require_command zip
-require_command sha256sum
+for command_name in git tar sha256sum; do
+  require_command "${command_name}"
+done
+git -C "${REPO_ROOT}" rev-parse --verify HEAD >/dev/null
+assert_tracked_source_is_safe
 mkdir -p "${BACKUP_DIR}" "${STAGING_DIR}"
 
-echo "[1/6] Copying repository files..."
-rsync -a \
-  --exclude 'node_modules' \
-  --exclude 'dist' \
-  --exclude '.next' \
-  --exclude 'build' \
-  --exclude '.env' \
-  --exclude '.env.local' \
-  --exclude '.env.production' \
-  --exclude 'backups' \
-  --exclude '.git' \
-  --exclude '*.log' \
-  "${REPO_ROOT}/" "${STAGING_DIR}/"
+echo "[1/6] Exporting tracked repository files..."
+git -C "${REPO_ROOT}" archive --format=tar HEAD \
+  | tar -xf - -C "${STAGING_DIR}"
 
 echo "[2/6] Creating database dump..."
 if [[ -n "${DATABASE_URL:-}" ]]; then
   require_command pg_dump
-  require_command openssl
+  require_command age
 
-  if [[ -z "${BACKUP_ENCRYPTION_PASSPHRASE:-}" ]]; then
-    echo "Error: BACKUP_ENCRYPTION_PASSPHRASE is required when DATABASE_URL is set." >&2
+  if [[ -z "${BACKUP_AGE_RECIPIENT:-}" ]]; then
+    echo "Error: BACKUP_AGE_RECIPIENT is required when DATABASE_URL is set." >&2
     exit 1
   fi
 
-  if ! pg_dump \
+  ENCRYPTED_DUMP="${STAGING_DIR}/database.dump.age"
+  if ! PGDATABASE="${DATABASE_URL}" pg_dump \
     --format=custom \
     --no-owner \
     --no-privileges \
-    --file="${STAGING_DIR}/database.dump" \
-    "${DATABASE_URL}"; then
-    rm -f -- "${STAGING_DIR}/database.dump"
-    echo "Error: pg_dump failed; no backup archive was created." >&2
+    | age --recipient "${BACKUP_AGE_RECIPIENT}" --output "${ENCRYPTED_DUMP}"; then
+    rm -f -- "${ENCRYPTED_DUMP}"
+    echo "Error: database dump or encryption failed; no backup archive was created." >&2
     exit 1
   fi
 
-  if [[ ! -s "${STAGING_DIR}/database.dump" ]]; then
-    echo "Error: pg_dump produced an empty file; no backup archive was created." >&2
+  if [[ ! -s "${ENCRYPTED_DUMP}" ]]; then
+    echo "Error: the encrypted database dump is empty; no backup archive was created." >&2
     exit 1
   fi
 
   DATABASE_INCLUDED=true
-  FINAL_EXTENSION="zip.enc"
+  FINAL_EXTENSION="tar.gz.age"
 elif [[ "${BACKUP_CODE_ONLY:-false}" == "true" ]]; then
   echo "  DATABASE_URL is absent; creating the explicitly requested code-only snapshot."
 else
@@ -95,34 +98,40 @@ GeneMap Discovery Backup
 ========================
 Date (UTC): $(date -u +%Y-%m-%dT%H:%M:%SZ)
 Git Branch: $(git -C "${REPO_ROOT}" branch --show-current 2>/dev/null || echo "N/A")
-Git Commit: $(git -C "${REPO_ROOT}" rev-parse HEAD 2>/dev/null || echo "N/A")
+Git Commit: $(git -C "${REPO_ROOT}" rev-parse HEAD)
+Source Scope: tracked files at Git commit only
 Database Included: ${DATABASE_INCLUDED}
-Database Archive Encrypted: ${DATABASE_INCLUDED}
+Database Dump Encrypted: ${DATABASE_INCLUDED}
+Outer Archive Encrypted: ${DATABASE_INCLUDED}
 Backup Type: Manual Snapshot
 EOF
 
-echo "[4/6] Creating archive..."
-(
-  cd "${TEMP_ROOT}"
-  zip -rq "${PLAIN_ARCHIVE}" "${BACKUP_NAME}"
-)
-
+echo "[4/6] Creating final archive..."
 FINAL_PATH="${BACKUP_DIR}/${BACKUP_NAME}.${FINAL_EXTENSION}"
 if [[ "${DATABASE_INCLUDED}" == "true" ]]; then
-  openssl enc -aes-256-cbc -salt -pbkdf2 \
-    -in "${PLAIN_ARCHIVE}" \
-    -out "${FINAL_PATH}" \
-    -pass env:BACKUP_ENCRYPTION_PASSPHRASE
-  rm -f -- "${PLAIN_ARCHIVE}"
+  if ! tar -C "${TEMP_ROOT}" -czf - "${BACKUP_NAME}" \
+    | age --recipient "${BACKUP_AGE_RECIPIENT}" --output "${FINAL_PATH}"; then
+    rm -f -- "${FINAL_PATH}"
+    echo "Error: final archive encryption failed." >&2
+    exit 1
+  fi
 else
-  mv "${PLAIN_ARCHIVE}" "${FINAL_PATH}"
+  tar -C "${TEMP_ROOT}" -czf "${FINAL_PATH}" "${BACKUP_NAME}"
 fi
+
+if [[ ! -s "${FINAL_PATH}" ]]; then
+  rm -f -- "${FINAL_PATH}"
+  echo "Error: final archive is empty." >&2
+  exit 1
+fi
+chmod 600 "${FINAL_PATH}"
 
 echo "[5/6] Writing integrity checksum..."
 (
   cd "${BACKUP_DIR}"
   sha256sum "$(basename "${FINAL_PATH}")" > "$(basename "${FINAL_PATH}").sha256"
 )
+chmod 600 "${FINAL_PATH}.sha256"
 
 REMOTE_COPIED=false
 if [[ -n "${DRIVE_DIR:-}" ]]; then
@@ -131,7 +140,7 @@ if [[ -n "${DRIVE_DIR:-}" ]]; then
     exit 1
   fi
 
-  echo "[6/6] Copying encrypted archive and checksum to configured storage..."
+  echo "[6/6] Copying archive and checksum to configured storage..."
   cp -- "${FINAL_PATH}" "${FINAL_PATH}.sha256" "${DRIVE_DIR}/"
   REMOTE_COPIED=true
 else
