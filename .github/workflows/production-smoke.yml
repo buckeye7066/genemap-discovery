@@ -87,10 +87,10 @@ jobs:
             .split(';', 1)[0]
             .trim()
             .toLowerCase();
-          const identityCacheDirectives = (identityResponse.headers.get('cache-control') || '')
-            .split(',')
-            .map((directive) => directive.trim().toLowerCase())
-            .filter(Boolean);
+          const identityCacheControl = (identityResponse.headers.get('cache-control') || '')
+            .trim()
+            .toLowerCase()
+            .replace(/\s*,\s*/gu, ', ');
           if (apiResponse.status !== 200 || !/^[a-f0-9]{40}$/u.test(api.releaseSha || '')) {
             throw new Error(
               `API readiness is missing an immutable release SHA: ${apiResponse.status} ${JSON.stringify(api)}`
@@ -102,7 +102,7 @@ jobs:
           if (
             identityResponse.status !== 200 ||
             identityMediaType !== 'application/json' ||
-            !identityCacheDirectives.includes('no-store') ||
+            identityCacheControl !== 'no-store, max-age=0' ||
             Object.keys(identity || {}).length !== 1 ||
             !/^[a-f0-9]{40}$/u.test(webSha || '')
           ) {
