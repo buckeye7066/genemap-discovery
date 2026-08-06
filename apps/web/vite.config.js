@@ -2,8 +2,25 @@ import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 import path from 'path'
 
+const commitSha = process.env.VERCEL_GIT_COMMIT_SHA || ''
+const releaseSha = /^[a-f0-9]{40}$/u.test(commitSha) ? commitSha : 'unavailable'
+
+const releaseIdentityPlugin = {
+  name: 'genemap-release-identity',
+  transformIndexHtml() {
+    return [{
+      tag: 'meta',
+      attrs: {
+        name: 'genemap-release-sha',
+        content: releaseSha,
+      },
+      injectTo: 'head',
+    }]
+  },
+}
+
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), releaseIdentityPlugin],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './'),
