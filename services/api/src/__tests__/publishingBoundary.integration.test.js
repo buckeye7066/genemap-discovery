@@ -361,6 +361,9 @@ describe('structured publication boundary in real Fastify', () => {
     });
 
     it.each([
+      'Genetics',
+      'General Genetics',
+      'general-genetics',
       "Alice Smith's BRCA1 variant",
       'Alice Smith VCF',
       'DNA from Alice Smith',
