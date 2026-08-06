@@ -283,6 +283,9 @@ describe('production launch verification', () => {
       <html><body></body></html>
       <html><head><meta name="genemap-release-sha" content="${approvedSha}"></head></html>
     `)).toBeNull();
+    expect(extractWebReleaseSha(`<html><body></body><head>
+      <meta name="genemap-release-sha" content="${approvedSha}">
+    </head></html>`)).toBeNull();
   });
 
   it('rejects redirects and the wrong publication mode', async () => {
