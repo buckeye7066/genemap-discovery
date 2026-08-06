@@ -81,9 +81,12 @@ The privacy-lifecycle migration is transactionally and rolling-client
 compatible after it commits, but it is not an online-migration guarantee. It
 backfills existing rows, changes foreign keys, validates constraints, and
 creates ordinary indexes while holding locks. Before production deployment,
-record row counts and expected lock duration, stop or drain writes under a
-controlled maintenance procedure, establish rollback/forward-recovery steps,
+record row counts and expected lock duration; preflight WAL and disk capacity;
+drain all application traffic and active database transactions under a
+controlled maintenance procedure; establish rollback/forward-recovery steps;
 and verify the populated upgrade fixture against a production-sized copy.
+If that outage cannot be guaranteed, split the migration into explicit
+expand/backfill/validate/contract phases before release.
 
 ## Backup and restore
 
