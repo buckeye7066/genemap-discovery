@@ -386,7 +386,8 @@ model ProjectAnnotation {
 
 model ConsentRecord {
   id          String   @id @default(uuid())
-  userId      String   @map("user_id")
+  userId      String?  @map("user_id")
+  subjectRef  String   @map("subject_ref")
   consentType String   @map("consent_type")
   version     String
   granted     Boolean
@@ -394,9 +395,12 @@ model ConsentRecord {
   metadata    Json?
   createdAt   DateTime @default(now()) @map("created_at")
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // The account relation is intentionally nullable. Local consent evidence
+  // survives account deletion under a pseudonymous subject reference.
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([userId, consentType])
+  @@index([subjectRef, consentType, createdAt])
   @@map("consent_records")
 }
 
@@ -444,16 +448,28 @@ model AgentLesson {
 }
 
 model DataDeletionRequest {
-  id           String    @id @default(uuid())
-  userId       String    @map("user_id")
-  status       String    @default("pending")
-  requestedAt  DateTime  @default(now()) @map("requested_at")
-  completedAt  DateTime? @map("completed_at")
-  deletedTypes String[]  @map("deleted_types")
+  id             String    @id @default(uuid())
+  userId         String?   @map("user_id")
+  subjectRef     String    @map("subject_ref")
+  scope          String    @default("legacy_content_v1")
+  status         String    @default("pending")
+  requestedAt    DateTime  @default(now()) @map("requested_at")
+  completedAt    DateTime? @map("completed_at")
+  requestedTypes String[]  @default(["medicalData", "aiConversations", "searchHistory"]) @map("requested_types")
+  deletedTypes   String[]  @default([]) @map("deleted_types")
+  attemptCount   Int       @default(0) @map("attempt_count")
+  lastAttemptAt  DateTime? @map("last_attempt_at")
+  nextAttemptAt  DateTime? @map("next_attempt_at")
+  leaseExpiresAt DateTime? @map("lease_expires_at")
+  failureCode    String?   @map("failure_code")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // This relation becomes null after local account deletion; subjectRef keeps
+  // the lifecycle evidence addressable without retaining account identity.
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([userId])
-  @@index([status, requestedAt])
+  @@index([subjectRef, requestedAt])
+  @@index([status, nextAttemptAt])
   @@map("data_deletion_requests")
 }
