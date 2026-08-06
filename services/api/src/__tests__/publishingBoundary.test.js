@@ -193,6 +193,26 @@ const ALLOWED_CASES = Object.freeze([
     prompt: 'Analyze gVCF files belonging to an anonymized cohort of 50 patients.',
   },
   {
+    label: 'copy-number variant calls from counted cohort',
+    task: PUBLICATION_TASKS.AGGREGATE_GENOMICS_RESEARCH,
+    prompt: 'Analyze copy-number variant calls from 50 patients across the cohort.',
+  },
+  {
+    label: 'CNV calls from deidentified cohort',
+    task: PUBLICATION_TASKS.AGGREGATE_GENOMICS_RESEARCH,
+    prompt: 'Analyze CNV calls from an anonymized aggregate cohort of 50 patients.',
+  },
+  {
+    label: 'cohort research with named gene variants',
+    task: PUBLICATION_TASKS.AGGREGATE_GENOMICS_RESEARCH,
+    prompt: 'Analyze public cohort results and BRCA1 gene variants across 50 patients.',
+  },
+  {
+    label: 'cohort research with two genomic artifact classes',
+    task: PUBLICATION_TASKS.AGGREGATE_GENOMICS_RESEARCH,
+    prompt: 'Analyze anonymized cohort VCF with copy-number variant calls from 50 patients.',
+  },
+  {
     label: 'reported aggregate work',
     task: PUBLICATION_TASKS.AGGREGATE_GENOMICS_RESEARCH,
     prompt: 'I was told to compare two cohort models for population-level association research.',
@@ -277,7 +297,20 @@ const ALLOWED_CASES = Object.freeze([
 // The matrix deliberately varies grammar rather than enumerating diagnoses.
 // Every row must stay blocked for every otherwise-valid task, so a caller
 // cannot relabel personal content as education or research.
+const JOINED_NAMED_ARTIFACT_CASES = Object.freeze(
+  ['and', 'plus', 'alongside', 'including', 'with', 'together with', 'as well as', 'combined with', ',']
+    .flatMap((connector) => [
+      'VCF', 'gVCF', 'BAM', 'CRAM', 'FASTQ', 'WES data', 'RNA-seq data',
+      'variant calls', 'SNP calls', 'CNV calls', 'copy-number variant calls',
+      'genome sequence', 'exome data',
+    ].map((artifact) => [
+      `aggregate prefix ${connector} named ${artifact}`,
+      `Analyze anonymized aggregate cohort data from 50 patients${connector === ',' ? ',' : ` ${connector}`} Jane Doe ${artifact} across the cohort.`,
+    ]))
+);
+
 const BLOCKED_CASES = Object.freeze([
+  ...JOINED_NAMED_ARTIFACT_CASES,
   ['first-person named condition', 'I have cancer. What are my options?'],
   ['first-person unknown condition', 'I have lupus. What can I do?'],
   ['reported condition', 'The doctor says I have MS. What now?'],
@@ -333,11 +366,15 @@ const BLOCKED_CASES = Object.freeze([
   ['accented bare name before VCF', 'Analyze María García VCF alongside 50 patients across the cohort.'],
   ['safe cohort beside VCF of person', 'Analyze the VCF of Jane Doe alongside an anonymized cohort of 50 patients.'],
   ['safe-prefix submitted owner plus individual', 'Analyze VCF submitted by an anonymized cohort and Jane Doe alongside 50 patients.'],
+  ['aggregate prefix then named VCF', 'Analyze anonymized aggregate cohort data from 50 patients and Jane Doe VCF across the cohort.'],
+  ['public cohort prefix then named BAM', 'Analyze public cohort results from 50 patients and Jane Doe BAM across the cohort.'],
+  ['deidentified population prefix then named FASTQ', 'Analyze a deidentified population of 50 patients and Jane Doe FASTQ across the cohort.'],
   ['named FASTQ ownership', "Analyze John Smith's FASTQ files alongside 50 patients across the cohort."],
   ['named BAM source', 'Analyze BAM files from jane doe alongside 50 patients across the cohort.'],
   ['named CRAM attribution', 'Review CRAM belonging to Jane Doe alongside 50 patients across the cohort.'],
   ['bare name before gVCF', 'Analyze Jane Doe gVCF alongside 50 patients across the cohort.'],
   ['named SNP calls ownership', 'Analyze SNP calls owned by Jane Doe alongside 50 patients across the cohort.'],
+  ['named CNV calls beside cohort', 'Analyze Jane Doe CNV calls alongside 50 patients across the cohort.'],
   ['exome of named individual', 'Analyze the exome of Jane Doe alongside 50 patients across the cohort.'],
   ['genome sequence provided by person', 'Analyze a genome sequence provided by Jane Doe alongside 50 patients across the cohort.'],
   ['possessive person gene variants', "Analyze Jane Doe's gene variants alongside 50 patients across the cohort."],
@@ -360,6 +397,10 @@ const BLOCKED_CASES = Object.freeze([
   ['personal care then aggregate', 'I need help with these symptoms; also identify variants across 50 patients for cohort-level research.'],
   ['aggregate plus family care', 'Compare variants across an anonymized cohort of 200 patients; what is the risk for my child?'],
   ['aggregate plus personal VCF', 'Compare variants from an anonymized cohort of 200 patients; the VCF belongs to me.'],
+  ['aggregate plus direct diagnosis in one clause', 'Compare variants across an anonymized cohort of 200 patients and diagnose the symptoms I am experiencing.'],
+  ['aggregate WES plus personal medication decision', 'Analyze WES from 50 patients across the cohort and tell me whether my CYP2D6 means I should take codeine.'],
+  ['aggregate RNA-seq plus personal screening decision', 'Analyze RNA-seq from 30 patients across the cohort and tell me whether I should get BRCA screening.'],
+  ['aggregate cohort plus personal treatment recommendation', 'Analyze variants across 50 patients and recommend treatment for me.'],
   ['research preface plus personal variant', 'I have a research project and need help interpreting this mutation.'],
   ['aggregate preface plus personal dose', 'Compare outcomes across 200 patients; calculate my warfarin dose from CYP2C9.'],
   ['personal dose then aggregate', 'Calculate my warfarin dose from CYP2C9; then compare outcomes across 200 patients.'],
