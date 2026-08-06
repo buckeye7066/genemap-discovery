@@ -19,7 +19,7 @@ reviewed lifecycle operations; removing a route does not delete stored data.
 | --- | --- |
 | Sessions | Refresh-token sessions have expiry fields and an indexed, idempotent maintenance sweep deletes rows whose expiresAt is at or before the run time. No production schedule is evidenced. |
 | Self-service content request | An authenticated request creates a server-scoped DataDeletionRequest, then transactionally deletes that user's legacy MedicalData, AIConversation, and SearchHistory rows. Caller-supplied categories are ignored. |
-| Deletion retries | Requests use finite states, attempt fencing, expiring leases, bounded exponential retry, and an operator-review terminal state. Failures persist only local_purge_failed; exception text is not stored. |
+| Deletion retries | Requests use finite states, attempt fencing, expiring leases, bounded exponential retry, and an operator-review terminal state. Only finite codes (local_purge_failed, retry_exhausted, subject_unavailable, and legacy_state_requires_review) may persist; exception text is not stored. |
 | Evidence preservation | Consent and deletion evidence survives local account deletion with a nullable user relation and an opaque UUID subjectRef. Consent IP addresses and free-form metadata are scrubbed during account deletion. subjectRef is pseudonymous, not anonymous. |
 | Manual backup artifact | Database-bearing snapshots fail closed, use tracked source only, require age encryption, write a checksum, and restrict local permissions. |
 | Publication APIs | Medical-data, conversation, VCF, variant/ClinVar, and clinical-trial paths are blocked before body parsing, route authentication, and handlers. |
@@ -52,8 +52,11 @@ The following remain release blockers, not promises:
 `POST /entities/data-deletion-request` is a limited local content purge, not
 verified full account closure. It requests exactly three legacy categories in
 one transaction. deletedTypes remains empty until that transaction commits.
-On failure, the route returns 503 and leaves a sanitized retry_scheduled or
-operator_review record for the maintenance worker.
+If immediate processing cannot complete, the durable request returns 202
+Accepted with a sanitized retry_scheduled, processing, or operator_review
+status. retry_scheduled and expired processing leases remain worker-eligible;
+operator_review is terminal and requires an accountable operator. A 5xx is
+reserved for failure to create and retain the request itself.
 
 A super-administrator's local account deletion finalizes open requests only
 because the database cascade removes those three local categories. It does not
