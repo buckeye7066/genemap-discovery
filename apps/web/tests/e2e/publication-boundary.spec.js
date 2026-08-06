@@ -8,6 +8,7 @@ const REMOVED_ROUTES = [
   '/robertclinical',
   '/visualizationhub',
   '/gsea',
+  '/functionreviewer',
 ];
 
 const FORBIDDEN_NAVIGATION = [
