@@ -5,7 +5,8 @@
 # the temporary workspace. Set BACKUP_CODE_ONLY=true to explicitly create a
 # source-only ZIP when no database URL is available.
 
-set -euo pipefail
+set -Eeuo pipefail
+umask 077
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 REPO_ROOT=$(cd "${SCRIPT_DIR}/.." && pwd)
