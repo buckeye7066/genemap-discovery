@@ -162,11 +162,41 @@ function generationText(body) {
   return values.filter((value) => typeof value === 'string').join('\n');
 }
 
+const INTENT_CLAUSE_SEPARATOR = /(?:[.;!?]+|\b(?:then|but|however|also)\b)/gi;
+
+function splitIntentClauseSpans(text) {
+  const source = String(text);
+  const spans = [];
+  let start = 0;
+
+  const appendSpan = (end) => {
+    const segment = source.slice(start, end);
+    const leadingWhitespace = segment.match(/^\s*/)?.[0].length || 0;
+    const trailingWhitespace = segment.match(/\s*$/)?.[0].length || 0;
+    const clauseStart = start + leadingWhitespace;
+    const clauseEnd = end - trailingWhitespace;
+    if (clauseStart < clauseEnd) {
+      spans.push({
+        text: source.slice(clauseStart, clauseEnd),
+        start: clauseStart,
+        end: clauseEnd,
+      });
+    }
+  };
+
+  for (const separator of source.matchAll(new RegExp(
+    INTENT_CLAUSE_SEPARATOR.source,
+    INTENT_CLAUSE_SEPARATOR.flags
+  ))) {
+    appendSpan(separator.index);
+    start = separator.index + separator[0].length;
+  }
+  appendSpan(source.length);
+  return spans;
+}
+
 function splitIntentClauses(text) {
-  return String(text)
-    .split(/(?:[.;!?]+|\b(?:then|but|however|also)\b)/i)
-    .map((clause) => clause.trim())
-    .filter(Boolean);
+  return splitIntentClauseSpans(text).map(({ text: clause }) => clause);
 }
 
 const AGGREGATE_EVIDENCE =
@@ -406,6 +436,45 @@ function hasUnsafePersonalRecommendation(text) {
   return false;
 }
 
+function regexMatches(regex, text) {
+  const flags = regex.flags.includes('g') ? regex.flags : `${regex.flags}g`;
+  return String(text).matchAll(new RegExp(regex.source, flags));
+}
+
+function rangesOverlap(leftStart, leftEnd, rightStart, rightEnd) {
+  return leftStart < rightEnd && rightStart < leftEnd;
+}
+
+function hasUnexemptedPersonalClinicalDecision(text) {
+  const source = String(text);
+  const clauses = splitIntentClauseSpans(source);
+
+  for (const personalDecision of regexMatches(PERSONAL_CLINICAL_DECISION, source)) {
+    const decisionStart = personalDecision.index;
+    const decisionEnd = decisionStart + personalDecision[0].length;
+    const clause = clauses.find(
+      ({ start, end }) => start <= decisionStart && decisionEnd <= end
+    );
+
+    // A research-design exemption is local to one decision predicate. The
+    // same clause must carry explicit aggregate evidence, and the research
+    // design match must overlap this exact personal-looking action (for
+    // example, "Should I use age as a covariate"). A separate safe covariate
+    // clause or predicate can never launder "should I take warfarin" or
+    // "should I get screening" elsewhere in the request.
+    const hasClauseLocalResearchDesign = clause
+      && isAggregateResearchIntent(clause.text)
+      && Array.from(regexMatches(RESEARCH_DESIGN_DECISION, clause.text)).some((designDecision) => {
+        const designStart = clause.start + designDecision.index;
+        const designEnd = designStart + designDecision[0].length;
+        return rangesOverlap(decisionStart, decisionEnd, designStart, designEnd);
+      });
+
+    if (!hasClauseLocalResearchDesign) return true;
+  }
+  return false;
+}
+
 function hasDirectPersonalOrClinicalExecution(text) {
   if (
     PERSONAL_SENSITIVE_OWNERSHIP.test(text)
@@ -423,10 +492,7 @@ function hasDirectPersonalOrClinicalExecution(text) {
     || hasUnsafePersonalRecommendation(text)
   ) return true;
 
-  if (PERSONAL_CLINICAL_DECISION.test(text)) {
-    return !(isAggregateResearchIntent(text) && RESEARCH_DESIGN_DECISION.test(text));
-  }
-  return false;
+  return hasUnexemptedPersonalClinicalDecision(text);
 }
 
 const GENETICS_DOMAIN =
