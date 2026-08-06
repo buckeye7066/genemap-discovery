@@ -22,6 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: '24'
@@ -55,21 +56,21 @@ jobs:
       - name: Check coordinated web and API release identity
         run: |
           api_body="$(curl --fail --silent --show-error --max-time 15 "$API_URL/readyz")"
-          web_html="$(curl --fail --silent --show-error --location --max-time 20 "$WEB_URL")"
-          API_BODY="$api_body" WEB_HTML="$web_html" node <<'NODE'
+          web_html="$(curl --fail --silent --show-error --proto '=https' --max-time 20 "$WEB_URL")"
+          API_BODY="$api_body" WEB_HTML="$web_html" node --input-type=module <<'NODE'
+          import { extractWebReleaseSha } from './scripts/lib/release-identity.mjs';
+
           const api = JSON.parse(process.env.API_BODY);
-          const webMatch = process.env.WEB_HTML.match(
-            /<meta\s+name=["']genemap-release-sha["']\s+content=["']([a-f0-9]{40})["'][^>]*>/iu
-          );
+          const webSha = extractWebReleaseSha(process.env.WEB_HTML);
           if (!/^[a-f0-9]{40}$/u.test(api.releaseSha || '')) {
             throw new Error(`API readiness is missing an immutable release SHA: ${JSON.stringify(api)}`);
           }
-          if (!webMatch) {
-            throw new Error('Web shell is missing the immutable release SHA meta tag.');
+          if (!webSha) {
+            throw new Error('Web shell is missing one unambiguous immutable release SHA marker.');
           }
-          if (webMatch[1] !== api.releaseSha) {
+          if (webSha !== api.releaseSha) {
             throw new Error(
-              `Web/API release skew: web=${webMatch[1]} api=${api.releaseSha}`
+              `Web/API release skew: web=${webSha} api=${api.releaseSha}`
             );
           }
           NODE
@@ -141,14 +142,14 @@ jobs:
       - name: Check web security headers
         run: |
           headers="$(mktemp)"
-          curl --fail --silent --show-error --location --max-time 20 \
+          curl --fail --silent --show-error --proto '=https' --max-time 20 \
             --output /dev/null --dump-header "$headers" "$WEB_URL"
           grep -Fi "strict-transport-security:" "$headers"
           grep -Fi "x-content-type-options: nosniff" "$headers"
 
       - name: Check web app shell
         run: |
-          html="$(curl --fail --silent --show-error --location --max-time 20 "$WEB_URL")"
+          html="$(curl --fail --silent --show-error --proto '=https' --max-time 20 "$WEB_URL")"
           case "$html" in
             *'<title>GeneMap Discovery | Genetics Education &amp; Research Leads</title>'*'<div id="root"'*) ;;
             *)
