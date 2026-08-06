@@ -49,7 +49,10 @@ const SEARCH_LABELS = {
   mondo_term: 'MONDO terms',
   gene: 'Genes',
   phenotype: 'Phenotypes',
-  free_text: 'Reviewed text searches',
+  free_text: 'Text searches',
+  premium: 'Expanded search mode',
+  free: 'Standard search mode',
+  general: 'General searches',
   other: 'Other'
 };
 
@@ -247,7 +250,7 @@ export default function AdminAnalytics() {
           />
           <StatCard
             icon={FileText}
-            label="Research projects"
+            label="Saved gene sets"
             value={stats.totalGeneSets}
             colorClass="bg-green-100 text-green-600"
           />
