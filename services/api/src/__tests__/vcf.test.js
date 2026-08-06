@@ -155,6 +155,58 @@ describe('VCF genomics routes', () => {
     expect(prisma._store.auditLog.some((row) => row.action === 'vcf.enrich')).toBe(true);
   });
 
+  it('sanitizes, deduplicates, and caps ClinVar follow-up candidate IDs', async () => {
+    const db = await import('../services/genomicDatabases.js');
+    db.getClinVarVariant.mockClear();
+    db.searchClinVar.mockResolvedValueOnce({
+      esearchresult: {
+        idlist: [
+          '123',
+          ' 123 ',
+          'not-a-record',
+          '',
+          ...Array.from({ length: 25 }, (_, index) => String(1000 + index)),
+        ],
+      },
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/genomics/vcf/enrich',
+      headers: { cookie: cookie() },
+      payload: {
+        variants: [{
+          chromosome: 'chr17',
+          position: 43071077,
+          rsid: 'rs80357906',
+          ref: 'A',
+          alt: 'G',
+          gene: 'BRCA1',
+          stableVariantKey: 'chr17:43071077:A>G',
+        }],
+      },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const candidates = JSON.parse(res.body)
+      .enrichedVariants[0]
+      .annotations.clinVar
+      .unverifiedCandidates;
+    expect(candidates).toHaveLength(20);
+    expect(candidates.map(({ recordId }) => recordId)).toEqual(
+      expect.arrayContaining(['123', '1000'])
+    );
+    expect(new Set(candidates.map(({ recordId }) => recordId)).size).toBe(20);
+    for (const candidate of candidates) {
+      expect(candidate.recordId).toMatch(/^\d+$/u);
+      expect(candidate.evidenceClass).toBe('unverified_search_candidate');
+      expect(candidate.url).toBe(
+        `https://www.ncbi.nlm.nih.gov/clinvar/variation/${candidate.recordId}/`
+      );
+    }
+    expect(db.getClinVarVariant).not.toHaveBeenCalled();
+  });
+
   it('rejects empty enrichment batches', async () => {
     const res = await app.inject({
       method: 'POST',
