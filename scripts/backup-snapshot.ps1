@@ -52,10 +52,20 @@ function Assert-SafeRemoteDirectory([string]$Path) {
     }
 }
 
-function Set-OwnerOnlyUnixMode([string]$Path) {
-    if ([System.Environment]::OSVersion.Platform -ne [System.PlatformID]::Win32NT) {
+function Set-OwnerOnlyAccess([string]$Path, [switch]$Directory) {
+    if ([System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT) {
+        Require-Command "icacls"
+        $Identity = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+        $Grant = if ($Directory) { "${Identity}:(OI)(CI)F" } else { "${Identity}:F" }
+        & icacls $Path /inheritance:r /grant:r $Grant *> $null
+        if ($LASTEXITCODE -ne 0) {
+            throw "Unable to restrict Windows ACLs on $Path."
+        }
+    }
+    else {
         Require-Command "chmod"
-        & chmod 600 $Path
+        $Mode = if ($Directory) { "700" } else { "600" }
+        & chmod $Mode $Path
         if ($LASTEXITCODE -ne 0) {
             throw "Unable to restrict permissions on $Path."
         }
@@ -77,6 +87,7 @@ try {
 
     New-Item -ItemType Directory -Force -Path $BackupDir | Out-Null
     New-Item -ItemType Directory -Force -Path $StagingDir | Out-Null
+    Set-OwnerOnlyAccess $TempRoot -Directory
 
     Write-Host "[1/6] Exporting tracked repository files..." -ForegroundColor Yellow
     $SourceTar = Join-Path $TempRoot "tracked-source.tar"
@@ -169,13 +180,13 @@ Backup Type: Manual Snapshot
     else {
         Move-Item -LiteralPath $PlainArchive -Destination $FinalPath -Force
     }
-    Set-OwnerOnlyUnixMode $FinalPath
+    Set-OwnerOnlyAccess $FinalPath
 
     Write-Host "[5/6] Writing integrity checksum..." -ForegroundColor Yellow
     $Hash = (Get-FileHash -LiteralPath $FinalPath -Algorithm SHA256).Hash.ToLowerInvariant()
     $ChecksumPath = "$FinalPath.sha256"
     Set-Content -LiteralPath $ChecksumPath -Value "$Hash  $([System.IO.Path]::GetFileName($FinalPath))" -Encoding ASCII
-    Set-OwnerOnlyUnixMode $ChecksumPath
+    Set-OwnerOnlyAccess $ChecksumPath
 
     $RemoteCopied = $false
     if ($env:DRIVE_DIR) {
