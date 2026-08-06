@@ -573,27 +573,9 @@ export interface AdminAnalyticsStats {
   totalActivities: number;
 }
 
-export type AdminActivityCategory =
-  | 'gene_view'
-  | 'search'
-  | 'search_view'
-  | 'project_create'
-  | 'project_update'
-  | 'learning_activity'
-  | 'login'
-  | 'page_view'
-  | 'other';
+export type AdminActivityCategory = 'page_view' | 'gene_view' | 'other';
 
-export type AdminSearchCategory =
-  | 'premium'
-  | 'free'
-  | 'disease'
-  | 'hpo_term'
-  | 'mondo_term'
-  | 'gene'
-  | 'phenotype'
-  | 'free_text'
-  | 'other';
+export type AdminSearchCategory = 'free' | 'premium' | 'general' | 'other';
 
 export interface AdminActivityTypeCount {
   activityType: AdminActivityCategory;
