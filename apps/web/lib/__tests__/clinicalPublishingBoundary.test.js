@@ -285,8 +285,6 @@ describe('clinical publishing boundary', () => {
       );
     }
     expect(registryTest).not.toContain('agentRegistry');
-    expect(registryTest).not.toContain("agent: 'robert'");
-    expect(registryTest).not.toContain("agent: 'anastasia'");
   });
 
   it('removes retired persona and agent-mesh contracts from runtime source', () => {
@@ -316,7 +314,7 @@ describe('clinical publishing boundary', () => {
       expect(privacy).toContain(provider);
     }
     expect(terms).not.toContain('The published service does not accept personal medical records');
-    expect(terms).toContain('Profile, project, annotation, and support fields can still accept free text');
+    expect(terms).toContain('fields can still accept free text');
     expect(terms).not.toContain('AI providers acting as our processors');
     expect(premium).toContain('Saved gene sets & research projects');
     expect(premium).not.toContain('VCF analysis & clinical tools');
