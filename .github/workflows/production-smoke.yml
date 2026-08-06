@@ -63,6 +63,7 @@ jobs:
             { method: 'GET', path: '/genomics/clinvar/search?q=BRCA1' },
             { method: 'GET', path: '/entities/medical-data' },
             { method: 'GET', path: '/entities/conversations' },
+            { method: 'GET', path: '/admin/self-test' },
           ];
 
           for (const probe of probes) {
