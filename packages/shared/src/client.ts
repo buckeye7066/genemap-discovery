@@ -209,10 +209,53 @@ export class ApiClient {
    */
   private refreshPromise: Promise<boolean> | null = null;
 
-  constructor(baseURL: string = DEFAULT_BASE_URL) {
+  /**
+   * Transient-failure retry policy. A Railway/Vercel redeploy briefly makes the
+   * API unreachable: the edge proxy returns 502/503/504 or the connection is
+   * refused/reset for a few seconds. Without retry these surface to the user as
+   * hard "connectivity / API errors" that would have cleared on their own. We
+   * retry ONLY idempotent (GET/HEAD) requests, a bounded number of times, with
+   * exponential backoff — never a POST/PUT/DELETE, which could double-write.
+   */
+  private readonly maxRetries: number;
+  private readonly retryBaseDelayMs: number;
+
+  constructor(
+    baseURL: string = DEFAULT_BASE_URL,
+    options: { maxRetries?: number; retryBaseDelayMs?: number } = {}
+  ) {
     // Sanitize here too so a polluted constructor override (or env value that
     // sneaks a newline back in) can never produce a malformed request URL.
     this.baseURL = sanitizeBaseURL(baseURL);
+    // Normalize to FINITE values. Math.max alone preserves Infinity (→ retry a
+    // persistent failure forever) and yields NaN for junk input; guard both so
+    // the retry loop is always bounded.
+    const maxRetries = options.maxRetries ?? 2;
+    const retryBaseDelayMs = options.retryBaseDelayMs ?? 300;
+    this.maxRetries = Number.isFinite(maxRetries) ? Math.max(0, Math.floor(maxRetries)) : 2;
+    this.retryBaseDelayMs = Number.isFinite(retryBaseDelayMs) ? Math.max(0, retryBaseDelayMs) : 300;
+  }
+
+  /**
+   * Wait before a transient-failure retry: base, 2×base, 4×base … Resolves
+   * early if the caller aborts so a cancelled request never lingers in backoff.
+   */
+  private backoff(attempt: number, signal?: AbortSignal | null): Promise<void> {
+    const ms = this.retryBaseDelayMs * 2 ** attempt;
+    if (ms <= 0 || signal?.aborted) return Promise.resolve();
+    return new Promise((resolve) => {
+      let settled = false;
+      let timer: ReturnType<typeof setTimeout>;
+      const settle = () => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        if (signal) signal.removeEventListener('abort', settle);
+        resolve();
+      };
+      timer = setTimeout(settle, ms);
+      if (signal) signal.addEventListener('abort', settle, { once: true });
+    });
   }
 
   /**
@@ -265,37 +308,70 @@ export class ApiClient {
 
     const { timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS, signal: callerSignal, ...restOptions } = options;
 
-    // Bound every request with an AbortController so a stalled connection can
-    // never hang the UI forever. Compose with any caller-supplied signal so
-    // explicit cancellation still works.
-    const controller = new AbortController();
-    const timer =
-      timeoutMs > 0 ? setTimeout(() => controller.abort(), timeoutMs) : undefined;
-    if (callerSignal) {
-      if (callerSignal.aborted) controller.abort();
-      else callerSignal.addEventListener('abort', () => controller.abort(), { once: true });
-    }
+    // Only idempotent methods may be transparently retried — replaying a write
+    // (POST/PUT/DELETE) risks a double-effect. GET/HEAD are safe to repeat.
+    const isIdempotent = method === 'GET' || method === 'HEAD';
 
-    const config: RequestInit = {
-      ...restOptions,
-      credentials: 'include',
-      headers,
-      signal: controller.signal,
-    };
-
-    let response: Response;
-    try {
-      response = await fetch(url, config);
-    } catch (err) {
-      if (controller.signal.aborted && !callerSignal?.aborted) {
-        throw new ApiError(
-          'The request timed out — the server took too long to respond. Please try again.',
-          408
-        );
+    // `!` (definite assignment): the loop only exits via `break` — which always
+    // runs after `response` has been assigned — or via `throw`/`return`.
+    let response!: Response;
+    for (let attempt = 0; ; attempt++) {
+      // Bound every attempt with its own AbortController so a stalled connection
+      // can never hang the UI forever. Compose with any caller-supplied signal so
+      // explicit cancellation still works.
+      const controller = new AbortController();
+      const timer =
+        timeoutMs > 0 ? setTimeout(() => controller.abort(), timeoutMs) : undefined;
+      const onCallerAbort = () => controller.abort();
+      if (callerSignal) {
+        if (callerSignal.aborted) controller.abort();
+        else callerSignal.addEventListener('abort', onCallerAbort, { once: true });
       }
-      throw err;
-    } finally {
-      if (timer) clearTimeout(timer);
+
+      const config: RequestInit = {
+        ...restOptions,
+        credentials: 'include',
+        headers,
+        signal: controller.signal,
+      };
+
+      try {
+        response = await fetch(url, config);
+      } catch (err) {
+        // Our own timeout fired (not a caller cancel): surface a clean 408. A
+        // timeout means the server is too slow, not a transient blip — no retry.
+        if (controller.signal.aborted && !callerSignal?.aborted) {
+          throw new ApiError(
+            'The request timed out — the server took too long to respond. Please try again.',
+            408
+          );
+        }
+        // A genuine network error (connection refused/reset, DNS, offline) — the
+        // exact signature of a redeploy window. Retry idempotent requests a
+        // bounded number of times with backoff before giving up.
+        if (isIdempotent && !callerSignal?.aborted && attempt < this.maxRetries) {
+          await this.backoff(attempt, callerSignal);
+          continue;
+        }
+        throw err;
+      } finally {
+        if (timer) clearTimeout(timer);
+        if (callerSignal) callerSignal.removeEventListener('abort', onCallerAbort);
+      }
+
+      // A 502/503/504 from the edge proxy is what an in-flight deploy looks like
+      // to the browser. Treat it as transient for idempotent requests and retry
+      // before surfacing the error.
+      if (
+        isIdempotent &&
+        (response.status === 502 || response.status === 503 || response.status === 504) &&
+        attempt < this.maxRetries
+      ) {
+        await this.backoff(attempt, callerSignal);
+        continue;
+      }
+
+      break;
     }
 
     // Silent token refresh: an expired 15-min access token surfaces as a 401.
@@ -328,8 +404,10 @@ export class ApiClient {
       );
     }
 
-    // 204 No Content: callers expect undefined. Avoid response.json() throw.
-    if (response.status === 204) return undefined as T;
+    // 204 No Content — and a successful HEAD, which by definition carries no
+    // body — yield undefined. Without the HEAD guard the empty-body check below
+    // would turn a healthy HEAD 200 into a spurious "empty response" ApiError.
+    if (method === 'HEAD' || response.status === 204) return undefined as T;
 
     // Read the body defensively. A real fetch Response exposes text(); reading
     // text first lets an empty or non-JSON 2xx response (e.g. a gateway that
