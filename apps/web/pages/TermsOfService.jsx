@@ -3,11 +3,10 @@ import { Link } from "react-router-dom";
 import { FileText, ArrowLeft } from "lucide-react";
 
 /**
- * Terms of Service. Standalone + reachable logged-in and logged-out
- * (registered in `openPages`). Emphasizes the single most important point for a
- * genetics/AI tool: it is for education and research, not medical advice.
+ * Terms for the public education/research product. These terms mirror the
+ * publication boundary enforced in both the web app and API.
  */
-const UPDATED = "June 30, 2026";
+const UPDATED = "August 6, 2026";
 const CONTACT = "support@axiombiolabs.org";
 
 function Section({ title, children }) {
@@ -42,13 +41,13 @@ export default function TermsOfService() {
 
           <Section title="Educational use only — not medical advice">
             <p>
-              GeneMap provides <strong>educational and research</strong> information about genetics, including
-              AI-generated explanations, gene/phenotype results, and analyses. It is <strong>not a substitute
-              for professional medical advice, diagnosis, or treatment</strong>, and it is not a medical
-              device. AI output (including gene coordinates, identifiers, and phenotype associations) can be
-              incomplete or wrong and is not validated against authoritative genomic databases. Always consult
-              a qualified healthcare provider or genetic counselor for medical decisions, and never disregard
-              professional advice because of something you read here.
+              GeneMap provides <strong>educational and exploratory-research</strong> information about genetics,
+              including AI-generated explanations and candidate gene or phenotype leads. It is <strong>not a
+              substitute for professional medical advice, diagnosis, or treatment</strong>, and it is not a
+              medical device. AI rankings and explanations can be incomplete or wrong. Links to authoritative
+              databases are starting points for independent verification, not claim-level citations. Always
+              consult a qualified healthcare provider or genetic counselor for medical decisions, and never
+              disregard professional advice because of something you read here.
             </p>
           </Section>
 
@@ -59,11 +58,22 @@ export default function TermsOfService() {
             </p>
           </Section>
 
+          <Section title="Publication boundary">
+            <p>
+              The public route graph does not provide personal medical-record upload, personal VCF analysis,
+              diagnosis, individualized risk interpretation, clinical decision support, pharmacogenomic
+              recommendations, medication selection, or dosing. Profile, project, annotation, and support
+              fields can still accept free text. You must not submit personal medical records, personal genomic
+              files, protected health information, or patient-identifying information in any field, or try to
+              use or bypass GeneMap for clinical purposes.
+            </p>
+          </Section>
+
           <Section title="Acceptable use">
             <ul className="list-disc ml-5 space-y-1">
-              <li>Do not upload another person's medical or genetic data without their consent.</li>
-              <li>Do not use the service for unlawful purposes or to attempt to breach its security.</li>
-              <li>Do not misrepresent AI-generated content as validated clinical fact.</li>
+              <li>Do not submit personal medical, genomic, or patient-identifying information.</li>
+              <li>Do not use the service for unlawful purposes or attempt to breach or bypass its security.</li>
+              <li>Do not misrepresent AI-generated content as validated scientific or clinical fact.</li>
             </ul>
           </Section>
 
@@ -77,9 +87,13 @@ export default function TermsOfService() {
 
           <Section title="Your content">
             <p>
-              You retain ownership of content you upload. You grant us a limited license to process it solely
-              to provide the service (including sending it to AI providers acting as our processors to return
-              your results). See our <Link to="/privacypolicy" className="text-blue-600 hover:underline">Privacy Policy</Link>.
+              You retain ownership of research prompts, notes, and other content you submit. You grant us a
+              limited license to process it solely to provide the service, including sending bounded task
+              inputs to the configured AI provider and identifiers or search terms to the scientific lookup
+              services described in the Privacy Policy. You must have the right to submit that content, and
+              you must not submit personal medical, genomic, protected-health, or patient-identifying
+              information. See our{" "}
+              <Link to="/privacypolicy" className="text-blue-600 hover:underline">Privacy Policy</Link>.
             </p>
           </Section>
 
@@ -111,3 +125,4 @@ export default function TermsOfService() {
     </div>
   );
 }
+

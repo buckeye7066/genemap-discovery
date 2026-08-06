@@ -1,11 +1,9 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { apiClient } from "@genemap/shared";
 import { useAuth } from "../lib/AuthContext";
 import { isAdminUser } from "../lib/roles";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   BarChart,
   Bar,
@@ -22,194 +20,173 @@ import {
   ResponsiveContainer
 } from "recharts";
 import {
-  TrendingUp,
-  Users,
   Activity,
-  Search,
-  FileText,
-  MessageSquare,
-  Eye,
   AlertCircle,
   BarChart3,
-  Clock,
-  Network
+  FileText,
+  Search,
+  ShieldCheck,
+  Users
 } from "lucide-react";
 
-export default function AdminAnalytics() {
-  // Use the authenticated user from context. This used to be a local
-  // useState(null) that nothing ever set, so isAdminUser(user) was always
-  // false and every visitor — super_admin included — saw "Admin access required".
-  const { user, isLoadingAuth } = useAuth();
-  const [stats, setStats] = useState({});
-  const [activities, setActivities] = useState([]);
-  const [searches, setSearches] = useState([]);
-  const [medicalRecords, setMedicalRecords] = useState([]);
-  const [medicalDataTypeBreakdown, setMedicalDataTypeBreakdown] = useState([]);
-  const [aiConversations, setAiConversations] = useState([]);
-  // Agent-mesh report surface (GET /admin/analytics -> agentMesh). Counts +
-  // operational lesson text only.
-  const [agentMesh, setAgentMesh] = useState({ messagesLast7d: 0, lessons: [] });
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [activeTab, setActiveTab] = useState('overview');
+const COLORS = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#06b6d4', '#84cc16'];
 
-  useEffect(() => {
-    if (isLoadingAuth) return;
-    loadAnalytics();
-     
-  }, [isLoadingAuth, user]);
+const ACTIVITY_LABELS = {
+  gene_view: 'Gene views',
+  search: 'Searches',
+  search_view: 'Search views',
+  project_create: 'Projects created',
+  project_update: 'Projects updated',
+  learning_activity: 'Learning activities',
+  login: 'Sign-ins',
+  page_view: 'Page views',
+  other: 'Other'
+};
 
-  const loadAnalytics = async () => {
-    setIsLoading(true);
-    try {
-      if (!isAdminUser(user)) {
-        setError('Admin access required');
-        return;
-      }
+const SEARCH_LABELS = {
+  disease: 'Disease concepts',
+  hpo_term: 'HPO terms',
+  mondo_term: 'MONDO terms',
+  gene: 'Genes',
+  phenotype: 'Phenotypes',
+  free_text: 'Text searches',
+  premium: 'Expanded search mode',
+  free: 'Standard search mode',
+  general: 'General searches',
+  other: 'Other'
+};
 
-      const analytics = await apiClient.getAdminAnalytics();
-      // Backend shape: { stats:{ total* counts }, recentActivity:[], recentSearches:[], recentConversations:[] }.
-      // The old code read recentActivity.activities/.searches (object props that
-      // never existed on the array), so every list was [] and every card read 0.
-      const {
-        stats: statCounts = {},
-        recentActivity = [],
-        recentSearches = [],
-        recentConversations = [],
-        medicalDataTypeBreakdown: typeBreakdown = [],
-        agentMesh: mesh = {},
-      } = analytics;
+function countValue(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+}
 
-      setStats(statCounts);
-      setActivities(Array.isArray(recentActivity) ? recentActivity : []);
-      setSearches(Array.isArray(recentSearches) ? recentSearches : []);
-      // Medical records are exposed as a COUNT only (no PHI listing) — the
-      // upload-type mix comes from a separate privacy-safe server-side
-      // aggregate (counts by type, no record content) instead.
-      setMedicalRecords([]);
-      setMedicalDataTypeBreakdown(Array.isArray(typeBreakdown) ? typeBreakdown : []);
-      setAiConversations(Array.isArray(recentConversations) ? recentConversations : []);
-      setAgentMesh({
-        messagesLast7d: Number(mesh?.messagesLast7d) || 0,
-        lessons: Array.isArray(mesh?.lessons) ? mesh.lessons : [],
-      });
-    } catch (err) {
-      console.error('Error loading analytics:', err);
-      setError(err.message || 'Failed to load analytics');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+function aggregateBreakdown(rows, key, labels) {
+  const counts = new Map();
 
-  const activityTypeDistribution = useMemo(() => {
-    const counts = {};
-    activities.forEach(activity => {
-      const type = activity.activityType || 'unknown';
-      counts[type] = (counts[type] || 0) + 1;
-    });
-    return Object.entries(counts).map(([name, value]) => ({ name, value }));
-  }, [activities]);
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const rawKey = typeof row?.[key] === 'string' ? row[key] : 'other';
+    const name = labels[rawKey] || labels.other;
+    counts.set(name, (counts.get(name) || 0) + countValue(row?.count));
+  }
 
-  const popularGenes = useMemo(() => {
-    const geneCounts = {};
-    activities.forEach(activity => {
-      // Gene views record the symbol in entityId (entityType === 'gene').
-      const symbol = (activity.entityType === 'gene' || activity.activityType === 'gene_view')
-        ? activity.entityId
-        : null;
-      if (symbol) {
-        geneCounts[symbol] = (geneCounts[symbol] || 0) + 1;
-      }
-    });
-    return Object.entries(geneCounts)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 10)
-      .map(([name, count]) => ({ name, count }));
-  }, [activities]);
+  return Array.from(counts, ([name, value]) => ({ name, value }))
+    .filter(({ value }) => value > 0)
+    .sort((a, b) => b.value - a.value);
+}
 
-  const popularSearches = useMemo(() => {
-    const searchCounts = {};
-    searches.forEach(search => {
-      const query = search.query || 'Unknown';
-      searchCounts[query] = (searchCounts[query] || 0) + 1;
-    });
-    return Object.entries(searchCounts)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 10)
-      .map(([name, count]) => ({ name, count }));
-  }, [searches]);
-
-  const activityTimeline = useMemo(() => {
-    const last7Days = [];
-    for (let i = 6; i >= 0; i--) {
-      const date = new Date();
-      date.setDate(date.getDate() - i);
-      last7Days.push(date.toISOString().split('T')[0]);
-    }
-    return last7Days.map(date => {
-      const onDay = (ts) => typeof ts === 'string' ? ts.startsWith(date) : new Date(ts).toISOString().startsWith(date);
-      const dayActivities = activities.filter(a => a.createdAt && onDay(a.createdAt)).length;
-      const daySearches = searches.filter(s => s.createdAt && onDay(s.createdAt)).length;
-      return {
-        date: new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-        activities: dayActivities,
-        searches: daySearches,
-        total: dayActivities + daySearches
-      };
-    });
-  }, [activities, searches]);
-
-  const medicalDataTypes = useMemo(() => {
-    return medicalDataTypeBreakdown.map(({ dataType, count }) => ({
-      name: (dataType || 'other').replace(/_/g, ' ').toUpperCase(),
-      value: count
-    }));
-  }, [medicalDataTypeBreakdown]);
-
-  const aiUsageStats = useMemo(() => {
-    const robertCount = aiConversations.filter(c => c.assistantType === 'robert').length;
-    const anastasiaCount = aiConversations.filter(c => c.assistantType === 'anastasia').length;
-    return [
-      { name: 'Robert (Clinical)', value: robertCount },
-      { name: 'Anastasia (Counselor)', value: anastasiaCount }
-    ];
-  }, [aiConversations]);
-
-  const searchTypeDistribution = useMemo(() => {
-    // SearchHistory records queryType (disease / free_text / hpo_term), not a
-    // premium/free flag — so report the real query-type mix.
-    const labels = { disease: 'Disease', free_text: 'Free Text', hpo_term: 'HPO Term' };
-    const counts = {};
-    searches.forEach(s => {
-      const key = labels[s.queryType] || s.queryType || 'Other';
-      counts[key] = (counts[key] || 0) + 1;
-    });
-    return Object.entries(counts).map(([name, value]) => ({ name, value }));
-  }, [searches]);
-
-  const COLORS = ['#3b82f6', '#8b5cf6', '#ec4899', '#10b981', '#f59e0b', '#ef4444', '#06b6d4', '#84cc16'];
-
-  // A degenerate dataset (empty, or a bar chart of all-zeros) renders as an
-  // empty box or a flat collapsed line that reads as "broken". Show an explicit
-  // empty-state instead so the chart area always communicates clearly.
-  const ChartEmpty = ({ label = 'No data yet' }) => (
+function ChartEmpty({ label }) {
+  return (
     <div className="h-[300px] flex flex-col items-center justify-center text-slate-400">
       <BarChart3 className="w-10 h-10 mb-2 text-slate-300" />
       <p className="text-sm">{label}</p>
     </div>
   );
-  const hasValues = (rows) => Array.isArray(rows) && rows.some((r) => (r?.value || 0) > 0);
+}
+
+function StatCard({ icon: Icon, label, value, colorClass }) {
+  return (
+    <Card>
+      <CardContent className="pt-6">
+        <div className="flex items-center gap-3">
+          <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${colorClass}`}>
+            <Icon className="w-6 h-6" />
+          </div>
+          <div>
+            <p className="text-2xl font-bold text-slate-900">{countValue(value).toLocaleString()}</p>
+            <p className="text-xs text-slate-600">{label}</p>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+export default function AdminAnalytics() {
+  const { user, isLoadingAuth } = useAuth();
+  const [analytics, setAnalytics] = useState({
+    stats: {},
+    activityTypeBreakdown: [],
+    searchTypeBreakdown: [],
+    dailyActivity: []
+  });
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    if (isLoadingAuth) return;
+
+    let isCurrent = true;
+
+    async function loadAnalytics() {
+      if (!isAdminUser(user)) {
+        if (isCurrent) {
+          setError('Admin access required');
+          setIsLoading(false);
+        }
+        return;
+      }
+
+      setIsLoading(true);
+      setError(null);
+
+      try {
+        const response = await apiClient.getAdminAnalytics();
+        if (!isCurrent) return;
+
+        setAnalytics({
+          stats: response?.stats || {},
+          activityTypeBreakdown: Array.isArray(response?.activityTypeBreakdown)
+            ? response.activityTypeBreakdown
+            : [],
+          searchTypeBreakdown: Array.isArray(response?.searchTypeBreakdown)
+            ? response.searchTypeBreakdown
+            : [],
+          dailyActivity: Array.isArray(response?.dailyActivity) ? response.dailyActivity : []
+        });
+      } catch (requestError) {
+        if (isCurrent) {
+          console.error('Error loading aggregate analytics:', requestError);
+          setError(requestError?.message || 'Failed to load analytics');
+        }
+      } finally {
+        if (isCurrent) setIsLoading(false);
+      }
+    }
+
+    loadAnalytics();
+    return () => {
+      isCurrent = false;
+    };
+  }, [isLoadingAuth, user]);
+
+  const activityTypes = useMemo(
+    () => aggregateBreakdown(analytics.activityTypeBreakdown, 'activityType', ACTIVITY_LABELS),
+    [analytics.activityTypeBreakdown]
+  );
+
+  const searchTypes = useMemo(
+    () => aggregateBreakdown(analytics.searchTypeBreakdown, 'queryType', SEARCH_LABELS),
+    [analytics.searchTypeBreakdown]
+  );
+
+  const dailyActivity = useMemo(
+    () => analytics.dailyActivity.map((row) => ({
+      date: typeof row?.date === 'string' ? row.date : '',
+      activities: countValue(row?.activities),
+      searches: countValue(row?.searches)
+    })).filter(({ date }) => date),
+    [analytics.dailyActivity]
+  );
 
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-6">
-        <div className="max-w-7xl mx-auto">
-          <div className="animate-pulse space-y-4">
-            <div className="h-32 bg-slate-200 rounded-lg"></div>
-            <div className="grid md:grid-cols-2 gap-4">
-              <div className="h-64 bg-slate-200 rounded-lg"></div>
-              <div className="h-64 bg-slate-200 rounded-lg"></div>
-            </div>
+        <div className="max-w-7xl mx-auto animate-pulse space-y-4">
+          <div className="h-28 bg-slate-200 rounded-lg" />
+          <div className="grid md:grid-cols-2 gap-4">
+            <div className="h-72 bg-slate-200 rounded-lg" />
+            <div className="h-72 bg-slate-200 rounded-lg" />
           </div>
         </div>
       </div>
@@ -222,388 +199,144 @@ export default function AdminAnalytics() {
         <div className="max-w-4xl mx-auto">
           <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
-            <AlertDescription>
-              {error || 'Admin access required to view analytics'}
-            </AlertDescription>
+            <AlertDescription>{error || 'Admin access required to view analytics'}</AlertDescription>
           </Alert>
         </div>
       </div>
     );
   }
 
+  const { stats } = analytics;
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-6">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="mb-8">
+      <div className="max-w-7xl mx-auto space-y-8">
+        <div>
           <h1 className="text-4xl font-bold text-slate-900 mb-2 flex items-center gap-3">
             <BarChart3 className="w-10 h-10 text-blue-600" />
-            Admin Analytics Dashboard
+            Aggregate Platform Analytics
           </h1>
-          <p className="text-slate-600">Track user activity, popular features, and platform usage</p>
+          <p className="text-slate-600">
+            Category-level operational metrics for the education and early-research service.
+          </p>
         </div>
 
-        {/* Quick Stats — each card jumps to the tab with its breakdown */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-          <Card
-            role="button"
-            tabIndex={0}
-            onClick={() => setActiveTab('overview')}
-            onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && setActiveTab('overview')}
-            className="cursor-pointer transition-shadow hover:shadow-md"
-          >
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                  <Activity className="w-6 h-6 text-blue-600" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-slate-900">{stats.totalActivities ?? activities.length}</p>
-                  <p className="text-xs text-slate-600">Total Activities</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+        <Alert className="border-blue-200 bg-blue-50">
+          <ShieldCheck className="h-4 w-4 text-blue-700" />
+          <AlertDescription className="text-blue-900">
+            This dashboard contains aggregate counts only. Individual search text, record contents,
+            activity metadata, and user identities are excluded.
+          </AlertDescription>
+        </Alert>
 
-          <Card
-            role="button"
-            tabIndex={0}
-            onClick={() => setActiveTab('searches')}
-            onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && setActiveTab('searches')}
-            className="cursor-pointer transition-shadow hover:shadow-md"
-          >
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-                  <Search className="w-6 h-6 text-purple-600" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-slate-900">{stats.totalSearches ?? searches.length}</p>
-                  <p className="text-xs text-slate-600">Searches</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card
-            role="button"
-            tabIndex={0}
-            onClick={() => setActiveTab('features')}
-            onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && setActiveTab('features')}
-            className="cursor-pointer transition-shadow hover:shadow-md"
-          >
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-                  <FileText className="w-6 h-6 text-green-600" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-slate-900">{stats.totalMedicalRecords ?? medicalRecords.length}</p>
-                  <p className="text-xs text-slate-600">Medical Records</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card
-            role="button"
-            tabIndex={0}
-            onClick={() => setActiveTab('overview')}
-            onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && setActiveTab('overview')}
-            className="cursor-pointer transition-shadow hover:shadow-md"
-          >
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-amber-100 rounded-lg flex items-center justify-center">
-                  <MessageSquare className="w-6 h-6 text-amber-600" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-slate-900">{stats.totalConversations ?? aiConversations.length}</p>
-                  <p className="text-xs text-slate-600">AI Chats</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+          <StatCard
+            icon={Users}
+            label="Users"
+            value={stats.totalUsers}
+            colorClass="bg-blue-100 text-blue-600"
+          />
+          <StatCard
+            icon={ShieldCheck}
+            label="Active subscriptions"
+            value={stats.activeSubscriptions}
+            colorClass="bg-amber-100 text-amber-600"
+          />
+          <StatCard
+            icon={Search}
+            label="Searches"
+            value={stats.totalSearches}
+            colorClass="bg-purple-100 text-purple-600"
+          />
+          <StatCard
+            icon={FileText}
+            label="Saved gene sets"
+            value={stats.totalGeneSets}
+            colorClass="bg-green-100 text-green-600"
+          />
+          <StatCard
+            icon={Activity}
+            label="Activities"
+            value={stats.totalActivities}
+            colorClass="bg-cyan-100 text-cyan-600"
+          />
         </div>
 
-        {/* Main Content */}
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="genes">Popular Genes</TabsTrigger>
-            <TabsTrigger value="searches">Searches</TabsTrigger>
-            <TabsTrigger value="features">Feature Usage</TabsTrigger>
-          </TabsList>
-
-          {/* Overview Tab */}
-          <TabsContent value="overview" className="space-y-6">
-            <div className="grid md:grid-cols-2 gap-6">
-              {/* Activity Timeline */}
-              <Card className="shadow-lg">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Clock className="w-5 h-5 text-blue-600" />
-                    Activity Timeline (7 Days)
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <LineChart data={activityTimeline}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="date" />
-                      <YAxis />
-                      <Tooltip />
-                      <Legend />
-                      <Line type="monotone" dataKey="activities" stroke="#3b82f6" strokeWidth={2} />
-                      <Line type="monotone" dataKey="searches" stroke="#8b5cf6" strokeWidth={2} />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
-
-              {/* Activity Type Distribution */}
-              <Card className="shadow-lg">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Activity className="w-5 h-5 text-purple-600" />
-                    Activity Types
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {hasValues(activityTypeDistribution) ? (
-                  <ResponsiveContainer width="100%" height={300}>
-                    <PieChart>
-                      <Pie
-                        data={activityTypeDistribution}
-                        cx="50%"
-                        cy="50%"
-                        labelLine={false}
-                        label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
-                        outerRadius={80}
-                        fill="#8884d8"
-                        dataKey="value"
-                      >
-                        {activityTypeDistribution.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                        ))}
-                      </Pie>
-                      <Tooltip />
-                    </PieChart>
-                  </ResponsiveContainer>
-                  ) : <ChartEmpty label="No activity recorded yet" />}
-                </CardContent>
-              </Card>
-
-              {/* Search Type Distribution */}
-              <Card className="shadow-lg">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Search className="w-5 h-5 text-green-600" />
-                    Search Types
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {hasValues(searchTypeDistribution) ? (
-                  <ResponsiveContainer width="100%" height={300}>
-                    <PieChart>
-                      <Pie
-                        data={searchTypeDistribution}
-                        cx="50%"
-                        cy="50%"
-                        labelLine={false}
-                        label={({ name, value, percent }) => `${name}: ${value} (${(percent * 100).toFixed(0)}%)`}
-                        outerRadius={80}
-                        fill="#8884d8"
-                        dataKey="value"
-                      >
-                        {searchTypeDistribution.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                        ))}
-                      </Pie>
-                      <Tooltip />
-                    </PieChart>
-                  </ResponsiveContainer>
-                  ) : <ChartEmpty label="No searches recorded yet" />}
-                </CardContent>
-              </Card>
-
-              {/* AI Assistant Usage */}
-              <Card className="shadow-lg">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <MessageSquare className="w-5 h-5 text-indigo-600" />
-                    AI Assistant Usage
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {hasValues(aiUsageStats) ? (
-                  <ResponsiveContainer width="100%" height={300}>
-                    <BarChart data={aiUsageStats}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="name" />
-                      <YAxis allowDecimals={false} />
-                      <Tooltip />
-                      <Bar dataKey="value" fill="#6366f1" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                  ) : <ChartEmpty label="No AI chats recorded yet" />}
-                </CardContent>
-              </Card>
-
-              {/* Agent mesh — what Robert and Anastasia have told each other.
-                  Operational metadata only (agent ids, topics, counts); no user
-                  or medical content ever reaches these stores. */}
-              <Card className="shadow-lg md:col-span-2">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Network className="w-5 h-5 text-teal-600" />
-                    Agent Mesh
-                    <Badge variant="outline" className="ml-auto text-xs font-normal">
-                      {agentMesh.messagesLast7d} peer message{agentMesh.messagesLast7d === 1 ? '' : 's'} / 7d
-                    </Badge>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {agentMesh.lessons.length === 0 ? (
-                    <p className="text-sm text-slate-500 py-2">
-                      No cross-agent lessons recorded yet.
-                    </p>
-                  ) : (
-                    <div className="space-y-2">
-                      {agentMesh.lessons.slice(0, 8).map((lesson, idx) => (
-                        <div
-                          key={idx}
-                          className="flex items-start gap-3 text-sm p-2 rounded bg-slate-50 border border-slate-200"
-                        >
-                          <Badge className="bg-teal-600 text-white text-xs shrink-0">
-                            {lesson.topic}
-                          </Badge>
-                          <span className="text-slate-800 flex-1 min-w-0 break-words">
-                            {lesson.claim}
-                          </span>
-                          <span className="text-xs text-slate-500 shrink-0 whitespace-nowrap">
-                            by {lesson.authorAgent} &middot; seen {lesson.timesSeen}&times; &middot;{' '}
-                            learned by {Object.keys(lesson.consumedBy || {}).length}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-          </TabsContent>
-
-          {/* Popular Genes Tab */}
-          <TabsContent value="genes">
-            <Card className="shadow-lg">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Eye className="w-5 h-5 text-blue-600" />
-                  Top 10 Most Viewed Genes
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={500}>
-                  <BarChart data={popularGenes} layout="vertical">
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis type="number" />
-                    <YAxis dataKey="name" type="category" width={100} />
-                    <Tooltip />
-                    <Bar dataKey="count" fill="#3b82f6" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* Popular Searches Tab */}
-          <TabsContent value="searches">
-            <Card className="shadow-lg">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <TrendingUp className="w-5 h-5 text-purple-600" />
-                  Top 10 Search Queries
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={500}>
-                  <BarChart data={popularSearches} layout="vertical">
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis type="number" />
-                    <YAxis dataKey="name" type="category" width={150} />
-                    <Tooltip />
-                    <Bar dataKey="count" fill="#8b5cf6" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* Feature Usage Tab */}
-          <TabsContent value="features" className="space-y-6">
-            <Card className="shadow-lg">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <FileText className="w-5 h-5 text-green-600" />
-                  Medical Data Upload Types
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {hasValues(medicalDataTypes) ? (
+        <div className="grid lg:grid-cols-2 gap-6">
+          <Card className="shadow-lg lg:col-span-2">
+            <CardHeader>
+              <CardTitle>Aggregate activity (7 days)</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {dailyActivity.some((row) => row.activities > 0 || row.searches > 0) ? (
                 <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={medicalDataTypes}>
+                  <LineChart data={dailyActivity}>
                     <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="name" />
+                    <XAxis dataKey="date" />
                     <YAxis allowDecimals={false} />
                     <Tooltip />
-                    <Bar dataKey="value" fill="#10b981" />
+                    <Legend />
+                    <Line type="monotone" dataKey="activities" stroke="#3b82f6" strokeWidth={2} />
+                    <Line type="monotone" dataKey="searches" stroke="#8b5cf6" strokeWidth={2} />
+                  </LineChart>
+                </ResponsiveContainer>
+              ) : (
+                <ChartEmpty label="No aggregate activity recorded yet" />
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="shadow-lg">
+            <CardHeader>
+              <CardTitle>Activity categories</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {activityTypes.length ? (
+                <ResponsiveContainer width="100%" height={300}>
+                  <PieChart>
+                    <Pie
+                      data={activityTypes}
+                      cx="50%"
+                      cy="50%"
+                      labelLine={false}
+                      label={({ name, value }) => `${name}: ${value}`}
+                      outerRadius={90}
+                      dataKey="value"
+                    >
+                      {activityTypes.map((entry, index) => (
+                        <Cell key={entry.name} fill={COLORS[index % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+              ) : (
+                <ChartEmpty label="No activity categories recorded yet" />
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="shadow-lg">
+            <CardHeader>
+              <CardTitle>Search categories</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {searchTypes.length ? (
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={searchTypes} layout="vertical">
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis type="number" allowDecimals={false} />
+                    <YAxis dataKey="name" type="category" width={150} />
+                    <Tooltip />
+                    <Bar dataKey="value" fill="#8b5cf6" />
                   </BarChart>
                 </ResponsiveContainer>
-                ) : <ChartEmpty label="No medical data uploads yet" />}
-              </CardContent>
-            </Card>
-
-            {/* Feature Insights */}
-            <div className="grid md:grid-cols-3 gap-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">Most Active Feature</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-3xl font-bold text-blue-600">Gene Search</p>
-                  <p className="text-sm text-slate-600 mt-2">{searches.length} searches performed</p>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">Most Viewed Gene</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {popularGenes[0] && (
-                    <>
-                      <p className="text-3xl font-bold text-purple-600">{popularGenes[0].name}</p>
-                      <p className="text-sm text-slate-600 mt-2">{popularGenes[0].count} views</p>
-                    </>
-                  )}
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">Active Subscriptions</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-3xl font-bold text-amber-600">
-                    {stats.activeSubscriptions ?? 0}
-                  </p>
-                  <p className="text-sm text-slate-600 mt-2">premium subscribers</p>
-                </CardContent>
-              </Card>
-            </div>
-          </TabsContent>
-        </Tabs>
+              ) : (
+                <ChartEmpty label="No search categories recorded yet" />
+              )}
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </div>
   );

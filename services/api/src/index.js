@@ -25,8 +25,14 @@ import llmRoutes from './routes/llm.js';
 import adminRoutes from './routes/admin.js';
 import entityRoutes from './routes/entities.js';
 import genomicsRoutes from './routes/genomics.js';
+import publicationConceptRoutes from './routes/publicationConcepts.js';
 import clinicalTrialRoutes from './routes/clinicalTrials.js';
 import clientErrorRoutes from './routes/clientError.js';
+import {
+  PUBLICATION_MODE,
+  enforceHiddenPathBoundary,
+  enforcePublishingBoundary,
+} from './config/publishingBoundary.js';
 
 const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
 const GLOBAL_RATE_LIMIT_MAX = 100;
@@ -113,6 +119,14 @@ fastify.addHook(
   })
 );
 
+// Reject hidden path families during onRequest, before content-type parsing,
+// so the publication build never accepts a VCF/medical/clinical request body.
+fastify.addHook('onRequest', enforceHiddenPathBoundary);
+
+// Enforce bounded generation contracts after parsing their small structured
+// bodies. Register before CSRF and child route authentication/handlers.
+fastify.addHook('preHandler', enforcePublishingBoundary);
+
 // Global CSRF guard for state-changing requests on cookie-authenticated paths.
 fastify.addHook('preHandler', requireCsrf);
 
@@ -155,6 +169,7 @@ await fastify.register(llmRoutes, { prefix: '/llm' });
 await fastify.register(adminRoutes, { prefix: '/admin' });
 await fastify.register(entityRoutes, { prefix: '/entities' });
 await fastify.register(genomicsRoutes, { prefix: '/genomics' });
+await fastify.register(publicationConceptRoutes, { prefix: '/genomics/publication-concepts' });
 await fastify.register(clinicalTrialRoutes, { prefix: '/clinical-trials' });
 
 // Frontend error ingest (auth optional). Registered at root so the web app can
@@ -185,6 +200,7 @@ fastify.get('/readyz', { config: { rateLimit: false } }, async (request, reply) 
   return {
     status: 'ready',
     degraded: rateLimitProtection.emergency,
+    publicationMode: PUBLICATION_MODE,
     medicalEncryption: env.hasMedicalEncryption(),
     rateLimitStore: rateLimitStoreStatus(rateLimitRedis),
     rateLimitProtection,

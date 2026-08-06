@@ -1,0 +1,55 @@
+name: Web Tests
+
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main, develop, 'migrate/*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: web-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  web-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: '24'
+          cache: pnpm
+      - name: Install (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+      - name: Backup safeguards
+        run: |
+          bash -n scripts/backup-snapshot.sh
+          pnpm test:backup
+          pwsh -NoLogo -NoProfile -Command '$tokens = $null; $errors = $null; [System.Management.Automation.Language.Parser]::ParseFile("scripts/backup-snapshot.ps1", [ref]$tokens, [ref]$errors) > $null; if ($errors.Count -gt 0) { $errors | ForEach-Object { Write-Error $_.Message }; exit 1 }'
+      - name: Build shared package
+        run: pnpm --filter @genemap/shared build
+      - name: Web tests (Vitest + jsdom)
+        run: pnpm --filter @genemap/web test
+      - name: Web typecheck
+        run: pnpm --filter @genemap/web typecheck
+      - name: Build web bundle
+        run: pnpm --filter @genemap/web build
+        env:
+          VITE_API_URL: http://localhost:3000
+      - name: Verify publication bundle excludes clinical code
+        run: node scripts/verify-publication-bundle.mjs
+      - name: Install Chromium
+        run: pnpm --filter @genemap/web exec playwright install --with-deps chromium
+      - name: Authenticated publication-boundary browser journeys
+        run: pnpm --filter @genemap/web exec playwright test tests/e2e/public-surface.spec.js tests/e2e/publication-boundary.spec.js
+        env:
+          CI: 'true'
+          PLAYWRIGHT_LOCAL_PREVIEW: '1'
+          PLAYWRIGHT_BASE_URL: http://127.0.0.1:4173

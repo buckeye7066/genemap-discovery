@@ -1,9 +1,9 @@
 import { defineConfig, devices } from '@playwright/test';
 
 /**
- * E2E config for the public/auth surface. Runs against a deployed (or local)
- * URL — no LLM keys or seeded auth required — so it's safe to run in CI on every
- * deploy and locally for a quick smoke:
+ * E2E config for the public/auth and publication-boundary surfaces. It can run
+ * against a deployed URL or an exact-head `vite preview` artifact. No LLM keys
+ * or real user session are required.
  *
  *   PLAYWRIGHT_BASE_URL=https://genemap-discovery.vercel.app pnpm --filter @genemap/web e2e
  *
@@ -11,7 +11,10 @@ import { defineConfig, devices } from '@playwright/test';
  * pages, nav redirects, and security headers — the things that must never
  * silently break for a logged-out visitor.
  */
-const baseURL = process.env.PLAYWRIGHT_BASE_URL || 'https://genemap-discovery.vercel.app';
+const localPreview = process.env.PLAYWRIGHT_LOCAL_PREVIEW === '1';
+const baseURL = process.env.PLAYWRIGHT_BASE_URL || (
+  localPreview ? 'http://127.0.0.1:4173' : 'https://genemap-discovery.vercel.app'
+);
 
 export default defineConfig({
   testDir: './tests/e2e',
@@ -21,6 +24,12 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   reporter: process.env.CI ? [['github'], ['list']] : [['list']],
+  webServer: localPreview ? {
+    command: 'pnpm exec vite preview --host 127.0.0.1 --port 4173',
+    url: 'http://127.0.0.1:4173/login',
+    reuseExistingServer: !process.env.CI,
+    timeout: 120_000,
+  } : undefined,
   use: {
     baseURL,
     trace: 'on-first-retry',

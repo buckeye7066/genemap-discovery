@@ -18,11 +18,9 @@ import type {
   LearningProgress,
   LLMOptions,
   LLMResponse,
-  LLMImageResponse,
+  PublicationTaskRequest,
   SearchHistoryEntry,
   ActivityEntry,
-  MedicalData,
-  Conversation,
   GeneSet,
   Project,
   ProjectVersion,
@@ -30,17 +28,6 @@ import type {
   Message,
   License,
   LicenseSeatAssignment,
-  GeneInfo,
-  Variant,
-  ClinVarResult,
-  PhenotypeResult,
-  ClinicalTrialSearchParams,
-  ClinicalTrialSearchResponse,
-  ClinicalTrialDetailResponse,
-  VcfParsedVariant,
-  VcfParseResponse,
-  VcfEnrichmentResponse,
-  VcfCohortEnrichmentResponse,
   ConsentRecord,
   DataDeletionRequest,
   DeletionRequestStatus,
@@ -50,6 +37,7 @@ import type {
   PreBanRequest,
   UnbanOptions,
   AuthoritativeGeneRecord,
+  PublicationConceptSuggestion,
 } from './types.js';
 
 /**
@@ -81,78 +69,6 @@ export function sanitizeBaseURL(raw: string | undefined | null): string {
     .replace(/[\u0000-\u001F\u007F]+/g, '')
     .trim()
     .replace(/\/+$/, '');
-}
-
-/**
- * Fields that belong INSIDE the encrypted `content` blob of a medical record.
- * Everything the Base44-era UI expects to read/write as a flat property is
- * packed here on write and spread back out on read.
- */
-const MEDICAL_CONTENT_KEYS = [
-  'summary',
-  'relevant_genes',
-  'phenotypes_identified',
-  'extracted_data',
-  'vcf_variants',
-  'key_findings',
-  'risks',
-  'recommendations',
-  'notes',
-  'file_name',
-] as const;
-
-/** Translate a UI-shaped medical record into the backend contract. */
-function toBackendMedicalPayload(ui: Record<string, unknown>): Record<string, unknown> {
-  const dataType = (ui.dataType ?? ui.file_type ?? 'other') as string;
-  const content: Record<string, unknown> = {};
-  for (const key of MEDICAL_CONTENT_KEYS) {
-    if (ui[key] !== undefined) content[key] = ui[key];
-  }
-  const payload: Record<string, unknown> = {
-    dataType,
-    title: (ui.title ?? null) as string | null,
-    content,
-    metadata: (ui.metadata ?? null) as unknown,
-  };
-  const fileUrl = ui.fileUrl ?? ui.file_url;
-  if (fileUrl !== undefined) payload.fileUrl = fileUrl;
-  return payload;
-}
-
-/**
- * Translate a backend medical record into the flat shape every UI consumer
- * (MedicalData, Anastasia, Dashboard, AIAssistants, comparison/clinical
- * components) reads. Tolerant of legacy rows where `content` is a raw string
- * or already-flattened.
- */
-function normalizeMedicalRecord(rec: unknown): Record<string, unknown> {
-  const r = (rec ?? {}) as Record<string, unknown>;
-  const rawContent = r.content;
-  const content: Record<string, unknown> =
-    rawContent && typeof rawContent === 'object' && !Array.isArray(rawContent)
-      ? (rawContent as Record<string, unknown>)
-      : {};
-  const dataType = (r.dataType ?? r.file_type ?? content.file_type ?? 'other') as string;
-  return {
-    ...content,
-    id: r.id,
-    dataType,
-    file_type: dataType,
-    title: (r.title ?? content.title ?? null) as unknown,
-    file_url: (r.fileUrl ?? content.file_url ?? null) as unknown,
-    created_date: (r.createdAt ?? content.created_date ?? null) as unknown,
-    createdAt: (r.createdAt ?? null) as unknown,
-    metadata: (r.metadata ?? null) as unknown,
-    summary:
-      (content.summary as string) ??
-      (typeof rawContent === 'string' ? rawContent : '') ??
-      '',
-    relevant_genes: content.relevant_genes ?? [],
-    phenotypes_identified: content.phenotypes_identified ?? [],
-    extracted_data: content.extracted_data ?? {},
-    vcf_variants: content.vcf_variants ?? null,
-    notes: content.notes ?? '',
-  };
 }
 
 function resolveDefaultBaseURL(): string {
@@ -621,34 +537,22 @@ export class ApiClient {
     return this.request('/education/progress', { method: 'POST', body: JSON.stringify(data) });
   }
 
-  // ─── LLM ───────────────────────────────────────────────────────────
-  //
-  // `options.agent` names the calling persona (see agentRegistry.ts). It is
-  // hoisted OUT of `options` and sent as a sibling `agent` field because the
-  // server treats it as routing/identity metadata, not a generation parameter:
-  // it selects which agent's mesh inbox and lessons are loaded, and which agent
-  // authors a lesson when the provider fails. Unknown/absent ids are ignored by
-  // the server, so this is always safe to send.
-  invokeLLM(prompt: string, options: LLMOptions = {}): Promise<LLMResponse> {
-    const { agent, ...llmOptions } = options;
+  // ─── Bounded publication tasks ──────────────────────────────────────
+  invokePublicationTask<T extends PublicationTaskRequest>(
+    publicationTask: T['publicationTask'],
+    taskInput: T['taskInput'],
+    options: LLMOptions = {},
+  ): Promise<LLMResponse> {
+    const { publicationTask: _legacyTask, agent: _retiredAgent, ...llmOptions } =
+      options as LLMOptions & { agent?: unknown };
     return this.request('/llm/invoke', {
       method: 'POST',
-      body: JSON.stringify({ prompt, options: llmOptions, ...(agent ? { agent } : {}) }),
+      body: JSON.stringify({
+        publicationTask,
+        taskInput,
+        options: llmOptions,
+      }),
     });
-  }
-  llmChat(messages: Array<{ role: string; content: string }>, options: LLMOptions = {}): Promise<LLMResponse> {
-    const { agent, ...llmOptions } = options;
-    return this.request('/llm/chat', {
-      method: 'POST',
-      body: JSON.stringify({ messages, options: llmOptions, ...(agent ? { agent } : {}) }),
-    });
-  }
-  llmImage(prompt: string, options: LLMOptions = {}): Promise<LLMImageResponse> {
-    // Image generation is slower than a text call and can exceed the 40s
-    // default; give it the same 90s budget as generateImage() so the browser
-    // doesn't abort a still-running generation. (Without this, generic image
-    // generation was cut off at 40s while /education/image was not.)
-    return this.request('/llm/image', { method: 'POST', body: JSON.stringify({ prompt, options }), timeoutMs: 90_000 });
   }
 
   // ─── Admin ───────────────────────────────────────────────
@@ -714,13 +618,6 @@ export class ApiClient {
   getAdminAnalytics(): Promise<AdminAnalytics> {
     return this.request('/admin/analytics');
   }
-  runFunctionTests(): Promise<{
-    ok: boolean;
-    data: { checked: number; passed: number; failed: number; skipped: number; errorReport: string; checks?: unknown[] };
-    run_duration_ms: number;
-  }> {
-    return this.request('/admin/self-test');
-  }
   async getAdminMessages(params: Record<string, string> = {}): Promise<{ messages: Message[] }> {
     const qs = new URLSearchParams(params).toString();
     return this.request(`/admin/messages${qs ? `?${qs}` : ''}`);
@@ -762,77 +659,6 @@ export class ApiClient {
       body: JSON.stringify(data),
     });
     return res.entry;
-  }
-
-  // ─── Medical Data ─────────────────
-  //
-  // The backend `medical_data` model is deliberately minimal: `dataType`,
-  // `title`, a single encrypted `content` JSON blob, `fileUrl`, `metadata`.
-  // The UI (carried over from Base44) speaks a flatter, richer shape —
-  // `file_type`, `summary`, `relevant_genes`, `phenotypes_identified`,
-  // `extracted_data`, `vcf_variants`, `created_date`, `file_url`. Rather than
-  // rewrite every consumer page, the client is the single translation layer:
-  // it flattens `content` OUT on read and packs the rich fields back IN on
-  // write. This keeps the API contract clean while the whole app keeps working.
-  async getMedicalData(dataType?: string): Promise<MedicalData[]> {
-    const qs = dataType ? `?dataType=${encodeURIComponent(dataType)}` : '';
-    const res = await this.request<{ records: MedicalData[] }>(`/entities/medical-data${qs}`);
-    return (res.records || []).map((r) => normalizeMedicalRecord(r)) as unknown as MedicalData[];
-  }
-  async saveMedicalData(data: Record<string, unknown>): Promise<MedicalData> {
-    // Deletion was historically overloaded onto this call with a `_delete`
-    // flag; route it to the dedicated DELETE endpoint.
-    if (data && data._delete && data.id) {
-      await this.deleteMedicalData(String(data.id));
-      return { id: String(data.id), deleted: true } as unknown as MedicalData;
-    }
-    // Record sharing has no backend model yet. Fail with a clear message
-    // instead of POSTing a payload the API rejects with a cryptic error.
-    if (data && (data._shareAction || data._revokeShareAction)) {
-      throw new Error('Sharing medical records is not available yet.');
-    }
-
-    const payload = toBackendMedicalPayload(data);
-
-    // A record `id` means "update"; PUT merges `content` server-side so a
-    // partial patch (e.g. just parsed VCF variants) won't wipe the summary.
-    if (data.id) {
-      const res = await this.request<{ record: MedicalData }>(
-        `/entities/medical-data/${data.id}`,
-        { method: 'PUT', body: JSON.stringify(payload) }
-      );
-      return normalizeMedicalRecord(res.record) as unknown as MedicalData;
-    }
-
-    const res = await this.request<{ record: MedicalData }>('/entities/medical-data', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    });
-    return normalizeMedicalRecord(res.record) as unknown as MedicalData;
-  }
-  deleteMedicalData(id: string): Promise<{ success: boolean }> {
-    return this.request(`/entities/medical-data/${id}`, { method: 'DELETE' });
-  }
-
-  // ─── AI Conversations ─────────────────
-  async getConversations(assistantType?: string): Promise<Conversation[]> {
-    const qs = assistantType ? `?assistantType=${encodeURIComponent(assistantType)}` : '';
-    const res = await this.request<{ conversations: Conversation[] }>(`/entities/conversations${qs}`);
-    return res.conversations;
-  }
-  async saveConversation(data: Omit<Conversation, 'id'>): Promise<Conversation> {
-    const res = await this.request<{ conversation: Conversation }>('/entities/conversations', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
-    return res.conversation;
-  }
-  async updateConversation(id: string, data: Partial<Conversation>): Promise<Conversation> {
-    const res = await this.request<{ conversation: Conversation }>(`/entities/conversations/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    });
-    return res.conversation;
   }
 
   // ─── Gene Sets ──────────────────
@@ -928,15 +754,6 @@ export class ApiClient {
   }
 
   // ─── Genomic Databases ───────────────
-  lookupVariant(variantId: string): Promise<Variant> {
-    return this.request(`/genomics/variant/${encodeURIComponent(variantId)}`);
-  }
-  searchVariants(query: string): Promise<{ hits?: Variant[] } | Variant[]> {
-    return this.request(`/genomics/variant/search?q=${encodeURIComponent(query)}`);
-  }
-  lookupGene(symbol: string): Promise<GeneInfo> {
-    return this.request(`/genomics/gene/${encodeURIComponent(symbol)}`);
-  }
   /**
    * Resolve authoritative gene records (MyGene.info → Ensembl/NCBI) and validate
    * phenotype names against HPO. Used by gene search to replace LLM-guessed
@@ -956,52 +773,20 @@ export class ApiClient {
       timeoutMs: 25_000,
     });
   }
-  searchClinVar(query: string): Promise<{ esearchresult?: { idlist?: string[] } } | ClinVarResult[]> {
-    return this.request(`/genomics/clinvar/search?q=${encodeURIComponent(query)}`);
+  /** Deterministic NLM HPO / Monarch typeahead. This endpoint never invokes an LLM. */
+  searchPublicationConcepts(
+    query: string,
+    kind: 'phenotype' | 'disease'
+  ): Promise<{ suggestions: PublicationConceptSuggestion[] }> {
+    return this.request(
+      `/genomics/publication-concepts/search?q=${encodeURIComponent(query)}&kind=${encodeURIComponent(kind)}`,
+      // Monarch entity/autocomplete calls can legitimately take several
+      // seconds. Keep this above the API's bounded 12s upstream budget while
+      // still failing closed instead of presenting stale data as resolved.
+      { timeoutMs: 15_000 },
+    );
   }
-  searchPhenotypes(query: string): Promise<{ terms?: PhenotypeResult[] } | PhenotypeResult[]> {
-    return this.request(`/genomics/phenotype/search?q=${encodeURIComponent(query)}`);
-  }
-  parseVcf(text: string, maxVariants?: number): Promise<VcfParseResponse> {
-    return this.request('/genomics/vcf/parse', {
-      method: 'POST',
-      body: JSON.stringify({ text, maxVariants }),
-    });
-  }
-  enrichVcfVariants(variants: VcfParsedVariant[]): Promise<VcfEnrichmentResponse> {
-    return this.request('/genomics/vcf/enrich', {
-      method: 'POST',
-      body: JSON.stringify({ variants }),
-    });
-  }
-  /**
-   * Annotate the deduplicated union of variants across a study cohort in one
-   * request. Slower than a single-file enrich because it fans out over many
-   * distinct variants against public databases — give it a longer budget so a
-   * still-running batch isn't aborted at the 40s default.
-   */
-  enrichVcfCohort(variants: Partial<VcfParsedVariant>[]): Promise<VcfCohortEnrichmentResponse> {
-    return this.request('/genomics/vcf/enrich-cohort', {
-      method: 'POST',
-      body: JSON.stringify({ variants }),
-      timeoutMs: 90_000,
-    });
-  }
-
-  // ─── Clinical Trials ────────────────
-  searchClinicalTrials(params: ClinicalTrialSearchParams = {}): Promise<ClinicalTrialSearchResponse> {
-    const qs = new URLSearchParams();
-    if (params.condition) qs.set('condition', params.condition);
-    if (params.gene) qs.set('gene', params.gene);
-    if (params.status) qs.set('status', params.status);
-    if (params.pageSize) qs.set('pageSize', String(params.pageSize));
-    return this.request(`/clinical-trials/search?${qs.toString()}`);
-  }
-  getClinicalTrial(nctId: string): Promise<ClinicalTrialDetailResponse> {
-    return this.request(`/clinical-trials/${encodeURIComponent(nctId)}`);
-  }
-
-  // ─── Consent & HIPAA Compliance ───────────────
+  // ─── Consent and data-deletion requests ───────────────
   async recordConsent(data: Omit<ConsentRecord, 'id'>): Promise<ConsentRecord> {
     const res = await this.request<{ record: ConsentRecord }>('/entities/consent', {
       method: 'POST',

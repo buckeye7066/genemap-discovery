@@ -1,5 +1,10 @@
 # Cutover Checklist
 
+> Historical Base44 migration record only. Do not use this document for a current
+> deploy or rollback. Use [DEPLOYMENT.md](DEPLOYMENT.md), the enforced release
+> workflows, and a boundary-preserving release artifact.
+
+
 ## Pre-Cutover (T-7 days)
 
 ### Week Before
@@ -25,7 +30,7 @@
 ### Final Checks
 ```bash
 # Verify all tests pass
-pnpm test && pnpm test:integration && pnpm test:e2e
+pnpm release:check && pnpm test:api:integration
 
 # Verify builds succeed
 pnpm build

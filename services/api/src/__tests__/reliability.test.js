@@ -3,10 +3,9 @@ import { buildTestApp, createPrismaMock, authCookie } from './setup.js';
 import { parseJsonFromLLM, isConnectionResetError } from '../services/llm.js';
 import { normalizeQuery } from '../services/genomicDatabases.js';
 import { __test as llmInternals } from '../routes/llm.js';
-import { __test as reporterInternals } from '../services/errorReporter.js';
 import { routeLabel } from '../middleware/errorHandler.js';
 
-// ─── routeLabel (no PII to logs / Sentry / owner email) ──────────────────────
+// ─── routeLabel (no user values in structured logs) ──────────────────────────
 describe('routeLabel', () => {
   it('prefers the route pattern, which carries no user values', () => {
     const req = { routeOptions: { url: '/genomics/gene/:symbol' }, url: '/genomics/gene/BRCA1?token=secret' };
@@ -87,26 +86,6 @@ describe('isConnectionResetError', () => {
   });
 });
 
-// ─── error reporter: transient transport noise is non-actionable ─────────────
-describe('errorReporter transient-connection triage', () => {
-  it('classifies "Premature close" as non-actionable (log-only, no owner page)', () => {
-    expect(reporterInternals.isNonActionable({ name: 'Error', message: 'Premature close' }, 500)).toBe(true);
-    expect(reporterInternals.isNonActionable({ message: 'socket hang up' })).toBe(true);
-    expect(reporterInternals.isNonActionable({ message: 'read ECONNRESET' })).toBe(true);
-  });
-
-  it('still pages the owner for genuine server bugs', () => {
-    expect(reporterInternals.isNonActionable({ name: 'TypeError', message: "Cannot read properties of undefined (reading 'x')" }, 500)).toBe(false);
-    expect(reporterInternals.isNonActionable({ message: 'relation "users" does not exist' }, 500)).toBe(false);
-  });
-
-  it('heuristic labels a premature close as low severity, not high', () => {
-    const analysis = reporterInternals.heuristicAnalysis({ name: 'Error', message: 'Premature close' }, { statusCode: 500 });
-    expect(analysis.severity).toBe('low');
-    expect(analysis.cause).toMatch(/reset|closed/i);
-  });
-});
-
 // ─── normalizeQuery (genomic database inputs) ────────────────────────────────
 describe('normalizeQuery', () => {
   it('trims and lower-cases so cache keys are case-insensitive', () => {
@@ -177,7 +156,7 @@ describe('LLM route input bounds', () => {
 
   const cookie = () => authCookie({ userId: 'free-user', email: 'free@example.com', role: 'user' });
 
-  it('rejects an over-long prompt with 400', async () => {
+  it('rejects an over-long raw prompt with 400 before provider execution', async () => {
     const res = await app.inject({
       method: 'POST', url: '/llm/invoke', headers: { cookie: cookie() },
       payload: { prompt: 'x'.repeat(llmInternals.MAX_PROMPT_CHARS + 1) },
@@ -200,23 +179,31 @@ describe('LLM route input bounds', () => {
       },
     });
     expect(res.statusCode).toBe(400);
-    expect(JSON.parse(res.body).error).toMatch(/Raw VCF/i);
+    expect(JSON.parse(res.body).error).toMatch(/raw prompt/i);
   });
 
-  it('rejects a chat with too many messages', async () => {
-    const messages = Array.from({ length: llmInternals.MAX_CHAT_MESSAGES + 1 }, (_, i) => ({
-      role: 'user', content: `m${i}`,
-    }));
+  it('rejects an out-of-contract structured cohort bound', async () => {
     const res = await app.inject({
-      method: 'POST', url: '/llm/chat', headers: { cookie: cookie() }, payload: { messages },
+      method: 'POST',
+      url: '/llm/invoke',
+      headers: { cookie: cookie() },
+      payload: {
+        publicationTask: 'aggregate_genomics_research',
+        taskInput: {
+          version: 1,
+          cohort: { sampleCount: 1_000_001, classification: 'deidentified_aggregate', hasControls: true },
+          modalities: ['wes'],
+          objective: 'identify_variants',
+        },
+      },
     });
     expect(res.statusCode).toBe(400);
   });
 
-  it('rejects a chat message that is individually too large', async () => {
+  it('rejects arbitrary chat regardless of message count or size', async () => {
     const res = await app.inject({
       method: 'POST', url: '/llm/chat', headers: { cookie: cookie() },
-      payload: { messages: [{ role: 'user', content: 'x'.repeat(llmInternals.MAX_MESSAGE_CHARS + 1) }] },
+      payload: { messages: [{ role: 'user', content: 'x' }] },
     });
     expect(res.statusCode).toBe(400);
   });

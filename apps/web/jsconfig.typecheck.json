@@ -31,8 +31,7 @@
     "components/MobileOptimization.jsx",
     "components/PlatformCompatibility.jsx",
     "components/UniversalLinkHandler.jsx",
-    "components/UserNotRegisteredError.jsx",
-    "components/functionRegistry.js"
+    "components/UserNotRegisteredError.jsx"
   ],
   "exclude": ["node_modules", "dist", "public/service-worker.js"]
 }

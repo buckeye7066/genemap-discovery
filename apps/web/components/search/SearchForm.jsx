@@ -1,9 +1,7 @@
 import React, { useState } from "react";
-import { useAuth } from '../../lib/AuthContext';
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
-import { Search, Crown, Sparkles, HelpCircle, Stethoscope } from "lucide-react";
+import { Search, Sparkles, Stethoscope } from "lucide-react";
 import AutocompleteSearch from "./AutocompleteSearch";
 import {
   Select,
@@ -12,17 +10,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-
 export default function SearchForm({ onSearch, isLoading, initialQuery = "" }) {
   const [query, setQuery] = useState(initialQuery);
   const [searchMode, setSearchMode] = useState("free_text");
-  const { user } = useAuth();
   
   React.useEffect(() => {
     setQuery(initialQuery);
@@ -53,31 +43,38 @@ export default function SearchForm({ onSearch, isLoading, initialQuery = "" }) {
   const handleSubmit = (e, isPremium = false) => {
     e.preventDefault();
     if (query.trim()) {
-      onSearch(query.trim(), isPremium);
+      onSearch(query.trim(), isPremium, searchMode);
     }
   };
-
-  const isAdmin = user?.role === "admin" || user?.role === "super_admin" || user?.entitlements?.isAdmin === true;
 
   return (
     <form onSubmit={(e) => handleSubmit(e, false)} className="space-y-6">
       <div className="space-y-2">
         <Label htmlFor="phenotype-query" className="text-base font-medium">
-          Search Query
+          Reviewed research concept or exact HPO identifier
         </Label>
         <div className="flex flex-col sm:flex-row gap-2">
           <AutocompleteSearch
             value={query}
             onChange={setQuery}
+            inputId="phenotype-query"
+            searchMode={searchMode}
             onSelect={(suggestion) => {
               if (suggestion.type === "disease") {
                 setSearchMode("disease");
               } else if (suggestion.type === "phenotype") {
                 setSearchMode("free_text");
+              } else if (suggestion.type === "hpo") {
+                setSearchMode("hpo_term");
               }
               // Picking a suggestion should run the search, not just refill the box.
               if (suggestion.text?.trim()) {
-                onSearch(suggestion.text.trim(), false);
+                onSearch(
+                  suggestion.text.trim(),
+                  false,
+                  suggestion.type === 'disease' ? 'disease' : suggestion.type === 'hpo' ? 'hpo_term' : 'free_text',
+                  suggestion.publicationReference || null,
+                );
               }
             }}
             placeholder="e.g., Rheumatoid Arthritis, polydactyly, HP:0001166"
@@ -88,9 +85,9 @@ export default function SearchForm({ onSearch, isLoading, initialQuery = "" }) {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="free_text">Free Text</SelectItem>
-              <SelectItem value="disease">Disease Name</SelectItem>
-              <SelectItem value="hpo_term">HPO Term</SelectItem>
+              <SelectItem value="free_text">Reviewed Phenotype</SelectItem>
+              <SelectItem value="disease">Reviewed Disease</SelectItem>
+              <SelectItem value="hpo_term">Exact HPO ID</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -117,7 +114,7 @@ export default function SearchForm({ onSearch, isLoading, initialQuery = "" }) {
                 // suggested term like "Bronchiectasis").
                 setQuery(example);
                 setSearchMode("disease");
-                onSearch(example, false);
+                onSearch(example, false, 'disease');
               }}
               disabled={isLoading}
               className="text-xs hover:bg-emerald-50 border-emerald-200 touch-manipulation min-h-[36px]"
@@ -144,7 +141,7 @@ export default function SearchForm({ onSearch, isLoading, initialQuery = "" }) {
               onClick={() => {
                 setQuery(example);
                 setSearchMode("free_text");
-                onSearch(example, false);
+                onSearch(example, false, 'free_text');
               }}
               disabled={isLoading}
               className="text-xs hover:bg-blue-50 touch-manipulation min-h-[36px]"
@@ -170,7 +167,7 @@ export default function SearchForm({ onSearch, isLoading, initialQuery = "" }) {
                 type="button"
                 onClick={() => {
                   setQuery(example);
-                  onSearch(example, false);
+                  onSearch(example, false, 'hpo_term');
                 }}
                 disabled={isLoading}
                 className="text-xs hover:bg-slate-50 touch-manipulation min-h-[36px]"
@@ -182,49 +179,24 @@ export default function SearchForm({ onSearch, isLoading, initialQuery = "" }) {
         </div>
       )}
 
-      <div className="flex flex-col gap-4">
+      <div>
         <Button
           type="submit"
           disabled={!query.trim() || isLoading}
           className="bg-blue-600 hover:bg-blue-700 w-full min-h-[48px] touch-manipulation"
         >
           <Search className="w-4 h-4 mr-2" />
-          {isLoading ? "Searching..." : searchMode === "disease" ? "Find Disease Genes" : "Search (Free)"}
+          {isLoading ? "Searching..." : searchMode === "disease" ? "Generate Candidate Genes" : "Search (Free)"}
         </Button>
-
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                type="button"
-                variant="outline"
-                disabled={!query.trim() || isLoading}
-                onClick={(e) => handleSubmit(e, true)}
-                className="border-amber-200 hover:bg-amber-50 text-amber-700 w-full min-h-[48px] touch-manipulation"
-              >
-                <Crown className="w-4 h-4 mr-2" />
-                Premium Search
-                {isAdmin && <Badge className="ml-2 bg-amber-600 text-white text-xs">Admin</Badge>}
-                {!isAdmin && <HelpCircle className="w-3 h-3 ml-1" />}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p className="max-w-xs">
-                {isAdmin ? "You have admin access to all premium features" :
-                 "Get additional data: population prevalence, gene history, mutations, and treatment information"}
-              </p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
       </div>
 
       <div className="bg-blue-50 p-4 rounded-lg">
         <div className="flex items-start gap-2">
           <Sparkles className="w-5 h-5 text-blue-600 mt-0.5" />
           <div>
-            <h4 className="font-medium text-blue-900">AI-Powered Insights</h4>
+            <h4 className="font-medium text-blue-900">AI-Generated Research Leads</h4>
             <p className="text-sm text-blue-700">
-              Search by disease name (e.g., "Rheumatoid Arthritis", "Trisomy 21") to discover all associated genes with personalized explanations
+              Search by disease or phenotype to generate candidate genes for follow-up. Rankings and explanations are AI-generated, are not exhaustive, and are not clinical evidence.
             </p>
           </div>
         </div>
