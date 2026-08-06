@@ -52,6 +52,28 @@ jobs:
             }
           '
 
+      - name: Check coordinated web and API release identity
+        run: |
+          api_body="$(curl --fail --silent --show-error --max-time 15 "$API_URL/readyz")"
+          web_html="$(curl --fail --silent --show-error --location --max-time 20 "$WEB_URL")"
+          API_BODY="$api_body" WEB_HTML="$web_html" node <<'NODE'
+          const api = JSON.parse(process.env.API_BODY);
+          const webMatch = process.env.WEB_HTML.match(
+            /<meta\s+name=["']genemap-release-sha["']\s+content=["']([a-f0-9]{40})["'][^>]*>/iu
+          );
+          if (!/^[a-f0-9]{40}$/u.test(api.releaseSha || '')) {
+            throw new Error(`API readiness is missing an immutable release SHA: ${JSON.stringify(api)}`);
+          }
+          if (!webMatch) {
+            throw new Error('Web shell is missing the immutable release SHA meta tag.');
+          }
+          if (webMatch[1] !== api.releaseSha) {
+            throw new Error(
+              `Web/API release skew: web=${webMatch[1]} api=${api.releaseSha}`
+            );
+          }
+          NODE
+
       - name: Check disabled clinical API paths
         run: |
           node --input-type=module <<'NODE'
