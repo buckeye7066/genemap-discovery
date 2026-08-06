@@ -140,22 +140,22 @@ export default function PrivacyPolicy() {
                 <strong>OpenAI API and Anthropic API:</strong> OpenAI is the default text-generation provider
                 unless deployment configuration selects Anthropic as the alternate. The selected provider
                 receives versioned structured education or aggregate early-research inputs, resolved
-                gene or ontology identifiers, and generated output. Error-triage code may also send a
-                sanitized error name, message, and stack.
+                gene or ontology identifiers, and generated output. Application error messages and
+                stacks are not sent to these providers.
               </li>
               <li>
                 <strong>Stripe:</strong> processes web subscription checkout, customer and subscription
                 identifiers, supplied contact fields, subscription status, and webhook event identifiers.
               </li>
               <li>
-                <strong>Resend:</strong> if configured, processes recipient and sender addresses, subject
-                lines, and email content for service messages. Current code can send first-login identity
-                and error-report messages to an operator.
+                <strong>Resend:</strong> the email integration remains installed but is not invoked by the
+                current publication build. First-login identity and error-report emails are disabled.
+                Any future service-email flow requires a new purpose, field, and retention review.
               </li>
               <li>
-                <strong>Sentry:</strong> if configured, receives exceptions, stack or application context,
-                routes, and performance telemetry. Disabling default PII collection does not guarantee that
-                application-supplied error context contains no personal data.
+                <strong>Sentry:</strong> external browser and API exception export is disabled in the
+                current publication build even if a DSN is configured. Application errors are reduced to
+                finite local operational events and are not sent to Sentry.
               </li>
               <li>
                 <strong>Redis rate-limit operator:</strong> if configured, receives rate-limit keys and
@@ -193,8 +193,8 @@ export default function PrivacyPolicy() {
             <p>
               We retain account and application data while needed to operate the service and for support,
               security, billing, or legal purposes. Fixed retention schedules for hosting logs, backups,
-              model-provider records, email, error telemetry, and rate-limit data have not yet been fully
-              documented. A deletion request may be subject to billing or legal-retention exceptions, and
+              model-provider records, hosting logs, any future service email, and rate-limit data have not
+              yet been fully documented. A deletion request may be subject to billing or legal-retention exceptions, and
               deletion propagation to provider logs and backups has not yet been verified. We therefore do
               not promise that deleting an application record immediately removes every provider or backup
               copy.
