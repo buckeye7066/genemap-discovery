@@ -459,27 +459,19 @@ export class ApiClient {
     return this.request('/education/progress', { method: 'POST', body: JSON.stringify(data) });
   }
 
-  // ─── LLM ───────────────────────────────────────────────────────────
-  //
-  // `options.agent` names the calling persona (see agentRegistry.ts). It is
-  // hoisted OUT of `options` and sent as a sibling `agent` field because the
-  // server treats it as routing/identity metadata, not a generation parameter:
-  // it selects which agent's mesh inbox and lessons are loaded, and which agent
-  // authors a lesson when the provider fails. Unknown/absent ids are ignored by
-  // the server, so this is always safe to send.
+  // ─── Bounded publication tasks ──────────────────────────────────────
   invokePublicationTask<T extends PublicationTaskRequest>(
     publicationTask: T['publicationTask'],
     taskInput: T['taskInput'],
     options: LLMOptions = {},
   ): Promise<LLMResponse> {
-    const { agent, publicationTask: _legacyTask, ...llmOptions } = options;
+    const { publicationTask: _legacyTask, ...llmOptions } = options;
     return this.request('/llm/invoke', {
       method: 'POST',
       body: JSON.stringify({
         publicationTask,
         taskInput,
         options: llmOptions,
-        ...(agent ? { agent } : {}),
       }),
     });
   }
