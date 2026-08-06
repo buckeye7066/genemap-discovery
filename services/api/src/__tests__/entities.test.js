@@ -848,7 +848,7 @@ describe('Data Deletion Requests', () => {
     expect(JSON.stringify(prisma._store.auditLog)).not.toContain(canary);
   });
 
-  it('returns a sanitized retry state instead of a stale success', async () => {
+  it('returns an accepted sanitized retry state without encouraging duplicates', async () => {
     prisma._store.medicalData.push({ id: 'medical-a', userId: 'user-a' });
     const originalDelete = prisma.aIConversation.deleteMany.getMockImplementation();
     prisma.aIConversation.deleteMany.mockImplementationOnce(async () => {
@@ -862,16 +862,17 @@ describe('Data Deletion Requests', () => {
         payload: { deletedTypes: ['patient@example.invalid'] },
       });
 
-      expect(res.statusCode).toBe(503);
+      expect(res.statusCode).toBe(202);
       const body = JSON.parse(res.body);
       expect(body).toMatchObject({
-        code: 'DELETION_NOT_COMPLETED',
+        code: 'DELETION_ACCEPTED',
         request: {
           status: 'retry_scheduled',
           deletedTypes: [],
           failureCode: 'local_purge_failed',
         },
       });
+      expect(body).not.toHaveProperty('error');
       expect(prisma._store.medicalData).toHaveLength(1);
       for (const forbidden of [
         'userId',
@@ -886,6 +887,36 @@ describe('Data Deletion Requests', () => {
       expect(JSON.stringify(body)).not.toMatch(/patient@example\.invalid|database canary/u);
     } finally {
       prisma.aIConversation.deleteMany.mockImplementation(originalDelete);
+    }
+  });
+
+  it('keeps a committed request accepted when immediate claiming is unavailable', async () => {
+    const originalUpdateMany = prisma.dataDeletionRequest.updateMany.getMockImplementation();
+    prisma.dataDeletionRequest.updateMany.mockRejectedValueOnce(
+      new Error('claim-stage patient@example.invalid')
+    );
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/entities/data-deletion-request',
+        headers: { cookie: cookieA },
+        payload: { deletedTypes: ['caller-canary'] },
+      });
+
+      expect(res.statusCode).toBe(202);
+      const body = JSON.parse(res.body);
+      expect(body).toMatchObject({
+        code: 'DELETION_ACCEPTED',
+        request: {
+          status: 'pending',
+          deletedTypes: [],
+          failureCode: null,
+        },
+      });
+      expect(JSON.stringify(body)).not.toMatch(/patient@example\.invalid|caller-canary/u);
+      expect(prisma._store.dataDeletionRequest).toHaveLength(1);
+    } finally {
+      prisma.dataDeletionRequest.updateMany.mockImplementation(originalUpdateMany);
     }
   });
 
