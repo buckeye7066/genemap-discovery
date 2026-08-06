@@ -208,4 +208,31 @@ describe('clinical publishing boundary', () => {
     expect(geneCard).toContain('Personal variant interpretation is not available');
   });
 
+  it('keeps administrator analytics aggregate-only and inside the publication boundary', () => {
+    const analytics = read('../../pages/AdminAnalytics.jsx');
+
+    for (const forbidden of [
+      'Medical Records',
+      'Medical Data Upload Types',
+      'Robert (Clinical)',
+      'Anastasia (Counselor)',
+      'Top 10 Search Queries',
+      'recentSearches',
+      'recentActivity',
+      'recentConversations',
+      'medicalDataTypeBreakdown',
+      'agentMesh',
+      'search.query',
+      'activity.entityId',
+      'activity.metadata',
+    ]) {
+      expect(analytics).not.toContain(forbidden);
+    }
+
+    expect(analytics).toContain('Aggregate Platform Analytics');
+    expect(analytics).toContain('Individual search text');
+    expect(analytics).toContain('activityTypeBreakdown');
+    expect(analytics).toContain('searchTypeBreakdown');
+  });
+
 });
