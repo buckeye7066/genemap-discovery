@@ -248,91 +248,161 @@ describe('Ban/Unban full flow', () => {
 // ─── GET /admin/analytics ────────────────────────────────────────────────────
 
 describe('GET /admin/analytics', () => {
-  it('should return platform statistics', async () => {
+  it('returns only safe aggregates and coarsens unrecognized type labels', async () => {
+    const now = new Date();
+    const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    const outsideTimeline = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const sensitive = {
+      query: 'PRIVATE_QUERY_BRCA1_PERSONAL_RISK',
+      email: 'private-patient@example.com',
+      clinical: 'PRIVATE_CLINICAL_DIAGNOSIS',
+      medical: 'PRIVATE_RAW_VCF_CONTENT',
+      agent: 'PRIVATE_AGENT_LESSON',
+      agentAuthor: 'private-agent',
+      activityType: 'private_clinical_activity_type',
+      queryType: 'private_medical_query_type',
+    };
+
     prisma._store.user.push(
-      { id: 'u-1', email: 'a@test.com', createdAt: new Date() },
-      { id: 'u-2', email: 'b@test.com', createdAt: new Date() },
+      { id: 'u-1', email: sensitive.email, createdAt: now },
+      { id: 'u-2', email: 'b@test.com', createdAt: now },
     );
     prisma._store.subscription.push(
-      { id: 's-1', userId: 'u-1', status: 'active', createdAt: new Date() },
+      { id: 's-active', userId: 'u-1', status: 'active', createdAt: now },
+      { id: 's-canceled', userId: 'u-2', status: 'canceled', createdAt: now },
     );
-    // Duplicate dataTypes on purpose: the upload-type breakdown is produced by
-    // prisma.medicalData.groupBy, so this exercises real grouping + counting.
-    prisma._store.medicalData.push(
-      { id: 'md-1', userId: 'u-1', dataType: 'vcf', content: 'v1', createdAt: new Date() },
-      { id: 'md-2', userId: 'u-2', dataType: 'vcf', content: 'v2', createdAt: new Date() },
-      { id: 'md-3', userId: 'u-1', dataType: 'lab_report', content: 'l1', createdAt: new Date() },
+    prisma._store.geneSet.push(
+      { id: 'gs-1', userId: 'u-1', name: 'one', createdAt: now },
+      { id: 'gs-2', userId: 'u-2', name: 'two', createdAt: now },
     );
-
-    const res = await app.inject({
-      method: 'GET',
-      url: '/admin/analytics',
-      headers: { cookie: adminCookie },
-    });
-
-    expect(res.statusCode).toBe(200);
-    const body = JSON.parse(res.body);
-    expect(body.stats).toBeDefined();
-    // 2 pushed + 3 auth-seeded baseline (admin-1 + user-1 + super-admin-1).
-    expect(body.stats.totalUsers).toBe(5);
-    expect(body.stats.activeSubscriptions).toBe(1);
-    expect(body.stats.totalMedicalRecords).toBe(3);
-    expect(body.recentActivity).toBeDefined();
-    // Aggregated per-type counts from groupBy — exact, order-independent.
-    const breakdown = Object.fromEntries(
-      body.medicalDataTypeBreakdown.map((r) => [r.dataType, r.count])
-    );
-    expect(breakdown).toEqual({ vcf: 2, lab_report: 1 });
-  });
-
-  it('reports the agent mesh: 7-day message count + operational lessons only', async () => {
-    prisma._store.agentMessage.push(
-      { id: 'am-1', fromAgent: 'robert', toAgent: 'anastasia', kind: 'provider_reliability', body: 'model flaky', readBy: {}, createdAt: new Date() },
-      { id: 'am-2', fromAgent: 'anastasia', toAgent: 'broadcast', kind: 'note', body: 'ack', readBy: {}, createdAt: new Date() },
-      // Older than the 7-day window — must NOT be counted.
-      { id: 'am-old', fromAgent: 'robert', toAgent: 'anastasia', kind: 'note', body: 'ancient', readBy: {}, createdAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) },
-    );
-    prisma._store.agentLesson.push({
-      id: 'al-1',
-      authorAgent: 'robert',
-      topic: 'provider_reliability',
-      claim: 'model gpt-4o-mini failing repeatedly (timeout)',
-      evidence: { model: 'gpt-4o-mini', kind: 'timeout', count: 3 },
-      timesSeen: 4,
-      consumedBy: { anastasia: '2026-07-28T00:00:00.000Z' },
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
-
-    const res = await app.inject({
-      method: 'GET',
-      url: '/admin/analytics',
-      headers: { cookie: adminCookie },
-    });
-
-    expect(res.statusCode).toBe(200);
-    const { agentMesh } = JSON.parse(res.body);
-    expect(agentMesh.messagesLast7d).toBe(2);
-    expect(agentMesh.lessons).toEqual([
+    prisma._store.searchHistory.push(
       {
-        authorAgent: 'robert',
-        topic: 'provider_reliability',
-        claim: 'model gpt-4o-mini failing repeatedly (timeout)',
-        timesSeen: 4,
-        consumedBy: { anastasia: '2026-07-28T00:00:00.000Z' },
+        id: 'sh-1', userId: 'u-1', query: sensitive.query, queryType: 'free',
+        results: { clinical: sensitive.clinical }, createdAt: now,
       },
-    ]);
-    // Message BODIES are never exposed here — only the count.
-    expect(JSON.stringify(agentMesh)).not.toContain('model flaky');
-  });
+      {
+        id: 'sh-2', userId: 'u-2', query: 'another private query',
+        queryType: 'free', createdAt: now,
+      },
+      {
+        id: 'sh-3', userId: 'u-1', query: 'premium private query',
+        queryType: 'premium', createdAt: yesterday,
+      },
+      {
+        id: 'sh-4', userId: 'u-1', query: 'unknown private query',
+        queryType: sensitive.queryType, createdAt: now,
+      },
+      {
+        id: 'sh-old', userId: 'u-2', query: 'old private query',
+        queryType: 'general', createdAt: outsideTimeline,
+      },
+    );
+    prisma._store.userActivity.push(
+      {
+        id: 'ua-1', userId: 'u-1', activityType: 'page_view',
+        metadata: { email: sensitive.email }, createdAt: now,
+      },
+      {
+        id: 'ua-2', userId: 'u-2', activityType: 'gene_view',
+        metadata: { clinical: sensitive.clinical }, createdAt: yesterday,
+      },
+      {
+        id: 'ua-3', userId: 'u-1', activityType: sensitive.activityType,
+        entityId: sensitive.medical, metadata: { medical: sensitive.medical }, createdAt: now,
+      },
+      {
+        id: 'ua-old', userId: 'u-2', activityType: 'another_private_activity',
+        metadata: { agent: sensitive.agent }, createdAt: outsideTimeline,
+      },
+    );
+    prisma._store.medicalData.push({
+      id: 'md-1', userId: 'u-1', dataType: 'genetic_test',
+      content: sensitive.medical, createdAt: now,
+    });
+    prisma._store.aIConversation.push({
+      id: 'conversation-1', userId: 'u-1', assistantType: 'clinical',
+      messages: [{ content: sensitive.clinical }], createdAt: now,
+    });
+    prisma._store.agentLesson.push({
+      id: 'lesson-1', authorAgent: sensitive.agentAuthor, topic: 'clinical',
+      claim: sensitive.agent, timesSeen: 1, createdAt: now, updatedAt: now,
+    });
 
-  it('returns an empty agent-mesh surface when nothing has happened yet', async () => {
     const res = await app.inject({
       method: 'GET',
       url: '/admin/analytics',
       headers: { cookie: adminCookie },
     });
-    expect(JSON.parse(res.body).agentMesh).toEqual({ messagesLast7d: 0, lessons: [] });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['cache-control']).toBe('private, no-store');
+    const body = JSON.parse(res.body);
+    expect(Object.keys(body).sort()).toEqual([
+      'activityTypeBreakdown',
+      'dailyActivity',
+      'searchTypeBreakdown',
+      'stats',
+    ]);
+    expect(body.stats).toEqual({
+      // Two pushed users plus the three auth principals seeded in beforeEach.
+      totalUsers: 5,
+      activeSubscriptions: 1,
+      totalSearches: 5,
+      totalGeneSets: 2,
+      totalActivities: 4,
+    });
+    expect(body.activityTypeBreakdown).toEqual([
+      { activityType: 'page_view', count: 1 },
+      { activityType: 'gene_view', count: 1 },
+      { activityType: 'other', count: 2 },
+    ]);
+    expect(body.searchTypeBreakdown).toEqual([
+      { queryType: 'free', count: 2 },
+      { queryType: 'premium', count: 1 },
+      { queryType: 'general', count: 1 },
+      { queryType: 'other', count: 1 },
+    ]);
+    expect(body.dailyActivity).toHaveLength(7);
+    expect(body.dailyActivity.every((row) => (
+      /^\d{4}-\d{2}-\d{2}$/.test(row.date)
+      && Number.isInteger(row.activities)
+      && Number.isInteger(row.searches)
+    ))).toBe(true);
+    expect(body.dailyActivity.reduce((sum, row) => sum + row.activities, 0)).toBe(3);
+    expect(body.dailyActivity.reduce((sum, row) => sum + row.searches, 0)).toBe(4);
+
+    expect(body).not.toHaveProperty('recentActivity');
+    expect(body).not.toHaveProperty('recentSearches');
+    expect(body).not.toHaveProperty('recentConversations');
+    expect(body).not.toHaveProperty('medicalDataTypeBreakdown');
+    expect(body).not.toHaveProperty('agentMesh');
+
+    const serialized = JSON.stringify(body);
+    for (const secret of Object.values(sensitive)) {
+      expect(serialized).not.toContain(secret);
+    }
+    expect(serialized).not.toContain('"userId"');
+    expect(serialized).not.toContain('"email"');
+    expect(serialized).not.toContain('"metadata"');
+    expect(serialized).not.toContain('"query":');
+  });
+
+  it('selects only timestamps for the server-aggregated timeline', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/admin/analytics',
+      headers: { cookie: adminCookie },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(prisma.userActivity.findMany).toHaveBeenCalledWith({
+      where: { createdAt: { gte: expect.any(Date), lt: expect.any(Date) } },
+      select: { createdAt: true },
+    });
+    expect(prisma.searchHistory.findMany).toHaveBeenCalledWith({
+      where: { createdAt: { gte: expect.any(Date), lt: expect.any(Date) } },
+      select: { createdAt: true },
+    });
   });
 
   it('should deny regular user access', async () => {
