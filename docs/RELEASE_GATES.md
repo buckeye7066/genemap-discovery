@@ -45,15 +45,15 @@ pnpm test:api:integration
 
 ### E2E Tests
 ```bash
-pnpm test:e2e
+pnpm --filter @genemap/web e2e
 ```
 - [ ] Playwright tests passing
-- [ ] Critical user journeys covered:
-  - [ ] User registration
-  - [ ] User login
-  - [ ] Premium upgrade (self-test mode)
-  - [ ] Institutional checkout (self-test mode)
-  - [ ] Premium feature gating
+- [ ] Critical publication journeys covered:
+  - [ ] Logged-out login, registration, Terms, and Privacy surfaces
+  - [ ] Authenticated deep links to retired clinical/VCF/persona routes render Page Not Found
+  - [ ] Published navigation contains no clinical, medical-data, VCF, trial, or persona links
+  - [ ] Live disabled API probes return 404 `FEATURE_NOT_AVAILABLE`
+  - [ ] Built-artifact scan contains no retired chunks, endpoint strings, or arbitrary-generation client
 
 ## Gate 3: Security
 
@@ -84,10 +84,10 @@ pnpm audit
 - [ ] XSS prevention verified
 
 ### Genomic Data & AI Safety
-- [ ] Raw VCF uploads use deterministic parsing by default
-- [ ] Raw VCF/genomic-looking content is rejected by LLM routes unless `ALLOW_GENOMIC_LLM_UPLOAD=true`
-- [ ] LLM genomic upload consent type/version and audit logging reviewed before enabling
-- [ ] VCF parse/enrich tests enforce payload size and batch limits
+- [ ] VCF, variant, ClinVar, personal medical-data, conversation, and clinical-trial routes are unavailable in publication mode
+- [ ] Negative integration tests prove boundary execution precedes auth and route handlers
+- [ ] Raw genomic-looking content is rejected by every model route
+- [ ] No VCF pipeline is publishable until reference-build, exact normalized allele identity, versioned provenance, and deterministic benchmark gates pass
 
 ## Gate 4: Database
 
