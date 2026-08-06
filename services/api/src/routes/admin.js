@@ -617,7 +617,9 @@ export default async function adminRoutes(fastify) {
     return { success: true };
   });
 
-  fastify.get('/analytics', async () => {
+  fastify.get('/analytics', async (_request, reply) => {
+    reply.header('Cache-Control', 'private, no-store');
+
     const todayUtc = startOfUtcDay(new Date());
     const timelineStart = new Date(todayUtc);
     timelineStart.setUTCDate(todayUtc.getUTCDate() - 6);
