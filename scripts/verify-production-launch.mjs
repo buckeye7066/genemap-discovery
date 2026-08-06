@@ -560,17 +560,55 @@ function buildSelfTestEvidence(now) {
   };
 }
 
-export function runSelfTest(now = new Date()) {
+export async function runSelfTest(now = new Date()) {
   const problems = [];
+  const evidence = buildSelfTestEvidence(now);
 
   const envFailures = validateLaunchEnv(SELF_TEST_ENV).checks.filter((c) => c.status === 'fail');
   if (envFailures.length > 0) {
     problems.push(`hardened env fixture unexpectedly failed: ${envFailures.map((c) => c.id).join(', ')}`);
   }
 
-  const evidenceFailures = validateEvidence(buildSelfTestEvidence(now), { now }).filter((c) => c.status === 'fail');
+  const evidenceFailures = validateEvidence(evidence, { now }).filter((c) => c.status === 'fail');
   if (evidenceFailures.length > 0) {
     problems.push(`complete evidence fixture unexpectedly failed: ${evidenceFailures.map((c) => c.id).join(', ')}`);
+  }
+
+  const approvedSha = evidence.release.approvedSha;
+  const fetchImpl = async (url) => {
+    const isWeb = !url.includes('api.example.com');
+    const body = url.endsWith('/healthz')
+      ? { status: 'ok' }
+      : url.endsWith('/readyz')
+        ? {
+            status: 'ready',
+            publicationMode: 'education_research',
+            medicalEncryption: true,
+            releaseSha: approvedSha,
+          }
+        : `<!doctype html><html><head><meta content="${approvedSha}" name="genemap-release-sha"></head></html>`;
+    return {
+      ok: true,
+      status: 200,
+      headers: {
+        get(name) {
+          if (name.toLowerCase() !== 'content-type') return '';
+          return isWeb ? 'text/html; charset=utf-8' : 'application/json';
+        },
+      },
+      async text() {
+        return typeof body === 'string' ? body : JSON.stringify(body);
+      },
+    };
+  };
+  const httpFailures = (await checkHttpEndpoints({
+    apiUrl: 'https://api.example.com',
+    webUrl: 'https://app.example.com',
+    approvedSha,
+    fetchImpl,
+  })).filter((check) => check.status === 'fail');
+  if (httpFailures.length > 0) {
+    problems.push(`synthetic live release verification failed: ${httpFailures.map((c) => c.id).join(', ')}`);
   }
 
   // Fail-closed invariant: a missing Stripe live key MUST be caught.
@@ -612,9 +650,9 @@ async function main() {
   }
 
   if (opts.selfTest) {
-    const selfTest = runSelfTest();
+    const selfTest = await runSelfTest();
     if (selfTest.ok) {
-      console.log('Launch verifier self-test passed (env + evidence validation executed, fail-closed confirmed).');
+      console.log('Launch verifier self-test passed (env, evidence, and live release checks executed).');
       process.exitCode = 0;
     } else {
       console.error('Launch verifier self-test FAILED:');
