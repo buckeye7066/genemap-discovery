@@ -120,7 +120,10 @@ function mockResponse(status, body, contentType = 'application/json') {
     status,
     headers: {
       get(name) {
-        return name.toLowerCase() === 'content-type' ? contentType : '';
+        const normalized = name.toLowerCase();
+        if (normalized === 'content-type') return contentType;
+        if (normalized === 'cache-control') return 'no-store, max-age=0';
+        return '';
       },
     },
     async text() {
@@ -350,6 +353,31 @@ describe('production launch verification', () => {
       'http.web',
       'http.webReleaseSha',
     ]));
+  });
+
+  it('keeps the static identity asset out of SPA rewrites and disables caching', () => {
+    const rootConfig = JSON.parse(readFileSync(
+      new URL('../../../../vercel.json', import.meta.url),
+      'utf8'
+    ));
+    const appConfig = JSON.parse(readFileSync(
+      new URL('../../../../apps/web/vercel.json', import.meta.url),
+      'utf8'
+    ));
+
+    expect(rootConfig.rewrites[0].source).toContain('release-identity\\.json$');
+    for (const config of [rootConfig, appConfig]) {
+      expect(config.buildCommand).toContain(
+        'GENEMAP_REQUIRE_RELEASE_IDENTITY=1 pnpm --filter @genemap/web build'
+      );
+      const releaseHeaders = config.headers.find(
+        (entry) => entry.source === '/release-identity.json'
+      );
+      expect(releaseHeaders?.headers).toContainEqual({
+        key: 'Cache-Control',
+        value: 'no-store, max-age=0',
+      });
+    }
   });
 
   it('keeps production smoke on the static release asset with exact statuses and no redirects', () => {
