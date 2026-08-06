@@ -465,7 +465,8 @@ export class ApiClient {
     taskInput: T['taskInput'],
     options: LLMOptions = {},
   ): Promise<LLMResponse> {
-    const { publicationTask: _legacyTask, ...llmOptions } = options;
+    const { publicationTask: _legacyTask, agent: _retiredAgent, ...llmOptions } =
+      options as LLMOptions & { agent?: unknown };
     return this.request('/llm/invoke', {
       method: 'POST',
       body: JSON.stringify({
