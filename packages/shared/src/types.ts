@@ -165,6 +165,42 @@ export type ResearchObjective =
   | 'covariate_design'
   | 'cohort_summary';
 
+/** Immutable, reviewed publication concept. Arbitrary client labels are never executable input. */
+export interface CuratedPublicationConceptRef {
+  kind: 'curated_concept';
+  conceptId: string;
+  canonicalLabel: string;
+  conceptKind: 'disease' | 'phenotype';
+  source: 'genemap_curated';
+  version: 1;
+}
+
+/** Exact HPO identifier selected from a deterministic resolver/search result. */
+export interface HpoPublicationReference {
+  kind: 'hpo';
+  identifier: string;
+}
+
+/** Exact MONDO disease identifier selected from Monarch and revalidated server-side. */
+export interface MondoPublicationReference {
+  kind: 'mondo';
+  identifier: string;
+}
+
+export type PublicationResearchReference =
+  | CuratedPublicationConceptRef
+  | HpoPublicationReference
+  | MondoPublicationReference;
+
+export interface PublicationConceptSuggestion {
+  kind: 'hpo' | 'mondo';
+  identifier: string;
+  canonicalLabel: string;
+  source: 'NLM Clinical Tables HPO' | 'Monarch Initiative';
+  /** Upstream HTTP API generation; this is not an ontology-data release identifier. */
+  apiVersion: 'v3';
+}
+
 export interface AggregateResearchTaskInput {
   version: 1;
   cohort: {
@@ -174,10 +210,7 @@ export interface AggregateResearchTaskInput {
   };
   modalities: ResearchModality[];
   objective: ResearchObjective;
-  focus?: {
-    kind: 'disease' | 'phenotype' | 'hpo' | 'gene';
-    term: string;
-  };
+  focus?: PublicationResearchReference;
 }
 
 export interface CandidateGeneTaskInput {
@@ -187,11 +220,9 @@ export interface CandidateGeneTaskInput {
     | 'classify'
     | 'suggest_candidates'
     | 'gene_profile';
-  query?: {
-    kind: 'disease' | 'phenotype' | 'hpo';
-    term: string;
-  };
-  gene?: { symbol: string; ensemblId?: string; entrezId?: string | number };
+  query?: PublicationResearchReference;
+  /** Server resolves this symbol against MyGene.info before any model call. */
+  gene?: { symbol: string };
   audience?: 'general' | 'undergraduate' | 'graduate' | 'researcher' | 'medical_researcher';
 }
 
@@ -199,7 +230,7 @@ export interface LearningActivityTaskInput {
   version: 1;
   educationLevel: EducationLevel;
   recentGenes: string[];
-  recentTopics: string[];
+  recentConcepts: PublicationResearchReference[];
 }
 
 export interface GeneticsTutorTaskInput {

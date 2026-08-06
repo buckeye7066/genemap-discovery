@@ -157,7 +157,14 @@ describe('honesty directive is injected by AI routes', () => {
         taskInput: {
           version: 1,
           operation: 'classify_and_suggest',
-          query: { kind: 'disease', term: 'familial hypercholesterolemia' },
+          query: {
+            kind: 'curated_concept',
+            conceptId: 'disease:cystic-fibrosis',
+            canonicalLabel: 'Cystic Fibrosis',
+            conceptKind: 'disease',
+            source: 'genemap_curated',
+            version: 1,
+          },
           audience: 'undergraduate',
         },
       },
@@ -165,7 +172,7 @@ describe('honesty directive is injected by AI routes', () => {
     expect(res.statusCode).toBe(200);
     const [prompt] = llmService.generateExplanation.mock.calls[0];
     expect(prompt).toContain('Never fabricate');
-    expect(prompt).toContain('disease: "familial hypercholesterolemia"');
+    expect(prompt).toContain('disease: "Cystic Fibrosis"');
   });
 
   it('/llm/chat is retired and never reaches the provider', async () => {

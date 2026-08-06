@@ -50,6 +50,7 @@ import type {
   PreBanRequest,
   UnbanOptions,
   AuthoritativeGeneRecord,
+  PublicationConceptSuggestion,
 } from './types.js';
 
 /**
@@ -872,6 +873,19 @@ export class ApiClient {
       body: JSON.stringify({ symbols, phenotypes }),
       timeoutMs: 25_000,
     });
+  }
+  /** Deterministic NLM HPO / Monarch typeahead. This endpoint never invokes an LLM. */
+  searchPublicationConcepts(
+    query: string,
+    kind: 'phenotype' | 'disease'
+  ): Promise<{ suggestions: PublicationConceptSuggestion[] }> {
+    return this.request(
+      `/genomics/publication-concepts/search?q=${encodeURIComponent(query)}&kind=${encodeURIComponent(kind)}`,
+      // Monarch entity/autocomplete calls can legitimately take several
+      // seconds. Keep this above the API's bounded 12s upstream budget while
+      // still failing closed instead of presenting stale data as resolved.
+      { timeoutMs: 15_000 },
+    );
   }
   searchClinVar(query: string): Promise<{ esearchresult?: { idlist?: string[] } } | ClinVarResult[]> {
     return this.request(`/genomics/clinvar/search?q=${encodeURIComponent(query)}`);

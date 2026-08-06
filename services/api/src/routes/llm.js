@@ -10,7 +10,9 @@ import { MAX_PROMPT_CHARS } from '../config/llmLimits.js';
 import {
   composePublicationPrompt,
   hasRawGenerationInput,
+  parsePublicationTaskInput,
 } from '../config/publicationTaskContracts.js';
+import { resolvePublicationTaskReferences } from '../services/publicationResolvers.js';
 import { isRegisteredAgent } from '@genemap/shared';
 
 // Hard ceiling on tokens per call. Premium users can request up to this
@@ -52,7 +54,7 @@ function validatePrompt(prompt) {
   }
 }
 
-function structuredInvocation(body) {
+function structuredTaskRequest(body) {
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
     throw new ValidationError('a structured publication task is required');
   }
@@ -72,8 +74,20 @@ function structuredInvocation(body) {
   if (!STRUCTURED_LLM_TASKS.has(publicationTask)) {
     throw new ValidationError('a recognized structured LLM publication task is required');
   }
+  const parsed = parsePublicationTaskInput(publicationTask, body.taskInput, {
+    routePath: '/llm/invoke',
+  });
+  if (!parsed.ok) {
+    throw new ValidationError(parsed.reason || 'invalid structured publication task');
+  }
+  return { publicationTask, taskInput: parsed.value };
+}
+
+function structuredInvocation(body, resolvedReferences = {}) {
+  const { publicationTask } = structuredTaskRequest(body);
   const composed = composePublicationPrompt(publicationTask, body.taskInput, {
     routePath: '/llm/invoke',
+    ...resolvedReferences,
   });
   if (!composed.ok) {
     throw new ValidationError(composed.reason || 'invalid structured publication task');
@@ -83,6 +97,18 @@ function structuredInvocation(body) {
     publicationTask,
     taskInput: composed.value,
     prompt: composed.prompt,
+  };
+}
+
+export function prepareStructuredInvocation(dependencies = {}) {
+  return async function preparePublicationInvocation(request) {
+    const preliminary = structuredTaskRequest(request.body);
+    const resolvedReferences = await resolvePublicationTaskReferences(
+      preliminary.publicationTask,
+      preliminary.taskInput,
+      dependencies,
+    );
+    request.publicationInvocation = structuredInvocation(request.body, resolvedReferences);
   };
 }
 
@@ -154,11 +180,19 @@ export default async function llmRoutes(fastify) {
 
   // Every /llm/* route requires authentication, an active entitlement
   // (free or premium), and consumes the per-user daily usage budget.
-  const guarded = [authenticate, checkEducationEntitlement, enforceUsageLimit];
+  // External identifiers are server-resolved in preHandler. The route handler
+  // (and therefore the model provider) is never entered for forged/mismatched
+  // gene IDs or nonexistent/obsolete HPO IDs.
+  const guarded = [
+    authenticate,
+    checkEducationEntitlement,
+    enforceUsageLimit,
+    prepareStructuredInvocation(),
+  ];
 
   fastify.post('/invoke', { preHandler: guarded }, async (request) => {
     const { options = {} } = request.body || {};
-    const { publicationTask, taskInput, prompt } = structuredInvocation(request.body);
+    const { publicationTask, taskInput, prompt } = request.publicationInvocation;
     const agent = resolveAgent(request.body);
     const allowGenomic = await assertNoRawGenomicLLM(prisma, request.user.userId, prompt);
 
@@ -238,6 +272,7 @@ export const __test = {
   validatePrompt,
   resolveAgent,
   structuredInvocation,
+  structuredTaskRequest,
   effectiveModel,
   /** Await every detached mesh task so assertions never race the side channel. */
   flushMeshWork: () => Promise.all(backgroundMeshWork.splice(0)),

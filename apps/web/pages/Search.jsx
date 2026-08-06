@@ -22,6 +22,7 @@ const SavedGeneSets = lazy(() => import("../components/search/SavedGeneSets"));
 const GenomeBrowser = lazy(() => import("../components/visualizations/GenomeBrowser"));
 const ComparativeGenomics = lazy(() => import("../components/search/ComparativeGenomics"));
 import { PhenotypeSearchService } from "../components/search/PhenotypeSearchService";
+import { resolvePublicationUrlReference } from "../lib/publicationConceptCatalog";
 
 export default function SearchPage() {
   const queryClient = useQueryClient();
@@ -49,11 +50,22 @@ export default function SearchPage() {
     const queryParam = urlParams.get('query');
     if (queryParam) {
       setSearchQuery(queryParam);
-      handleSearch(queryParam, false, /^HP:\d{7}$/i.test(queryParam) ? 'hpo_term' : 'free_text');
+      const resolved = resolvePublicationUrlReference(queryParam);
+      // Arbitrary URL text may prefill the guided form, but it cannot silently
+      // invoke generation. Dynamic labels must be selected through the
+      // deterministic resolver; exact HPO/MONDO ids are revalidated server-side.
+      if (resolved) {
+        handleSearch(queryParam, false, resolved.searchMode, resolved.reference);
+      }
     }
   }, []);
 
-  const handleSearch = async (query, isPremium = false, searchMode = 'free_text') => {
+  const handleSearch = async (
+    query,
+    isPremium = false,
+    searchMode = 'free_text',
+    selectedReference = null,
+  ) => {
     if (!query.trim()) {
       setError("Please enter a phenotype to search for");
       return;
@@ -77,7 +89,12 @@ export default function SearchPage() {
       // FAST: render candidate genes (with authoritative coordinates) as soon as
       // they're found, then drop the blocking spinner. The slow per-gene LLM
       // enrichment happens after this, in the background.
-      const base = await PhenotypeSearchService.findCandidates(query, isPremium, searchMode);
+      const base = await PhenotypeSearchService.findCandidates(
+        query,
+        isPremium,
+        searchMode,
+        selectedReference,
+      );
       if (!isCurrent()) return;
       setSearchResults(base);
       setIsLoading(false);

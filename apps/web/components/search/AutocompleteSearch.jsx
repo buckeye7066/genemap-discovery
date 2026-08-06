@@ -2,21 +2,25 @@ import React, { useState, useEffect, useRef } from "react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Search, Dna } from "lucide-react";
+import { apiClient } from "@genemap/shared";
+import {
+  CURATED_PUBLICATION_CONCEPTS,
+  publicationConceptById,
+} from "@/lib/publicationConceptCatalog";
 
 // Publication mode keeps autocomplete deterministic. These labels are UI
 // examples, not model output and not claims that an external database was
 // queried. Arbitrary prefixes never reach a generation provider.
 const SAFE_SUGGESTIONS = Object.freeze([
-  { text: 'Cystic Fibrosis', type: 'disease', description: 'Curated search example' },
-  { text: 'Rheumatoid Arthritis', type: 'disease', description: 'Curated search example' },
-  { text: 'Trisomy 21', type: 'disease', description: 'Curated search example' },
-  { text: 'polydactyly', type: 'phenotype', description: 'Curated search example' },
-  { text: 'intellectual disability', type: 'phenotype', description: 'Curated search example' },
-  { text: 'short stature', type: 'phenotype', description: 'Curated search example' },
-  { text: 'seizures', type: 'phenotype', description: 'Curated search example' },
-  { text: 'HP:0001166', type: 'hpo', description: 'Curated HPO identifier example' },
-  { text: 'HP:0001250', type: 'hpo', description: 'Curated HPO identifier example' },
-  { text: 'HP:0004322', type: 'hpo', description: 'Curated HPO identifier example' },
+  ...CURATED_PUBLICATION_CONCEPTS.map((concept) => ({
+    text: concept.canonicalLabel,
+    type: concept.conceptKind,
+    description: 'Reviewed GeneMap publication concept',
+    publicationReference: publicationConceptById(concept.conceptId),
+  })),
+  { text: 'HP:0001166', type: 'hpo', description: 'Exact HPO identifier example', publicationReference: { kind: 'hpo', identifier: 'HP:0001166' } },
+  { text: 'HP:0001250', type: 'hpo', description: 'Exact HPO identifier example', publicationReference: { kind: 'hpo', identifier: 'HP:0001250' } },
+  { text: 'HP:0004322', type: 'hpo', description: 'Exact HPO identifier example', publicationReference: { kind: 'hpo', identifier: 'HP:0004322' } },
 ]);
 
 export default function AutocompleteSearch({ 
@@ -24,6 +28,7 @@ export default function AutocompleteSearch({
   onChange, 
   onSelect, 
   searchMode = 'free_text',
+  inputId,
   placeholder = "Search for genes, diseases, or phenotypes...",
   disabled = false 
 }) {
@@ -35,7 +40,7 @@ export default function AutocompleteSearch({
   // Set when the user picks a suggestion. The selection programmatically
   // updates `value`, which would otherwise re-trigger the fetch effect and
   // immediately re-open the dropdown ("won't dismiss / re-fills the box").
-  const justSelectedRef = useRef(false);
+  const selectedValueRef = useRef(null);
 
   // Close suggestions when clicking outside
   useEffect(() => {
@@ -60,7 +65,9 @@ export default function AutocompleteSearch({
 
   // Filter the bounded local catalog when the user types.
   useEffect(() => {
-    const filterSuggestions = () => {
+    let cancelled = false;
+    setHighlightedIndex(-1);
+    const filterSuggestions = async () => {
       // Don't fetch (or surface) suggestions while a search is in flight.
       if (disabled) {
         setShowSuggestions(false);
@@ -68,12 +75,16 @@ export default function AutocompleteSearch({
       }
       // A selection just set `value`; consume the flag and skip the refetch so
       // the dropdown stays dismissed instead of re-populating.
-      if (justSelectedRef.current) {
-        justSelectedRef.current = false;
+      if (selectedValueRef.current === value) {
+        selectedValueRef.current = null;
         setSuggestions([]);
         setShowSuggestions(false);
         return;
       }
+      // If the selected text was already identical to the input, React did not
+      // emit a value-state change. Clear that old marker on the user's next edit
+      // without swallowing the edit or suppressing its resolver lookup.
+      if (selectedValueRef.current) selectedValueRef.current = null;
       if (!value || value.length < 2) {
         setSuggestions([]);
         return;
@@ -85,19 +96,43 @@ export default function AutocompleteSearch({
           ? 'hpo'
           : 'phenotype';
       const normalized = value.trim().toLowerCase();
-      const matches = SAFE_SUGGESTIONS.filter((suggestion) => (
+      const localMatches = SAFE_SUGGESTIONS.filter((suggestion) => (
         suggestion.type === wantedType
         && suggestion.text.toLowerCase().includes(normalized)
-      )).slice(0, 8);
+      ));
+      let remoteMatches = [];
+      try {
+        const kind = searchMode === 'disease' ? 'disease' : 'phenotype';
+        const response = await apiClient.searchPublicationConcepts(value.trim(), kind);
+        remoteMatches = (response?.suggestions || []).map((item) => ({
+          text: item.canonicalLabel,
+          type: item.kind === 'mondo' ? 'disease' : searchMode === 'hpo_term' ? 'hpo' : 'phenotype',
+          description: `${item.identifier} · ${item.source} API ${item.apiVersion}`,
+          publicationReference: { kind: item.kind, identifier: item.identifier },
+        }));
+      } catch {
+        // Deterministic local examples remain available during resolver outage.
+      }
+      if (cancelled) return;
+      const seen = new Set();
+      const matches = [...localMatches, ...remoteMatches].filter((suggestion) => {
+        const key = `${suggestion.publicationReference?.kind}:${suggestion.publicationReference?.identifier || suggestion.text.toLowerCase()}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      }).slice(0, 8);
       setSuggestions(matches);
       setShowSuggestions(matches.length > 0);
     };
 
     const timeoutId = setTimeout(() => {
-      filterSuggestions();
-    }, 150);
+      void filterSuggestions();
+    }, 250);
 
-    return () => clearTimeout(timeoutId);
+    return () => {
+      cancelled = true;
+      clearTimeout(timeoutId);
+    };
   }, [disabled, searchMode, value]);
 
   const handleKeyDown = (e) => {
@@ -115,8 +150,8 @@ export default function AutocompleteSearch({
         setHighlightedIndex((prev) => (prev > 0 ? prev - 1 : -1));
         break;
       case "Enter":
-        e.preventDefault();
         if (highlightedIndex >= 0 && highlightedIndex < suggestions.length) {
+          e.preventDefault();
           handleSelectSuggestion(suggestions[highlightedIndex]);
         }
         break;
@@ -128,7 +163,7 @@ export default function AutocompleteSearch({
   };
 
   const handleSelectSuggestion = (suggestion) => {
-    justSelectedRef.current = true;
+    selectedValueRef.current = suggestion.text;
     setSuggestions([]);
     setShowSuggestions(false);
     setHighlightedIndex(-1);
@@ -168,6 +203,7 @@ export default function AutocompleteSearch({
       <div className="relative">
         <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-slate-400" />
         <Input
+          id={inputId}
           ref={inputRef}
           value={value}
           onChange={(e) => onChange(e.target.value)}

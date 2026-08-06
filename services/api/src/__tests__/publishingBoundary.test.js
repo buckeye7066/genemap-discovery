@@ -8,6 +8,7 @@ import {
 } from '../config/publishingBoundary.js';
 import {
   composePublicationPrompt,
+  parsePublicationTaskInput,
   validatePublicationTaskInput,
 } from '../config/publicationTaskContracts.js';
 import { TOPICS_CATALOG } from '../config/educationCatalog.js';
@@ -15,6 +16,31 @@ import { TOPICS_CATALOG } from '../config/educationCatalog.js';
 const CATALOG_TOPICS = TOPICS_CATALOG.flatMap(({ topics }) =>
   topics.flatMap(({ id, title }) => [id, title])
 );
+
+const EARLY_ONSET_CONCEPT = Object.freeze({
+  kind: 'curated_concept',
+  conceptId: 'phenotype:early-onset-symptoms',
+  canonicalLabel: 'early-onset symptoms',
+  conceptKind: 'phenotype',
+  source: 'genemap_curated',
+  version: 1,
+});
+const POLYDACTYLY_CONCEPT = Object.freeze({
+  kind: 'curated_concept',
+  conceptId: 'phenotype:polydactyly',
+  canonicalLabel: 'polydactyly',
+  conceptKind: 'phenotype',
+  source: 'genemap_curated',
+  version: 1,
+});
+const CYSTIC_FIBROSIS_CONCEPT = Object.freeze({
+  kind: 'curated_concept',
+  conceptId: 'disease:cystic-fibrosis',
+  canonicalLabel: 'Cystic Fibrosis',
+  conceptKind: 'disease',
+  source: 'genemap_curated',
+  version: 1,
+});
 
 const RESEARCH_FIXTURES = Object.freeze([
   {
@@ -25,7 +51,7 @@ const RESEARCH_FIXTURES = Object.freeze([
       cohort: { sampleCount: 50, classification: 'deidentified_aggregate', hasControls: false },
       modalities: ['wes', 'phenotype'],
       objective: 'identify_variants',
-      focus: { kind: 'phenotype', term: 'early-onset symptoms' },
+      focus: EARLY_ONSET_CONCEPT,
     },
   },
   {
@@ -75,14 +101,14 @@ const ROOT_ADVERSARIAL_PROMPTS = Object.freeze([
 const VALID_CANDIDATE_INPUT = Object.freeze({
   version: 1,
   operation: 'classify_and_suggest',
-  query: { kind: 'phenotype', term: 'polydactyly' },
+  query: POLYDACTYLY_CONCEPT,
   audience: 'undergraduate',
 });
 const VALID_LEARNING_INPUT = Object.freeze({
   version: 1,
   educationLevel: 'undergraduate',
-  recentGenes: ['CFTR', 'BRCA1'],
-  recentTopics: ['cystic fibrosis'],
+  recentGenes: [],
+  recentConcepts: [CYSTIC_FIBROSIS_CONCEPT],
 });
 const VALID_TUTOR_INPUT = Object.freeze({
   version: 1,
@@ -118,17 +144,30 @@ describe('structured publication task contracts', () => {
 
   it.each([
     [PUBLICATION_TASKS.CANDIDATE_GENE_RESEARCH, VALID_CANDIDATE_INPUT],
-    [PUBLICATION_TASKS.CANDIDATE_GENE_RESEARCH, {
-      version: 1,
-      operation: 'gene_profile',
-      gene: { symbol: 'CFTR', ensemblId: 'ENSG00000001626', entrezId: '1080' },
-      audience: 'graduate',
-    }],
     [PUBLICATION_TASKS.LEARNING_ACTIVITY_SUMMARY, VALID_LEARNING_INPUT],
   ])('composes task %s from strict structured input', (task, input) => {
     const result = composePublicationPrompt(task, input);
     expect(result.ok).toBe(true);
     expect(result.prompt).toEqual(expect.any(String));
+  });
+
+  it('composes a gene profile only from the server-resolved MyGene record', () => {
+    const input = {
+      version: 1,
+      operation: 'gene_profile',
+      gene: { symbol: 'CFTR' },
+      audience: 'graduate',
+    };
+    expect(composePublicationPrompt(PUBLICATION_TASKS.CANDIDATE_GENE_RESEARCH, input).ok).toBe(false);
+    expect(composePublicationPrompt(PUBLICATION_TASKS.CANDIDATE_GENE_RESEARCH, input, {
+      resolvedGene: {
+        symbol: 'CFTR',
+        ensemblId: 'ENSG00000001626',
+        entrezId: '1080',
+        source: 'MyGene.info',
+        verified: true,
+      },
+    }).ok).toBe(true);
   });
 
   it.each([
@@ -138,7 +177,7 @@ describe('structured publication task contracts', () => {
     ['one-person cohort', PUBLICATION_TASKS.AGGREGATE_GENOMICS_RESEARCH, { ...RESEARCH_FIXTURES[0].input, cohort: { ...RESEARCH_FIXTURES[0].input.cohort, sampleCount: 1 } }],
     ['unattested cohort', PUBLICATION_TASKS.AGGREGATE_GENOMICS_RESEARCH, { ...RESEARCH_FIXTURES[0].input, cohort: { ...RESEARCH_FIXTURES[0].input.cohort, classification: 'patient_level' } }],
     ['free-form objective', PUBLICATION_TASKS.AGGREGATE_GENOMICS_RESEARCH, { ...RESEARCH_FIXTURES[0].input, objective: 'tell me what drug to take' }],
-    ['personal focus', PUBLICATION_TASKS.AGGREGATE_GENOMICS_RESEARCH, { ...RESEARCH_FIXTURES[0].input, focus: { kind: 'phenotype', term: 'my chest pain' } }],
+    ['arbitrary personal focus', PUBLICATION_TASKS.AGGREGATE_GENOMICS_RESEARCH, { ...RESEARCH_FIXTURES[0].input, focus: { kind: 'phenotype', term: 'my chest pain' } }],
     ['instruction-laundered disease label', PUBLICATION_TASKS.CANDIDATE_GENE_RESEARCH, {
       version: 1,
       operation: 'classify_and_suggest',
@@ -183,6 +222,115 @@ describe('structured publication task contracts', () => {
     }],
   ])('rejects %s', (_label, task, input) => {
     expect(validatePublicationTaskInput(task, input).ok).toBe(false);
+  });
+
+  it.each(['Alice Smith', 'Alice Smith BRCA1 result', 'DNA and bomb making'])(
+    'rejects arbitrary research and candidate labels: %s',
+    (term) => {
+      expect(parsePublicationTaskInput(PUBLICATION_TASKS.AGGREGATE_GENOMICS_RESEARCH, {
+        ...RESEARCH_FIXTURES[1].input,
+        focus: { kind: 'phenotype', term },
+      }).ok).toBe(false);
+      expect(parsePublicationTaskInput(PUBLICATION_TASKS.CANDIDATE_GENE_RESEARCH, {
+        version: 1,
+        operation: 'classify_and_suggest',
+        query: { kind: 'disease', term },
+        audience: 'researcher',
+      }).ok).toBe(false);
+    },
+  );
+
+  it.each(['HP:9999999', 'HP:1234567'])(
+    'does not authorize well-shaped HPO id without a resolver record: %s',
+    (identifier) => {
+      const focusInput = { ...RESEARCH_FIXTURES[1].input, focus: { kind: 'hpo', identifier } };
+      const queryInput = {
+        version: 1,
+        operation: 'classify_and_suggest',
+        query: { kind: 'hpo', identifier },
+        audience: 'researcher',
+      };
+      expect(parsePublicationTaskInput(PUBLICATION_TASKS.AGGREGATE_GENOMICS_RESEARCH, focusInput).ok).toBe(true);
+      expect(validatePublicationTaskInput(PUBLICATION_TASKS.AGGREGATE_GENOMICS_RESEARCH, focusInput).ok).toBe(false);
+      expect(parsePublicationTaskInput(PUBLICATION_TASKS.CANDIDATE_GENE_RESEARCH, queryInput).ok).toBe(true);
+      expect(validatePublicationTaskInput(PUBLICATION_TASKS.CANDIDATE_GENE_RESEARCH, queryInput).ok).toBe(false);
+    },
+  );
+
+  it('authorizes exact HPO/MONDO ids only with matching server resolver records', () => {
+    const hpoInput = {
+      ...RESEARCH_FIXTURES[1].input,
+      focus: { kind: 'hpo', identifier: 'HP:0001250' },
+    };
+    expect(validatePublicationTaskInput(PUBLICATION_TASKS.AGGREGATE_GENOMICS_RESEARCH, hpoInput, {
+      resolvedHpoById: {
+        'HP:0001250': {
+          identifier: 'HP:0001250',
+          canonicalLabel: 'Seizure',
+          source: 'NLM Clinical Tables HPO',
+          apiVersion: 'v3',
+          obsolete: false,
+        },
+      },
+    }).ok).toBe(true);
+    expect(validatePublicationTaskInput(PUBLICATION_TASKS.AGGREGATE_GENOMICS_RESEARCH, hpoInput, {
+      resolvedHpoById: {
+        'HP:0001250': {
+          identifier: 'HP:0001250',
+          canonicalLabel: 'spoofed',
+          source: 'browser',
+          apiVersion: 'v3',
+          obsolete: false,
+        },
+      },
+    }).ok).toBe(false);
+
+    const mondoInput = {
+      version: 1,
+      operation: 'classify_and_suggest',
+      query: { kind: 'mondo', identifier: 'MONDO:0007947' },
+      audience: 'researcher',
+    };
+    expect(validatePublicationTaskInput(PUBLICATION_TASKS.CANDIDATE_GENE_RESEARCH, mondoInput).ok).toBe(false);
+    expect(validatePublicationTaskInput(PUBLICATION_TASKS.CANDIDATE_GENE_RESEARCH, mondoInput, {
+      resolvedMondoById: {
+        'MONDO:0007947': {
+          identifier: 'MONDO:0007947',
+          canonicalLabel: 'Marfan syndrome',
+          source: 'Monarch Initiative',
+          apiVersion: 'v3',
+        },
+      },
+    }).ok).toBe(true);
+  });
+
+  it('rejects tampered curated concept provenance instead of trusting client fields', () => {
+    for (const mutation of [
+      { canonicalLabel: 'Alice Smith' },
+      { conceptKind: 'disease' },
+      { source: 'browser' },
+      { version: 2 },
+      { conceptId: 'phenotype:not-reviewed' },
+    ]) {
+      expect(parsePublicationTaskInput(PUBLICATION_TASKS.CANDIDATE_GENE_RESEARCH, {
+        ...VALID_CANDIDATE_INPUT,
+        query: { ...POLYDACTYLY_CONCEPT, ...mutation },
+      }).ok).toBe(false);
+    }
+  });
+
+  it.each([
+    ['CFTR + BRCA1 Ensembl', { symbol: 'CFTR', ensemblId: 'ENSG00000012048' }],
+    ['BRCA1 + CFTR Ensembl', { symbol: 'BRCA1', ensemblId: 'ENSG00000001626' }],
+    ['fake symbol + fake Ensembl', { symbol: 'FAKE1', ensemblId: 'ENSG99999999999' }],
+    ['BRCA1 + fake Entrez', { symbol: 'BRCA1', entrezId: '999999999999' }],
+  ])('rejects client-asserted gene identity: %s', (_label, gene) => {
+    expect(parsePublicationTaskInput(PUBLICATION_TASKS.CANDIDATE_GENE_RESEARCH, {
+      version: 1,
+      operation: 'gene_profile',
+      gene,
+      audience: 'researcher',
+    }).ok).toBe(false);
   });
 });
 

@@ -13,6 +13,11 @@ import {
   MANDATED_RESEARCH_EXAMPLES,
   parseAggregateResearchExample,
 } from '@/lib/researchTaskFixtures';
+import {
+  CURATED_PUBLICATION_CONCEPTS,
+  publicationConceptById,
+  publicationHpoReference,
+} from '@/lib/publicationConceptCatalog';
 
 const dataTypeOptions = [
   { key: 'wes', label: 'Whole-exome sequencing (WES)', icon: '🧬' },
@@ -32,8 +37,9 @@ export default function HypothesisGenerator() {
   const [classification, setClassification] = useState('deidentified_aggregate');
   const [hasControls, setHasControls] = useState(true);
   const [objective, setObjective] = useState('identify_variants');
-  const [focusKind, setFocusKind] = useState('phenotype');
-  const [focusTerm, setFocusTerm] = useState('early-onset symptoms');
+  const [focusKind, setFocusKind] = useState('curated');
+  const [focusConceptId, setFocusConceptId] = useState('phenotype:early-onset-symptoms');
+  const [focusHpoId, setFocusHpoId] = useState('');
   const [dataTypes, setDataTypes] = useState({
     wes: true,
     wgs: false,
@@ -57,8 +63,9 @@ export default function HypothesisGenerator() {
     setClassification(parsed.cohort.classification);
     setHasControls(parsed.cohort.hasControls);
     setObjective(parsed.objective);
-    setFocusKind(parsed.focus?.kind || 'phenotype');
-    setFocusTerm(parsed.focus?.term || '');
+    setFocusKind(parsed.focus?.kind === 'hpo' ? 'hpo' : parsed.focus ? 'curated' : 'none');
+    setFocusConceptId(parsed.focus?.conceptId || 'phenotype:early-onset-symptoms');
+    setFocusHpoId(parsed.focus?.kind === 'hpo' ? parsed.focus.identifier : '');
     setDataTypes(Object.fromEntries(dataTypeOptions.map(({ key }) => [
       key,
       parsed.modalities.includes(key),
@@ -76,6 +83,15 @@ export default function HypothesisGenerator() {
         setError('Enter at least 2 samples and select at least one aggregate data type.');
         return;
       }
+      const focus = focusKind === 'curated'
+        ? publicationConceptById(focusConceptId)
+        : focusKind === 'hpo'
+          ? publicationHpoReference(focusHpoId)
+          : null;
+      if (focusKind !== 'none' && !focus) {
+        setError('Choose a reviewed concept or enter an exact HPO identifier such as HP:0001250.');
+        return;
+      }
       const taskInput = {
         version: 1,
         cohort: {
@@ -85,7 +101,7 @@ export default function HypothesisGenerator() {
         },
         modalities: selectedDataTypes,
         objective,
-        ...(focusTerm.trim() ? { focus: { kind: focusKind, term: focusTerm.trim() } } : {}),
+        ...(focus ? { focus } : {}),
       };
       const { result: response } = await apiClient.invokePublicationTask(
         'research_hypothesis',
@@ -166,15 +182,29 @@ export default function HypothesisGenerator() {
             <div>
               <Label htmlFor="focus-kind">Optional focus type</Label>
               <select id="focus-kind" className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3" value={focusKind} onChange={(event) => setFocusKind(event.target.value)} disabled={isGenerating}>
-                <option value="phenotype">Phenotype</option>
-                <option value="disease">Disease label</option>
-                <option value="hpo">HPO identifier</option>
-                <option value="gene">Gene symbol</option>
+                <option value="none">No specific concept</option>
+                <option value="curated">Reviewed disease or phenotype</option>
+                <option value="hpo">Exact HPO identifier (server verified)</option>
               </select>
             </div>
             <div>
-              <Label htmlFor="focus-term">Optional bounded research label</Label>
-              <Input id="focus-term" maxLength={120} placeholder="e.g., early-onset symptoms or HP:0001250" value={focusTerm} onChange={(event) => setFocusTerm(event.target.value)} disabled={isGenerating} />
+              {focusKind === 'curated' ? (
+                <>
+                  <Label htmlFor="focus-concept">Reviewed concept</Label>
+                  <select id="focus-concept" className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3" value={focusConceptId} onChange={(event) => setFocusConceptId(event.target.value)} disabled={isGenerating}>
+                    {CURATED_PUBLICATION_CONCEPTS.map((concept) => (
+                      <option key={concept.conceptId} value={concept.conceptId}>{concept.canonicalLabel}</option>
+                    ))}
+                  </select>
+                </>
+              ) : focusKind === 'hpo' ? (
+                <>
+                  <Label htmlFor="focus-hpo">Exact HPO identifier</Label>
+                  <Input id="focus-hpo" maxLength={10} placeholder="HP:0001250" value={focusHpoId} onChange={(event) => setFocusHpoId(event.target.value)} disabled={isGenerating} />
+                </>
+              ) : (
+                <p className="pt-7 text-sm text-slate-600">No concept label will be sent.</p>
+              )}
             </div>
           </div>
 

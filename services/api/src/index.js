@@ -25,6 +25,7 @@ import llmRoutes from './routes/llm.js';
 import adminRoutes from './routes/admin.js';
 import entityRoutes from './routes/entities.js';
 import genomicsRoutes from './routes/genomics.js';
+import publicationConceptRoutes from './routes/publicationConcepts.js';
 import clinicalTrialRoutes from './routes/clinicalTrials.js';
 import clientErrorRoutes from './routes/clientError.js';
 import {
@@ -166,6 +167,7 @@ await fastify.register(llmRoutes, { prefix: '/llm' });
 await fastify.register(adminRoutes, { prefix: '/admin' });
 await fastify.register(entityRoutes, { prefix: '/entities' });
 await fastify.register(genomicsRoutes, { prefix: '/genomics' });
+await fastify.register(publicationConceptRoutes, { prefix: '/genomics/publication-concepts' });
 await fastify.register(clinicalTrialRoutes, { prefix: '/clinical-trials' });
 
 // Frontend error ingest (auth optional). Registered at root so the web app can

@@ -97,7 +97,14 @@ const RESEARCH_TASK_INPUT = Object.freeze({
   cohort: { sampleCount: 50, classification: 'deidentified_aggregate', hasControls: true },
   modalities: ['wes'],
   objective: 'identify_variants',
-  focus: { kind: 'phenotype', term: 'early-onset symptoms' },
+  focus: {
+    kind: 'curated_concept',
+    conceptId: 'phenotype:early-onset-symptoms',
+    canonicalLabel: 'early-onset symptoms',
+    conceptKind: 'phenotype',
+    source: 'genemap_curated',
+    version: 1,
+  },
 });
 
 // Legacy tests used distinct raw prompts only as call labels. The public route

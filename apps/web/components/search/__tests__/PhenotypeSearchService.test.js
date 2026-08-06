@@ -102,6 +102,16 @@ describe('PhenotypeSearchService.findCandidates (fused analyze+find)', () => {
 
   const json = (obj) => ({ result: JSON.stringify(obj) });
 
+  it.each(['Alice Smith', 'Alice Smith BRCA1 result', 'DNA and bomb making'])(
+    'does not invoke generation for unresolved free label %s',
+    async (query) => {
+      const invoke = vi.spyOn(apiClient, 'invokePublicationTask');
+      await expect(PhenotypeSearchService.findCandidates(query, false, 'free_text'))
+        .rejects.toThrow(/reviewed disease\/phenotype|free-text labels/i);
+      expect(invoke).not.toHaveBeenCalled();
+    },
+  );
+
   it('uses ONE LLM call on the happy path and returns the genes', async () => {
     const invoke = vi.spyOn(apiClient, 'invokePublicationTask').mockResolvedValue(
       json({
@@ -126,7 +136,14 @@ describe('PhenotypeSearchService.findCandidates (fused analyze+find)', () => {
       expect.objectContaining({
         version: 1,
         operation: 'classify_and_suggest',
-        query: { kind: 'disease', term: 'Cystic Fibrosis' },
+        query: {
+          kind: 'curated_concept',
+          conceptId: 'disease:cystic-fibrosis',
+          canonicalLabel: 'Cystic Fibrosis',
+          conceptKind: 'disease',
+          source: 'genemap_curated',
+          version: 1,
+        },
       }),
       expect.any(Object),
     );
@@ -141,10 +158,32 @@ describe('PhenotypeSearchService.findCandidates (fused analyze+find)', () => {
     vi.spyOn(apiClient, 'getMe').mockResolvedValue({});
     vi.spyOn(apiClient, 'enrichGenomicData').mockResolvedValue({ genes: {}, phenotypes: {} });
 
-    const base = await PhenotypeSearchService.findCandidates('tall stature', false);
+    const base = await PhenotypeSearchService.findCandidates('short stature', false);
 
     expect(base.candidateGenes.map((g) => g.symbol)).toContain('FBN1');
     expect(invoke).toHaveBeenCalledTimes(3); // fused (empty) + analyze + find
+  });
+
+  it('submits only the selected Monarch id for a dynamic disease result', async () => {
+    const invoke = vi.spyOn(apiClient, 'invokePublicationTask').mockResolvedValue(json({
+      queryType: 'disease',
+      isDisease: true,
+      candidateGenes: [{ symbol: 'FBN1' }],
+    }));
+    vi.spyOn(apiClient, 'getMe').mockResolvedValue({});
+    vi.spyOn(apiClient, 'enrichGenomicData').mockResolvedValue({ genes: {}, phenotypes: {} });
+    await PhenotypeSearchService.findCandidates(
+      'Marfan syndrome',
+      false,
+      'disease',
+      { kind: 'mondo', identifier: 'MONDO:0007947', canonicalLabel: 'untrusted browser label' },
+    );
+    expect(invoke).toHaveBeenCalledWith(
+      'candidate_gene_research',
+      expect.objectContaining({ query: { kind: 'mondo', identifier: 'MONDO:0007947' } }),
+      expect.any(Object),
+    );
+    expect(JSON.stringify(invoke.mock.calls[0])).not.toContain('untrusted browser label');
   });
 });
 
@@ -196,7 +235,7 @@ describe('PhenotypeSearchService verified gene profile contract', () => {
       {
         version: 1,
         operation: 'gene_profile',
-        gene: { symbol: 'CFTR', ensemblId: 'ENSG00000001626', entrezId: '1080' },
+        gene: { symbol: 'CFTR' },
         audience: 'graduate',
       },
       { maxTokens: 2048 },

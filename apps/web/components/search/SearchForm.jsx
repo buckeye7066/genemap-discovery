@@ -51,12 +51,13 @@ export default function SearchForm({ onSearch, isLoading, initialQuery = "" }) {
     <form onSubmit={(e) => handleSubmit(e, false)} className="space-y-6">
       <div className="space-y-2">
         <Label htmlFor="phenotype-query" className="text-base font-medium">
-          Search Query
+          Reviewed research concept or exact HPO identifier
         </Label>
         <div className="flex flex-col sm:flex-row gap-2">
           <AutocompleteSearch
             value={query}
             onChange={setQuery}
+            inputId="phenotype-query"
             searchMode={searchMode}
             onSelect={(suggestion) => {
               if (suggestion.type === "disease") {
@@ -72,6 +73,7 @@ export default function SearchForm({ onSearch, isLoading, initialQuery = "" }) {
                   suggestion.text.trim(),
                   false,
                   suggestion.type === 'disease' ? 'disease' : suggestion.type === 'hpo' ? 'hpo_term' : 'free_text',
+                  suggestion.publicationReference || null,
                 );
               }
             }}
@@ -83,9 +85,9 @@ export default function SearchForm({ onSearch, isLoading, initialQuery = "" }) {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="free_text">Phenotype Label</SelectItem>
-              <SelectItem value="disease">Disease Name</SelectItem>
-              <SelectItem value="hpo_term">HPO Term</SelectItem>
+              <SelectItem value="free_text">Reviewed Phenotype</SelectItem>
+              <SelectItem value="disease">Reviewed Disease</SelectItem>
+              <SelectItem value="hpo_term">Exact HPO ID</SelectItem>
             </SelectContent>
           </Select>
         </div>

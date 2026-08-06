@@ -78,9 +78,16 @@ describe('clinical publishing boundary', () => {
     expect(sharedClient).not.toContain('llmImage(');
 
     const autocomplete = read('../../components/search/AutocompleteSearch.jsx');
+    const searchForm = read('../../components/search/SearchForm.jsx');
+    const searchPage = read('../../pages/Search.jsx');
     expect(autocomplete).toContain('SAFE_SUGGESTIONS');
-    expect(autocomplete).not.toContain('apiClient.');
+    expect(autocomplete).toContain('apiClient.searchPublicationConcepts');
     expect(autocomplete).not.toContain('invokePublicationTask');
+    expect(autocomplete).toContain('if (cancelled) return;');
+    expect(autocomplete).toContain('suggestion.publicationReference');
+    expect(searchForm).toContain('suggestion.publicationReference || null');
+    expect(searchPage).toContain('selectedReference = null');
+    expect(searchPage).toContain('PhenotypeSearchService.findCandidates(');
   });
 
   it('removes unrelated arbitrary generation from published support and icon routes', () => {
@@ -166,6 +173,7 @@ describe('clinical publishing boundary', () => {
     expect(capIndex).toBeGreaterThan(-1);
     expect(enrichmentIndex).toBeGreaterThan(capIndex);
     expect(searchService).toContain('const usesDiseaseCandidateLimit = this.usesDiseaseCandidatePrompt');
-    expect(searchService).toContain('const isDisease = this.usesDiseaseCandidatePrompt');
+    expect(searchService).toContain('query: queryReference');
+    expect(searchService).not.toContain('query: { kind: this.queryKind');
   });
 });

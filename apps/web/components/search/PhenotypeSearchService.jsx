@@ -3,6 +3,7 @@ import { log } from "../shared/logger";
 import { getErrorMessage } from "../shared/errorUtils";
 import { GENE_ENRICHMENT_CONCURRENCY } from "../shared/constants";
 import { parseLLMJson } from "../shared/llmJson";
+import { resolvePublicationSearchReference } from "@/lib/publicationConceptCatalog";
 
 export class PhenotypeSearchService {
   static async getUserContext() {
@@ -29,8 +30,16 @@ export class PhenotypeSearchService {
    * with nothing rendered). Per-gene detail is filled in later by
    * enrichCandidates(). Each returned gene carries `detailsPending: true`.
    */
-  static async findCandidates(phenotypeQuery, isPremium = false, searchMode = 'free_text') {
+  static async findCandidates(phenotypeQuery, isPremium = false, searchMode = 'free_text', selectedReference = null) {
     try {
+      const queryReference = resolvePublicationSearchReference(
+        phenotypeQuery,
+        searchMode,
+        selectedReference,
+      );
+      if (!queryReference) {
+        throw new Error('Choose a reviewed disease/phenotype example or enter an exact HPO identifier. Free-text labels are not sent to the model.');
+      }
       // Two independent round-trips run CONCURRENTLY:
       //  - getUserContext() (a /auth/me call) — needed only for the premium flag
       //    and the LATER per-gene enrichment, NOT for candidate discovery.
@@ -40,7 +49,7 @@ export class PhenotypeSearchService {
       // to wait for getMe() before starting the (slow) LLM call — overlap them.
       const [{ isAdmin, userPreferences }, fused] = await Promise.all([
         this.getUserContext(),
-        this.analyzeAndFindCandidates(phenotypeQuery, searchMode),
+        this.analyzeAndFindCandidates(queryReference),
       ]);
       const effectivePremium = isPremium || isAdmin;
 
@@ -50,13 +59,13 @@ export class PhenotypeSearchService {
       // or unparseable JSON), fall back to the original two-step path so the
       // speedup never costs us a result.
       if (!candidateGenes.length) {
-        analysis = await this.analyzePhenotype(phenotypeQuery, searchMode);
-        candidateGenes = await this.findCandidateGenes(analysis, effectivePremium, phenotypeQuery, searchMode);
+        analysis = await this.analyzePhenotype(queryReference);
+        candidateGenes = await this.findCandidateGenes(analysis, effectivePremium, queryReference);
       }
 
       // LLM output is untrusted: enforce the promised lead limits before any
       // authoritative or per-gene enrichment can fan out into external calls.
-      const usesDiseaseCandidateLimit = this.usesDiseaseCandidatePrompt(analysis, phenotypeQuery);
+      const usesDiseaseCandidateLimit = this.usesDiseaseCandidatePrompt(analysis, queryReference);
       const maxCandidateLeads = analysis.isDisease
         || analysis.queryType === 'disease'
         || usesDiseaseCandidateLimit
@@ -107,13 +116,13 @@ export class PhenotypeSearchService {
    * fallback) are unchanged. parseLLMJson tolerates fences/prose; a sparse reply
    * yields an empty gene list, which findCandidates() handles by falling back.
   */
-  static async analyzeAndFindCandidates(query, searchMode = 'free_text') {
+  static async analyzeAndFindCandidates(queryReference) {
     const response = await apiClient.invokePublicationTask(
       'candidate_gene_research',
       {
         version: 1,
         operation: 'classify_and_suggest',
-        query: { kind: this.queryKind(query, searchMode), term: query },
+        query: queryReference,
         audience: 'researcher',
       },
       { maxTokens: 4096 },
@@ -162,8 +171,8 @@ export class PhenotypeSearchService {
   }
 
   // Backward-compatible one-shot: candidates then enrichment in one await.
-  static async searchGenes(phenotypeQuery, isPremium = false, searchMode = 'free_text') {
-    const base = await this.findCandidates(phenotypeQuery, isPremium, searchMode);
+  static async searchGenes(phenotypeQuery, isPremium = false, searchMode = 'free_text', selectedReference = null) {
+    const base = await this.findCandidates(phenotypeQuery, isPremium, searchMode, selectedReference);
     return this.enrichCandidates(base);
   }
 
@@ -298,20 +307,13 @@ export class PhenotypeSearchService {
     return 'undergraduate';
   }
 
-  static queryKind(query, searchMode = 'free_text') {
-    const normalized = String(query || '').trim();
-    if (searchMode === 'hpo_term' || /^HP:\d{7}$/i.test(normalized)) return 'hpo';
-    if (searchMode === 'disease') return 'disease';
-    return 'phenotype';
-  }
-
-  static async analyzePhenotype(query, searchMode = 'free_text') {
+  static async analyzePhenotype(queryReference) {
     const response = await apiClient.invokePublicationTask(
       'candidate_gene_research',
       {
         version: 1,
         operation: 'classify',
-        query: { kind: this.queryKind(query, searchMode), term: query },
+        query: queryReference,
         audience: 'researcher',
       },
     );
@@ -319,29 +321,15 @@ export class PhenotypeSearchService {
     return parseLLMJson(response, {});
   }
 
-  static async findCandidateGenes(phenotypeAnalysis, isPremium, originalQuery = "", searchMode = 'free_text') {
-    const searchTerms = [
-      phenotypeAnalysis.mainFeatures,
-      phenotypeAnalysis.synonyms
-    ].flat().filter(Boolean).join(", ");
-
-    // If analyzePhenotype returned sparse/unparseable JSON, searchTerms and
-    // diseaseName can be empty — which previously produced an EMPTY prompt
-    // ("Based on the phenotype features: ") and made the model fall back to
-    // generic "famous" genes (BRCA1/TP53/APOE) unrelated to the query. Always
-    // anchor on the user's original query so e.g. "Cystic Fibrosis" still
-    // searches for cystic fibrosis genes (CFTR) even when analysis is thin.
-    const diseaseTarget = phenotypeAnalysis.diseaseName || originalQuery || searchTerms;
-    const phenotypeTarget = searchTerms || originalQuery;
-
-    const isDisease = this.usesDiseaseCandidatePrompt(phenotypeAnalysis, originalQuery);
-    const target = originalQuery || (isDisease ? diseaseTarget : phenotypeTarget);
+  static async findCandidateGenes(phenotypeAnalysis, isPremium, queryReference) {
+    // The second model call reuses the exact immutable selection. Model output
+    // (diseaseName/features/synonyms) is never promoted into executable input.
     const response = await apiClient.invokePublicationTask(
       'candidate_gene_research',
       {
         version: 1,
         operation: 'suggest_candidates',
-        query: { kind: isDisease ? 'disease' : this.queryKind(target, searchMode), term: target },
+        query: queryReference,
         audience: 'researcher',
       },
       { maxTokens: 4096 },
@@ -352,12 +340,16 @@ export class PhenotypeSearchService {
     return (geneResults?.candidateGenes || []).filter((g) => g && g.symbol);
   }
 
-  static usesDiseaseCandidatePrompt(phenotypeAnalysis, originalQuery = "") {
+  static usesDiseaseCandidatePrompt(phenotypeAnalysis, queryReference) {
     const searchTerms = [
       phenotypeAnalysis?.mainFeatures,
       phenotypeAnalysis?.synonyms,
     ].flat().filter(Boolean).join(", ");
-    return Boolean(phenotypeAnalysis?.isDisease || (!searchTerms && originalQuery));
+    return Boolean(
+      phenotypeAnalysis?.isDisease
+      || queryReference?.conceptKind === 'disease'
+      || (!searchTerms && queryReference),
+    );
   }
 
   static async enrichGeneData(candidateGenes, isPremium, userPreferences) {
@@ -433,11 +425,10 @@ export class PhenotypeSearchService {
       {
         version: 1,
         operation: 'gene_profile',
-        gene: {
-          symbol: gene.symbol,
-          ...(gene.ensemblId ? { ensemblId: gene.ensemblId } : {}),
-          ...(gene.entrezId ? { entrezId: gene.entrezId } : {}),
-        },
+        // The server re-resolves this symbol through MyGene.info and composes
+        // only its authoritative record. Browser-held identifiers are display
+        // data, not an authorization credential.
+        gene: { symbol: gene.symbol },
         audience: this.getAudience(userPreferences),
       },
       { maxTokens: 2048 },

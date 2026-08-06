@@ -5,9 +5,36 @@ import {
   enforcePublishingBoundary,
 } from '../config/publishingBoundary.js';
 import { TOPICS_CATALOG } from '../config/educationCatalog.js';
+import {
+  composePublicationPrompt,
+  parsePublicationTaskInput,
+} from '../config/publicationTaskContracts.js';
+import {
+  resolvePublicationTaskReferences,
+  __test as resolverTest,
+} from '../services/publicationResolvers.js';
 
 const CATALOG_TOPICS = TOPICS_CATALOG.flatMap(({ topics }) =>
   topics.flatMap(({ id, title }) => [id, title])
+);
+
+const concept = (conceptId, canonicalLabel, conceptKind) => ({
+  kind: 'curated_concept',
+  conceptId,
+  canonicalLabel,
+  conceptKind,
+  source: 'genemap_curated',
+  version: 1,
+});
+const EARLY_ONSET_CONCEPT = concept(
+  'phenotype:early-onset-symptoms',
+  'early-onset symptoms',
+  'phenotype',
+);
+const CYSTIC_FIBROSIS_CONCEPT = concept(
+  'disease:cystic-fibrosis',
+  'Cystic Fibrosis',
+  'disease',
 );
 
 const RESEARCH_INPUTS = Object.freeze([
@@ -16,7 +43,7 @@ const RESEARCH_INPUTS = Object.freeze([
     cohort: { sampleCount: 50, classification: 'deidentified_aggregate', hasControls: false },
     modalities: ['wes', 'phenotype'],
     objective: 'identify_variants',
-    focus: { kind: 'phenotype', term: 'early-onset symptoms' },
+    focus: EARLY_ONSET_CONCEPT,
   },
   {
     version: 1,
@@ -89,6 +116,36 @@ async function buildBoundaryApp() {
     routes.get('/topics', handler);
   }, { prefix: '/education' });
   app.route({ method: ['GET', 'POST'], url: '/*', handler });
+  await app.ready();
+  return { app, handler };
+}
+
+async function buildResolverGuardApp(dependencies) {
+  const app = Fastify({ logger: false });
+  const handler = vi.fn(async (request) => ({ prompt: request.publicationPrompt }));
+  app.addHook('preHandler', enforcePublishingBoundary);
+  app.post('/llm/invoke', {
+    preHandler: async (request, reply) => {
+      const publicationTask = request.body?.publicationTask;
+      const parsed = parsePublicationTaskInput(publicationTask, request.body?.taskInput, {
+        routePath: '/llm/invoke',
+      });
+      if (!parsed.ok) return reply.code(403).send({ code: 'TASK_INPUT_REJECTED' });
+      const resolved = await resolvePublicationTaskReferences(
+        publicationTask,
+        parsed.value,
+        dependencies,
+      );
+      const composed = composePublicationPrompt(publicationTask, request.body?.taskInput, {
+        routePath: '/llm/invoke',
+        ...resolved,
+      });
+      if (!composed.ok) return reply.code(403).send({ code: 'IDENTITY_NOT_RESOLVED' });
+      request.publicationPrompt = composed.prompt;
+      return undefined;
+    },
+  }, handler);
+  app.post('/education/chat', handler);
   await app.ready();
   return { app, handler };
 }
@@ -173,14 +230,14 @@ describe('structured publication boundary in real Fastify', () => {
       [PUBLICATION_TASKS.CANDIDATE_GENE_RESEARCH, {
         version: 1,
         operation: 'classify_and_suggest',
-        query: { kind: 'disease', term: 'cystic fibrosis' },
+        query: CYSTIC_FIBROSIS_CONCEPT,
         audience: 'researcher',
       }],
       [PUBLICATION_TASKS.LEARNING_ACTIVITY_SUMMARY, {
         version: 1,
         educationLevel: 'undergraduate',
-        recentGenes: ['CFTR'],
-        recentTopics: ['cystic fibrosis'],
+        recentGenes: [],
+        recentConcepts: [CYSTIC_FIBROSIS_CONCEPT],
       }],
     ];
     for (const [publicationTask, taskInput] of cases) {
@@ -217,6 +274,31 @@ describe('structured publication boundary in real Fastify', () => {
     expect(response.statusCode).toBe(403);
     expect(handler).not.toHaveBeenCalled();
   });
+
+  it.each(['Alice Smith', 'Alice Smith BRCA1 result', 'DNA and bomb making'])(
+    'never executes either generation endpoint for arbitrary label %s',
+    async (term) => {
+      const taskInput = {
+        version: 1,
+        operation: 'classify_and_suggest',
+        query: { kind: 'disease', term },
+        audience: 'researcher',
+      };
+      for (const url of ['/llm/invoke', '/education/chat']) {
+        handler.mockClear();
+        const response = await app.inject({
+          method: 'POST',
+          url,
+          payload: {
+            publicationTask: PUBLICATION_TASKS.CANDIDATE_GENE_RESEARCH,
+            taskInput,
+          },
+        });
+        expect(response.statusCode).toBe(403);
+        expect(handler).not.toHaveBeenCalled();
+      }
+    },
+  );
 
   it.each(ROOT_ADVERSARIAL_PROMPTS)(
     'never executes either generation handler for raw adversarial prompt: %s',
@@ -343,5 +425,233 @@ describe('structured publication boundary in real Fastify', () => {
     const response = await app.inject({ method: 'GET', url: '/education/topics' });
     expect(response.statusCode).toBe(200);
     expect(handler).toHaveBeenCalledOnce();
+  });
+});
+
+describe('resolver-backed identities in real Fastify preHandler', () => {
+  beforeEach(() => resolverTest.resetHpoCache());
+
+  it.each([
+    ['CFTR + BRCA1 Ensembl', { symbol: 'CFTR', ensemblId: 'ENSG00000012048' }],
+    ['BRCA1 + CFTR Ensembl', { symbol: 'BRCA1', ensemblId: 'ENSG00000001626' }],
+    ['fake symbol + fake Ensembl', { symbol: 'FAKE1', ensemblId: 'ENSG99999999999' }],
+    ['BRCA1 + fake Entrez', { symbol: 'BRCA1', entrezId: '999999999999' }],
+  ])('rejects forged browser gene tuple before resolver/model handler: %s', async (_label, gene) => {
+    const geneLookup = vi.fn();
+    const { app, handler } = await buildResolverGuardApp({ geneLookup });
+    try {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/llm/invoke',
+        payload: {
+          publicationTask: PUBLICATION_TASKS.CANDIDATE_GENE_RESEARCH,
+          taskInput: { version: 1, operation: 'gene_profile', gene, audience: 'researcher' },
+        },
+      });
+      expect(response.statusCode).toBe(403);
+      expect(geneLookup).not.toHaveBeenCalled();
+      expect(handler).not.toHaveBeenCalled();
+    } finally {
+      await app.close();
+    }
+  });
+
+  it.each([
+    ['unavailable', {}],
+    ['not found', { CFTR: null }],
+    ['record-symbol mismatch', {
+      CFTR: {
+        symbol: 'BRCA1',
+        ensemblId: 'ENSG00000012048',
+        entrezId: '672',
+        source: 'MyGene.info',
+        verified: true,
+      },
+    }],
+  ])('does not execute model handler when MyGene is %s', async (_label, records) => {
+    const { app, handler } = await buildResolverGuardApp({
+      geneLookup: vi.fn().mockResolvedValue(records),
+    });
+    try {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/llm/invoke',
+        payload: {
+          publicationTask: PUBLICATION_TASKS.CANDIDATE_GENE_RESEARCH,
+          taskInput: {
+            version: 1,
+            operation: 'gene_profile',
+            gene: { symbol: 'CFTR' },
+            audience: 'researcher',
+          },
+        },
+      });
+      expect(response.statusCode).toBe(403);
+      expect(handler).not.toHaveBeenCalled();
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('executes only after MyGene resolves the exact symbol', async () => {
+    const { app, handler } = await buildResolverGuardApp({
+      geneLookup: vi.fn().mockResolvedValue({
+        CFTR: {
+          symbol: 'CFTR',
+          ensemblId: 'ENSG00000001626',
+          entrezId: '1080',
+          source: 'MyGene.info',
+          verified: true,
+        },
+      }),
+    });
+    try {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/llm/invoke',
+        payload: {
+          publicationTask: PUBLICATION_TASKS.CANDIDATE_GENE_RESEARCH,
+          taskInput: {
+            version: 1,
+            operation: 'gene_profile',
+            gene: { symbol: 'CFTR' },
+            audience: 'researcher',
+          },
+        },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json().prompt).toContain('ENSG00000001626');
+      expect(handler).toHaveBeenCalledOnce();
+    } finally {
+      await app.close();
+    }
+  });
+
+  it.each(['HP:9999999', 'HP:1234567'])(
+    'does not execute a model handler for unresolved well-shaped HPO id %s',
+    async (identifier) => {
+      const { app, handler } = await buildResolverGuardApp({
+        fetchImpl: vi.fn().mockResolvedValue({
+          ok: true,
+          json: vi.fn().mockResolvedValue([0, [], { name: [], is_obsolete: [] }, []]),
+        }),
+      });
+      try {
+        const payload = {
+          publicationTask: PUBLICATION_TASKS.CANDIDATE_GENE_RESEARCH,
+          taskInput: {
+            version: 1,
+            operation: 'classify_and_suggest',
+            query: { kind: 'hpo', identifier },
+            audience: 'researcher',
+          },
+        };
+        for (const url of ['/llm/invoke', '/education/chat']) {
+          handler.mockClear();
+          const response = await app.inject({ method: 'POST', url, payload });
+          expect(response.statusCode).toBe(403);
+          expect(handler).not.toHaveBeenCalled();
+        }
+      } finally {
+        await app.close();
+      }
+    },
+  );
+
+  it('executes after exact HPO id revalidation and uses the server label', async () => {
+    const { app, handler } = await buildResolverGuardApp({
+      fetchImpl: vi.fn().mockResolvedValue({
+        ok: true,
+        json: vi.fn().mockResolvedValue([
+          1,
+          ['HP:0001250'],
+          { name: ['Seizure'], is_obsolete: [null], replaced_by: [null] },
+          [['HP:0001250', 'Seizure']],
+        ]),
+      }),
+    });
+    try {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/llm/invoke',
+        payload: {
+          publicationTask: PUBLICATION_TASKS.CANDIDATE_GENE_RESEARCH,
+          taskInput: {
+            version: 1,
+            operation: 'classify_and_suggest',
+            query: { kind: 'hpo', identifier: 'HP:0001250' },
+            audience: 'researcher',
+          },
+        },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json().prompt).toContain('Seizure');
+      expect(handler).toHaveBeenCalledOnce();
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('executes a disease search only after exact MONDO entity revalidation', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({
+        id: 'MONDO:0009061',
+        name: 'Cystic fibrosis',
+        category: ['biolink:Disease'],
+      }),
+    });
+    const { app, handler } = await buildResolverGuardApp({ fetchImpl });
+    try {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/llm/invoke',
+        payload: {
+          publicationTask: PUBLICATION_TASKS.CANDIDATE_GENE_RESEARCH,
+          taskInput: {
+            version: 1,
+            operation: 'classify_and_suggest',
+            query: { kind: 'mondo', identifier: 'MONDO:0009061' },
+            audience: 'researcher',
+          },
+        },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json().prompt).toContain('Cystic fibrosis');
+      expect(handler).toHaveBeenCalledOnce();
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('does not execute for a missing or wrong-category MONDO entity', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({
+        id: 'MONDO:0009061',
+        name: 'CFTR',
+        category: ['biolink:Gene'],
+      }),
+    });
+    const { app, handler } = await buildResolverGuardApp({ fetchImpl });
+    try {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/llm/invoke',
+        payload: {
+          publicationTask: PUBLICATION_TASKS.CANDIDATE_GENE_RESEARCH,
+          taskInput: {
+            version: 1,
+            operation: 'classify_and_suggest',
+            query: { kind: 'mondo', identifier: 'MONDO:0009061' },
+            audience: 'researcher',
+          },
+        },
+      });
+      expect(response.statusCode).toBe(403);
+      expect(handler).not.toHaveBeenCalled();
+    } finally {
+      await app.close();
+    }
   });
 });

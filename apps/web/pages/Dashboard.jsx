@@ -5,6 +5,10 @@ import { useAuth } from "../lib/AuthContext";
 import { Link, useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { normalizeSearchHistoryEntry } from "../lib/searchHistory";
+import {
+  publicationConceptByLabel,
+  publicationHpoReference,
+} from "../lib/publicationConceptCatalog";
 import { log } from "../components/shared/logger";
 import { DASHBOARD_REFRESH_INTERVAL_MS } from "../components/shared/constants";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -131,6 +135,10 @@ export default function Dashboard() {
           .filter(Boolean)
       )];
       const allPhenotypes = searches.map(s => normalizeSearchHistoryEntry(s).query).filter(Boolean);
+      const recentConcepts = allPhenotypes
+        .map((value) => publicationConceptByLabel(value) || publicationHpoReference(value))
+        .filter(Boolean)
+        .slice(0, 3);
       const allowedLevels = new Set([
         'elementary', 'middle_school', 'high_school', 'undergraduate',
         'graduate', 'postgraduate',
@@ -138,13 +146,14 @@ export default function Dashboard() {
       const educationLevel = allowedLevels.has(user.education_level)
         ? user.education_level
         : 'undergraduate';
+      if (uniqueGenes.length === 0 && recentConcepts.length === 0) return;
       const response = await apiClient.invokePublicationTask(
         'learning_activity_summary',
         {
           version: 1,
           educationLevel,
           recentGenes: uniqueGenes.slice(0, 5),
-          recentTopics: allPhenotypes.slice(0, 3),
+          recentConcepts,
         },
       );
       const insightText = typeof response === 'string' ? response : response?.result;

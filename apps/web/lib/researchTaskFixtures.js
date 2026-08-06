@@ -10,7 +10,7 @@ const EXAMPLE_TASK_INPUTS = Object.freeze([
     cohort: { sampleCount: 50, classification: 'deidentified_aggregate', hasControls: false },
     modalities: ['wes', 'phenotype'],
     objective: 'identify_variants',
-    focus: { kind: 'phenotype', term: 'early-onset symptoms' },
+    focus: publicationConceptById('phenotype:early-onset-symptoms'),
   },
   {
     version: 1,
@@ -33,3 +33,4 @@ export function parseAggregateResearchExample(text) {
   const index = MANDATED_RESEARCH_EXAMPLES.indexOf(String(text).trim());
   return index === -1 ? null : JSON.parse(JSON.stringify(EXAMPLE_TASK_INPUTS[index]));
 }
+import { publicationConceptById } from './publicationConceptCatalog.js';

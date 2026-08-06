@@ -8,7 +8,7 @@
 import { TOPICS_CATALOG } from './educationCatalog.js';
 import {
   hasRawGenerationInput,
-  validatePublicationTaskInput,
+  parsePublicationTaskInput,
 } from './publicationTaskContracts.js';
 
 export const PUBLICATION_MODE = 'education_research';
@@ -204,7 +204,10 @@ export function publicationBoundaryDecision({ url, routeUrl, body } = {}) {
   if (hasRawGenerationInput(body)) {
     return block('Raw prompts and message histories are not accepted by the published build.');
   }
-  const validation = validatePublicationTaskInput(suppliedTask, body?.taskInput, {
+  // This choke point validates the finite request shape. External identifiers
+  // are authoritatively resolved in the authenticated route preHandler before
+  // any generation handler can run.
+  const validation = parsePublicationTaskInput(suppliedTask, body?.taskInput, {
     routePath: path,
   });
   if (!validation.ok) {
