@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { resolveRailwayReleaseSha } from '../config/releaseIdentity.js';
 
@@ -26,5 +27,17 @@ describe('Railway release identity', () => {
       { NODE_ENV: 'test' },
       { production: false }
     )).toBeNull();
+  });
+
+  it('runs the identity preflight before every production migration command', () => {
+    const root = new URL('../../../../', import.meta.url);
+    const railway = readFileSync(new URL('railway.json', root), 'utf8');
+    const dockerfile = readFileSync(new URL('services/api/Dockerfile', root), 'utf8');
+    for (const source of [railway, dockerfile]) {
+      const identity = source.indexOf('release:identity:verify');
+      const migration = source.indexOf('db:migrate:deploy');
+      expect(identity).toBeGreaterThan(-1);
+      expect(migration).toBeGreaterThan(identity);
+    }
   });
 });
