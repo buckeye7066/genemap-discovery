@@ -66,7 +66,7 @@ export default function HypothesisGenerator() {
     setHasControls(parsed.cohort.hasControls);
     setObjective(parsed.objective);
     setFocusKind(parsed.focus?.kind === 'hpo' ? 'hpo' : parsed.focus ? 'curated' : 'none');
-    setFocusConceptId(parsed.focus?.conceptId || 'phenotype:early-onset-symptoms');
+    setFocusConceptId(parsed.focus?.conceptId || '');
     setFocusHpoId(parsed.focus?.kind === 'hpo' ? parsed.focus.identifier : '');
     setDataTypes(Object.fromEntries(dataTypeOptions.map(({ key }) => [
       key,
@@ -194,6 +194,7 @@ export default function HypothesisGenerator() {
                 <>
                   <Label htmlFor="focus-concept">Reviewed concept</Label>
                   <select id="focus-concept" className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3" value={focusConceptId} onChange={(event) => setFocusConceptId(event.target.value)} disabled={isGenerating}>
+                    <option value="" disabled>Choose a reviewed concept</option>
                     {CURATED_PUBLICATION_CONCEPTS.map((concept) => (
                       <option key={concept.conceptId} value={concept.conceptId}>{concept.canonicalLabel}</option>
                     ))}
