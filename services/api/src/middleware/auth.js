@@ -26,7 +26,7 @@ export async function authenticate(request) {
 
   const user = await request.server.prisma.user.findUnique({
     where: { id: payload.userId },
-    select: { id: true, email: true, role: true, banned: true },
+    select: { id: true, privacySubjectRef: true, email: true, role: true, banned: true },
   });
 
   if (!user) {
@@ -41,6 +41,7 @@ export async function authenticate(request) {
   // role embedded in the JWT.
   request.user = {
     userId: user.id,
+    privacySubjectRef: user.privacySubjectRef,
     email: user.email,
     role: user.role,
   };
