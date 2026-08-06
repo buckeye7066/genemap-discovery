@@ -182,8 +182,8 @@ const IDENTIFIER =
   /\b(?:date of birth|dob|social security(?: number)?|ssn|medical record number|mrn|email address|phone number|home address)\b|\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i;
 const DATA_EXECUTION =
   /\b(?:analy[sz]e|process|review|interpret|classify|evaluate|assess|upload|use|summari[sz]e|annotate)\b/i;
-const GENOMIC_ARTIFACT = String.raw`(?:raw\s+)?(?:(?:g?vcf|bcf|bam|cram|sam|fastq|fasta)(?:\s+(?:data|records?|files?|results?|reads?))?|(?:structural\s+)?variant\s+calls?|snp\s+calls?|copy[- ]number\s+(?:variants?|calls?|profiles?)|variants?|mutations?|alleles?|haplotypes?|polymorphisms?|snps?|(?:genomic|genetic|dna|genotyp\w*|genome|exome|transcriptome|wes|wgs|rna[- ]?seq)(?:\s+(?:data|records?|files?|results?|reads?|sequences?|alignments?))?)`;
-const GENOMIC_DATA_ARTIFACT = String.raw`(?:raw\s+)?(?:(?:g?vcf|bcf|bam|cram|sam|fastq|fasta)(?:\s+(?:data|records?|files?|results?|reads?))?|(?:structural\s+)?variant\s+calls?|snp\s+calls?|copy[- ]number\s+(?:variants?|calls?|profiles?)|(?:genomic|genetic|dna|genotyp\w*)\s+(?:data|records?|files?|results?|reads?|sequences?|alignments?)|(?:genome|exome|transcriptome|wes|wgs|rna[- ]?seq)(?:\s+(?:data|records?|files?|results?|reads?|sequences?|alignments?))?)`;
+const GENOMIC_ARTIFACT = String.raw`(?:raw\s+)?(?:(?:g?vcf|bcf|bam|cram|sam|fastq|fasta)(?:\s+(?:data|records?|files?|results?|reads?))?|(?:structural\s+)?variant\s+calls?|snp\s+calls?|(?:cnvs?|copy[- ]number)\s+(?:variants?|calls?|profiles?)|variants?|mutations?|alleles?|haplotypes?|polymorphisms?|snps?|(?:genomic|genetic|dna|genotyp\w*)\s+(?:data|records?|files?|results?|reads?|sequences?|alignments?)|(?:genome|exome|transcriptome|wes|wgs|rna[- ]?seq)(?:\s+(?:data|records?|files?|results?|reads?|sequences?|alignments?))?)`;
+const GENOMIC_DATA_ARTIFACT = String.raw`(?:raw\s+)?(?:(?:g?vcf|bcf|bam|cram|sam|fastq|fasta)(?:\s+(?:data|records?|files?|results?|reads?))?|(?:structural\s+)?variant\s+calls?|snp\s+calls?|(?:cnvs?|copy[- ]number)\s+(?:variants?|calls?|profiles?)|(?:genomic|genetic|dna|genotyp\w*)\s+(?:data|records?|files?|results?|reads?|sequences?|alignments?)|(?:genome|exome|transcriptome|wes|wgs|rna[- ]?seq)(?:\s+(?:data|records?|files?|results?|reads?|sequences?|alignments?))?)`;
 const SENSITIVE_DATA_MATERIAL = new RegExp(
   String.raw`\b(?:raw\s+)?(?:patient|participant|subject|individual)[- ]level\b|\b${GENOMIC_DATA_ARTIFACT}\b|\b(?:patient|participant|subject)\s+(?:records?|files?|data)\b`,
   'i'
@@ -205,6 +205,16 @@ const NAMED_OWNER_BEFORE_GENOMIC_ARTIFACT = new RegExp(
   String.raw`(?:\b(?:analy[sz]e|process|review|interpret|classify|evaluate|assess|upload|use|summari[sz]e|annotate|compare|explain)\s+|(?:^|[.;!?]\s*)(?!(?:analy[sz]e|process|review|interpret|classify|evaluate|assess|upload|use|summari[sz]e|annotate|compare|explain)\b))(${NAME_TOKEN}(?:\s+${NAME_TOKEN}){0,2}?)\s+(?:(?:gene|sample|specimen)\s+)?${GENOMIC_ARTIFACT}\b`,
   'giu'
 );
+// A valid cohort clause cannot launder a second, individually attributed
+// artifact joined later in the same sentence. Capture the complete phrase
+// immediately before that later artifact and accept it only when it is itself
+// a bounded aggregate or genetics-education descriptor. This intentionally
+// avoids casing/name dictionaries: `and Jane Doe VCF`, `and JOHN DOE BAM`, and
+// `, maría garcía FASTQ` all take the same fail-closed path.
+const JOINED_OWNER_BEFORE_GENOMIC_ARTIFACT = new RegExp(
+  String.raw`(?:,(?!\s*(?:and|plus|alongside|including|with|together\s+with|as\s+well\s+as|combined\s+with)\b)|\b(?:and|plus|alongside|including|with|together\s+with|as\s+well\s+as|combined\s+with)\b)\s*((?:(?!\b(?:and|plus|alongside|including|with|together\s+with|as\s+well\s+as|combined\s+with)\b)[^,.;!?\n]){1,100}?)\s+${GENOMIC_ARTIFACT}\b`,
+  'giu'
+);
 const OWNER_PREFIX_ACTION =
   /^[\s\S]*\b(?:analy[sz]e|process|review|interpret|classify|evaluate|assess|upload|use|summari[sz]e|annotate|compare|explain)\s+/i;
 const SAFE_AGGREGATE_OWNER =
@@ -218,7 +228,9 @@ const GENERIC_ATTRIBUTION_OWNER =
 const NAMED_GENE_ATTRIBUTION_OWNER =
   /^(?:(?:an?|the|this|that)\s+)?[A-Z][A-Z0-9-]{1,9}\s+gene(?:\s+in\s+general\s+genetics\s+education)?\s*$/u;
 const SAFE_BARE_ARTIFACT_PREFIX =
-  /^(?:i have|we have|what (?:is|are)|types of|the human|raw|how (?:an?|the|does|do)(?:\s+(?:gene|protein|pathway)['’]s)?|(?:(?:an?|the)\s+)?(?:aggregate|anonymized|deidentified|public|synthetic)\s+cohort['’]s|(?:an?|the) (?:gene|protein|pathway)|(?:rare|common|novel|known|candidate|putative|predicted|pathogenic|benign|coding|noncoding|germline|somatic|structural|genetic|genomic|human|mouse|yeast|aggregate|anonymized|deidentified|public|synthetic|reference|target|disease[- ]associated|protein[- ]altering|early[- ]onset|late[- ]onset|loss[- ]of[- ]function|gain[- ]of[- ]function|population[- ]level|cohort[- ]level|treatment[- ]response)(?:\s+(?:disease|associated|gene|genes|cohort|population|level|variants?|mutations?|calls?|data|results?|response|function))?)$/i;
+  /^(?:i have|we have|what (?:is|are)|types of|the human|raw|copy[- ]number|how (?:an?|the|does|do)(?:\s+(?:gene|protein|pathway)['’]s)?|(?:(?:an?|the)\s+)?(?:aggregate|anonymized|deidentified|public|synthetic)\s+cohort['’]s|(?:an?|the) (?:gene|protein|pathway)|(?:rare|common|novel|known|candidate|putative|predicted|pathogenic|benign|coding|noncoding|germline|somatic|structural|genetic|genomic|human|mouse|yeast|aggregate|anonymized|deidentified|public|synthetic|reference|target|disease[- ]associated|protein[- ]altering|early[- ]onset|late[- ]onset|loss[- ]of[- ]function|gain[- ]of[- ]function|population[- ]level|cohort[- ]level|treatment[- ]response)(?:\s+(?:disease|associated|gene|genes|cohort|population|level|variants?|mutations?|calls?|data|results?|response|function))?)$/i;
+const SAFE_JOINED_ARTIFACT_PREFIX =
+  /^(?:(?:need|plan|aim|want)\s+to\s+)?(?:analy[sz]e|process|review|interpret|classify|evaluate|assess|summari[sz]e|annotate|compare|identify|study|model|test|explore|investigate)(?:\s+(?:the|these|those|rare|common|novel|known|candidate|genetic|genomic|structural|copy[- ]number)){0,4}$/i;
 const FROM_SENSITIVE_SOURCE = /\bfrom\b/i;
 const EXPLICIT_AGGREGATE_DATA_SOURCE =
   /\bfrom\s+(?:(?:an?|the)\s+)?(?:(?:(?:anonymized|de-identified|deidentified|non-identifiable|aggregate|synthetic|public)\s+){1,3}(?:cohort|population|data ?set|data|records?|samples?|biobank|repository)|\d+(?:\s+|-)\s*(?:patients?|participants?|subjects?|samples?|controls?))\b/i;
@@ -267,6 +279,19 @@ function hasIndividualGenomicOwnership(text) {
     // in any casing without trying to infer a name lexicon, while keeping
     // explicit phrases such as "rare disease variants" publishable.
     if (!SAFE_BARE_ARTIFACT_PREFIX.test(match[1].trim())) return true;
+  }
+  for (const match of String(text).matchAll(JOINED_OWNER_BEFORE_GENOMIC_ARTIFACT)) {
+    const owner = match[1].trim();
+    if (
+      SAFE_AGGREGATE_OWNER.test(owner)
+      || SAFE_BARE_ARTIFACT_PREFIX.test(owner)
+      || SAFE_JOINED_ARTIFACT_PREFIX.test(owner)
+      || GENERIC_EDUCATIONAL_OWNER.test(owner)
+      || NAMED_GENE_EDUCATIONAL_OWNER.test(owner)
+    ) {
+      continue;
+    }
+    return true;
   }
   return false;
 }
@@ -345,9 +370,9 @@ function hasUnsafeMedicationDisclosure(text) {
 }
 
 const DIRECT_DIAGNOSIS_OR_CARE =
-  /(?:\b(?:can|could|would|will)\s+you\s+(?:diagnos\w*|treat|screen|prescribe|recommend)\b|(?:^|[.!?]\s*)\s*(?:diagnos\w*|treat me|screen me|prescribe)\b|\b(?:diagnos\w*|treat|screen|assess|evaluate|interpret|classify)\s+(?:me|myself)\b)/i;
+  /(?:\b(?:can|could|would|will)\s+you\s+(?:diagnos\w*|treat|screen|prescribe|recommend)\b|(?:^|[.!?]\s*)\s*(?:diagnos\w*|treat me|screen me|prescribe)\b|\b(?:diagnos\w*|treat|screen|prescribe|recommend)\b[^.;!?\n]{0,160}\b(?:me|my|myself|i\s+(?:am|have|experience|feel)|you|your|yourself)\b|\b(?:me|my|myself|i\s+(?:am|have|experience|feel)|you|your|yourself)\b[^.;!?\n]{0,160}\b(?:diagnos\w*|treat|screen|prescribe|recommend)\b|\b(?:diagnos\w*|treat|screen|assess|evaluate|interpret|classify)\s+(?:me|myself)\b)/i;
 const PERSONAL_CLINICAL_DECISION =
-  /\b(?:should|can|could|would)\s+i\s+(?:take|use|choose|receive|start|stop|change|increase|decrease)\b|\bwhat\s+(?:treatment|medicine|medication|drug|dose)\s+should\s+i\s+(?:take|use|choose|receive)\b|\b(?:for|to)\s+myself\b/i;
+  /\b(?:should|can|could|would)\s+i\s+(?:take|use|choose|receive|start|stop|change|increase|decrease|get|undergo|schedule)\b|\bi\s+(?:should|can|could|would|need\s+to|ought\s+to)\s+(?:take|use|choose|receive|start|stop|change|increase|decrease|get|undergo|schedule)\b|\bwhat\s+(?:treatment|medicine|medication|drug|dose)\s+should\s+i\s+(?:take|use|choose|receive)\b|\b(?:for|to)\s+myself\b/i;
 const RESEARCH_DESIGN_DECISION =
   /\b(?:include|use|choose)\b[\s\S]{0,100}\bas\s+(?:an?\s+)?(?:[\w-]+\s+){0,2}(?:covariate|endpoint|outcome|variable)\b/i;
 const PERSONAL_CLINICAL_HELP =
