@@ -855,20 +855,41 @@ export default async function entityRoutes(fastify) {
       return created;
     });
 
-    // The finite local purge is attempted immediately and remains eligible for
-    // the external maintenance worker if an infrastructure failure occurs.
-    const result = await processDeletionRequestNow(prisma, deletionRequest.id, { now });
+    // The finite local purge is attempted immediately. Once creation commits,
+    // the request is durable: an infrastructure failure here is an accepted
+    // asynchronous request, not a failed POST that callers should duplicate.
+    let result;
+    try {
+      result = await processDeletionRequestNow(prisma, deletionRequest.id, { now });
+    } catch {
+      request.log.warn(
+        { requestId: request.id, deletionRequestId: deletionRequest.id },
+        'deletion request accepted; immediate processing was unavailable'
+      );
+      return reply.code(202).send({
+        request: serializeDeletionRequest(deletionRequest),
+        message: 'The request was accepted and remains eligible for maintenance processing.',
+        code: 'DELETION_ACCEPTED',
+      });
+    }
+
     const publicRequest = serializeDeletionRequest(result.request || deletionRequest);
     if (result.outcome === 'completed') return { request: publicRequest };
 
-    request.log.error(
+    const needsOperator = result.outcome === 'operator_review'
+      || publicRequest?.status === 'operator_review';
+    request.log.warn(
       { requestId: request.id, deletionRequestId: deletionRequest.id },
-      'deletion request retained for retry or operator review'
+      needsOperator
+        ? 'deletion request accepted for operator review'
+        : 'deletion request accepted for maintenance processing'
     );
-    return reply.code(503).send({
+    return reply.code(202).send({
       request: publicRequest,
-      error: 'The local content purge did not complete; the request was retained for retry.',
-      code: 'DELETION_NOT_COMPLETED',
+      message: needsOperator
+        ? 'The request was accepted and requires operator review.'
+        : 'The request was accepted and remains eligible for maintenance processing.',
+      code: 'DELETION_ACCEPTED',
     });
   });
 
