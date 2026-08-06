@@ -230,12 +230,17 @@ describe('clinical publishing boundary', () => {
       'enrichVcfCohort(',
       'searchClinicalTrials(',
       'HIPAA Compliance',
+      '/admin/self-test',
+      'runFunctionTests(',
     ]) {
       expect(sharedClient).not.toContain(forbidden);
     }
 
     expect(sharedClient).toContain('/genomics/enrich');
     expect(sharedClient).toContain('/genomics/publication-concepts/search');
+
+    const adminRoute = read('../../../../services/api/src/routes/admin.js');
+    expect(adminRoute).not.toContain("fastify.get('/self-test'");
   });
 
   it('keeps administrator analytics aggregate-only', () => {
