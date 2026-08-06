@@ -388,8 +388,6 @@ export interface VcfEnrichment {
   original_variant: VcfParsedVariant;
   annotations: Record<string, unknown>;
   evidenceSummary: string;
-  clinicalConfirmationRequired: boolean;
-  questionsForClinician: string[];
   [key: string]: unknown;
 }
 
