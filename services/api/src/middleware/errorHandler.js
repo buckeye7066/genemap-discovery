@@ -1,7 +1,5 @@
 import { ZodError } from 'zod';
 import { AppError, sanitizeError } from '../utils/errors.js';
-import { reportErrorToOwner } from '../services/errorReporter.js';
-import { captureException } from '../config/sentry.js';
 
 /**
  * Detect operational app errors regardless of cross-realm prototype chains
@@ -47,7 +45,7 @@ export function errorHandler(error, request, reply) {
       requestId,
       err: {
         name: error.name,
-        message: sanitizeError(error),
+        message: isProd ? undefined : sanitizeError(error),
         code: error.code,
         statusCode: error.statusCode,
         // Stack traces are useful in dev/test but can leak file system
@@ -67,35 +65,6 @@ export function errorHandler(error, request, reply) {
   // message) and every 429 was captured by Sentry as a server failure.
   const isFrameworkClientError =
     Number.isInteger(error?.statusCode) && error.statusCode >= 400 && error.statusCode < 500;
-
-  // Resolve the status code we are about to return so the owner is only
-  // notified about genuine server-side failures (>=500), not client/validation
-  // errors. Fire-and-forget; never awaited and never throws. The reporter
-  // itself excludes admin/owner users.
-  const resolvedStatus =
-    error instanceof ZodError ? 400
-    : isAppError(error) ? error.statusCode
-    : isFrameworkClientError ? error.statusCode
-    : 500;
-  if (resolvedStatus >= 500) {
-    reportErrorToOwner({
-      error,
-      source: 'backend',
-      user: request.user,
-      route: routeLabel(request),
-      method: request.method,
-      requestId,
-      statusCode: resolvedStatus,
-    });
-    // Also send to Sentry when configured (no-op otherwise). Minimal,
-    // non-PII context — route PATTERN only, never the URL/query or request body.
-    captureException(error, {
-      requestId,
-      route: routeLabel(request),
-      method: request.method,
-      userId: request.user?.userId,
-    });
-  }
 
   if (error instanceof ZodError) {
     return reply.status(400).send({
