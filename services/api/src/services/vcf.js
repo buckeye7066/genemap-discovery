@@ -2,7 +2,6 @@ import {
   lookupVariant,
   lookupGene,
   searchClinVar,
-  getClinVarVariant,
 } from './genomicDatabases.js';
 import { ValidationError } from '../utils/errors.js';
 
@@ -190,52 +189,6 @@ function sourceResult(name, url, data) {
   };
 }
 
-/**
- * ClinVar's esummary payload carries three parallel classification blocks
- * (germline / oncogenicity / clinical impact); a record may populate any
- * subset. Germline is the one that answers "is this variant pathogenic for an
- * inherited condition", so it is preferred, with the others as fallbacks so an
- * oncogenicity-only somatic record still reports something rather than nothing.
- *
- * `clinical_significance` is the pre-2024 field name. It is retained last in
- * the chain only so cached/replayed payloads keep resolving; live NCBI
- * responses no longer contain it, and reading it alone is what silently blanked
- * every classification in the UI. Callers must go through this helper rather
- * than reaching into the raw record, so the schema is known in exactly one place.
- */
-function extractClinVarClassification(record) {
-  if (!record || typeof record !== 'object') return null;
-  // A record routinely carries all three blocks with only one populated, so
-  // pick the first that actually says something — `||` alone would stop at an
-  // empty-object germline block and report nothing for a somatic-only record.
-  const hasContent = (candidate) => candidate && typeof candidate === 'object'
-    && (String(candidate.description ?? '').trim() || String(candidate.review_status ?? '').trim());
-  const block = [
-    record.germline_classification,
-    record.oncogenicity_classification,
-    record.clinical_impact_classification,
-    record.clinical_significance,
-  ].find(hasContent) || null;
-  if (!block) return null;
-
-  const description = typeof block.description === 'string' && block.description.trim()
-    ? block.description.trim()
-    : null;
-  const reviewStatus = typeof block.review_status === 'string' && block.review_status.trim()
-    ? block.review_status.trim()
-    : (typeof record.review_status === 'string' && record.review_status.trim()
-      ? record.review_status.trim()
-      : null);
-  const lastEvaluated = typeof block.last_evaluated === 'string' && block.last_evaluated.trim()
-    ? block.last_evaluated.trim()
-    : null;
-
-  if (!description && !reviewStatus) return null;
-  return { description, reviewStatus, lastEvaluated };
-}
-
-export { extractClinVarClassification };
-
 async function enrichOneVariant(variant) {
   const rsid = variant.rsid || (typeof variant.id === 'string' && variant.id.startsWith('rs') ? variant.id : null);
   const gene = variant.gene || null;
@@ -248,10 +201,19 @@ async function enrichOneVariant(variant) {
     clinVarQuery ? searchClinVar(clinVarQuery) : Promise.resolve(null),
   ]);
 
-  const clinVarIds = clinVarSearch?.esearchresult?.idlist || [];
-  const clinVarDetails = clinVarIds.length > 0 ? await getClinVarVariant(clinVarIds[0]) : null;
-  const clinVarRecord = clinVarIds.length > 0 ? clinVarDetails?.result?.[clinVarIds[0]] : null;
-  const clinVarClassification = extractClinVarClassification(clinVarRecord);
+  // ESearch returns relevance-ranked candidates, not allele/build identity.
+  // Until this pipeline can normalize against a trusted reference assembly and
+  // compare an exact ClinVar allele, candidate IDs are follow-up links only.
+  const clinVarIds = [...new Set(
+    (clinVarSearch?.esearchresult?.idlist || [])
+      .map((uid) => String(uid || '').trim())
+      .filter((uid) => /^\d+$/u.test(uid))
+  )].slice(0, 20);
+  const clinVarCandidates = clinVarIds.map((uid) => ({
+    recordId: uid,
+    evidenceClass: 'unverified_search_candidate',
+    url: `https://www.ncbi.nlm.nih.gov/clinvar/variation/${uid}/`,
+  }));
 
   return {
     originalVariant: variant,
@@ -268,29 +230,23 @@ async function enrichOneVariant(variant) {
         geneData
       ),
       clinVar: {
-        status: clinVarDetails ? 'found' : 'not_found',
+        status: clinVarCandidates.length > 0 ? 'candidate_only' : 'not_found',
+        evidenceClass: 'unverified_search_candidates',
+        claimLevelEvidenceAttached: false,
         source: source(
           'ClinVar E-utilities',
           `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=clinvar&term=${encodeURIComponent(clinVarQuery || '')}`,
-          { reviewStatus: clinVarClassification?.reviewStatus || null }
+          { databaseRelease: null }
         ),
-        classification: clinVarClassification?.description || null,
-        reviewStatus: clinVarClassification?.reviewStatus || null,
-        lastEvaluated: clinVarClassification?.lastEvaluated || null,
-        recordTitle: typeof clinVarRecord?.title === 'string' ? clinVarRecord.title : null,
-        accession: typeof clinVarRecord?.accession === 'string' ? clinVarRecord.accession : null,
-        search: clinVarSearch || null,
-        data: clinVarDetails,
+        unverifiedCandidates: clinVarCandidates,
+        limitation: clinVarCandidates.length > 0
+          ? 'Search candidates were returned, but none was matched to an exact normalized allele and genome assembly. No ClinVar claim is attached.'
+          : 'No ClinVar search candidates were returned. No ClinVar claim is attached.',
       },
     },
-    evidenceSummary: clinVarDetails
-      ? 'ClinVar source data returned for this query. Interpret only according to the cited source review status.'
-      : 'No ClinVar source data found for this query.',
-    clinicalConfirmationRequired: true,
-    questionsForClinician: [
-      'Does this variant match the same genome assembly and transcript used by the source annotation?',
-      'Is confirmatory testing from a certified clinical lab appropriate for this context?',
-    ],
+    evidenceSummary: clinVarCandidates.length > 0
+      ? 'ClinVar returned unverified follow-up candidates. No candidate was matched to this variant\'s normalized allele and genome assembly, so no ClinVar classification is attached.'
+      : 'No ClinVar search candidates were returned for this query. No ClinVar classification is attached.',
   };
 }
 
