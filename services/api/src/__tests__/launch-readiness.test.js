@@ -2,7 +2,6 @@ import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { extractWebReleaseSha } from '../../../../scripts/lib/release-identity.mjs';
 
 let checkHttpEndpoints;
 let parseArgs;
@@ -227,9 +226,12 @@ describe('production launch verification', () => {
           releaseSha: approvedSha,
         });
       }
+      if (url.endsWith('/release-identity.json')) {
+        return mockResponse(200, { releaseSha: approvedSha });
+      }
       return mockResponse(
         200,
-        `<!doctype html><html><head><meta name="genemap-release-sha" content="${approvedSha}"></head></html>`,
+        '<!doctype html><html><head></head><body><div id="root"></div></body></html>',
         'text/html; charset=utf-8'
       );
     };
@@ -243,52 +245,6 @@ describe('production launch verification', () => {
     });
 
     expect(failures(checks)).toEqual([]);
-  });
-
-  it('reads one real head marker regardless of attribute order and ignores inert text', () => {
-    const approvedSha = 'a'.repeat(40);
-    const liveSha = 'b'.repeat(40);
-    const html = `<!doctype html>
-      <!-- <head><meta name="genemap-release-sha" content="${approvedSha}"></head> -->
-      <html>
-        <head>
-          <script>const marker = '<meta name="genemap-release-sha" content="${approvedSha}">'</script>
-          <meta content="${liveSha}" data-purpose="release" name="genemap-release-sha">
-        </head>
-        <body><meta name="genemap-release-sha" content="${approvedSha}"></body>
-      </html>`;
-
-    expect(extractWebReleaseSha(html)).toBe(liveSha);
-    expect(extractWebReleaseSha(`<html><head>
-      <meta name="genemap-release-sha" content="${liveSha}">
-      <meta content="${liveSha}" name="genemap-release-sha">
-    </head><body></body></html>`)).toBeNull();
-    expect(extractWebReleaseSha(`<html><head>
-      <title><meta name="genemap-release-sha" content="${approvedSha}"></title>
-    </head><body></body></html>`)).toBeNull();
-    expect(extractWebReleaseSha(`<html><head>
-      <link data-decoy='<meta name="genemap-release-sha" content="${approvedSha}">'>
-      <meta content="${liveSha}" name="genemap-release-sha">
-    </head><body></body></html>`)).toBe(liveSha);
-    expect(extractWebReleaseSha(`<html><head>
-      <meta name="genemap-release-sha" content="${liveSha}" content="${approvedSha}">
-    </head><body></body></html>`)).toBeNull();
-    expect(extractWebReleaseSha(`<!doctype html><html><body><script>
-      const decoy = '<head><meta name="genemap-release-sha" content="${approvedSha}"></head>';
-    </script></body></html>`)).toBeNull();
-    expect(extractWebReleaseSha(`<html><body><head>
-      <meta name="genemap-release-sha" content="${approvedSha}">
-    </head></body></html>`)).toBeNull();
-    expect(extractWebReleaseSha(`<!doctype html>
-      <html><body></body></html>
-      <html><head><meta name="genemap-release-sha" content="${approvedSha}"></head></html>
-    `)).toBeNull();
-    expect(extractWebReleaseSha(`<html><body></body><head>
-      <meta name="genemap-release-sha" content="${approvedSha}">
-    </head></html>`)).toBeNull();
-    expect(extractWebReleaseSha(`<html><head><body/>
-      <meta name="genemap-release-sha" content="${approvedSha}">
-    </head></html>`)).toBeNull();
   });
 
   it('rejects redirects and the wrong publication mode', async () => {
@@ -333,9 +289,12 @@ describe('production launch verification', () => {
           releaseSha: 'b'.repeat(40),
         });
       }
+      if (url.endsWith('/release-identity.json')) {
+        return mockResponse(200, { releaseSha: 'c'.repeat(40) });
+      }
       return mockResponse(
         200,
-        `<!doctype html><html><head><meta name="genemap-release-sha" content="${'c'.repeat(40)}"></head></html>`,
+        '<!doctype html><html><head></head><body><div id="root"></div></body></html>',
         'text/html; charset=utf-8'
       );
     };
@@ -354,14 +313,54 @@ describe('production launch verification', () => {
     ]));
   });
 
-  it('keeps production smoke on the tested head parser and rejects redirects', () => {
+  it('rejects non-200 responses even when their bodies look valid', async () => {
+    const approvedSha = 'a'.repeat(40);
+    const fetchImpl = async (url) => {
+      if (url.endsWith('/healthz')) return mockResponse(203, { status: 'ok' });
+      if (url.endsWith('/readyz')) {
+        return mockResponse(206, {
+          status: 'ready',
+          publicationMode: 'education_research',
+          medicalEncryption: true,
+          releaseSha: approvedSha,
+        });
+      }
+      if (url.endsWith('/release-identity.json')) {
+        return mockResponse(202, { releaseSha: approvedSha });
+      }
+      return mockResponse(
+        203,
+        '<!doctype html><html><head></head><body><div id="root"></div></body></html>',
+        'text/html; charset=utf-8'
+      );
+    };
+
+    const checks = await checkHttpEndpoints({
+      apiUrl: 'https://api.example.com',
+      webUrl: 'https://app.example.com',
+      approvedSha,
+      fetchImpl,
+      timeoutMs: 1000,
+    });
+
+    expect(failures(checks).map((check) => check.id)).toEqual(expect.arrayContaining([
+      'http.healthz',
+      'http.readyz',
+      'http.apiReleaseSha',
+      'http.web',
+      'http.webReleaseSha',
+    ]));
+  });
+
+  it('keeps production smoke on the static release asset with exact statuses and no redirects', () => {
     const workflow = readFileSync(
       new URL('../../../../.github/workflows/production-smoke.yml', import.meta.url),
       'utf8'
     );
-    expect(workflow).toContain('extractWebReleaseSha');
+    expect(workflow).toContain('release-identity.json');
     expect(workflow).toContain("redirect: 'error'");
     expect(workflow).toMatch(/response\.status !== 200/u);
+    expect(workflow).not.toContain('extractWebReleaseSha');
     expect(workflow).not.toContain('--location');
   });
 
