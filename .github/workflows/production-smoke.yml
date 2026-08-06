@@ -83,6 +83,14 @@ jobs:
           const api = await apiResponse.json();
           const identity = await identityResponse.json();
           const webSha = identity?.releaseSha;
+          const identityMediaType = (identityResponse.headers.get('content-type') || '')
+            .split(';', 1)[0]
+            .trim()
+            .toLowerCase();
+          const identityCacheDirectives = (identityResponse.headers.get('cache-control') || '')
+            .split(',')
+            .map((directive) => directive.trim().split('=', 1)[0].toLowerCase())
+            .filter(Boolean);
           if (apiResponse.status !== 200 || !/^[a-f0-9]{40}$/u.test(api.releaseSha || '')) {
             throw new Error(
               `API readiness is missing an immutable release SHA: ${apiResponse.status} ${JSON.stringify(api)}`
@@ -93,8 +101,8 @@ jobs:
           }
           if (
             identityResponse.status !== 200 ||
-            !identityResponse.headers.get('content-type')?.includes('application/json') ||
-            !identityResponse.headers.get('cache-control')?.includes('no-store') ||
+            identityMediaType !== 'application/json' ||
+            !identityCacheDirectives.includes('no-store') ||
             Object.keys(identity || {}).length !== 1 ||
             !/^[a-f0-9]{40}$/u.test(webSha || '')
           ) {
