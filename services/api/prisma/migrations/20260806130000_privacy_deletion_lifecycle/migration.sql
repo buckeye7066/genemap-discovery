@@ -225,6 +225,7 @@ RETURNS trigger
 LANGUAGE plpgsql
 AS $normalize_deletion_lifecycle$
 BEGIN
+  NEW."updated_at" := CURRENT_TIMESTAMP;
   NEW."requested_types" := ARRAY['medicalData', 'aiConversations', 'searchHistory']::TEXT[];
 
   IF NEW."status" IN ('pending', 'processing', 'retry_scheduled') THEN
