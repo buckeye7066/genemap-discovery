@@ -1,9 +1,9 @@
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 import path from 'path'
+import { resolveVercelReleaseSha } from './lib/releaseIdentity.js'
 
-const commitSha = process.env.VERCEL_GIT_COMMIT_SHA || ''
-const releaseSha = /^[a-f0-9]{40}$/u.test(commitSha) ? commitSha : 'unavailable'
+const releaseSha = resolveVercelReleaseSha(process.env)
 
 const releaseIdentityPlugin = {
   name: 'genemap-release-identity',
