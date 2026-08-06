@@ -8,7 +8,7 @@ import MelissaBanner from "./components/MelissaBanner";
 import PlatformCompatibility from "./components/PlatformCompatibility";
 import UniversalLinkHandler from "./components/UniversalLinkHandler";
 import { getBrowserEnvironment } from "./components/shared/safeNavigate";
-import { Search, User, Crown, History, BarChart3, Microscope, LayoutDashboard, MessageSquare, Building2, ShieldOff, Mail, Crown as CrownIcon, Users, Sparkles, Server, Code2, BookOpen, GraduationCap, HelpCircle, Route } from "lucide-react";
+import { Search, User, Crown, History, BarChart3, Microscope, LayoutDashboard, MessageSquare, Building2, ShieldOff, Mail, Crown as CrownIcon, Users, Sparkles, Server, BookOpen, GraduationCap, HelpCircle, Route } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -84,10 +84,9 @@ const adminNav = [
   { title: "User Messages", url: createPageUrl("AdminMessages"), icon: MessageSquare },
   { title: "Banned Users", url: createPageUrl("BannedUsers"), icon: ShieldOff },
   { title: "Newsletter Subs", url: createPageUrl("AxiomNewsletter"), icon: Mail },
-  // Developer diagnostics that enumerate the API surface + privilege/access
-  // management — super_admin only (matches superAdminPages routing in App.jsx).
+  // Developer diagnostics and privilege/access management — super_admin only
+  // (matches superAdminPages routing in App.jsx).
   { title: "Function Tester", url: createPageUrl("AdminFunctionTester"), icon: Server, superAdminOnly: true },
-  { title: "Function Reviewer", url: createPageUrl("FunctionReviewer"), icon: Code2, superAdminOnly: true },
   { title: "Access Grants", url: createPageUrl("SuperAdminSetup"), icon: Crown, superAdminOnly: true },
 ];
 
