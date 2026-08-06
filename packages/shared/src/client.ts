@@ -540,13 +540,6 @@ export class ApiClient {
   getAdminAnalytics(): Promise<AdminAnalytics> {
     return this.request('/admin/analytics');
   }
-  runFunctionTests(): Promise<{
-    ok: boolean;
-    data: { checked: number; passed: number; failed: number; skipped: number; errorReport: string; checks?: unknown[] };
-    run_duration_ms: number;
-  }> {
-    return this.request('/admin/self-test');
-  }
   async getAdminMessages(params: Record<string, string> = {}): Promise<{ messages: Message[] }> {
     const qs = new URLSearchParams(params).toString();
     return this.request(`/admin/messages${qs ? `?${qs}` : ''}`);
