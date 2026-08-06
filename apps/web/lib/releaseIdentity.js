@@ -1,6 +1,6 @@
 const SHA_PATTERN = /^[a-f0-9]{40}$/u;
 
-export function resolveVercelReleaseSha(source = process.env) {
+export function resolveVercelReleaseSha(source = globalThis.process?.env || {}) {
   const value = source.VERCEL_GIT_COMMIT_SHA || '';
   if (SHA_PATTERN.test(value)) return value;
 
