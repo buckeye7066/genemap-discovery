@@ -127,6 +127,7 @@ export default function SearchPage() {
           queryType: isPremium ? "premium" : "free",
           results: {
             hpoTerm: enriched.hpoTerms?.[0] || null,
+            publicationReference: enriched.publicationReference || null,
             candidateGenes: enriched.candidateGenes.map(g => g.symbol),
             count: enriched.candidateGenes.length,
           },
