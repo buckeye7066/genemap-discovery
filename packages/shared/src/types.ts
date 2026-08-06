@@ -280,12 +280,6 @@ export interface LLMOptions {
   quality?: string;
   /** Server-enforced intent for a publishable text-generation request. */
   publicationTask?: PublicationTask;
-  /**
-   * Calling persona id from the shared agent registry ('robert' | 'anastasia').
-   * Sent as a sibling `agent` field on the request, not inside `options` — see
-   * ApiClient#invokePublicationTask. Unknown ids are ignored server-side.
-   */
-  agent?: string;
 }
 
 // API actually returns { result, disclaimer } for /llm/* — fix the contract.
