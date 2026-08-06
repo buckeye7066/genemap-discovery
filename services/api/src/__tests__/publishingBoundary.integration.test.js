@@ -222,6 +222,7 @@ describe('structured publication boundary in real Fastify', () => {
     ['GET', '/entities/conversations'],
     ['POST', '/entities/conversations'],
     ['PUT', '/entities/conversations/conversation-1'],
+    ['GET', '/admin/self-test'],
   ])('blocks the real hidden route before auth and handler: %s %s', async (method, url) => {
     const response = await app.inject({ method, url, payload: ['POST', 'PUT'].includes(method) ? {} : undefined });
     expect(response.statusCode).toBe(404);
