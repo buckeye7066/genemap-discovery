@@ -138,6 +138,12 @@ export function extractWebReleaseSha(html) {
     const tag = parseTag(token.raw);
     if (tag.kind === 'declaration') continue;
     if (tag.kind !== 'tag') return null;
+    if (!tag.closing && tag.selfClosing && !VOID_ELEMENTS.has(tag.name)) {
+      // HTML ignores the XML-style self-closing flag on ordinary elements.
+      // Reject it instead of reasoning about a document tree the browser will
+      // construct differently.
+      return null;
+    }
 
     if (tag.closing) {
       if (stack.length === 0 || stack.at(-1) !== tag.name) return null;
