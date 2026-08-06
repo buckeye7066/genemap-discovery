@@ -248,6 +248,30 @@ describe('Medical Data CRUD', () => {
     expect(granted.statusCode).toBe(200);
   });
 
+  it('POST /entities/medical-data — fails closed when latest consent events tie', async () => {
+    const tiedAt = new Date('2026-08-06T12:30:00.000Z');
+    prisma._store.consentRecord.push(
+      {
+        id: 'tied-grant', userId: USER_A.userId,
+        consentType: 'medical_data_storage', version: '1.0',
+        granted: true, createdAt: tiedAt,
+      },
+      {
+        id: 'tied-revoke', userId: USER_A.userId,
+        consentType: 'medical_data_storage', version: '1.0',
+        granted: false, createdAt: tiedAt,
+      },
+    );
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/entities/medical-data',
+      headers: { cookie: cookieA },
+      payload: { dataType: 'lab_result', content: 'ambiguous consent' },
+    });
+    expect(response.statusCode).toBe(403);
+  });
+
   it('POST /entities/medical-data — should reject missing required fields', async () => {
     seedMedicalConsent(prisma, USER_A.userId);
 
