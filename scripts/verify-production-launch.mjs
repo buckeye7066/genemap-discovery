@@ -479,10 +479,12 @@ export async function runLaunchVerification(opts = {}) {
 // never imports env.js or exercises a single validation branch, so a runtime
 // regression (a thrown import, a broken check, an inverted condition) sails
 // through. `--self-test` actually RUNS the verifier against a synthetic but
-// complete production env + evidence fixture and asserts three invariants:
+// complete production env, evidence, and synthetic live responses:
 //   1. a hardened env passes,
 //   2. complete evidence passes,
-//   3. HTTP checks that are skipped FAIL CLOSED (never a false "launch ok").
+//   3. live readiness is in publication mode and both surfaces report the
+//      approved SHA,
+//   4. a non-live Stripe key still fails closed.
 // It needs no network and no real secrets, so it is safe in CI while still
 // proving the verifier executes end-to-end.
 const SELF_TEST_ENV = {
@@ -630,8 +632,8 @@ Options:
   --evidence=PATH     Launch evidence JSON file. Default: ${DEFAULT_EVIDENCE_FILE}
   --timeout-ms=N      HTTP timeout per request. Default: ${DEFAULT_TIMEOUT_MS}
   --skip-http         Validate env and launch evidence only; exits non-zero because live HTTP proof is incomplete.
-  --self-test         Run the verifier against a synthetic hardened env + evidence fixture (no network, no secrets).
-                      Proves the script executes end-to-end and fails closed. Used by the release gate.
+  --self-test         Run the verifier against synthetic env, evidence, and live endpoint fixtures.
+                      Uses no network or secrets; proves every verifier layer executes. Used by the release gate.
   --json              Print machine-readable JSON.
 `);
 }
