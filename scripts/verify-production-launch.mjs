@@ -27,6 +27,22 @@ function isBlank(value) {
   return typeof value !== 'string' || value.trim().length === 0;
 }
 
+function isPlaceholder(value) {
+  return isBlank(value) || /\b(?:REPLACE|TODO|TBD|UNKNOWN)\b/iu.test(value);
+}
+
+function checkEvidenceReference(id, value) {
+  return isPlaceholder(value)
+    ? fail(id, 'current non-placeholder evidence reference is required')
+    : pass(id, 'evidence reference recorded');
+}
+
+function checkGitSha(id, value) {
+  return typeof value === 'string' && /^[a-f0-9]{40}$/iu.test(value)
+    ? pass(id, 'immutable 40-character release SHA recorded')
+    : fail(id, 'immutable 40-character release SHA is required');
+}
+
 function asArray(value) {
   return Array.isArray(value) ? value : [];
 }
@@ -256,6 +272,39 @@ export function validateEvidence(evidence, opts = {}) {
   checks.push(Number(retention.backupRetentionDays) >= 7
     ? pass('retention.backupRetentionDays', `backup retention is ${retention.backupRetentionDays} days`)
     : fail('retention.backupRetentionDays', 'backup retention must be at least 7 days'));
+  checks.push(retention.privacyMaintenanceScheduled === true
+    ? pass('retention.privacyMaintenanceScheduled', 'privacy maintenance schedule confirmed')
+    : fail('retention.privacyMaintenanceScheduled', 'privacy maintenance must have an evidenced production schedule'));
+  checks.push(checkEvidenceReference(
+    'retention.privacyMaintenanceEvidence',
+    retention.privacyMaintenanceEvidence
+  ));
+  checks.push(retention.externalDeletionReconciliation === true
+    ? pass('retention.externalDeletionReconciliation', 'external restore/deletion reconciliation confirmed')
+    : fail('retention.externalDeletionReconciliation', 'external restore/deletion reconciliation must be evidenced'));
+  checks.push(checkEvidenceReference(
+    'retention.externalDeletionReconciliationEvidence',
+    retention.externalDeletionReconciliationEvidence
+  ));
+
+  const release = evidence?.release || {};
+  const releaseShaFields = ['approvedSha', 'webSha', 'apiSha'];
+  for (const field of releaseShaFields) {
+    checks.push(checkGitSha(`release.${field}`, release[field]));
+  }
+  if (
+    releaseShaFields.every((field) => /^[a-f0-9]{40}$/iu.test(String(release[field] || '')))
+    && release.webSha === release.approvedSha
+    && release.apiSha === release.approvedSha
+  ) {
+    checks.push(pass('release.alignment', 'web and API evidence match the approved SHA'));
+  } else {
+    checks.push(fail('release.alignment', 'web and API evidence must match the approved SHA'));
+  }
+  checks.push(release.boundaryPreservingRollbackTested === true
+    ? pass('release.boundaryPreservingRollbackTested', 'boundary-preserving rollback confirmed')
+    : fail('release.boundaryPreservingRollbackTested', 'boundary-preserving rollback must be tested'));
+  checks.push(checkEvidenceReference('release.rollbackEvidence', release.rollbackEvidence));
 
   const legal = evidence?.legalCompliance || {};
   checks.push(legal.legalReviewCompleted === true
@@ -444,7 +493,23 @@ function buildSelfTestEvidence(now) {
       webhookEvents: [...REQUIRED_STRIPE_EVENTS],
       lastWebhookTestAt: iso(2 * ONE_DAY_MS),
     },
-    dataRetention: { policyApproved: true, policyDocument: 'docs/DATA_RETENTION.md', deletionRequestSlaDays: 30, backupRetentionDays: 30 },
+    dataRetention: {
+      policyApproved: true,
+      policyDocument: 'docs/DATA_RETENTION.md',
+      deletionRequestSlaDays: 30,
+      backupRetentionDays: 30,
+      privacyMaintenanceScheduled: true,
+      privacyMaintenanceEvidence: 'ops://privacy-maintenance/schedule/self-test',
+      externalDeletionReconciliation: true,
+      externalDeletionReconciliationEvidence: 'ops://restore-reconciliation/self-test',
+    },
+    release: {
+      approvedSha: 'a'.repeat(40),
+      webSha: 'a'.repeat(40),
+      apiSha: 'a'.repeat(40),
+      boundaryPreservingRollbackTested: true,
+      rollbackEvidence: 'ops://rollback/self-test',
+    },
     legalCompliance: {
       legalReviewCompleted: true,
       complianceReviewCompleted: true,
