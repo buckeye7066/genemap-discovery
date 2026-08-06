@@ -1,87 +1,79 @@
-# Data Retention Policy
+# Data retention implementation status
 
-This document is the production baseline for GeneMap Discovery data retention.
-It is an operational policy, not legal advice. A launch reviewer must confirm
-that it matches the business model, user terms, and any healthcare/privacy
-obligations before real users are admitted.
+This document records what the repository currently enforces. It is not a
+production-retention guarantee or legal advice. GeneMap's education/research
+publication boundary does not make the remaining account, log, billing, legacy,
+processor, or backup lifecycle complete.
 
-## Scope
+## Publication boundary
 
-This policy covers user accounts, authentication sessions, genomic and medical
-records, AI conversations, search and learning history, audit logs, billing
-records, backups, and deletion requests stored by GeneMap Discovery.
+The published product does not expose personal medical-record upload, VCF,
+variant/ClinVar interpretation, AI-conversation persistence, clinical trials,
+clinical personas, diagnosis, pharmacogenomics, treatment, or dosing features.
+Legacy rows and schema models from earlier releases may still exist and require
+a reviewed migration; removing a route does not delete previously stored data.
 
-## Default Retention
+## Enforced today
 
-| Data category | Default retention | Notes |
-| --- | --- | --- |
-| User profile and account data | While the account is active | Deleted or anonymized after a verified deletion request unless retention is legally required. |
-| Medical and genomic data | User-controlled while the account is active | Stored encrypted in production. Raw VCF content is not sent to LLM routes by default. |
-| AI conversations | Until the user requests deletion | Removed immediately on a data-deletion request (see below). A 365-day automatic purge is a target, not yet enforced by a scheduled job. |
-| Search history | Until the user requests deletion | Removed immediately on a data-deletion request. Same 365-day auto-purge target as above. |
-| Learning sessions and progress | While the account is active | Used for learning history and progress; cascade-deleted with the account. |
-| Consent records | 6 years | Retained to prove consent state and version at the time of processing. |
-| Audit and security logs | 6 years | Retained for abuse investigation, access review, and compliance evidence. |
-| Stripe billing metadata | 7 years | Retained for accounting, tax, chargeback, and subscription support needs. |
-| Active sessions | Until expiry or logout | Refresh-token sessions expire automatically and are removed by account deletion. |
-| Data deletion requests | 6 years | Retained as evidence of request handling. |
-| Database backups | At least 7 days; production target 30 days | Backups age out according to the configured backup schedule. |
+| Category | Repository-enforced behavior |
+| --- | --- |
+| Sessions | Refresh-token sessions have expiry fields and are removed when their user row is deleted. |
+| Self-service content request | An authenticated request creates a `DataDeletionRequest` and transactionally deletes that user's legacy `MedicalData`, `AIConversation`, and `SearchHistory` rows. |
+| Manual backup artifact | Database-bearing snapshots fail closed, use tracked source only, require `age` encryption, write a checksum, and restrict local permissions. |
+| Publication APIs | Medical-data, conversation, VCF, variant/ClinVar, and clinical-trial paths are blocked before route authentication and handlers. |
 
-## Deletion Requests
+## Not yet enforced
 
-Verified user deletion requests must be completed within 30 days. The normal
-flow is:
+The following are release blockers, not promises:
 
-1. Verify the requester controls the account.
-2. Create or update a `DataDeletionRequest` record.
-3. Delete user-owned records through the cascade path where possible.
-4. Preserve only records required for legal, tax, fraud prevention, security,
-   or compliance evidence.
-5. Mark the request completed with `completedAt` and the deleted data types.
+- no scheduled TTL purge exists for search history, activity, legacy
+  conversations, support data, or audit/log data;
+- a content-deletion request does not delete or anonymize the user profile,
+  learning data, activities, gene sets, projects, collaborations, annotations,
+  messages, subscriptions, Stripe-side objects, processor copies, or backups;
+- deletion processing has no durable retry worker, alert, attempt counter, or
+  external processor-propagation ledger;
+- `ConsentRecord` and `DataDeletionRequest` currently cascade with `User`,
+  so the schema does not support a claimed six-year evidence record after
+  account deletion;
+- no external deletion/tombstone ledger is reconciled before restoring an old
+  database, so restore must remain quarantined;
+- backup cadence, automatic expiry, immutability, remote operator, key custody,
+  recovery access, RPO/RTO, and a current restore drill are not evidenced;
+- provider retention, regions, deletion/export behavior, contracts, and
+  subprocessors remain incomplete in `docs/PROCESSOR_REGISTER.md`.
 
-### As implemented
+## Deletion request behavior
 
-An authenticated user's self-service request runs **immediately** and is not
-queued: `POST /entities/data-deletion-request`
-(`services/api/src/routes/entities.js` → `processDeletionRequest`) deletes that
-user's `medical_data`, `ai_conversations`, and `search_history` in a single
-transaction, then marks the request `completed` with `completedAt` and
-`deletedTypes`. The `audit_log`, `consent_records`, and the
-`data_deletion_requests` row itself are intentionally retained as the
-compliance record of who requested deletion and when. Full **account closure**
-(removing the `users` row and its remaining cascade-linked profile, learning,
-and research data) is handled on verified request within the 30-day SLA.
-Storing medical/genomic data is gated by an active consent record
-(`requireConsent`, `medical_data_storage` v1.0), so a `403` is returned if
-consent is missing.
+`POST /entities/data-deletion-request` is a limited content purge, not verified
+full account closure. It currently deletes three legacy categories in one
+transaction. If processing fails, the request can remain pending and there is
+no durable retry worker. The public policy must not represent this endpoint as
+complete erasure of the account, provider logs, or backups.
 
-Backups are not rewritten for individual deletion requests. Deleted data ages
-out of backups through the retention window. Restore procedures must re-apply
-completed deletion requests before any restored environment is exposed to users.
+A production-ready deletion design requires:
 
-## Backup Retention
+1. verified request and cancellation/cool-off policy;
+2. explicit category and legal-exception manifest;
+3. pseudonymized, non-cascading evidence records where legally justified;
+4. durable queued states, attempts, errors, alerts, and idempotent retries;
+5. propagation to every user-owned model, object store, Stripe, email,
+   telemetry, hosting, and other processors;
+6. an external tombstone ledger applied before any restored service is exposed;
+7. tests for each category, processor result, partial failure, retry, and
+   restore reconciliation.
 
-Production database backups must be enabled before launch. The minimum accepted
-retention is 7 days; the preferred production baseline is 30 days. Backups that
-contain medical, genomic, or account data must be encrypted by the storage
-provider or encrypted before transfer to any external archive.
+## Backup and restore
 
-Restore testing must happen at least quarterly and before launch. Record the
-latest restore test in `ops/production-launch-evidence.json`.
+Follow `docs/BACKUP.md`. A checksum proves integrity, not recoverability.
+Database restores must stay isolated with outbound integrations disabled until
+schema integrity and deletion/tombstone reconciliation pass. No repository text
+may assert daily backups, a fixed retention window, or a restore SLA without
+current operational evidence.
 
-## AI and Genomic Data Handling
+## Review gate
 
-GeneMap is research and education software. It must not represent generated
-content as diagnosis or treatment. Raw genomic uploads remain on deterministic
-API paths by default. Any future change that sends genomic-looking content to
-an LLM must require explicit consent, audit logging, and a separate legal and
-security review.
-
-## Access and Review
-
-Production data access is limited to authorized operators with a legitimate
-support, security, billing, or compliance need. Access to backups, dashboards,
-and logs must be reviewed at least quarterly.
-
-Review this policy before launch, after any material data model change, after
-any change to AI processing of genomic data, and at least annually.
+Do not mark privacy, retention, deletion, backup, or processor review complete
+until the missing controls above are implemented and evidenced against the exact
+release SHA. Re-review after every material schema, processor, telemetry, or
+backup change.
