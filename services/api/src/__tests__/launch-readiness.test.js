@@ -214,23 +214,65 @@ describe('production launch verification', () => {
     expect(failures(checks).map((check) => check.id)).toContain('backups.restoreTestedAt');
   });
 
-  it('checks deployed API and web health endpoints', async () => {
+  it('checks deployed health and binds both live surfaces to the approved SHA', async () => {
+    const approvedSha = 'a'.repeat(40);
     const fetchImpl = async (url) => {
       if (url.endsWith('/healthz')) return mockResponse(200, { status: 'ok' });
       if (url.endsWith('/readyz')) {
-        return mockResponse(200, { status: 'ready', medicalEncryption: true });
+        return mockResponse(200, {
+          status: 'ready',
+          medicalEncryption: true,
+          releaseSha: approvedSha,
+        });
       }
-      return mockResponse(200, '<!doctype html><html></html>', 'text/html; charset=utf-8');
+      return mockResponse(
+        200,
+        `<!doctype html><html><head><meta name="genemap-release-sha" content="${approvedSha}"></head></html>`,
+        'text/html; charset=utf-8'
+      );
     };
 
     const checks = await checkHttpEndpoints({
       apiUrl: 'https://api.example.com',
       webUrl: 'https://app.example.com',
+      approvedSha,
       fetchImpl,
       timeoutMs: 1000,
     });
 
     expect(failures(checks)).toEqual([]);
+  });
+
+  it('rejects healthy deployments that report a different release SHA', async () => {
+    const approvedSha = 'a'.repeat(40);
+    const fetchImpl = async (url) => {
+      if (url.endsWith('/healthz')) return mockResponse(200, { status: 'ok' });
+      if (url.endsWith('/readyz')) {
+        return mockResponse(200, {
+          status: 'ready',
+          medicalEncryption: true,
+          releaseSha: 'b'.repeat(40),
+        });
+      }
+      return mockResponse(
+        200,
+        `<!doctype html><html><head><meta name="genemap-release-sha" content="${'c'.repeat(40)}"></head></html>`,
+        'text/html; charset=utf-8'
+      );
+    };
+
+    const checks = await checkHttpEndpoints({
+      apiUrl: 'https://api.example.com',
+      webUrl: 'https://app.example.com',
+      approvedSha,
+      fetchImpl,
+      timeoutMs: 1000,
+    });
+
+    expect(failures(checks).map((check) => check.id)).toEqual(expect.arrayContaining([
+      'http.apiReleaseSha',
+      'http.webReleaseSha',
+    ]));
   });
 
   it('self-test executes the verifier end-to-end and confirms fail-closed behaviour', () => {
