@@ -798,8 +798,16 @@ export class ApiClient {
     const res = await this.request<{ records: ConsentRecord[] }>('/entities/consent');
     return res.records;
   }
-  async requestDataDeletion(data: DataDeletionRequest = {}): Promise<{ request: { id: string } }> {
-    return this.request('/entities/data-deletion-request', { method: 'POST', body: JSON.stringify(data) });
+  async requestDataDeletion(
+    legacyRequest?: DataDeletionRequest
+  ): Promise<{ request: DeletionRequestStatus }> {
+    // Retained for source compatibility only. Deletion scope is server-owned,
+    // so caller categories are deliberately never serialized.
+    void legacyRequest;
+    return this.request('/entities/data-deletion-request', {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
   }
   async getDeletionRequestStatus(): Promise<DeletionRequestStatus[]> {
     const res = await this.request<{ requests: DeletionRequestStatus[] }>(

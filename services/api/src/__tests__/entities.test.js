@@ -212,6 +212,66 @@ describe('Medical Data CRUD', () => {
     expect(JSON.parse(res.body).error).toMatch(/consent required/i);
   });
 
+  it('POST /entities/medical-data — latest consent event wins', async () => {
+    prisma._store.consentRecord.push(
+      {
+        id: 'grant-old', userId: USER_A.userId, subjectRef: USER_A.userId,
+        consentType: 'medical_data_storage', version: '1.0', granted: true,
+        createdAt: new Date('2026-08-06T10:00:00Z'),
+      },
+      {
+        id: 'revoke-new', userId: USER_A.userId, subjectRef: USER_A.userId,
+        consentType: 'medical_data_storage', version: '1.0', granted: false,
+        createdAt: new Date('2026-08-06T11:00:00Z'),
+      },
+    );
+
+    const revoked = await app.inject({
+      method: 'POST',
+      url: '/entities/medical-data',
+      headers: { cookie: cookieA },
+      payload: { dataType: 'lab_result', content: 'should not persist' },
+    });
+    expect(revoked.statusCode).toBe(403);
+
+    prisma._store.consentRecord.push({
+      id: 'grant-newest', userId: USER_A.userId, subjectRef: USER_A.userId,
+      consentType: 'medical_data_storage', version: '1.0', granted: true,
+      createdAt: new Date('2026-08-06T12:00:00Z'),
+    });
+    const granted = await app.inject({
+      method: 'POST',
+      url: '/entities/medical-data',
+      headers: { cookie: cookieA },
+      payload: { dataType: 'lab_result', content: 'allowed after re-grant' },
+    });
+    expect(granted.statusCode).toBe(200);
+  });
+
+  it('POST /entities/medical-data — fails closed when latest consent events tie', async () => {
+    const tiedAt = new Date('2026-08-06T12:30:00.000Z');
+    prisma._store.consentRecord.push(
+      {
+        id: 'tied-grant', userId: USER_A.userId,
+        consentType: 'medical_data_storage', version: '1.0',
+        granted: true, createdAt: tiedAt,
+      },
+      {
+        id: 'tied-revoke', userId: USER_A.userId,
+        consentType: 'medical_data_storage', version: '1.0',
+        granted: false, createdAt: tiedAt,
+      },
+    );
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/entities/medical-data',
+      headers: { cookie: cookieA },
+      payload: { dataType: 'lab_result', content: 'ambiguous consent' },
+    });
+    expect(response.statusCode).toBe(403);
+  });
+
   it('POST /entities/medical-data — should reject missing required fields', async () => {
     seedMedicalConsent(prisma, USER_A.userId);
 
@@ -674,18 +734,30 @@ describe('Messages CRUD', () => {
 // ─── Consent Records ─────────────────────────────────────────────────────────
 
 describe('Consent Records', () => {
-  it('POST /entities/consent — should record consent', async () => {
+  it('POST /entities/consent — records consent without exposing internal evidence fields', async () => {
     const res = await app.inject({
       method: 'POST',
       url: '/entities/consent',
       headers: { cookie: cookieA },
-      payload: { consentType: 'data_processing', version: '1.0', granted: true },
+      payload: {
+        consentType: 'data_processing',
+        version: '1.0',
+        granted: true,
+        metadata: { privateCanary: 'do-not-return' },
+      },
     });
 
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body);
-    expect(body.record.consentType).toBe('data_processing');
-    expect(body.record.granted).toBe(true);
+    expect(body.record).toMatchObject({
+      consentType: 'data_processing',
+      version: '1.0',
+      granted: true,
+    });
+    for (const forbidden of ['userId', 'subjectRef', 'ipAddress', 'metadata']) {
+      expect(body.record).not.toHaveProperty(forbidden);
+    }
+    expect(JSON.stringify(body)).not.toContain('do-not-return');
   });
 
   it('POST /entities/consent — should reject missing fields', async () => {
@@ -699,10 +771,19 @@ describe('Consent Records', () => {
     expect(res.statusCode).toBe(400);
   });
 
-  it('GET /entities/consent — should return own records', async () => {
+  it('GET /entities/consent — returns only own projected records', async () => {
     prisma._store.consentRecord.push(
-      { id: 'cr-1', userId: 'user-a', consentType: 'hipaa', version: '1.0', granted: true, createdAt: new Date() },
-      { id: 'cr-2', userId: 'user-b', consentType: 'hipaa', version: '1.0', granted: true, createdAt: new Date() },
+      {
+        id: 'cr-1', userId: 'user-a', subjectRef: 'user-a',
+        consentType: 'research', version: '1.0', granted: true,
+        ipAddress: '192.0.2.1', metadata: { secret: 'owner-only-internal' },
+        createdAt: new Date('2026-08-06T12:00:00Z'),
+      },
+      {
+        id: 'cr-2', userId: 'user-b', subjectRef: 'user-b',
+        consentType: 'research', version: '1.0', granted: true,
+        createdAt: new Date('2026-08-06T12:01:00Z'),
+      },
     );
 
     const res = await app.inject({
@@ -713,7 +794,11 @@ describe('Consent Records', () => {
 
     const body = JSON.parse(res.body);
     expect(body.records).toHaveLength(1);
-    expect(body.records[0].userId).toBe('user-a');
+    expect(body.records[0]).toMatchObject({ id: 'cr-1', consentType: 'research' });
+    for (const forbidden of ['userId', 'subjectRef', 'ipAddress', 'metadata']) {
+      expect(body.records[0]).not.toHaveProperty(forbidden);
+    }
+    expect(JSON.stringify(body)).not.toContain('owner-only-internal');
   });
 });
 
@@ -739,10 +824,23 @@ describe('Data Deletion Requests', () => {
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body);
     expect(body.request).toMatchObject({
+      scope: 'legacy_content_v1',
       status: 'completed',
-      userId: 'user-a',
+      requestedTypes: ['medicalData', 'aiConversations', 'searchHistory'],
       deletedTypes: ['medicalData', 'aiConversations', 'searchHistory'],
+      failureCode: null,
     });
+    for (const forbidden of [
+      'userId',
+      'subjectRef',
+      'attemptCount',
+      'lastAttemptAt',
+      'nextAttemptAt',
+      'leaseExpiresAt',
+      'updatedAt',
+    ]) {
+      expect(body.request).not.toHaveProperty(forbidden);
+    }
     expect(JSON.stringify(body)).not.toContain(canary);
     for (const storeName of ['medicalData', 'aIConversation', 'searchHistory']) {
       expect(prisma._store[storeName].map((row) => row.userId)).toEqual(['user-b']);
@@ -750,9 +848,12 @@ describe('Data Deletion Requests', () => {
     expect(JSON.stringify(prisma._store.auditLog)).not.toContain(canary);
   });
 
-  it('returns a retained failed state instead of a stale pending success', async () => {
-    const originalTransaction = prisma.$transaction;
-    prisma.$transaction = vi.fn().mockRejectedValue(new Error('private database canary'));
+  it('returns an accepted sanitized retry state without encouraging duplicates', async () => {
+    prisma._store.medicalData.push({ id: 'medical-a', userId: 'user-a' });
+    const originalDelete = prisma.aIConversation.deleteMany.getMockImplementation();
+    prisma.aIConversation.deleteMany.mockImplementationOnce(async () => {
+      throw new Error('private database canary');
+    });
     try {
       const res = await app.inject({
         method: 'POST',
@@ -761,22 +862,76 @@ describe('Data Deletion Requests', () => {
         payload: { deletedTypes: ['patient@example.invalid'] },
       });
 
-      expect(res.statusCode).toBe(503);
+      expect(res.statusCode).toBe(202);
       const body = JSON.parse(res.body);
       expect(body).toMatchObject({
-        code: 'DELETION_NOT_COMPLETED',
-        request: { status: 'failed', userId: 'user-a' },
+        code: 'DELETION_ACCEPTED',
+        request: {
+          status: 'retry_scheduled',
+          deletedTypes: [],
+          failureCode: 'local_purge_failed',
+        },
       });
+      expect(body).not.toHaveProperty('error');
+      expect(prisma._store.medicalData).toHaveLength(1);
+      for (const forbidden of [
+        'userId',
+        'subjectRef',
+        'attemptCount',
+        'lastAttemptAt',
+        'nextAttemptAt',
+        'leaseExpiresAt',
+      ]) {
+        expect(body.request).not.toHaveProperty(forbidden);
+      }
       expect(JSON.stringify(body)).not.toMatch(/patient@example\.invalid|database canary/u);
     } finally {
-      prisma.$transaction = originalTransaction;
+      prisma.aIConversation.deleteMany.mockImplementation(originalDelete);
     }
   });
 
-  it('GET /entities/data-deletion-request — should return own requests', async () => {
+  it('keeps a committed request accepted when immediate claiming is unavailable', async () => {
+    const originalUpdateMany = prisma.dataDeletionRequest.updateMany.getMockImplementation();
+    prisma.dataDeletionRequest.updateMany.mockRejectedValueOnce(
+      new Error('claim-stage patient@example.invalid')
+    );
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/entities/data-deletion-request',
+        headers: { cookie: cookieA },
+        payload: { deletedTypes: ['caller-canary'] },
+      });
+
+      expect(res.statusCode).toBe(202);
+      const body = JSON.parse(res.body);
+      expect(body).toMatchObject({
+        code: 'DELETION_ACCEPTED',
+        request: {
+          status: 'pending',
+          deletedTypes: [],
+          failureCode: null,
+        },
+      });
+      expect(JSON.stringify(body)).not.toMatch(/patient@example\.invalid|caller-canary/u);
+      expect(prisma._store.dataDeletionRequest).toHaveLength(1);
+    } finally {
+      prisma.dataDeletionRequest.updateMany.mockImplementation(originalUpdateMany);
+    }
+  });
+
+  it('GET /entities/data-deletion-request — returns only own projected requests', async () => {
+    const base = {
+      scope: 'legacy_content_v1',
+      requestedTypes: ['medicalData', 'aiConversations', 'searchHistory'],
+      deletedTypes: [],
+      attemptCount: 2,
+      nextAttemptAt: new Date(),
+      requestedAt: new Date(),
+    };
     prisma._store.dataDeletionRequest.push(
-      { id: 'dr-1', userId: 'user-a', status: 'pending', requestedAt: new Date() },
-      { id: 'dr-2', userId: 'user-b', status: 'pending', requestedAt: new Date() },
+      { ...base, id: 'dr-1', userId: 'user-a', subjectRef: 'user-a', status: 'retry_scheduled' },
+      { ...base, id: 'dr-2', userId: 'user-b', subjectRef: 'user-b', status: 'retry_scheduled' },
     );
 
     const res = await app.inject({
@@ -787,6 +942,11 @@ describe('Data Deletion Requests', () => {
 
     const body = JSON.parse(res.body);
     expect(body.requests).toHaveLength(1);
-    expect(body.requests[0].userId).toBe('user-a');
+    expect(body.requests[0]).toMatchObject({ id: 'dr-1', status: 'retry_scheduled' });
+    for (const forbidden of ['userId', 'subjectRef', 'attemptCount', 'nextAttemptAt']) {
+      expect(body.requests[0]).not.toHaveProperty(forbidden);
+    }
   });
 });
+
+

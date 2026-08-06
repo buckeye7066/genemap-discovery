@@ -1,50 +1,54 @@
 {
-  "reviewedBy": "Launch Reviewer",
-  "reviewedAt": "2026-06-27T10:00:00.000Z",
+  "reviewedBy": "REPLACE_WITH_REVIEWER",
+  "reviewedAt": "REPLACE_WITH_CURRENT_ISO_TIMESTAMP",
   "productionSecrets": {
-    "storedInSecretManager": true,
-    "rotatedForLaunch": true,
-    "manager": "Railway, Vercel, and 1Password"
+    "storedInSecretManager": false,
+    "rotatedForLaunch": false,
+    "manager": "REPLACE_WITH_SECRET_MANAGER_EVIDENCE"
   },
   "backups": {
-    "automaticBackupsEnabled": true,
-    "retentionDays": 30,
-    "lastSuccessfulBackupAt": "2026-06-27T09:00:00.000Z",
-    "restoreTestedAt": "2026-06-20T09:00:00.000Z",
+    "automaticBackupsEnabled": false,
+    "retentionDays": 0,
+    "lastSuccessfulBackupAt": "REPLACE_WITH_CURRENT_ISO_TIMESTAMP",
+    "restoreTestedAt": "REPLACE_WITH_CURRENT_ISO_TIMESTAMP",
     "restoreRunbook": "docs/BACKUP.md"
   },
   "monitoring": {
-    "errorTrackingConfigured": true,
-    "logAggregationConfigured": true,
-    "alertingConfigured": true,
-    "dashboardUrl": "https://monitoring.example.com/genemap",
-    "pagerEscalation": "#on-call"
+    "errorTrackingConfigured": false,
+    "logAggregationConfigured": false,
+    "alertingConfigured": false,
+    "dashboardUrl": "REPLACE_WITH_HTTPS_DASHBOARD_URL",
+    "pagerEscalation": "REPLACE_WITH_ESCALATION_EVIDENCE"
   },
   "stripe": {
-    "liveMode": true,
-    "webhookEndpoint": "https://api.example.com/billing/webhook",
-    "webhookEvents": [
-      "checkout.session.completed",
-      "customer.subscription.created",
-      "customer.subscription.updated",
-      "customer.subscription.deleted",
-      "invoice.payment_succeeded",
-      "invoice.payment_failed"
-    ],
-    "lastWebhookTestAt": "2026-06-26T09:00:00.000Z"
+    "liveMode": false,
+    "webhookEndpoint": "REPLACE_WITH_HTTPS_API_URL/billing/webhook",
+    "webhookEvents": [],
+    "lastWebhookTestAt": "REPLACE_WITH_CURRENT_ISO_TIMESTAMP"
   },
   "dataRetention": {
-    "policyApproved": true,
+    "policyApproved": false,
     "policyDocument": "docs/DATA_RETENTION.md",
-    "deletionRequestSlaDays": 30,
-    "backupRetentionDays": 30
+    "deletionRequestSlaDays": 0,
+    "backupRetentionDays": 0,
+    "privacyMaintenanceScheduled": false,
+    "privacyMaintenanceEvidence": "REPLACE_WITH_SCHEDULER_AND_RUN_HISTORY",
+    "externalDeletionReconciliation": false,
+    "externalDeletionReconciliationEvidence": "REPLACE_WITH_EXTERNAL_RECONCILIATION_EVIDENCE"
   },
   "legalCompliance": {
-    "legalReviewCompleted": true,
-    "complianceReviewCompleted": true,
-    "reviewer": "Counsel / Compliance Owner",
-    "reviewedAt": "2026-06-15T09:00:00.000Z",
-    "medicalDisclaimerApproved": true,
-    "baaStatus": "not_required"
+    "legalReviewCompleted": false,
+    "complianceReviewCompleted": false,
+    "reviewer": "REPLACE_WITH_COUNSEL_OR_COMPLIANCE_OWNER",
+    "reviewedAt": "REPLACE_WITH_CURRENT_ISO_TIMESTAMP",
+    "medicalDisclaimerApproved": false,
+    "baaStatus": "REPLACE_WITH_SIGNED_OR_NOT_REQUIRED"
+  },
+  "release": {
+    "approvedSha": "REPLACE_WITH_IMMUTABLE_RELEASE_SHA",
+    "webSha": "REPLACE_WITH_DEPLOYED_WEB_SHA",
+    "apiSha": "REPLACE_WITH_DEPLOYED_API_SHA",
+    "boundaryPreservingRollbackTested": false,
+    "rollbackEvidence": "REPLACE_WITH_ROLLBACK_EVIDENCE"
   }
 }

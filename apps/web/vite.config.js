@@ -1,9 +1,23 @@
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 import path from 'path'
+import { resolveVercelReleaseSha } from './lib/releaseIdentity.js'
+
+const releaseSha = resolveVercelReleaseSha(process.env)
+
+const releaseIdentityPlugin = {
+  name: 'genemap-release-identity',
+  generateBundle() {
+    this.emitFile({
+      type: 'asset',
+      fileName: 'release-identity.json',
+      source: `${JSON.stringify({ releaseSha })}\n`,
+    })
+  },
+}
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), releaseIdentityPlugin],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './'),

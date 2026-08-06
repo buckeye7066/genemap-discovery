@@ -1,64 +1,54 @@
 # Production launch verification
 
-`scripts/verify-production-launch.mjs` (run via `pnpm launch:verify`) is the
-machine-checked launch gate. It validates three things:
-
-1. **Production env shape** — loaded through the real API env validator
-   (`services/api/src/config/env.js`): NODE_ENV, HTTPS-only CORS allowlist (no
-   wildcard), live Stripe key, webhook secret, and real (non-placeholder) price
-   IDs.
-2. **Live HTTP health** — `GET /healthz` is `ok`, `GET /readyz` is `ready` with
-   `medicalEncryption: true`, and the web app returns HTML.
-3. **Human-attested evidence** — a JSON file (default
-   `ops/production-launch-evidence.json`) covering backups, monitoring, Stripe,
-   data-retention, and legal/compliance sign-off, with freshness windows (e.g. a
-   restore must have been tested within 90 days, a Stripe webhook test within 30).
+`scripts/verify-production-launch.mjs` (run through `pnpm launch:verify`)
+checks the shape and freshness of a launch evidence file plus selected live HTTP
+responses. It does not query provider consoles and cannot prove that a
+self-attested boolean is true.
 
 ## How to run
 
 ```bash
-# Full check against production (requires the production env + evidence file):
 PRODUCTION_API_URL=https://genemap-api-production.up.railway.app \
 PRODUCTION_WEB_URL=https://genemap-discovery.vercel.app \
 pnpm launch:verify
-
-# Env + evidence only (no live HTTP; exits non-zero by design):
-pnpm launch:verify -- --skip-http
 ```
 
 Copy `production-launch-evidence.example.json` to
-`production-launch-evidence.json` and fill in every `REPLACE` value. The real
-evidence file is intentionally **git-ignored** — it is a point-in-time launch
-record, not source.
+`production-launch-evidence.json` and replace every placeholder with a
+current evidence reference. The filled file is intentionally git-ignored.
+Never copy the example's values as launch proof.
 
-## Current state (2026-07-01)
+## Current repository state
 
-Already verified true for GeneMap (safe to leave as in the example):
+The following controls exist in code but are not operational evidence:
 
-- **Env / Stripe** — Railway `genemap-api` has all required prod secrets; Stripe
-  is live with the webhook at `/billing/webhook` and all billing events enabled
-  (confirmed against the Stripe API).
-- **Encryption** — `/readyz` reports `medicalEncryption: true`.
-- **Backup restore drill** — a full `pg_dump` → restore into a throwaway
-  Postgres 18 container was performed with exact per-table row-count parity; the
-  procedure is in `docs/BACKUP.md`.
-- **Error alerting** — non-admin runtime errors are analyzed and emailed to the
-  owner (`services/api/.../errorReporter`); `POST /report-client-error` is live.
-  Optional Sentry activates by setting `SENTRY_DSN` (API) / `VITE_SENTRY_DSN`
-  (web).
+- production environment validation and live health/readiness checks;
+- exact publication-boundary CI, browser, artifact, and negative API tests;
+- fail-closed encrypted manual backup tooling;
+- a one-shot privacy maintenance worker for finite deletion retries and expired
+  sessions.
 
-Owner actions that still require a real answer before flipping to `true`:
+The repository does **not** currently prove:
 
-- **`backups.automaticBackupsEnabled` + `retentionDays`** — confirm/enable the
-  Railway Postgres automated-snapshot schedule and set retention ≥ 7 days
-  (dashboard-only setting), then record `lastSuccessfulBackupAt`.
-- **`dataRetention.policyDocument`** — `docs/DATA_RETENTION.md` exists and is
-  reconciled with the implemented deletion/consent behavior; a launch reviewer
-  should confirm it matches the business terms, then keep `policyApproved` true.
-- **`legalCompliance.*`** — record the reviewing attorney / compliance owner and
-  the review date. `baaStatus` is `not_required` for the consumer-education use
-  case; change to `signed` if GeneMap is ever offered to a covered entity that
-  requires a Business Associate Agreement.
-- **`monitoring.dashboardUrl`** — point at the real Railway project dashboard.
-- **`stripe.lastWebhookTestAt`** — send a test event from the Stripe dashboard
-  and record the date.
+- an automatic backup schedule, retention/expiry, key custody, or a current
+  successful restore drill;
+- a production schedule, alert, or run history for `pnpm privacy:maintenance`;
+- external processor deletion propagation or restore-tombstone reconciliation;
+- configured content-scrubbed error tracking, log aggregation, alert routing,
+  or an on-call escalation;
+- provider regions, contracts, retention, subprocessors, or completed
+  legal/compliance review;
+- coordinated web/API release and boundary-preserving rollback evidence.
+
+Raw client-error forwarding, owner error emails, and Sentry ingestion are
+disabled in the publication remediation. Do not set their old configuration
+flags or describe them as active without a new privacy review, data minimization
+contract, and regression tests.
+
+## Approval rule
+
+A passing verifier means only that the supplied file met the verifier's current
+machine-readable contract and that the selected endpoints responded. Launch
+approval still requires a reviewer to inspect the underlying provider,
+scheduler, restore, processor, legal, and rollback evidence against the exact
+release SHA. Keep every unverified example value false or marked `REPLACE`.

@@ -533,14 +533,37 @@ export interface ConsentRecord {
   createdAt?: string;
 }
 
+/**
+ * @deprecated Deletion scope is server-owned. This input remains only so
+ * existing SDK callers continue to compile; requestDataDeletion ignores it.
+ */
 export interface DataDeletionRequest {
   deletedTypes?: string[];
 }
 
+export type LocalDeletionScope = 'legacy_content_v1';
+export type LocalDeletionType = 'medicalData' | 'aiConversations' | 'searchHistory';
+export type DeletionLifecycleStatus =
+  | 'pending'
+  | 'processing'
+  | 'retry_scheduled'
+  | 'completed'
+  | 'operator_review';
+export type DeletionFailureCode =
+  | 'local_purge_failed'
+  | 'retry_exhausted'
+  | 'subject_unavailable'
+  | 'legacy_state_requires_review';
+
 export interface DeletionRequestStatus {
-  status: string;
-  requestedAt?: string;
-  completedAt?: string;
+  id: string;
+  scope: LocalDeletionScope;
+  status: DeletionLifecycleStatus;
+  requestedAt: string | null;
+  completedAt: string | null;
+  requestedTypes: LocalDeletionType[];
+  deletedTypes: LocalDeletionType[];
+  failureCode: DeletionFailureCode | null;
 }
 
 // ─── Annotations ────────────────────────────────────────────────────────────

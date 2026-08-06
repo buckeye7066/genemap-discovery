@@ -27,6 +27,22 @@ function isBlank(value) {
   return typeof value !== 'string' || value.trim().length === 0;
 }
 
+function isPlaceholder(value) {
+  return isBlank(value) || /(?:REPLACE|TODO|TBD|UNKNOWN)/iu.test(value);
+}
+
+function checkEvidenceReference(id, value) {
+  return isPlaceholder(value)
+    ? fail(id, 'current non-placeholder evidence reference is required')
+    : pass(id, 'evidence reference recorded');
+}
+
+function checkGitSha(id, value) {
+  return typeof value === 'string' && /^[a-f0-9]{40}$/u.test(value)
+    ? pass(id, 'immutable 40-character release SHA recorded')
+    : fail(id, 'immutable 40-character release SHA is required');
+}
+
 function asArray(value) {
   return Array.isArray(value) ? value : [];
 }
@@ -181,8 +197,8 @@ export function validateEvidence(evidence, opts = {}) {
   const now = opts.now || new Date();
   const checks = [];
 
-  checks.push(isBlank(evidence?.reviewedBy)
-    ? fail('evidence.reviewedBy', 'reviewedBy is required')
+  checks.push(isPlaceholder(evidence?.reviewedBy)
+    ? fail('evidence.reviewedBy', 'current non-placeholder reviewedBy is required')
     : pass('evidence.reviewedBy', `reviewed by ${evidence.reviewedBy}`));
   checks.push(checkRecentDate('evidence.reviewedAt', evidence?.reviewedAt, 30, now));
 
@@ -193,8 +209,8 @@ export function validateEvidence(evidence, opts = {}) {
   checks.push(secrets.rotatedForLaunch === true
     ? pass('secrets.rotatedForLaunch', 'launch secrets were rotated/generated for launch')
     : fail('secrets.rotatedForLaunch', 'launch secrets must be newly generated or explicitly rotated'));
-  checks.push(isBlank(secrets.manager)
-    ? fail('secrets.manager', 'secret manager name is required')
+  checks.push(isPlaceholder(secrets.manager)
+    ? fail('secrets.manager', 'current non-placeholder secret manager evidence is required')
     : pass('secrets.manager', `secret manager recorded: ${secrets.manager}`));
 
   const backups = evidence?.backups || {};
@@ -221,8 +237,8 @@ export function validateEvidence(evidence, opts = {}) {
     ? pass('monitoring.alertingConfigured', 'alerting configured')
     : fail('monitoring.alertingConfigured', 'alerting rules must be configured'));
   checks.push(checkUrl('monitoring.dashboardUrl', monitoring.dashboardUrl, { requireHttps: true }));
-  checks.push(isBlank(monitoring.pagerEscalation)
-    ? fail('monitoring.pagerEscalation', 'pager/on-call escalation path is required')
+  checks.push(isPlaceholder(monitoring.pagerEscalation)
+    ? fail('monitoring.pagerEscalation', 'current non-placeholder escalation evidence is required')
     : pass('monitoring.pagerEscalation', 'pager/on-call escalation path recorded'));
 
   const stripe = evidence?.stripe || {};
@@ -256,6 +272,39 @@ export function validateEvidence(evidence, opts = {}) {
   checks.push(Number(retention.backupRetentionDays) >= 7
     ? pass('retention.backupRetentionDays', `backup retention is ${retention.backupRetentionDays} days`)
     : fail('retention.backupRetentionDays', 'backup retention must be at least 7 days'));
+  checks.push(retention.privacyMaintenanceScheduled === true
+    ? pass('retention.privacyMaintenanceScheduled', 'privacy maintenance schedule confirmed')
+    : fail('retention.privacyMaintenanceScheduled', 'privacy maintenance must have an evidenced production schedule'));
+  checks.push(checkEvidenceReference(
+    'retention.privacyMaintenanceEvidence',
+    retention.privacyMaintenanceEvidence
+  ));
+  checks.push(retention.externalDeletionReconciliation === true
+    ? pass('retention.externalDeletionReconciliation', 'external restore/deletion reconciliation confirmed')
+    : fail('retention.externalDeletionReconciliation', 'external restore/deletion reconciliation must be evidenced'));
+  checks.push(checkEvidenceReference(
+    'retention.externalDeletionReconciliationEvidence',
+    retention.externalDeletionReconciliationEvidence
+  ));
+
+  const release = evidence?.release || {};
+  const releaseShaFields = ['approvedSha', 'webSha', 'apiSha'];
+  for (const field of releaseShaFields) {
+    checks.push(checkGitSha(`release.${field}`, release[field]));
+  }
+  if (
+    releaseShaFields.every((field) => /^[a-f0-9]{40}$/u.test(String(release[field] || '')))
+    && release.webSha === release.approvedSha
+    && release.apiSha === release.approvedSha
+  ) {
+    checks.push(pass('release.alignment', 'web and API evidence match the approved SHA'));
+  } else {
+    checks.push(fail('release.alignment', 'web and API evidence must match the approved SHA'));
+  }
+  checks.push(release.boundaryPreservingRollbackTested === true
+    ? pass('release.boundaryPreservingRollbackTested', 'boundary-preserving rollback confirmed')
+    : fail('release.boundaryPreservingRollbackTested', 'boundary-preserving rollback must be tested'));
+  checks.push(checkEvidenceReference('release.rollbackEvidence', release.rollbackEvidence));
 
   const legal = evidence?.legalCompliance || {};
   checks.push(legal.legalReviewCompleted === true
@@ -264,8 +313,8 @@ export function validateEvidence(evidence, opts = {}) {
   checks.push(legal.complianceReviewCompleted === true
     ? pass('legal.complianceReviewCompleted', 'compliance review completed')
     : fail('legal.complianceReviewCompleted', 'compliance review must be completed or formally waived'));
-  checks.push(isBlank(legal.reviewer)
-    ? fail('legal.reviewer', 'legal/compliance reviewer is required')
+  checks.push(isPlaceholder(legal.reviewer)
+    ? fail('legal.reviewer', 'current non-placeholder legal/compliance reviewer is required')
     : pass('legal.reviewer', `legal/compliance reviewer recorded: ${legal.reviewer}`));
   checks.push(checkRecentDate('legal.reviewedAt', legal.reviewedAt, 365, now));
   checks.push(legal.medicalDisclaimerApproved === true
@@ -282,7 +331,10 @@ async function fetchJson(fetchImpl, url, timeoutMs) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await fetchImpl(url, { signal: controller.signal });
+    const response = await fetchImpl(url, {
+      signal: controller.signal,
+      redirect: 'error',
+    });
     const text = await response.text();
     let body = null;
     try {
@@ -300,6 +352,7 @@ export async function checkHttpEndpoints(opts) {
   const {
     apiUrl,
     webUrl,
+    approvedSha,
     fetchImpl = globalThis.fetch,
     timeoutMs = DEFAULT_TIMEOUT_MS,
   } = opts;
@@ -307,6 +360,7 @@ export async function checkHttpEndpoints(opts) {
 
   checks.push(checkUrl('http.apiUrl', apiUrl, { requireHttps: true }));
   checks.push(checkUrl('http.webUrl', webUrl, { requireHttps: true }));
+  checks.push(checkGitSha('http.approvedSha', approvedSha));
   if (checks.some((check) => check.status === 'fail')) return checks;
   if (typeof fetchImpl !== 'function') {
     checks.push(fail('http.fetch', 'global fetch is not available'));
@@ -318,7 +372,7 @@ export async function checkHttpEndpoints(opts) {
 
   try {
     const { response, body } = await fetchJson(fetchImpl, `${apiBase}/healthz`, timeoutMs);
-    checks.push(response.ok && body?.status === 'ok'
+    checks.push(response.status === 200 && body?.status === 'ok'
       ? pass('http.healthz', '/healthz returned status ok')
       : fail('http.healthz', `/healthz expected 200 {status:"ok"}, got ${response.status}`));
   } catch (err) {
@@ -327,21 +381,75 @@ export async function checkHttpEndpoints(opts) {
 
   try {
     const { response, body } = await fetchJson(fetchImpl, `${apiBase}/readyz`, timeoutMs);
-    checks.push(response.ok && body?.status === 'ready' && body?.medicalEncryption === true
-      ? pass('http.readyz', '/readyz returned ready with medicalEncryption=true')
-      : fail('http.readyz', `/readyz expected ready + encryption, got status ${response.status}`));
+    checks.push(
+      response.status === 200
+      && body?.status === 'ready'
+      && body?.publicationMode === 'education_research'
+      && body?.medicalEncryption === true
+        ? pass(
+          'http.readyz',
+          '/readyz returned ready in education_research mode with medicalEncryption=true'
+        )
+        : fail(
+          'http.readyz',
+          `/readyz expected ready + education_research + encryption, got status ${response.status}`
+        )
+    );
+    checks.push(response.status === 200 && body?.releaseSha === approvedSha
+      ? pass('http.apiReleaseSha', 'live API reports the approved release SHA')
+      : fail(
+        'http.apiReleaseSha',
+        `live API release SHA does not match approved SHA (reported ${body?.releaseSha || 'missing'})`
+      ));
   } catch (err) {
     checks.push(fail('http.readyz', `/readyz request failed: ${err.message}`));
+    checks.push(fail('http.apiReleaseSha', 'live API release identity could not be verified'));
   }
 
   try {
-    const response = await fetchImpl(webBase, { signal: AbortSignal.timeout(timeoutMs) });
+    const response = await fetchImpl(webBase, {
+      signal: AbortSignal.timeout(timeoutMs),
+      redirect: 'error',
+    });
     const contentType = response.headers?.get?.('content-type') || '';
-    checks.push(response.ok && contentType.includes('text/html')
+    await response.text();
+    checks.push(response.status === 200 && contentType.includes('text/html')
       ? pass('http.web', 'web app returned HTML')
       : fail('http.web', `web app expected HTML 200, got ${response.status} ${contentType}`));
   } catch (err) {
     checks.push(fail('http.web', `web request failed: ${err.message}`));
+  }
+
+  try {
+    const { response, body } = await fetchJson(
+      fetchImpl,
+      `${webBase}/release-identity.json`,
+      timeoutMs
+    );
+    const contentType = response.headers?.get?.('content-type') || '';
+    const mediaType = contentType.split(';', 1)[0].trim().toLowerCase();
+    const cacheControl = (response.headers?.get?.('cache-control') || '')
+      .trim()
+      .toLowerCase()
+      .replace(/\s*,\s*/gu, ', ');
+    const keys = body && typeof body === 'object' && !Array.isArray(body)
+      ? Object.keys(body)
+      : [];
+    checks.push(
+      response.status === 200
+      && mediaType === 'application/json'
+      && cacheControl === 'no-store, max-age=0'
+      && keys.length === 1
+      && keys[0] === 'releaseSha'
+      && body.releaseSha === approvedSha
+        ? pass('http.webReleaseSha', 'live no-store JSON asset reports the approved release SHA')
+        : fail(
+          'http.webReleaseSha',
+          `live web release asset is not exact no-store JSON for the approved SHA (status ${response.status})`
+        )
+    );
+  } catch (err) {
+    checks.push(fail('http.webReleaseSha', 'live web release identity could not be verified'));
   }
 
   return checks;
@@ -354,12 +462,14 @@ export async function runLaunchVerification(opts = {}) {
   checks.push(...validateLaunchEnv(source).checks);
 
   const evidenceFile = opts.evidenceFile || DEFAULT_EVIDENCE_FILE;
+  let evidence = null;
   if (!existsSync(evidenceFile)) {
     checks.push(fail('evidence.file', `missing launch evidence file: ${evidenceFile}`));
   } else {
     try {
+      evidence = parseJsonFile(evidenceFile);
       checks.push(pass('evidence.file', `loaded ${evidenceFile}`));
-      checks.push(...validateEvidence(parseJsonFile(evidenceFile), { now: opts.now }));
+      checks.push(...validateEvidence(evidence, { now: opts.now }));
     } catch (err) {
       checks.push(fail('evidence.file', `could not parse evidence file: ${err.message}`));
     }
@@ -374,6 +484,7 @@ export async function runLaunchVerification(opts = {}) {
     checks.push(...await checkHttpEndpoints({
       apiUrl: opts.apiUrl || source.PRODUCTION_API_URL || source.API_URL,
       webUrl: opts.webUrl || source.PRODUCTION_WEB_URL || source.WEB_URL,
+      approvedSha: evidence?.release?.approvedSha || '',
       fetchImpl: opts.fetchImpl,
       timeoutMs: opts.timeoutMs || DEFAULT_TIMEOUT_MS,
     }));
@@ -391,10 +502,12 @@ export async function runLaunchVerification(opts = {}) {
 // never imports env.js or exercises a single validation branch, so a runtime
 // regression (a thrown import, a broken check, an inverted condition) sails
 // through. `--self-test` actually RUNS the verifier against a synthetic but
-// complete production env + evidence fixture and asserts three invariants:
+// complete production env, evidence, and synthetic live responses:
 //   1. a hardened env passes,
 //   2. complete evidence passes,
-//   3. HTTP checks that are skipped FAIL CLOSED (never a false "launch ok").
+//   3. live readiness is in publication mode and both surfaces report the
+//      approved SHA,
+//   4. a non-live Stripe key still fails closed.
 // It needs no network and no real secrets, so it is safe in CI while still
 // proving the verifier executes end-to-end.
 const SELF_TEST_ENV = {
@@ -444,7 +557,23 @@ function buildSelfTestEvidence(now) {
       webhookEvents: [...REQUIRED_STRIPE_EVENTS],
       lastWebhookTestAt: iso(2 * ONE_DAY_MS),
     },
-    dataRetention: { policyApproved: true, policyDocument: 'docs/DATA_RETENTION.md', deletionRequestSlaDays: 30, backupRetentionDays: 30 },
+    dataRetention: {
+      policyApproved: true,
+      policyDocument: 'docs/DATA_RETENTION.md',
+      deletionRequestSlaDays: 30,
+      backupRetentionDays: 30,
+      privacyMaintenanceScheduled: true,
+      privacyMaintenanceEvidence: 'ops://privacy-maintenance/schedule/self-test',
+      externalDeletionReconciliation: true,
+      externalDeletionReconciliationEvidence: 'ops://restore-reconciliation/self-test',
+    },
+    release: {
+      approvedSha: 'a'.repeat(40),
+      webSha: 'a'.repeat(40),
+      apiSha: 'a'.repeat(40),
+      boundaryPreservingRollbackTested: true,
+      rollbackEvidence: 'ops://rollback/self-test',
+    },
     legalCompliance: {
       legalReviewCompleted: true,
       complianceReviewCompleted: true,
@@ -456,17 +585,64 @@ function buildSelfTestEvidence(now) {
   };
 }
 
-export function runSelfTest(now = new Date()) {
+export async function runSelfTest(now = new Date()) {
   const problems = [];
+  const evidence = buildSelfTestEvidence(now);
 
   const envFailures = validateLaunchEnv(SELF_TEST_ENV).checks.filter((c) => c.status === 'fail');
   if (envFailures.length > 0) {
     problems.push(`hardened env fixture unexpectedly failed: ${envFailures.map((c) => c.id).join(', ')}`);
   }
 
-  const evidenceFailures = validateEvidence(buildSelfTestEvidence(now), { now }).filter((c) => c.status === 'fail');
+  const evidenceFailures = validateEvidence(evidence, { now }).filter((c) => c.status === 'fail');
   if (evidenceFailures.length > 0) {
     problems.push(`complete evidence fixture unexpectedly failed: ${evidenceFailures.map((c) => c.id).join(', ')}`);
+  }
+
+  const approvedSha = evidence.release.approvedSha;
+  const fetchImpl = async (url) => {
+    const isReleaseAsset = url.endsWith('/release-identity.json');
+    const isWebShell = !url.includes('api.example.com') && !isReleaseAsset;
+    const body = url.endsWith('/healthz')
+      ? { status: 'ok' }
+      : url.endsWith('/readyz')
+        ? {
+            status: 'ready',
+            publicationMode: 'education_research',
+            medicalEncryption: true,
+            releaseSha: approvedSha,
+          }
+        : isReleaseAsset
+          ? { releaseSha: approvedSha }
+          : '<!doctype html><html><head></head><body><div id="root"></div></body></html>';
+    return {
+      ok: true,
+      status: 200,
+      headers: {
+        get(name) {
+          const normalized = name.toLowerCase();
+          if (normalized === 'content-type') {
+            return isWebShell ? 'text/html; charset=utf-8' : 'application/json';
+          }
+          if (normalized === 'cache-control' && isReleaseAsset) {
+            return 'no-store, max-age=0';
+          }
+          return '';
+        },
+      },
+      async text() {
+        return typeof body === 'string' ? body : JSON.stringify(body);
+      },
+    };
+  };
+  const httpFailures = (await checkHttpEndpoints({
+    apiUrl: 'https://api.example.com',
+    webUrl: 'https://app.example.com',
+    approvedSha,
+    fetchImpl,
+  })).filter((check) => check.status === 'fail');
+  if (httpFailures.length > 0) {
+    problems.push(`synthetic live release verification failed: ${httpFailures.map((c) => c.id).join(', ')}`);
   }
 
   // Fail-closed invariant: a missing Stripe live key MUST be caught.
@@ -488,8 +664,8 @@ Options:
   --evidence=PATH     Launch evidence JSON file. Default: ${DEFAULT_EVIDENCE_FILE}
   --timeout-ms=N      HTTP timeout per request. Default: ${DEFAULT_TIMEOUT_MS}
   --skip-http         Validate env and launch evidence only; exits non-zero because live HTTP proof is incomplete.
-  --self-test         Run the verifier against a synthetic hardened env + evidence fixture (no network, no secrets).
-                      Proves the script executes end-to-end and fails closed. Used by the release gate.
+  --self-test         Run the verifier against synthetic env, evidence, and live endpoint fixtures.
+                      Uses no network or secrets; proves every verifier layer executes. Used by the release gate.
   --json              Print machine-readable JSON.
 `);
 }
@@ -508,9 +684,9 @@ async function main() {
   }
 
   if (opts.selfTest) {
-    const selfTest = runSelfTest();
+    const selfTest = await runSelfTest();
     if (selfTest.ok) {
-      console.log('Launch verifier self-test passed (env + evidence validation executed, fail-closed confirmed).');
+      console.log('Launch verifier self-test passed (env, evidence, and live release checks executed).');
       process.exitCode = 0;
     } else {
       console.error('Launch verifier self-test FAILED:');

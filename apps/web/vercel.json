@@ -2,9 +2,15 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "vite",
   "installCommand": "pnpm install --frozen-lockfile",
-  "buildCommand": "pnpm --filter @genemap/shared build && pnpm --filter @genemap/web build",
+  "buildCommand": "pnpm --filter @genemap/shared build && GENEMAP_REQUIRE_RELEASE_IDENTITY=1 pnpm --filter @genemap/web build",
   "outputDirectory": "apps/web/dist",
   "headers": [
+    {
+      "source": "/release-identity.json",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store, max-age=0" }
+      ]
+    },
     {
       "source": "/(.*)",
       "headers": [

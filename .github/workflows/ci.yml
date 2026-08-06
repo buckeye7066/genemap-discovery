@@ -279,6 +279,39 @@ jobs:
             --to-schema-datamodel prisma/schema.prisma \
             --exit-code
 
+  privacy-migration-upgrade:
+    # A fresh-schema deploy cannot prove backfill safety. Apply every prior SQL
+    # migration, seed historical privacy rows, then apply the lifecycle upgrade.
+    runs-on: ubuntu-latest
+    needs: [verify-migrations]
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_DB: genemap_privacy_upgrade
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/genemap_privacy_upgrade
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: 'pnpm'
+      - name: Install (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+      - name: Populated privacy migration upgrade
+        run: bash scripts/__tests__/privacy-migration-upgrade.sh
+
   security-audit:
     runs-on: ubuntu-latest
     steps:

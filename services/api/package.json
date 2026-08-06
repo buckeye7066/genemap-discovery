@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "node --watch --env-file=.env src/index.js",
     "start": "node --env-file=.env src/index.js",
+    "release:identity:verify": "node src/scripts/verifyReleaseIdentity.js",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
@@ -15,7 +16,8 @@
     "typecheck": "node --check src/index.js && node --check src/config/env.js",
     "test": "vitest run",
     "test:integration": "vitest run src/__tests__/postgres-integration.test.js",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "privacy:maintenance": "node --env-file-if-exists=.env src/workers/privacyMaintenance.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",

@@ -54,26 +54,22 @@ PORT=3000
 HOST=0.0.0.0
 ```
 
-### 4. Deploy API
+### 4. Deploy API from the linked Git commit
 
-```bash
-# Link to Railway project
-railway link
+Connect the GitHub repository to the Railway service and configure the approved
+production branch. Production promotion must originate from that GitHub trigger:
+the API requires Railway's provider-issued `RAILWAY_GIT_COMMIT_SHA` and refuses
+to start when it is missing or malformed.
 
-# Deploy
-cd services/api
-railway up
-```
+Do not use `railway up` for a production release. A CLI/source upload is not
+accepted release-identity evidence and may not receive Git-trigger metadata.
 
-### 5. Run Database Migrations
+### 5. Apply Database Migrations
 
-```bash
-# Generate Prisma client
-railway run pnpm db:generate
-
-# Apply committed production migrations
-railway run pnpm db:migrate:deploy
-```
+The committed `railway.json` start command runs `prisma migrate deploy` before
+starting the API. For the privacy-lifecycle migration, also follow the offline
+cutover procedure in `docs/DATA_RETENTION.md`; a green health check is not a
+substitute for its traffic drain and production-sized rehearsal.
 
 ### 6. Get API URL
 
@@ -114,15 +110,16 @@ Create `vercel.json` in project root:
 }
 ```
 
-### 4. Deploy to Vercel
+### 4. Deploy the linked Git commit to Vercel
 
-```bash
-# Login
-vercel login
+Connect the GitHub repository, select the approved production branch, and keep
+Vercel system environment variables enabled. The Vite build embeds
+`VERCEL_GIT_COMMIT_SHA` and fails on Vercel when that immutable identity is
+missing or malformed.
 
-# Deploy
-vercel --prod
-```
+Do not use `vercel --prod` or a prebuilt upload as the production release path.
+Promote only the reviewed Git-triggered deployment whose reported SHA matches
+the API and the approved launch evidence.
 
 ## GoDaddy DNS Configuration
 

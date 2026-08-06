@@ -3,6 +3,13 @@ import { logMedicalAccess } from '../middleware/accessLog.js';
 import { createAuditLog } from '../utils/audit.js';
 import { encrypt, decrypt } from '../utils/encryption.js';
 import { ValidationError, NotFoundError, ForbiddenError } from '../utils/errors.js';
+import {
+  PRIVACY_DELETION_SCOPE,
+  SELF_SERVICE_PURGE_TYPES,
+  processDeletionRequestNow,
+  serializeConsentRecord,
+  serializeDeletionRequest,
+} from '../services/privacyMaintenance.js';
 
 function normalizeEmail(email) {
   return String(email || '').trim().toLowerCase();
@@ -82,50 +89,22 @@ async function requireProjectAccess(prisma, projectId, userId, roles = ['owner',
 }
 
 /**
- * Throws ForbiddenError unless the requester has previously granted a
- * matching consent record. Does not check that the consent has been revoked
- * — clients should call /entities/consent again to overwrite.
+ * Require the latest consent event for this exact type/version to be a grant.
+ * A later revocation must override an older grant.
  */
 async function requireConsent(prisma, userId, consentType, minVersion) {
-  const consent = await prisma.consentRecord.findFirst({
-    where: { userId, consentType, version: minVersion, granted: true },
+  const events = await prisma.consentRecord.findMany({
+    where: { userId, consentType, version: minVersion },
     orderBy: { createdAt: 'desc' },
+    take: 2,
   });
+  const latest = events[0];
+  const ambiguousTimestamp = latest && events[1]
+    && new Date(latest.createdAt).getTime() === new Date(events[1].createdAt).getTime();
 
-  if (!consent) {
+  if (!latest?.granted || ambiguousTimestamp) {
     throw new ForbiddenError(`Consent required: ${consentType} v${minVersion}`);
   }
-}
-
-const SELF_SERVICE_PURGE_TYPES = Object.freeze([
-  'medicalData',
-  'aiConversations',
-  'searchHistory',
-]);
-
-/**
- * Process the currently implemented, limited content purge in one transaction.
- * This is not account closure or processor/backup deletion. Any partial
- * database failure rolls the purge back.
- */
-async function processDeletionRequest(prisma, requestId) {
-  return prisma.$transaction(async (tx) => {
-    const req = await tx.dataDeletionRequest.findUnique({ where: { id: requestId } });
-    if (!req || req.status !== 'pending') return null;
-
-    await tx.medicalData.deleteMany({ where: { userId: req.userId } });
-    await tx.aIConversation.deleteMany({ where: { userId: req.userId } });
-    await tx.searchHistory.deleteMany({ where: { userId: req.userId } });
-
-    return tx.dataDeletionRequest.update({
-      where: { id: requestId },
-      data: {
-        status: 'completed',
-        completedAt: new Date(),
-        deletedTypes: [...SELF_SERVICE_PURGE_TYPES],
-      },
-    });
-  });
 }
 
 export default async function entityRoutes(fastify) {
@@ -787,7 +766,7 @@ export default async function entityRoutes(fastify) {
     return result;
   });
 
-  // ─── Consent Records (HIPAA Compliance) ────────────────────
+  // ─── Consent Records ────────────────────────────────────────
   fastify.post('/consent', async (request) => {
     const { consentType, version, granted } = request.body || {};
     if (!consentType || !version || granted === undefined) {
@@ -798,90 +777,120 @@ export default async function entityRoutes(fastify) {
     if (typeof granted !== 'boolean') throw new ValidationError('granted must be a boolean');
     assertJsonSize(request.body.metadata, 'metadata');
 
-    const record = await prisma.consentRecord.create({
-      data: {
-        userId: request.user.userId,
-        consentType,
-        version,
-        granted,
-        ipAddress: request.ip || request.headers['x-forwarded-for'] || null,
-        metadata: request.body.metadata || null,
-      },
+    const record = await prisma.$transaction(async (tx) => {
+      const created = await tx.consentRecord.create({
+        data: {
+          userId: request.user.userId,
+          subjectRef: request.user.privacySubjectRef,
+          consentType,
+          version,
+          granted,
+          ipAddress: request.ip || request.headers['x-forwarded-for'] || null,
+          metadata: request.body.metadata || null,
+        },
+      });
+
+      await createAuditLog(
+        tx,
+        {
+          userId: request.user.userId,
+          action: 'consent_recorded',
+          entityType: 'consent_record',
+          entityId: created.id,
+          metadata: { consentType, version, granted },
+        },
+        { required: true }
+      );
+      return created;
     });
 
-    await createAuditLog(
-      prisma,
-      {
-        userId: request.user.userId,
-        action: 'consent_recorded',
-        entityType: 'consent_record',
-        entityId: record.id,
-        metadata: { consentType, version, granted },
-      },
-      { required: true }
-    );
-
-    return { record };
+    return { record: serializeConsentRecord(record) };
   });
 
   fastify.get('/consent', async (request) => {
     const records = await prisma.consentRecord.findMany({
       where: { userId: request.user.userId },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     });
-    return { records };
+    return { records: records.map(serializeConsentRecord) };
   });
 
   // ─── Limited self-service content purge ─────────────────────
   fastify.post('/data-deletion-request', async (request, reply) => {
-    const deletionRequest = await prisma.dataDeletionRequest.create({
-      data: {
-        userId: request.user.userId,
-        status: 'pending',
-        deletedTypes: [...SELF_SERVICE_PURGE_TYPES],
-      },
+    const now = new Date();
+    const deletionRequest = await prisma.$transaction(async (tx) => {
+      const created = await tx.dataDeletionRequest.create({
+        data: {
+          userId: request.user.userId,
+          subjectRef: request.user.privacySubjectRef,
+          scope: PRIVACY_DELETION_SCOPE,
+          status: 'pending',
+          requestedAt: now,
+          completedAt: null,
+          requestedTypes: [...SELF_SERVICE_PURGE_TYPES],
+          deletedTypes: [],
+          attemptCount: 0,
+          lastAttemptAt: null,
+          nextAttemptAt: now,
+          leaseExpiresAt: null,
+          failureCode: null,
+          updatedAt: now,
+        },
+      });
+
+      await createAuditLog(
+        tx,
+        {
+          userId: request.user.userId,
+          action: 'data_deletion_requested',
+          entityType: 'data_deletion_request',
+          entityId: created.id,
+          metadata: {
+            scope: PRIVACY_DELETION_SCOPE,
+            requestedTypes: [...SELF_SERVICE_PURGE_TYPES],
+          },
+        },
+        { required: true }
+      );
+      return created;
     });
 
-    await createAuditLog(
-      prisma,
-      {
-        userId: request.user.userId,
-        action: 'data_deletion_requested',
-        entityType: 'data_deletion_request',
-        entityId: deletionRequest.id,
-        metadata: { deletedTypes: [...SELF_SERVICE_PURGE_TYPES] },
-      },
-      { required: true }
-    );
-
-    // This limited purge runs immediately. A full account/processor deletion
-    // requires the separately reviewed workflow documented in DATA_RETENTION.
+    // The finite local purge is attempted immediately. Once creation commits,
+    // the request is durable: an infrastructure failure here is an accepted
+    // asynchronous request, not a failed POST that callers should duplicate.
+    let result;
     try {
-      const processedRequest = await processDeletionRequest(prisma, deletionRequest.id);
-      return { request: processedRequest || deletionRequest };
+      result = await processDeletionRequestNow(prisma, deletionRequest.id, { now });
     } catch {
-      request.log.error(
+      request.log.warn(
         { requestId: request.id, deletionRequestId: deletionRequest.id },
-        'deletion request processing failed'
+        'deletion request accepted; immediate processing was unavailable'
       );
-      let failedRequest = deletionRequest;
-      try {
-        failedRequest = await prisma.dataDeletionRequest.update({
-          where: { id: deletionRequest.id },
-          data: { status: 'failed' },
-        });
-      } catch {
-        request.log.error(
-          { requestId: request.id, deletionRequestId: deletionRequest.id },
-          'deletion request failure state could not be persisted'
-        );
-      }
-      return reply.code(503).send({
-        request: failedRequest,
-        error: 'The content purge did not complete; the request was retained for operator review.',
-        code: 'DELETION_NOT_COMPLETED',
+      return reply.code(202).send({
+        request: serializeDeletionRequest(deletionRequest),
+        message: 'The request was accepted and remains eligible for maintenance processing.',
+        code: 'DELETION_ACCEPTED',
       });
     }
+
+    const publicRequest = serializeDeletionRequest(result.request || deletionRequest);
+    if (result.outcome === 'completed') return { request: publicRequest };
+
+    const needsOperator = result.outcome === 'operator_review'
+      || publicRequest?.status === 'operator_review';
+    request.log.warn(
+      { requestId: request.id, deletionRequestId: deletionRequest.id },
+      needsOperator
+        ? 'deletion request accepted for operator review'
+        : 'deletion request accepted for maintenance processing'
+    );
+    return reply.code(202).send({
+      request: publicRequest,
+      message: needsOperator
+        ? 'The request was accepted and requires operator review.'
+        : 'The request was accepted and remains eligible for maintenance processing.',
+      code: 'DELETION_ACCEPTED',
+    });
   });
 
   fastify.get('/data-deletion-request', async (request) => {
@@ -889,7 +898,7 @@ export default async function entityRoutes(fastify) {
       where: { userId: request.user.userId },
       orderBy: { requestedAt: 'desc' },
     });
-    return { requests };
+    return { requests: requests.map(serializeDeletionRequest) };
   });
 
   // ─── Project Annotations (Collaboration) ──────────────────

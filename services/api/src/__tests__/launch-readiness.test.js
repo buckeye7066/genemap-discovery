@@ -1,4 +1,4 @@
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
@@ -88,6 +88,17 @@ const VALID_EVIDENCE = {
     policyDocument: 'docs/DATA_RETENTION.md',
     deletionRequestSlaDays: 30,
     backupRetentionDays: 30,
+    privacyMaintenanceScheduled: true,
+    privacyMaintenanceEvidence: 'ops://privacy-maintenance/schedule/run-123',
+    externalDeletionReconciliation: true,
+    externalDeletionReconciliationEvidence: 'ops://restore/reconciliation/run-123',
+  },
+  release: {
+    approvedSha: 'a'.repeat(40),
+    webSha: 'a'.repeat(40),
+    apiSha: 'a'.repeat(40),
+    boundaryPreservingRollbackTested: true,
+    rollbackEvidence: 'ops://rollback/run-123',
   },
   legalCompliance: {
     legalReviewCompleted: true,
@@ -103,13 +114,21 @@ function failures(checks) {
   return checks.filter((check) => check.status === 'fail');
 }
 
-function mockResponse(status, body, contentType = 'application/json') {
+function mockResponse(
+  status,
+  body,
+  contentType = 'application/json',
+  cacheControl = 'no-store, max-age=0'
+) {
   return {
     ok: status >= 200 && status < 300,
     status,
     headers: {
       get(name) {
-        return name.toLowerCase() === 'content-type' ? contentType : '';
+        const normalized = name.toLowerCase();
+        if (normalized === 'content-type') return contentType;
+        if (normalized === 'cache-control') return cacheControl;
+        return '';
       },
     },
     async text() {
@@ -151,6 +170,47 @@ describe('production launch verification', () => {
     expect(failures(checks)).toEqual([]);
   });
 
+  it('rejects missing privacy schedule and restore reconciliation evidence', () => {
+    const checks = validateEvidence({
+      ...VALID_EVIDENCE,
+      dataRetention: {
+        ...VALID_EVIDENCE.dataRetention,
+        privacyMaintenanceScheduled: false,
+        privacyMaintenanceEvidence: 'REPLACE_WITH_SCHEDULE',
+        externalDeletionReconciliation: false,
+        externalDeletionReconciliationEvidence: 'TODO',
+      },
+    }, { now: NOW });
+
+    const ids = failures(checks).map((check) => check.id);
+    expect(ids).toEqual(expect.arrayContaining([
+      'retention.privacyMaintenanceScheduled',
+      'retention.privacyMaintenanceEvidence',
+      'retention.externalDeletionReconciliation',
+      'retention.externalDeletionReconciliationEvidence',
+    ]));
+  });
+
+  it('rejects mismatched release identities and untested rollback', () => {
+    const checks = validateEvidence({
+      ...VALID_EVIDENCE,
+      release: {
+        approvedSha: 'a'.repeat(40),
+        webSha: 'b'.repeat(40),
+        apiSha: 'a'.repeat(40),
+        boundaryPreservingRollbackTested: false,
+        rollbackEvidence: 'REPLACE_WITH_ROLLBACK',
+      },
+    }, { now: NOW });
+
+    const ids = failures(checks).map((check) => check.id);
+    expect(ids).toEqual(expect.arrayContaining([
+      'release.alignment',
+      'release.boundaryPreservingRollbackTested',
+      'release.rollbackEvidence',
+    ]));
+  });
+
   it('rejects missing backup restore evidence', () => {
     const checks = validateEvidence({
       ...VALID_EVIDENCE,
@@ -162,18 +222,32 @@ describe('production launch verification', () => {
     expect(failures(checks).map((check) => check.id)).toContain('backups.restoreTestedAt');
   });
 
-  it('checks deployed API and web health endpoints', async () => {
+  it('checks deployed health and binds both live surfaces to the approved SHA', async () => {
+    const approvedSha = 'a'.repeat(40);
     const fetchImpl = async (url) => {
       if (url.endsWith('/healthz')) return mockResponse(200, { status: 'ok' });
       if (url.endsWith('/readyz')) {
-        return mockResponse(200, { status: 'ready', medicalEncryption: true });
+        return mockResponse(200, {
+          status: 'ready',
+          publicationMode: 'education_research',
+          medicalEncryption: true,
+          releaseSha: approvedSha,
+        });
       }
-      return mockResponse(200, '<!doctype html><html></html>', 'text/html; charset=utf-8');
+      if (url.endsWith('/release-identity.json')) {
+        return mockResponse(200, { releaseSha: approvedSha });
+      }
+      return mockResponse(
+        200,
+        '<!doctype html><html><head></head><body><div id="root"></div></body></html>',
+        'text/html; charset=utf-8'
+      );
     };
 
     const checks = await checkHttpEndpoints({
       apiUrl: 'https://api.example.com',
       webUrl: 'https://app.example.com',
+      approvedSha,
       fetchImpl,
       timeoutMs: 1000,
     });
@@ -181,13 +255,192 @@ describe('production launch verification', () => {
     expect(failures(checks)).toEqual([]);
   });
 
-  it('self-test executes the verifier end-to-end and confirms fail-closed behaviour', () => {
-    // This is what the release gate runs instead of `node --check`: it actually
-    // imports env.js and exercises the env + evidence validators against a
-    // synthetic hardened fixture, then confirms the verifier still rejects a
-    // non-live Stripe key. A green self-test proves the script runs, not merely
-    // that it parses.
-    const result = runSelfTest(NOW);
+  it('rejects redirects and the wrong publication mode', async () => {
+    const approvedSha = 'a'.repeat(40);
+    const redirectingFetch = async (url) => {
+      if (url.endsWith('/healthz')) return mockResponse(200, { status: 'ok' });
+      if (url.endsWith('/readyz')) {
+        return mockResponse(200, {
+          status: 'ready',
+          publicationMode: 'clinical',
+          medicalEncryption: true,
+          releaseSha: approvedSha,
+        });
+      }
+      return mockResponse(302, '', 'text/html; charset=utf-8');
+    };
+
+    const checks = await checkHttpEndpoints({
+      apiUrl: 'https://api.example.com',
+      webUrl: 'https://app.example.com',
+      approvedSha,
+      fetchImpl: redirectingFetch,
+      timeoutMs: 1000,
+    });
+
+    expect(failures(checks).map((check) => check.id)).toEqual(expect.arrayContaining([
+      'http.readyz',
+      'http.web',
+      'http.webReleaseSha',
+    ]));
+  });
+
+  it('rejects healthy deployments that report a different release SHA', async () => {
+    const approvedSha = 'a'.repeat(40);
+    const fetchImpl = async (url) => {
+      if (url.endsWith('/healthz')) return mockResponse(200, { status: 'ok' });
+      if (url.endsWith('/readyz')) {
+        return mockResponse(200, {
+          status: 'ready',
+          publicationMode: 'education_research',
+          medicalEncryption: true,
+          releaseSha: 'b'.repeat(40),
+        });
+      }
+      if (url.endsWith('/release-identity.json')) {
+        return mockResponse(200, { releaseSha: 'c'.repeat(40) });
+      }
+      return mockResponse(
+        200,
+        '<!doctype html><html><head></head><body><div id="root"></div></body></html>',
+        'text/html; charset=utf-8'
+      );
+    };
+
+    const checks = await checkHttpEndpoints({
+      apiUrl: 'https://api.example.com',
+      webUrl: 'https://app.example.com',
+      approvedSha,
+      fetchImpl,
+      timeoutMs: 1000,
+    });
+
+    expect(failures(checks).map((check) => check.id)).toEqual(expect.arrayContaining([
+      'http.apiReleaseSha',
+      'http.webReleaseSha',
+    ]));
+  });
+
+  it.each([
+    ['JSONP media type', 'application/jsonp', 'no-store'],
+    ['lookalike cache directive', 'application/json', 'public, x-no-store=1'],
+    ['parameterized no-store directive', 'application/json', 'public, no-store=0'],
+    ['quoted comma decoy', 'application/json', 'public, foo="x,no-store,y"'],
+  ])('rejects a deceptive release asset %s', async (_label, contentType, cacheControl) => {
+    const approvedSha = 'a'.repeat(40);
+    const fetchImpl = async (url) => {
+      if (url.endsWith('/healthz')) return mockResponse(200, { status: 'ok' });
+      if (url.endsWith('/readyz')) {
+        return mockResponse(200, {
+          status: 'ready',
+          publicationMode: 'education_research',
+          medicalEncryption: true,
+          releaseSha: approvedSha,
+        });
+      }
+      if (url.endsWith('/release-identity.json')) {
+        return mockResponse(200, { releaseSha: approvedSha }, contentType, cacheControl);
+      }
+      return mockResponse(
+        200,
+        '<!doctype html><html><head></head><body><div id="root"></div></body></html>',
+        'text/html; charset=utf-8'
+      );
+    };
+
+    const checks = await checkHttpEndpoints({
+      apiUrl: 'https://api.example.com',
+      webUrl: 'https://app.example.com',
+      approvedSha,
+      fetchImpl,
+      timeoutMs: 1000,
+    });
+
+    expect(failures(checks).map((check) => check.id)).toContain('http.webReleaseSha');
+  });
+
+  it('rejects non-200 responses even when their bodies look valid', async () => {
+    const approvedSha = 'a'.repeat(40);
+    const fetchImpl = async (url) => {
+      if (url.endsWith('/healthz')) return mockResponse(203, { status: 'ok' });
+      if (url.endsWith('/readyz')) {
+        return mockResponse(206, {
+          status: 'ready',
+          publicationMode: 'education_research',
+          medicalEncryption: true,
+          releaseSha: approvedSha,
+        });
+      }
+      if (url.endsWith('/release-identity.json')) {
+        return mockResponse(202, { releaseSha: approvedSha });
+      }
+      return mockResponse(
+        203,
+        '<!doctype html><html><head></head><body><div id="root"></div></body></html>',
+        'text/html; charset=utf-8'
+      );
+    };
+
+    const checks = await checkHttpEndpoints({
+      apiUrl: 'https://api.example.com',
+      webUrl: 'https://app.example.com',
+      approvedSha,
+      fetchImpl,
+      timeoutMs: 1000,
+    });
+
+    expect(failures(checks).map((check) => check.id)).toEqual(expect.arrayContaining([
+      'http.healthz',
+      'http.readyz',
+      'http.apiReleaseSha',
+      'http.web',
+      'http.webReleaseSha',
+    ]));
+  });
+
+  it('keeps the static identity asset out of SPA rewrites and disables caching', () => {
+    const rootConfig = JSON.parse(readFileSync(
+      new URL('../../../../vercel.json', import.meta.url),
+      'utf8'
+    ));
+    const appConfig = JSON.parse(readFileSync(
+      new URL('../../../../apps/web/vercel.json', import.meta.url),
+      'utf8'
+    ));
+
+    expect(rootConfig.rewrites[0].source).toContain('release-identity\\.json$');
+    for (const config of [rootConfig, appConfig]) {
+      expect(config.buildCommand).toContain(
+        'GENEMAP_REQUIRE_RELEASE_IDENTITY=1 pnpm --filter @genemap/web build'
+      );
+      const releaseHeaders = config.headers.find(
+        (entry) => entry.source === '/release-identity.json'
+      );
+      expect(releaseHeaders?.headers).toContainEqual({
+        key: 'Cache-Control',
+        value: 'no-store, max-age=0',
+      });
+    }
+  });
+
+  it('keeps production smoke on the static release asset with exact statuses and no redirects', () => {
+    const workflow = readFileSync(
+      new URL('../../../../.github/workflows/production-smoke.yml', import.meta.url),
+      'utf8'
+    );
+    expect(workflow).toContain('release-identity.json');
+    expect(workflow).toContain("redirect: 'error'");
+    expect(workflow).toMatch(/response\.status !== 200/u);
+    expect(workflow).not.toContain('extractWebReleaseSha');
+    expect(workflow).not.toContain('--location');
+  });
+
+  it('self-test executes env, evidence, and live release checks end-to-end', async () => {
+    // This is what the release gate runs instead of `node --check`: it imports
+    // env.js and exercises env, evidence, HTTP publication-mode, and deployed
+    // SHA validation with synthetic responses, then confirms a non-live Stripe
+    // key is still rejected.
+    const result = await runSelfTest(NOW);
     expect(result.problems).toEqual([]);
     expect(result.ok).toBe(true);
   });
