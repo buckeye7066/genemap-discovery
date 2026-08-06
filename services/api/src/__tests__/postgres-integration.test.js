@@ -4,6 +4,7 @@ import { buildTestApp } from './setup.js';
 import {
   SELF_SERVICE_PURGE_TYPES,
   claimDueDeletionRequests,
+  processClaimedDeletionRequest,
   pruneExpiredSessions,
 } from '../services/privacyMaintenance.js';
 
@@ -355,6 +356,87 @@ runIfPostgres('Postgres integration smoke', () => {
       where: { subjectRef: subjectUser.privacySubjectRef },
     });
     expect(stored).toMatchObject({ status: 'processing', attemptCount: 1 });
+  });
+
+  it('rolls back a stale real-Postgres purge after lease reclaim', async () => {
+    const subject = await registerUser('privacy-fence@example.com');
+    const subjectUser = await prisma.user.findUnique({ where: { id: subject.user.id } });
+    const claimAt = new Date('2026-08-06T13:00:00.000Z');
+    const request = await prisma.dataDeletionRequest.create({
+      data: {
+        userId: subject.user.id,
+        subjectRef: subjectUser.privacySubjectRef,
+        scope: 'legacy_content_v1',
+        status: 'pending',
+        requestedTypes: [...SELF_SERVICE_PURGE_TYPES],
+        deletedTypes: [],
+        nextAttemptAt: new Date(claimAt.getTime() - 1),
+      },
+    });
+
+    const [firstClaim] = await claimDueDeletionRequests(prisma, {
+      now: claimAt,
+      limit: 1,
+      leaseMs: 1_000,
+    });
+    expect(firstClaim).toMatchObject({ id: request.id, attemptCount: 1 });
+
+    const reclaimAt = new Date(claimAt.getTime() + 2_000);
+    await prisma.dataDeletionRequest.update({
+      where: { id: request.id },
+      data: { leaseExpiresAt: new Date(reclaimAt.getTime() - 1) },
+    });
+    const [secondClaim] = await claimDueDeletionRequests(prisma, {
+      now: reclaimAt,
+      limit: 1,
+    });
+    expect(secondClaim).toMatchObject({ id: request.id, attemptCount: 2 });
+
+    await prisma.medicalData.create({
+      data: {
+        userId: subject.user.id,
+        dataType: 'legacy',
+        content: { fixture: true },
+      },
+    });
+    await prisma.aIConversation.create({
+      data: {
+        userId: subject.user.id,
+        assistantType: 'legacy',
+        messages: [],
+      },
+    });
+    await prisma.searchHistory.create({
+      data: {
+        userId: subject.user.id,
+        query: 'stale-worker-canary',
+        queryType: 'general',
+      },
+    });
+
+    const staleResult = await processClaimedDeletionRequest(prisma, firstClaim, {
+      clock: () => new Date(reclaimAt.getTime() + 1_000),
+    });
+    expect(staleResult.outcome).toBe('stale');
+    await expect(prisma.medicalData.count({ where: { userId: subject.user.id } })).resolves.toBe(1);
+    await expect(prisma.aIConversation.count({ where: { userId: subject.user.id } })).resolves.toBe(1);
+    await expect(prisma.searchHistory.count({ where: { userId: subject.user.id } })).resolves.toBe(1);
+
+    const completed = await processClaimedDeletionRequest(prisma, secondClaim, {
+      clock: () => new Date(reclaimAt.getTime() + 2_000),
+    });
+    expect(completed).toMatchObject({
+      outcome: 'completed',
+      request: {
+        id: request.id,
+        status: 'completed',
+        attemptCount: 2,
+        deletedTypes: SELF_SERVICE_PURGE_TYPES,
+      },
+    });
+    await expect(prisma.medicalData.count({ where: { userId: subject.user.id } })).resolves.toBe(0);
+    await expect(prisma.aIConversation.count({ where: { userId: subject.user.id } })).resolves.toBe(0);
+    await expect(prisma.searchHistory.count({ where: { userId: subject.user.id } })).resolves.toBe(0);
   });
 
   it('deletes expired sessions at the exact boundary and retains future sessions', async () => {
