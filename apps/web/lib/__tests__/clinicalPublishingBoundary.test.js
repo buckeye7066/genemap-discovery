@@ -317,6 +317,18 @@ describe('clinical publishing boundary', () => {
     expect(playListing).not.toContain('Ready-to-paste');
   });
 
+  it('keeps profile fields outside personalized clinical promises', () => {
+    const profile = read('../../pages/Profile.jsx');
+
+    expect(profile).toContain('Learning & Research Profile');
+    expect(profile).toContain('Do not enter personal medical records');
+    expect(profile).toContain('personal genomic data');
+    expect(profile).toContain('protected health information');
+    expect(profile).not.toContain('AI Personalization');
+    expect(profile).not.toContain('personalized explanations');
+    expect(profile).not.toContain('research opportunities');
+  });
+
   it('keeps candidate-search scope and provenance truthful', () => {
     const searchForm = read('../../components/search/SearchForm.jsx');
     const geneResults = read('../../components/search/GeneResults.jsx');
