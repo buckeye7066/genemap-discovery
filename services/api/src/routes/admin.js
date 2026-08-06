@@ -736,7 +736,7 @@ export default async function adminRoutes(fastify) {
       // caller-supplied free-form metadata after account deletion.
       await tx.consentRecord.updateMany({
         where: { userId: user.id },
-        data: { ipAddress: null, metadata: null },
+        data: { ipAddress: null, metadata: { erasedOnAccountDeletion: true } },
       });
 
       // Deleting the account cascades all three rows covered by the finite
@@ -766,9 +766,9 @@ export default async function adminRoutes(fastify) {
           userId: request.user.userId,
           action: 'local_account_deleted',
           entityType: 'user',
-          entityId: user.id,
+          entityId: user.privacySubjectRef,
           metadata: {
-            scope: 'local_database_account',
+            scope: 'local_database_account_v1',
             retainedPrivacyEvidence: true,
           },
         },
@@ -776,6 +776,6 @@ export default async function adminRoutes(fastify) {
       );
     });
 
-    return { success: true, scope: 'local_database_account' };
+    return { success: true, scope: 'local_database_account_v1' };
   });
 }
