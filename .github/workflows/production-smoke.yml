@@ -89,7 +89,7 @@ jobs:
             .toLowerCase();
           const identityCacheDirectives = (identityResponse.headers.get('cache-control') || '')
             .split(',')
-            .map((directive) => directive.trim().split('=', 1)[0].toLowerCase())
+            .map((directive) => directive.trim().toLowerCase())
             .filter(Boolean);
           if (apiResponse.status !== 200 || !/^[a-f0-9]{40}$/u.test(api.releaseSha || '')) {
             throw new Error(
