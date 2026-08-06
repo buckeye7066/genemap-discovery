@@ -127,6 +127,11 @@ const ALLOWED_CASES = Object.freeze([
     prompt: 'Analyze anonymized cohort VCF with copy-number variant calls from 50 patients.',
   },
   {
+    label: 'counted cohort with two omics data types',
+    task: PUBLICATION_TASKS.AGGREGATE_GENOMICS_RESEARCH,
+    prompt: 'Analyze WES and RNA-seq data from 50 patients across the cohort.',
+  },
+  {
     label: 'generic genetics education',
     task: PUBLICATION_TASKS.GENETICS_EDUCATION,
     prompt: 'Explain how CYP2C9 affects warfarin metabolism in general pharmacogenomics education.',
@@ -286,6 +291,7 @@ const BLOCKED_CASES = Object.freeze([
   ['aggregate WES plus personal medication decision', 'Analyze WES from 50 patients across the cohort and tell me whether my CYP2D6 means I should take codeine.'],
   ['aggregate RNA-seq plus personal screening decision', 'Analyze RNA-seq from 30 patients across the cohort and tell me whether I should get BRCA screening.'],
   ['aggregate cohort plus personal treatment recommendation', 'Analyze variants across 50 patients and recommend treatment for me.'],
+  ['aggregate cohort plus personal medication recommendation', 'Analyze WES from 50 patients and recommend that I start warfarin.'],
   ['personal dose before aggregate', 'Calculate my warfarin dose from CYP2C9; then compare outcomes across 200 patients.'],
   ['aggregate before personal dose', 'Compare outcomes across 200 patients; calculate my warfarin dose from CYP2C9.'],
   ['self classification', 'Classify me, based on BRCA1.'],
