@@ -2,7 +2,11 @@ import { describe, it, expect } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { AGENT_IDS } from '@genemap/shared';
+// This is a source-maintenance test for retired internal personas. Production
+// browser aliases deliberately expose only shared/client.ts, so importing the
+// registry through the application package entry would put clinical persona
+// copy back into the public bundle.
+import { AGENT_IDS } from '../../../../packages/shared/src/agentRegistry.ts';
 
 // ─── Totality: the app and the agent registry cannot drift ───────────────────
 //

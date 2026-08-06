@@ -1,19 +1,38 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Search, Dna } from "lucide-react";
+import { Search, Dna } from "lucide-react";
 import { apiClient } from "@genemap/shared";
-import { parseLLMJson } from "../shared/llmJson";
+import {
+  CURATED_PUBLICATION_CONCEPTS,
+  publicationConceptById,
+} from "@/lib/publicationConceptCatalog";
+
+// Publication mode keeps autocomplete deterministic. These labels are UI
+// examples, not model output and not claims that an external database was
+// queried. Arbitrary prefixes never reach a generation provider.
+const SAFE_SUGGESTIONS = Object.freeze([
+  ...CURATED_PUBLICATION_CONCEPTS.map((concept) => ({
+    text: concept.canonicalLabel,
+    type: concept.conceptKind,
+    description: 'Reviewed GeneMap publication concept',
+    publicationReference: publicationConceptById(concept.conceptId),
+  })),
+  { text: 'HP:0001166', type: 'hpo', description: 'Exact HPO identifier example', publicationReference: { kind: 'hpo', identifier: 'HP:0001166' } },
+  { text: 'HP:0001250', type: 'hpo', description: 'Exact HPO identifier example', publicationReference: { kind: 'hpo', identifier: 'HP:0001250' } },
+  { text: 'HP:0004322', type: 'hpo', description: 'Exact HPO identifier example', publicationReference: { kind: 'hpo', identifier: 'HP:0004322' } },
+]);
 
 export default function AutocompleteSearch({ 
   value, 
   onChange, 
   onSelect, 
+  searchMode = 'free_text',
+  inputId,
   placeholder = "Search for genes, diseases, or phenotypes...",
   disabled = false 
 }) {
   const [suggestions, setSuggestions] = useState([]);
-  const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const wrapperRef = useRef(null);
@@ -21,7 +40,7 @@ export default function AutocompleteSearch({
   // Set when the user picks a suggestion. The selection programmatically
   // updates `value`, which would otherwise re-trigger the fetch effect and
   // immediately re-open the dropdown ("won't dismiss / re-fills the box").
-  const justSelectedRef = useRef(false);
+  const selectedValueRef = useRef(null);
 
   // Close suggestions when clicking outside
   useEffect(() => {
@@ -44,9 +63,11 @@ export default function AutocompleteSearch({
     }
   }, [disabled]);
 
-  // Fetch suggestions when user types
+  // Filter the bounded local catalog when the user types.
   useEffect(() => {
-    const fetchSuggestions = async () => {
+    let cancelled = false;
+    setHighlightedIndex(-1);
+    const filterSuggestions = async () => {
       // Don't fetch (or surface) suggestions while a search is in flight.
       if (disabled) {
         setShowSuggestions(false);
@@ -54,51 +75,65 @@ export default function AutocompleteSearch({
       }
       // A selection just set `value`; consume the flag and skip the refetch so
       // the dropdown stays dismissed instead of re-populating.
-      if (justSelectedRef.current) {
-        justSelectedRef.current = false;
+      if (selectedValueRef.current === value) {
+        selectedValueRef.current = null;
         setSuggestions([]);
         setShowSuggestions(false);
         return;
       }
+      // If the selected text was already identical to the input, React did not
+      // emit a value-state change. Clear that old marker on the user's next edit
+      // without swallowing the edit or suppressing its resolver lookup.
+      if (selectedValueRef.current) selectedValueRef.current = null;
       if (!value || value.length < 2) {
         setSuggestions([]);
         return;
       }
 
-      setIsLoadingSuggestions(true);
+      const wantedType = searchMode === 'disease'
+        ? 'disease'
+        : searchMode === 'hpo_term'
+          ? 'hpo'
+          : 'phenotype';
+      const normalized = value.trim().toLowerCase();
+      const localMatches = SAFE_SUGGESTIONS.filter((suggestion) => (
+        suggestion.type === wantedType
+        && suggestion.text.toLowerCase().includes(normalized)
+      ));
+      let remoteMatches = [];
       try {
-        const suggestionPrompt = `Given the search query "${value}", suggest 5-8 relevant:
-- Gene symbols (if it looks like a gene name)
-- Disease names (if it looks like a disease)
-- Common phenotype terms related to the query
-
-Format as JSON array with objects containing:
-- text: the suggestion
-- type: "gene", "disease", or "phenotype"
-- description: brief 1-line description
-
-Focus on the most common and relevant matches. Return JSON: {"suggestions": [...]}`;
-        const raw = await apiClient.invokeLLM(suggestionPrompt);
-        const response = parseLLMJson(raw, { suggestions: [] });
-
-        if (Array.isArray(response.suggestions) && response.suggestions.length > 0) {
-          setSuggestions(response.suggestions.slice(0, 8));
-          setShowSuggestions(true);
-        }
-      } catch (err) {
-        console.error("Error fetching suggestions:", err);
-        setSuggestions([]);
-      } finally {
-        setIsLoadingSuggestions(false);
+        const kind = searchMode === 'disease' ? 'disease' : 'phenotype';
+        const response = await apiClient.searchPublicationConcepts(value.trim(), kind);
+        remoteMatches = (response?.suggestions || []).map((item) => ({
+          text: item.canonicalLabel,
+          type: item.kind === 'mondo' ? 'disease' : searchMode === 'hpo_term' ? 'hpo' : 'phenotype',
+          description: `${item.identifier} · ${item.source} API ${item.apiVersion}`,
+          publicationReference: { kind: item.kind, identifier: item.identifier },
+        }));
+      } catch {
+        // Deterministic local examples remain available during resolver outage.
       }
+      if (cancelled) return;
+      const seen = new Set();
+      const matches = [...localMatches, ...remoteMatches].filter((suggestion) => {
+        const key = `${suggestion.publicationReference?.kind}:${suggestion.publicationReference?.identifier || suggestion.text.toLowerCase()}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      }).slice(0, 8);
+      setSuggestions(matches);
+      setShowSuggestions(matches.length > 0);
     };
 
     const timeoutId = setTimeout(() => {
-      fetchSuggestions();
-    }, 300); // Debounce
+      void filterSuggestions();
+    }, 250);
 
-    return () => clearTimeout(timeoutId);
-  }, [value]);
+    return () => {
+      cancelled = true;
+      clearTimeout(timeoutId);
+    };
+  }, [disabled, searchMode, value]);
 
   const handleKeyDown = (e) => {
     if (!showSuggestions || suggestions.length === 0) return;
@@ -115,8 +150,8 @@ Focus on the most common and relevant matches. Return JSON: {"suggestions": [...
         setHighlightedIndex((prev) => (prev > 0 ? prev - 1 : -1));
         break;
       case "Enter":
-        e.preventDefault();
         if (highlightedIndex >= 0 && highlightedIndex < suggestions.length) {
+          e.preventDefault();
           handleSelectSuggestion(suggestions[highlightedIndex]);
         }
         break;
@@ -128,7 +163,7 @@ Focus on the most common and relevant matches. Return JSON: {"suggestions": [...
   };
 
   const handleSelectSuggestion = (suggestion) => {
-    justSelectedRef.current = true;
+    selectedValueRef.current = suggestion.text;
     setSuggestions([]);
     setShowSuggestions(false);
     setHighlightedIndex(-1);
@@ -168,6 +203,7 @@ Focus on the most common and relevant matches. Return JSON: {"suggestions": [...
       <div className="relative">
         <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-slate-400" />
         <Input
+          id={inputId}
           ref={inputRef}
           value={value}
           onChange={(e) => onChange(e.target.value)}
@@ -177,9 +213,6 @@ Focus on the most common and relevant matches. Return JSON: {"suggestions": [...
           disabled={disabled}
           className="pl-10 pr-10 text-lg py-3 min-h-[48px]"
         />
-        {isLoadingSuggestions && (
-          <Loader2 className="absolute right-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-blue-600 animate-spin" />
-        )}
       </div>
 
       {/* Suggestions Dropdown */}

@@ -3,7 +3,7 @@ import { apiClient } from "@genemap/shared";
 import { useAuth } from '../../lib/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { X, Sparkles, MessageSquare, Palette, Search, BarChart3, ChevronRight, ChevronLeft } from "lucide-react";
+import { X, Sparkles, MessageSquare, Palette, Search, ChevronRight, ChevronLeft } from "lucide-react";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 
@@ -37,20 +37,11 @@ const tourSteps = [
   {
     id: "search",
     title: "Discover Genes by Phenotype",
-    description: "Search for candidate genes using phenotypes or clinical descriptions. Our AI-powered search connects you with relevant genomic data.",
+    description: "Use diseases, phenotypes, or HPO terms to generate AI candidate-gene leads, then verify each association in primary database records.",
     icon: Search,
     position: "center",
     highlight: "search-link",
     action: { label: "Start Searching", link: createPageUrl("Search") }
-  },
-  {
-    id: "visualizations",
-    title: "Visualize & Compare",
-    description: "Access powerful visualization tools to compare genes, analyze expression patterns, and explore protein interactions.",
-    icon: BarChart3,
-    position: "center",
-    highlight: "viz-link",
-    action: { label: "Explore Visualizations", link: createPageUrl("VisualizationHub") }
   },
   {
     id: "complete",

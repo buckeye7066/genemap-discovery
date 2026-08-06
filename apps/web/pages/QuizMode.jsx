@@ -25,6 +25,13 @@ function QuizTopicPicker({ onSelect, levelConfig }) {
     return () => { active = false; };
   }, []);
 
+  const availableTopics = (categories || []).flatMap((category) => category.topics || []);
+  const selectSurpriseTopic = () => {
+    if (availableTopics.length === 0) return;
+    const index = Math.floor(Math.random() * availableTopics.length);
+    onSelect(availableTopics[index]);
+  };
+
   return (
     <div className="p-4 md:p-6 max-w-3xl mx-auto space-y-6 dna-bg min-h-screen">
       <div className="text-center space-y-2 animate-slide-up">
@@ -40,7 +47,8 @@ function QuizTopicPicker({ onSelect, levelConfig }) {
       <Card className="animate-slide-up delay-100">
         <CardContent className="p-5">
           <button
-            onClick={() => onSelect({ id: 'general-genetics', title: 'General Genetics' })}
+            onClick={selectSurpriseTopic}
+            disabled={availableTopics.length === 0}
             className="w-full flex items-center gap-3 p-3.5 mb-4 rounded-xl border-2 border-purple-200 bg-purple-50/60 hover:bg-purple-50 hover:border-purple-300 transition-all text-left"
           >
             <Sparkles className="w-5 h-5 text-purple-600 flex-shrink-0" />
@@ -128,7 +136,9 @@ export default function QuizMode() {
     setFinished(false);
 
     try {
-      const res = await apiClient.generateQuiz({ topic: topicTitle, level: level || 'undergraduate', questionCount: 5 });
+      // The URL title is display-only. Generation uses the catalog id, which
+      // the server validates against its immutable education catalog.
+      const res = await apiClient.generateQuiz({ topic: topicId, level: level || 'undergraduate', questionCount: 5 });
       const q = Array.isArray(res.questions) ? res.questions : [];
       if (q.length === 0) {
         setError('Could not generate quiz questions. Please try again.');

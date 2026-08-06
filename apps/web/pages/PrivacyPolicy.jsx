@@ -3,14 +3,11 @@ import { Link } from "react-router-dom";
 import { ShieldCheck, ArrowLeft } from "lucide-react";
 
 /**
- * Privacy Policy. Standalone, theme-consistent, and reachable both logged-in
- * and logged-out (registered in `openPages`). Content reflects what the app
- * actually does: AI-assisted genetics education + analysis, optional medical
- * data uploads (encrypted at rest), Stripe billing, and third-party LLM
- * providers. This is a good-faith plain-language policy; have counsel review
- * before relying on it for a regulated deployment.
+ * Privacy Policy for the public education/research product. It describes the
+ * published data flows and the fail-closed boundary around personal clinical
+ * and genomic information. Have counsel review before commercial reliance.
  */
-const UPDATED = "July 13, 2026";
+const UPDATED = "August 5, 2026";
 const CONTACT = "dr.johnwhite@axiombiolabs.org";
 
 function Section({ title, children }) {
@@ -52,45 +49,43 @@ export default function PrivacyPolicy() {
             <ul className="list-disc ml-5 space-y-1">
               <li><strong>Account data:</strong> email, and any name/phone/profile details you choose to add.</li>
               <li><strong>Usage data:</strong> searches, topics viewed, quizzes, and AI conversations, used to power your dashboard, learning progress, and product analytics.</li>
-              <li><strong>Health &amp; genetic data you upload (optional):</strong> if you choose to use the analysis features, you may upload genetic and health-related files — for example VCF/variant files, lab results, and clinical reports. This is sensitive personal information; you decide whether to provide it, and the app works for learning without it.</li>
+              <li><strong>Research content:</strong> learning prompts, gene or phenotype search terms, saved gene sets, and research-project notes you choose to provide. Do not include personal medical records, personal genomic files, or information that identifies a patient.</li>
               <li><strong>Billing data:</strong> handled by Stripe; we never see or store full card numbers.</li>
             </ul>
           </Section>
 
-          <Section title="How your health & genetic data is used">
+          <Section title="Publication-mode data boundary">
             <p>
-              Genetic and health data you upload is used <strong>only to produce your own results</strong> —
-              variant/gene analysis, summaries, and educational explanations shown back to you in your account.
-              We do <strong>not</strong> sell it, we do <strong>not</strong> use it for advertising, and we do
-              not use it to build profiles about you. There is <strong>no feature that shares your records with
-              other users</strong>: your uploads are not published, shared, or made visible to anyone else on
-              the platform.
+              The public version of GeneMap does not offer personal medical-record upload, VCF analysis,
+              diagnosis, individualized risk interpretation, pharmacogenomic recommendations, or medication
+              dosing. Those paths are blocked in both the interface and API. If an earlier version of GeneMap
+              stored information in your account, the public version does not use it for AI generation; contact
+              us to request export or deletion.
             </p>
           </Section>
 
           <Section title="How your data is protected">
             <p>
-              Uploaded medical/genetic data is <strong>encrypted at rest</strong> (AES-256-GCM) and is
-              accessible only to your account. Authentication uses signed, HTTP-only cookies with CSRF
-              protection; traffic is served over HTTPS only. Access to your records is scoped to you.
+              Authentication uses signed, HTTP-only cookies with CSRF protection, and production traffic is
+              served over HTTPS. Access to account data is scoped to the signed-in user. No online service can
+              guarantee absolute security, so avoid submitting sensitive personal information.
             </p>
           </Section>
 
           <Section title="AI processing & third parties">
             <p>
-              To generate explanations, summaries, quizzes, and gene/phenotype results, the content you
-              submit may be sent to third-party large-language-model providers (such as OpenAI and
-              Anthropic) acting as our processors. Payments are processed by Stripe. We do not sell your
-              personal data, and we do not use your uploaded medical content to train third-party models
-              beyond what is required to return your result.
+              Learning prompts and exploratory research queries may be sent to third-party large-language-model
+              providers acting as our processors so GeneMap can return explanations, summaries, quizzes, and
+              candidate research leads. Do not include personal health or genomic information in prompts.
+              Payments are processed by Stripe. We do not sell personal data.
             </p>
           </Section>
 
           <Section title="Your choices & rights">
             <ul className="list-disc ml-5 space-y-1">
               <li>View and edit your profile at any time.</li>
-              <li>Delete any uploaded record from the Medical Data page.</li>
               <li>Request export or deletion of your account and associated data by contacting us.</li>
+              <li>Ask us to remove legacy records retained from an earlier version of the service.</li>
               <li>Opt out of the mailing list from your profile settings.</li>
             </ul>
           </Section>
@@ -115,8 +110,8 @@ export default function PrivacyPolicy() {
           </Section>
 
           <p className="text-xs text-slate-400 mt-6">
-            This policy is provided in good faith for transparency and is not legal advice. For a regulated
-            (e.g. HIPAA) deployment, have qualified counsel review and adapt it.
+            This policy is provided in good faith for transparency and is not legal advice. Have qualified
+            counsel review and adapt it before relying on it for a commercial or regulated deployment.
           </p>
         </div>
 
@@ -127,3 +122,4 @@ export default function PrivacyPolicy() {
     </div>
   );
 }
+

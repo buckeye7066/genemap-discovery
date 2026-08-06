@@ -10,7 +10,7 @@
  * so both render correctly and nothing shows up blank.
  *
  * @param {object} s raw record
- * @returns {{id, query, queryType, createdAt, hpoTerm, candidateGenes, count}}
+ * @returns {{id, query, queryType, createdAt, hpoTerm, candidateGenes, count, publicationReference}}
  */
 export function normalizeSearchHistoryEntry(s) {
   const record = s || {};
@@ -22,6 +22,9 @@ export function normalizeSearchHistoryEntry(s) {
     queryType: record.queryType ?? record.search_type ?? 'free',
     createdAt: record.createdAt ?? record.created_date ?? null,
     hpoTerm: results.hpoTerm ?? record.hpo_term ?? null,
+    // Only current guided searches write this structured field. Legacy display
+    // labels deliberately have no executable fallback.
+    publicationReference: results.publicationReference ?? null,
     candidateGenes,
     count: results.count ?? record.results_count ?? candidateGenes.length ?? 0,
   };

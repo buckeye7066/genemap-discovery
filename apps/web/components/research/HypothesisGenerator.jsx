@@ -2,148 +2,134 @@ import React, { useState } from "react";
 import { apiClient } from "@genemap/shared";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Lightbulb, Loader2, Sparkles, Info } from "lucide-react";
 import ReactMarkdown from 'react-markdown';
+import {
+  MANDATED_RESEARCH_EXAMPLES,
+  isValidAggregateSampleCount,
+  parseAggregateResearchExample,
+  researchFocusControls,
+} from '@/lib/researchTaskFixtures';
+import {
+  CURATED_PUBLICATION_CONCEPTS,
+  publicationConceptById,
+  publicationHpoReference,
+} from '@/lib/publicationConceptCatalog';
 
 const dataTypeOptions = [
-  { key: 'genomics', label: 'Genomics (DNA variants, CNVs)', icon: '🧬' },
-  { key: 'transcriptomics', label: 'Transcriptomics (RNA-seq, expression)', icon: '📊' },
-  { key: 'proteomics', label: 'Proteomics (protein abundance)', icon: '🔬' },
+  { key: 'wes', label: 'Whole-exome sequencing (WES)', icon: '🧬' },
+  { key: 'wgs', label: 'Whole-genome sequencing (WGS)', icon: '🧬' },
+  { key: 'rna_seq', label: 'RNA sequencing', icon: '📊' },
+  { key: 'genotype', label: 'Aggregate genotype variables', icon: '🧪' },
+  { key: 'phenotype', label: 'Aggregate phenotype variables', icon: '📋' },
+  { key: 'treatment_response', label: 'Aggregate treatment-response variables', icon: '📈' },
+  { key: 'cnv', label: 'Copy-number variants (CNVs)', icon: '🔬' },
+  { key: 'proteomics', label: 'Proteomics', icon: '🔬' },
   { key: 'metabolomics', label: 'Metabolomics (metabolite profiles)', icon: '⚗️' },
-  { key: 'epigenomics', label: 'Epigenomics (methylation, ChIP-seq)', icon: '🎯' }
+  { key: 'epigenomics', label: 'Epigenomics', icon: '🎯' }
 ];
 
-function getEducationContext(level) {
-  if (level === 'medical_professional') {
-    return "clinical researchers - emphasize translational applications";
-  }
-  return "research scientists - provide comprehensive technical details";
-}
-
-export default function HypothesisGenerator({ userEducationLevel }) {
-  const [researchContext, setResearchContext] = useState("");
+export default function HypothesisGenerator() {
+  const [sampleCount, setSampleCount] = useState(50);
+  const [classification, setClassification] = useState('deidentified_aggregate');
+  const [hasControls, setHasControls] = useState(true);
+  const [objective, setObjective] = useState('identify_variants');
+  const [focusKind, setFocusKind] = useState('curated');
+  const [focusConceptId, setFocusConceptId] = useState('phenotype:early-onset-symptoms');
+  const [focusHpoId, setFocusHpoId] = useState('');
   const [dataTypes, setDataTypes] = useState({
-    genomics: true,
-    transcriptomics: false,
+    wes: true,
+    wgs: false,
+    rna_seq: false,
+    genotype: false,
+    phenotype: true,
+    treatment_response: false,
+    cnv: false,
     proteomics: false,
     metabolomics: false,
     epigenomics: false
   });
   const [isGenerating, setIsGenerating] = useState(false);
   const [hypotheses, setHypotheses] = useState(null);
+  const [error, setError] = useState('');
+  const sampleCountIsValid = isValidAggregateSampleCount(sampleCount);
+
+  const loadExample = (example) => {
+    const parsed = parseAggregateResearchExample(example);
+    if (!parsed) return;
+    setSampleCount(parsed.cohort.sampleCount);
+    setClassification(parsed.cohort.classification);
+    setHasControls(parsed.cohort.hasControls);
+    setObjective(parsed.objective);
+    const nextFocus = researchFocusControls(parsed.focus);
+    setFocusKind(nextFocus.focusKind);
+    setFocusConceptId(nextFocus.focusConceptId);
+    setFocusHpoId(nextFocus.focusHpoId);
+    setDataTypes(Object.fromEntries(dataTypeOptions.map(({ key }) => [
+      key,
+      parsed.modalities.includes(key),
+    ])));
+  };
+
+  const changeFocusKind = (nextKind) => {
+    // A type change is a new explicit selection. Never carry an HPO id or
+    // reviewed concept across modes where it could be paired with a new label.
+    setFocusKind(nextKind);
+    setFocusConceptId('');
+    setFocusHpoId('');
+  };
 
   const handleGenerate = async () => {
-    if (!researchContext.trim()) return;
-
+    setError('');
     setIsGenerating(true);
     try {
       const selectedDataTypes = Object.entries(dataTypes)
         .filter(([_, selected]) => selected)
         .map(([type]) => type);
-
-      const educationContext = getEducationContext(userEducationLevel);
-
-      const prompt = `You are an AI-powered scientific hypothesis generator for genomics research. Generate novel, testable hypotheses.
-
-**Research Context:**
-${researchContext}
-
-**Available Data Types:**
-${selectedDataTypes.join(', ')}
-
-**Audience:** ${educationContext}
-
-**Your Task - Generate Research Hypotheses:**
-
-1. **Primary Hypothesis (H1)**
-   - Clear, testable statement
-   - Scientific rationale
-   - Expected outcome
-   - Significance if confirmed
-
-2. **Alternative Hypotheses (H2-H4)**
-   - At least 3 alternative hypotheses
-   - Each with rationale
-   - Competing or complementary to H1
-
-3. **Multi-Omic Integration Strategy**
-   For each available data type:
-   ${selectedDataTypes.includes('genomics') ? `
-   - **Genomics:** Variant calling, GWAS, rare variant analysis
-   ` : ''}
-   ${selectedDataTypes.includes('transcriptomics') ? `
-   - **Transcriptomics:** Differential expression, co-expression networks, isoform analysis
-   ` : ''}
-   ${selectedDataTypes.includes('proteomics') ? `
-   - **Proteomics:** Protein abundance, post-translational modifications, protein-protein interactions
-   ` : ''}
-   ${selectedDataTypes.includes('metabolomics') ? `
-   - **Metabolomics:** Metabolite profiling, pathway flux, metabolic networks
-   ` : ''}
-   ${selectedDataTypes.includes('epigenomics') ? `
-   - **Epigenomics:** DNA methylation, histone modifications, chromatin accessibility
-   ` : ''}
-
-4. **Experimental Design**
-   - Sample size requirements
-   - Control groups needed
-   - Statistical power considerations
-   - Potential confounders
-
-5. **Data Analysis Pipeline**
-   Step-by-step analysis workflow:
-   - Quality control steps
-   - Integration methods
-   - Statistical tests
-   - Visualization approaches
-
-6. **Expected Results Scenarios**
-   - Scenario 1: Hypothesis confirmed
-   - Scenario 2: Hypothesis rejected
-   - Scenario 3: Mixed/partial results
-   - Interpretation for each
-
-7. **Novel Insights & Predictions**
-   - What would be discovered if true?
-   - Clinical implications
-   - Therapeutic targets
-   - Future research directions
-
-8. **Resource Requirements**
-   - Computational resources
-   - Laboratory resources
-   - Estimated timeline
-   - Collaboration needs
-
-9. **Potential Challenges**
-   - Technical limitations
-   - Biological confounders
-   - Statistical concerns
-   - Mitigation strategies
-
-10. **Grant Application Relevance**
-    - Alignment with funding priorities
-    - Innovation aspects
-    - Translational potential
-    - Broader impacts
-
-Generate creative, scientifically rigorous hypotheses that integrate multi-omic data.`;
-
-      const { result: response } = await apiClient.invokeLLM(prompt);
+      if (!sampleCountIsValid || selectedDataTypes.length === 0) {
+        setError('Enter an integer from 2 to 1,000,000 and select at least one aggregate data type.');
+        return;
+      }
+      const focus = focusKind === 'curated'
+        ? publicationConceptById(focusConceptId)
+        : focusKind === 'hpo'
+          ? publicationHpoReference(focusHpoId)
+          : null;
+      if (focusKind !== 'none' && !focus) {
+        setError('Choose a reviewed concept or enter an exact HPO identifier such as HP:0001250.');
+        return;
+      }
+      const taskInput = {
+        version: 1,
+        cohort: {
+          sampleCount: Number(sampleCount),
+          classification,
+          hasControls,
+        },
+        modalities: selectedDataTypes,
+        objective,
+        ...(focus ? { focus } : {}),
+      };
+      const { result: response } = await apiClient.invokePublicationTask(
+        'research_hypothesis',
+        taskInput,
+      );
 
       setHypotheses({
-        context: researchContext,
+        cohort: taskInput.cohort,
+        objective,
         data_types: selectedDataTypes,
         analysis: response
       });
 
     } catch (err) {
       console.error("Error generating hypotheses:", err);
+      setError(err?.message || 'The structured research request could not be generated.');
     } finally {
       setIsGenerating(false);
     }
@@ -162,21 +148,77 @@ Generate creative, scientifically rigorous hypotheses that integrate multi-omic 
           <Alert className="bg-amber-50 border-amber-200">
             <Info className="h-4 w-4 text-amber-600" />
             <AlertDescription className="text-amber-900 text-sm">
-              <strong>Hypothesis Generator:</strong> Describe your research context, select available 
-              data types, and receive AI-generated testable hypotheses with experimental design recommendations.
+              <strong>Exploratory research only:</strong> Define a deidentified aggregate, synthetic, or public cohort using the guided fields. GeneMap sends only this structured specification and does not accept patient-level data or free-form clinical requests here.
             </AlertDescription>
           </Alert>
 
-          <div>
-            <Label htmlFor="research-context">Research Context</Label>
-            <Textarea
-              id="research-context"
-              placeholder="Describe your research project, preliminary findings, and questions...&#10;&#10;Example: We have WES data from 50 patients with early-onset Alzheimer's disease and age-matched controls. We observed elevated expression of inflammatory markers in patients. We want to identify genetic variants that may contribute to neuroinflammation."
-              value={researchContext}
-              onChange={(e) => setResearchContext(e.target.value)}
-              className="mt-1 h-40"
-              disabled={isGenerating}
-            />
+          <div className="space-y-2">
+            <Label>Load a structured example</Label>
+            <div className="grid gap-2">
+              {MANDATED_RESEARCH_EXAMPLES.map((example, index) => (
+                <Button key={example} type="button" variant="outline" className="h-auto whitespace-normal text-left justify-start" onClick={() => loadExample(example)}>
+                  Example {index + 1}: {example}
+                </Button>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="sample-count">Aggregate sample count</Label>
+              <Input id="sample-count" type="number" min="2" max="1000000" step="1" value={sampleCount} onChange={(event) => setSampleCount(Number(event.target.value))} disabled={isGenerating} aria-invalid={!sampleCountIsValid} />
+            </div>
+            <div>
+              <Label htmlFor="classification">Data classification</Label>
+              <select id="classification" className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3" value={classification} onChange={(event) => setClassification(event.target.value)} disabled={isGenerating}>
+                <option value="deidentified_aggregate">Deidentified aggregate cohort</option>
+                <option value="synthetic">Synthetic cohort</option>
+                <option value="public_dataset">Public dataset</option>
+              </select>
+            </div>
+            <div>
+              <Label htmlFor="objective">Research objective</Label>
+              <select id="objective" className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3" value={objective} onChange={(event) => setObjective(event.target.value)} disabled={isGenerating}>
+                <option value="identify_variants">Identify cohort-level variants</option>
+                <option value="association_analysis">Association-analysis design</option>
+                <option value="compare_cohorts">Compare cohorts</option>
+                <option value="multi_omic_hypothesis">Multi-omic hypotheses</option>
+                <option value="covariate_design">Covariate design</option>
+                <option value="cohort_summary">Cohort summary</option>
+              </select>
+            </div>
+            <div className="flex items-end pb-2 gap-2">
+              <Checkbox id="has-controls" checked={hasControls} onCheckedChange={(checked) => setHasControls(Boolean(checked))} />
+              <Label htmlFor="has-controls">A control group is present</Label>
+            </div>
+            <div>
+              <Label htmlFor="focus-kind">Optional focus type</Label>
+              <select id="focus-kind" className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3" value={focusKind} onChange={(event) => changeFocusKind(event.target.value)} disabled={isGenerating}>
+                <option value="none">No specific concept</option>
+                <option value="curated">Reviewed disease or phenotype</option>
+                <option value="hpo">Exact HPO identifier (server verified)</option>
+              </select>
+            </div>
+            <div>
+              {focusKind === 'curated' ? (
+                <>
+                  <Label htmlFor="focus-concept">Reviewed concept</Label>
+                  <select id="focus-concept" className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3" value={focusConceptId} onChange={(event) => setFocusConceptId(event.target.value)} disabled={isGenerating}>
+                    <option value="" disabled>Choose a reviewed concept</option>
+                    {CURATED_PUBLICATION_CONCEPTS.map((concept) => (
+                      <option key={concept.conceptId} value={concept.conceptId}>{concept.canonicalLabel}</option>
+                    ))}
+                  </select>
+                </>
+              ) : focusKind === 'hpo' ? (
+                <>
+                  <Label htmlFor="focus-hpo">Exact HPO identifier</Label>
+                  <Input id="focus-hpo" maxLength={10} placeholder="HP:0001250" value={focusHpoId} onChange={(event) => setFocusHpoId(event.target.value)} disabled={isGenerating} />
+                </>
+              ) : (
+                <p className="pt-7 text-sm text-slate-600">No concept label will be sent.</p>
+              )}
+            </div>
           </div>
 
           <div>
@@ -197,9 +239,11 @@ Generate creative, scientifically rigorous hypotheses that integrate multi-omic 
             </div>
           </div>
 
+          {error && <p className="text-sm text-red-700" role="alert">{error}</p>}
+
           <Button
             onClick={handleGenerate}
-            disabled={isGenerating || !researchContext.trim()}
+            disabled={isGenerating || !sampleCountIsValid || !Object.values(dataTypes).some(Boolean)}
             className="w-full bg-amber-600 hover:bg-amber-700"
           >
             {isGenerating ? (

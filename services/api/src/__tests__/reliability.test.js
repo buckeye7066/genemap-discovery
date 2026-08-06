@@ -177,7 +177,7 @@ describe('LLM route input bounds', () => {
 
   const cookie = () => authCookie({ userId: 'free-user', email: 'free@example.com', role: 'user' });
 
-  it('rejects an over-long prompt with 400', async () => {
+  it('rejects an over-long raw prompt with 400 before provider execution', async () => {
     const res = await app.inject({
       method: 'POST', url: '/llm/invoke', headers: { cookie: cookie() },
       payload: { prompt: 'x'.repeat(llmInternals.MAX_PROMPT_CHARS + 1) },
@@ -200,23 +200,31 @@ describe('LLM route input bounds', () => {
       },
     });
     expect(res.statusCode).toBe(400);
-    expect(JSON.parse(res.body).error).toMatch(/Raw VCF/i);
+    expect(JSON.parse(res.body).error).toMatch(/raw prompt/i);
   });
 
-  it('rejects a chat with too many messages', async () => {
-    const messages = Array.from({ length: llmInternals.MAX_CHAT_MESSAGES + 1 }, (_, i) => ({
-      role: 'user', content: `m${i}`,
-    }));
+  it('rejects an out-of-contract structured cohort bound', async () => {
     const res = await app.inject({
-      method: 'POST', url: '/llm/chat', headers: { cookie: cookie() }, payload: { messages },
+      method: 'POST',
+      url: '/llm/invoke',
+      headers: { cookie: cookie() },
+      payload: {
+        publicationTask: 'aggregate_genomics_research',
+        taskInput: {
+          version: 1,
+          cohort: { sampleCount: 1_000_001, classification: 'deidentified_aggregate', hasControls: true },
+          modalities: ['wes'],
+          objective: 'identify_variants',
+        },
+      },
     });
     expect(res.statusCode).toBe(400);
   });
 
-  it('rejects a chat message that is individually too large', async () => {
+  it('rejects arbitrary chat regardless of message count or size', async () => {
     const res = await app.inject({
       method: 'POST', url: '/llm/chat', headers: { cookie: cookie() },
-      payload: { messages: [{ role: 'user', content: 'x'.repeat(llmInternals.MAX_MESSAGE_CHARS + 1) }] },
+      payload: { messages: [{ role: 'user', content: 'x' }] },
     });
     expect(res.statusCode).toBe(400);
   });

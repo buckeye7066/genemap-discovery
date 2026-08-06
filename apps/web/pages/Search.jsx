@@ -10,9 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import DnaIcon from "../components/icons/DnaIcon";
-import { Search, AlertCircle, GitCompare, BookmarkPlus, Library, Sparkles, BarChart3, Brain } from "lucide-react";
-import { Link } from "react-router-dom";
-import { createPageUrl } from "@/utils";
+import { Search, AlertCircle, GitCompare, BookmarkPlus, Library, Sparkles, Brain } from "lucide-react";
 
 import SearchForm from "../components/search/SearchForm";
 import GeneResults from "../components/search/GeneResults";
@@ -24,6 +22,10 @@ const SavedGeneSets = lazy(() => import("../components/search/SavedGeneSets"));
 const GenomeBrowser = lazy(() => import("../components/visualizations/GenomeBrowser"));
 const ComparativeGenomics = lazy(() => import("../components/search/ComparativeGenomics"));
 import { PhenotypeSearchService } from "../components/search/PhenotypeSearchService";
+import {
+  resolvePublicationSearchReference,
+  resolvePublicationUrlReference,
+} from "../lib/publicationConceptCatalog";
 
 export default function SearchPage() {
   const queryClient = useQueryClient();
@@ -51,11 +53,22 @@ export default function SearchPage() {
     const queryParam = urlParams.get('query');
     if (queryParam) {
       setSearchQuery(queryParam);
-      handleSearch(queryParam, false);
+      const resolved = resolvePublicationUrlReference(queryParam);
+      // Arbitrary URL text may prefill the guided form, but it cannot silently
+      // invoke generation. Dynamic labels must be selected through the
+      // deterministic resolver; exact HPO/MONDO ids are revalidated server-side.
+      if (resolved) {
+        handleSearch(queryParam, false, resolved.searchMode, resolved.reference);
+      }
     }
   }, []);
 
-  const handleSearch = async (query, isPremium = false) => {
+  const handleSearch = async (
+    query,
+    isPremium = false,
+    searchMode = 'free_text',
+    selectedReference = null,
+  ) => {
     if (!query.trim()) {
       setError("Please enter a phenotype to search for");
       return;
@@ -76,10 +89,23 @@ export default function SearchPage() {
     setGeneSetComparison(null); // Clear gene set comparison on new phenotype search
 
     try {
+      // Normalize every invocation again at the page boundary. A prior
+      // autocomplete identifier is never retained when the user types, pastes,
+      // switches mode, clicks an example, or follows a different URL.
+      const publicationReference = resolvePublicationSearchReference(
+        query,
+        searchMode,
+        selectedReference,
+      );
       // FAST: render candidate genes (with authoritative coordinates) as soon as
       // they're found, then drop the blocking spinner. The slow per-gene LLM
       // enrichment happens after this, in the background.
-      const base = await PhenotypeSearchService.findCandidates(query, isPremium);
+      const base = await PhenotypeSearchService.findCandidates(
+        query,
+        isPremium,
+        searchMode,
+        publicationReference,
+      );
       if (!isCurrent()) return;
       setSearchResults(base);
       setIsLoading(false);
@@ -114,6 +140,7 @@ export default function SearchPage() {
             hpoTerm: enriched.hpoTerms?.[0] || null,
             candidateGenes: enriched.candidateGenes.map(g => g.symbol),
             count: enriched.candidateGenes.length,
+            publicationReference,
           },
         });
       } catch (historyError) {
@@ -257,26 +284,8 @@ export default function SearchPage() {
             Phenotype → Gene Discovery
           </h1>
           <p className="text-base sm:text-lg text-slate-600 max-w-2xl mx-auto px-4">
-            Search phenotypes or input genes of interest for comprehensive analysis
+            Generate exploratory candidate-gene leads and verify them in primary sources
           </p>
-          
-          {/* Quick Actions */}
-          {selectedGenes.length > 0 && (
-            <div className="mt-4 flex gap-2 justify-center">
-              <Link to={createPageUrl("VisualizationHub")}>
-                <Button variant="outline" className="gap-2">
-                  <BarChart3 className="w-4 h-4" />
-                  Visualization Hub
-                </Button>
-              </Link>
-              <Link to={createPageUrl("AIAssistants")}>
-                <Button variant="outline" className="gap-2">
-                  <Brain className="w-4 h-4" />
-                  AI Tools
-                </Button>
-              </Link>
-            </div>
-          )}
         </div>
 
         {!showComparison && !showSavedSets && !showComparativeGenomics && (
@@ -347,7 +356,7 @@ export default function SearchPage() {
               <Alert className="mb-4 bg-blue-50 border-blue-200">
                 <Brain className="h-4 w-4 text-blue-600 animate-pulse" />
                 <AlertDescription className="text-blue-900">
-                  Genes found — adding summaries, phenotypes, and tissue expression…
+                  Genes found — adding exploratory summaries and candidate phenotype terms…
                 </AlertDescription>
               </Alert>
             )}

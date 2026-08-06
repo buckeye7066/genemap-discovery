@@ -8,20 +8,14 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Microscope,
-  Database,
-  GitBranch,
   Lightbulb,
   Shield,
   TrendingUp,
-  FileStack,
   Lock,
   Beaker
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-const BulkVCFAnalysis = lazy(() => import("../components/research/BulkVCFAnalysis"));
-const ExternalDatabaseIntegration = lazy(() => import("../components/research/ExternalDatabaseIntegration"));
-const PathwayEnrichment = lazy(() => import("../components/research/PathwayEnrichment"));
 const HypothesisGenerator = lazy(() => import("../components/research/HypothesisGenerator"));
 const ProjectManager = lazy(() => import("../components/research/ProjectManager"));
 
@@ -77,15 +71,15 @@ export default function ResearchMode() {
                 </div>
                 <div>
                   <CardTitle className="text-2xl">Research Mode Access Required</CardTitle>
-                  <p className="text-slate-600">Advanced features for researchers and clinicians</p>
+                  <p className="text-slate-600">Exploratory tools for advanced learners and researchers</p>
                 </div>
               </div>
             </CardHeader>
             <CardContent className="space-y-6">
               <Alert className="bg-amber-50 border-amber-200">
                 <AlertDescription className="text-amber-900">
-                  Research Mode is designed for researchers, clinicians, and PhD students conducting 
-                  genomic research. Update your profile to indicate your research or clinical background.
+                  Research Mode is designed for researchers and advanced students organizing
+                  exploratory genetics questions. Update your profile to indicate your research background.
                 </AlertDescription>
               </Alert>
 
@@ -93,31 +87,17 @@ export default function ResearchMode() {
                 <h3 className="font-semibold text-slate-900">Research Mode Includes:</h3>
                 <div className="grid md:grid-cols-2 gap-3">
                   <div className="flex items-start gap-2">
-                    <FileStack className="w-5 h-5 text-blue-600 mt-0.5" />
-                    <div>
-                      <p className="font-medium text-slate-900 text-sm">Bulk VCF Analysis</p>
-                      <p className="text-xs text-slate-600">Process multiple VCF files for cohort studies</p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <Database className="w-5 h-5 text-green-600 mt-0.5" />
-                    <div>
-                      <p className="font-medium text-slate-900 text-sm">External Database Integration</p>
-                      <p className="text-xs text-slate-600">Access ClinGen, dbGaP, and research databases</p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <GitBranch className="w-5 h-5 text-purple-600 mt-0.5" />
-                    <div>
-                      <p className="font-medium text-slate-900 text-sm">Pathway Enrichment</p>
-                      <p className="text-xs text-slate-600">Advanced network and pathway analysis</p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-2">
                     <Lightbulb className="w-5 h-5 text-amber-600 mt-0.5" />
                     <div>
                       <p className="font-medium text-slate-900 text-sm">Hypothesis Generation</p>
-                      <p className="text-xs text-slate-600">AI-powered multi-omic insights</p>
+                      <p className="text-xs text-slate-600">AI brainstorming for testable research questions</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <Beaker className="w-5 h-5 text-blue-600 mt-0.5" />
+                    <div>
+                      <p className="font-medium text-slate-900 text-sm">Research Projects</p>
+                      <p className="text-xs text-slate-600">Organize source-checked gene lists and notes</p>
                     </div>
                   </div>
                 </div>
@@ -150,7 +130,7 @@ export default function ResearchMode() {
             Research Mode
           </h1>
           <p className="text-lg text-slate-600 max-w-3xl mx-auto">
-            Advanced genomic research tools for cohort studies, pathway analysis, and hypothesis generation
+            Exploratory hypothesis brainstorming and project organization; verify every scientific claim independently
           </p>
           <div className="flex justify-center gap-2 mt-4">
             <Badge className="bg-indigo-600 text-white">
@@ -165,25 +145,12 @@ export default function ResearchMode() {
         </div>
 
         {/* Feature Tabs */}
-        <Tabs defaultValue="bulk-vcf" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-2 lg:grid-cols-5 h-auto"> {/* Changed to lg:grid-cols-5 */}
-            <TabsTrigger value="bulk-vcf" className="flex-col gap-1 py-3">
-              <FileStack className="w-5 h-5" />
-              <span className="text-xs">Bulk VCF</span>
-            </TabsTrigger>
-            <TabsTrigger value="databases" className="flex-col gap-1 py-3">
-              <Database className="w-5 h-5" />
-              <span className="text-xs">Databases</span>
-            </TabsTrigger>
-            <TabsTrigger value="pathways" className="flex-col gap-1 py-3">
-              <GitBranch className="w-5 h-5" />
-              <span className="text-xs">Pathways</span>
-            </TabsTrigger>
+        <Tabs defaultValue="hypothesis" className="space-y-6">
+          <TabsList className="grid w-full grid-cols-2 h-auto">
             <TabsTrigger value="hypothesis" className="flex-col gap-1 py-3">
               <Lightbulb className="w-5 h-5" />
               <span className="text-xs">Hypothesis</span>
             </TabsTrigger>
-            {/* Added new TabsTrigger for Projects */}
             <TabsTrigger value="projects" className="flex-col gap-1 py-3">
               <Beaker className="w-5 h-5" />
               <span className="text-xs">Projects</span>
@@ -191,31 +158,12 @@ export default function ResearchMode() {
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="bulk-vcf">
-            <Suspense fallback={<TabLoading />}>
-              <BulkVCFAnalysis userEducationLevel={user?.education_level} />
-            </Suspense>
-          </TabsContent>
-
-          <TabsContent value="databases">
-            <Suspense fallback={<TabLoading />}>
-              <ExternalDatabaseIntegration userEducationLevel={user?.education_level} />
-            </Suspense>
-          </TabsContent>
-
-          <TabsContent value="pathways">
-            <Suspense fallback={<TabLoading />}>
-              <PathwayEnrichment userEducationLevel={user?.education_level} />
-            </Suspense>
-          </TabsContent>
-
           <TabsContent value="hypothesis">
             <Suspense fallback={<TabLoading />}>
               <HypothesisGenerator userEducationLevel={user?.education_level} />
             </Suspense>
           </TabsContent>
 
-          {/* Added new TabsContent for Projects */}
           <TabsContent value="projects">
             <Suspense fallback={<TabLoading />}>
               <ProjectManager />

@@ -18,7 +18,7 @@ import type {
   LearningProgress,
   LLMOptions,
   LLMResponse,
-  LLMImageResponse,
+  PublicationTaskRequest,
   SearchHistoryEntry,
   ActivityEntry,
   MedicalData,
@@ -50,6 +50,7 @@ import type {
   PreBanRequest,
   UnbanOptions,
   AuthoritativeGeneRecord,
+  PublicationConceptSuggestion,
 } from './types.js';
 
 /**
@@ -551,26 +552,21 @@ export class ApiClient {
   // it selects which agent's mesh inbox and lessons are loaded, and which agent
   // authors a lesson when the provider fails. Unknown/absent ids are ignored by
   // the server, so this is always safe to send.
-  invokeLLM(prompt: string, options: LLMOptions = {}): Promise<LLMResponse> {
-    const { agent, ...llmOptions } = options;
+  invokePublicationTask<T extends PublicationTaskRequest>(
+    publicationTask: T['publicationTask'],
+    taskInput: T['taskInput'],
+    options: LLMOptions = {},
+  ): Promise<LLMResponse> {
+    const { agent, publicationTask: _legacyTask, ...llmOptions } = options;
     return this.request('/llm/invoke', {
       method: 'POST',
-      body: JSON.stringify({ prompt, options: llmOptions, ...(agent ? { agent } : {}) }),
+      body: JSON.stringify({
+        publicationTask,
+        taskInput,
+        options: llmOptions,
+        ...(agent ? { agent } : {}),
+      }),
     });
-  }
-  llmChat(messages: Array<{ role: string; content: string }>, options: LLMOptions = {}): Promise<LLMResponse> {
-    const { agent, ...llmOptions } = options;
-    return this.request('/llm/chat', {
-      method: 'POST',
-      body: JSON.stringify({ messages, options: llmOptions, ...(agent ? { agent } : {}) }),
-    });
-  }
-  llmImage(prompt: string, options: LLMOptions = {}): Promise<LLMImageResponse> {
-    // Image generation is slower than a text call and can exceed the 40s
-    // default; give it the same 90s budget as generateImage() so the browser
-    // doesn't abort a still-running generation. (Without this, generic image
-    // generation was cut off at 40s while /education/image was not.)
-    return this.request('/llm/image', { method: 'POST', body: JSON.stringify({ prompt, options }), timeoutMs: 90_000 });
   }
 
   // ─── Admin ───────────────────────────────────────────────
@@ -877,6 +873,19 @@ export class ApiClient {
       body: JSON.stringify({ symbols, phenotypes }),
       timeoutMs: 25_000,
     });
+  }
+  /** Deterministic NLM HPO / Monarch typeahead. This endpoint never invokes an LLM. */
+  searchPublicationConcepts(
+    query: string,
+    kind: 'phenotype' | 'disease'
+  ): Promise<{ suggestions: PublicationConceptSuggestion[] }> {
+    return this.request(
+      `/genomics/publication-concepts/search?q=${encodeURIComponent(query)}&kind=${encodeURIComponent(kind)}`,
+      // Monarch entity/autocomplete calls can legitimately take several
+      // seconds. Keep this above the API's bounded 12s upstream budget while
+      // still failing closed instead of presenting stale data as resolved.
+      { timeoutMs: 15_000 },
+    );
   }
   searchClinVar(query: string): Promise<{ esearchresult?: { idlist?: string[] } } | ClinVarResult[]> {
     return this.request(`/genomics/clinvar/search?q=${encodeURIComponent(query)}`);
