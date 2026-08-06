@@ -33,7 +33,8 @@
     "backupRetentionDays": 0,
     "privacyMaintenanceScheduled": false,
     "privacyMaintenanceEvidence": "REPLACE_WITH_SCHEDULER_AND_RUN_HISTORY",
-    "externalDeletionReconciliation": false
+    "externalDeletionReconciliation": false,
+    "externalDeletionReconciliationEvidence": "REPLACE_WITH_EXTERNAL_RECONCILIATION_EVIDENCE"
   },
   "legalCompliance": {
     "legalReviewCompleted": false,
