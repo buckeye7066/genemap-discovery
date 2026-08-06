@@ -65,9 +65,8 @@ jobs:
       - name: Check coordinated web and API release identity
         run: |
           node --input-type=module <<'NODE'
-          import { extractWebReleaseSha } from './scripts/lib/release-identity.mjs';
-
-          const [apiResponse, webResponse] = await Promise.all([
+          const webBase = process.env.WEB_URL.replace(/\/+$/, '');
+          const [apiResponse, webResponse, identityResponse] = await Promise.all([
             fetch(`${process.env.API_URL}/readyz`, {
               redirect: 'error',
               signal: AbortSignal.timeout(15_000),
@@ -76,18 +75,32 @@ jobs:
               redirect: 'error',
               signal: AbortSignal.timeout(20_000),
             }),
+            fetch(`${webBase}/release-identity.json`, {
+              redirect: 'error',
+              signal: AbortSignal.timeout(20_000),
+            }),
           ]);
           const api = await apiResponse.json();
-          const webHtml = await webResponse.text();
-          const webSha = extractWebReleaseSha(webHtml);
+          const identity = await identityResponse.json();
+          const webSha = identity?.releaseSha;
           if (apiResponse.status !== 200 || !/^[a-f0-9]{40}$/u.test(api.releaseSha || '')) {
             throw new Error(
               `API readiness is missing an immutable release SHA: ${apiResponse.status} ${JSON.stringify(api)}`
             );
           }
-          if (webResponse.status !== 200 || !webSha) {
+          if (webResponse.status !== 200) {
+            throw new Error(`Web shell must return exactly 200; got ${webResponse.status}`);
+          }
+          if (
+            identityResponse.status !== 200 ||
+            !identityResponse.headers.get('content-type')?.includes('application/json') ||
+            !identityResponse.headers.get('cache-control')?.includes('no-store') ||
+            Object.keys(identity || {}).length !== 1 ||
+            !/^[a-f0-9]{40}$/u.test(webSha || '')
+          ) {
             throw new Error(
-              `Web shell must return 200 with one unambiguous immutable release SHA marker; got ${webResponse.status}`
+              `Web release asset must be exact, no-store JSON with one immutable SHA; got ` +
+              `${identityResponse.status} ${JSON.stringify(identity)}`
             );
           }
           if (webSha !== api.releaseSha) {
