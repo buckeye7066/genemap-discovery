@@ -323,12 +323,14 @@ describe('Consent and data deletion methods', () => {
     expect(fetchCalls[0].url).toBe('http://localhost:3000/entities/consent');
   });
 
-  it('requestDataDeletion() posts an empty server-scoped request', async () => {
-    await client.requestDataDeletion();
+  it('requestDataDeletion() ignores the deprecated caller scope', async () => {
+    await client.requestDataDeletion({
+      deletedTypes: ['patient@example.invalid', 'caller-controlled'],
+    });
     expect(fetchCalls[0].url).toBe('http://localhost:3000/entities/data-deletion-request');
     expect(fetchCalls[0].method).toBe('POST');
     expect(fetchCalls[0].body).toBe('{}');
-    expect(fetchCalls[0].body).not.toContain('deletedTypes');
+    expect(fetchCalls[0].body).not.toMatch(/deletedTypes|patient@example\.invalid/u);
   });
 
   it('getDeletionRequestStatus() should GET /entities/data-deletion-request', async () => {
