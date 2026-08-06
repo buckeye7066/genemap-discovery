@@ -71,8 +71,8 @@ railway up
 # Generate Prisma client
 railway run pnpm db:generate
 
-# Push schema to database
-railway run pnpm db:push
+# Apply committed production migrations
+railway run pnpm db:migrate:deploy
 ```
 
 ### 6. Get API URL
