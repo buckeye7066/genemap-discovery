@@ -74,6 +74,16 @@ A production-ready deletion program still requires:
 6. tests and operational evidence for each processor result, partial failure,
    retry, backup expiry, key erasure, and restore reconciliation.
 
+## Migration deployment
+
+The privacy-lifecycle migration is transactionally and rolling-client
+compatible after it commits, but it is not an online-migration guarantee. It
+backfills existing rows, changes foreign keys, validates constraints, and
+creates ordinary indexes while holding locks. Before production deployment,
+record row counts and expected lock duration, stop or drain writes under a
+controlled maintenance procedure, establish rollback/forward-recovery steps,
+and verify the populated upgrade fixture against a production-sized copy.
+
 ## Backup and restore
 
 Follow `docs/BACKUP.md`. A checksum proves integrity, not recoverability.
