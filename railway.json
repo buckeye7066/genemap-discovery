@@ -5,7 +5,7 @@
     "dockerfilePath": "services/api/Dockerfile"
   },
   "deploy": {
-    "startCommand": "sh -c \"pnpm --filter @genemap/api db:migrate:deploy && node services/api/src/index.js\"",
+    "startCommand": "sh -c \"pnpm --filter @genemap/api release:identity:verify && pnpm --filter @genemap/api db:migrate:deploy && node services/api/src/index.js\"",
     "healthcheckPath": "/readyz",
     "healthcheckTimeout": 300,
     "restartPolicyType": "ON_FAILURE",
