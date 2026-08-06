@@ -1,3 +1,10 @@
+import {
+  publicationConceptById,
+  publicationConceptByLabel,
+  publicationHpoReference,
+  publicationMondoReference,
+} from './publicationConceptCatalog';
+
 /**
  * Normalize a raw search-history record from the API into the shape the
  * History page renders.
@@ -10,7 +17,7 @@
  * so both render correctly and nothing shows up blank.
  *
  * @param {object} s raw record
- * @returns {{id, query, queryType, createdAt, hpoTerm, candidateGenes, count}}
+ * @returns {{id, query, queryType, createdAt, hpoTerm, publicationReference, candidateGenes, count}}
  */
 export function normalizeSearchHistoryEntry(s) {
   const record = s || {};
@@ -22,7 +29,37 @@ export function normalizeSearchHistoryEntry(s) {
     queryType: record.queryType ?? record.search_type ?? 'free',
     createdAt: record.createdAt ?? record.created_date ?? null,
     hpoTerm: results.hpoTerm ?? record.hpo_term ?? null,
+    publicationReference: results.publicationReference ?? null,
     candidateGenes,
     count: results.count ?? record.results_count ?? candidateGenes.length ?? 0,
   };
+}
+
+
+/**
+ * Recover only bounded publication references from search history.
+ * Stored resolver metadata is reduced to identifier-only input; older exact
+ * HPO/MONDO identifiers are revalidated by the API before model execution.
+ */
+export function publicationReferenceFromSearchHistoryEntry(record) {
+  const normalized = normalizeSearchHistoryEntry(record);
+  const stored = normalized.publicationReference;
+
+  if (stored?.kind === 'curated_concept') {
+    const curated = publicationConceptById(stored.conceptId);
+    if (curated) return curated;
+  }
+  if (stored?.kind === 'hpo') {
+    const hpo = publicationHpoReference(stored.identifier);
+    if (hpo) return hpo;
+  }
+  if (stored?.kind === 'mondo') {
+    const mondo = publicationMondoReference(stored.identifier);
+    if (mondo) return mondo;
+  }
+
+  return publicationConceptByLabel(normalized.query)
+    || publicationHpoReference(normalized.query)
+    || publicationMondoReference(normalized.query)
+    || publicationHpoReference(normalized.hpoTerm);
 }
