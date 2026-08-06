@@ -918,12 +918,15 @@ describe('DELETE /admin/users/:id', () => {
     seedAuthUser(prisma, SUPER);
     const superCookie = authCookie(SUPER);
     const targetEmail = 'delete@test.com';
+    const privacySubjectRef = '33333333-3333-4333-8333-333333333333';
 
-    prisma._store.user.push({ id: 'del-1', email: targetEmail, role: 'user' });
+    prisma._store.user.push({
+      id: 'del-1', privacySubjectRef, email: targetEmail, role: 'user',
+    });
     prisma._store.consentRecord.push({
       id: 'consent-del-1',
       userId: 'del-1',
-      subjectRef: 'del-1',
+      subjectRef: privacySubjectRef,
       consentType: 'research',
       version: '1.0',
       granted: true,
@@ -933,7 +936,7 @@ describe('DELETE /admin/users/:id', () => {
     prisma._store.dataDeletionRequest.push({
       id: 'request-del-1',
       userId: 'del-1',
-      subjectRef: 'del-1',
+      subjectRef: privacySubjectRef,
       scope: 'legacy_content_v1',
       status: 'retry_scheduled',
       requestedTypes: ['medicalData', 'aiConversations', 'searchHistory'],
@@ -951,13 +954,13 @@ describe('DELETE /admin/users/:id', () => {
     expect(res.statusCode).toBe(200);
     expect(JSON.parse(res.body)).toEqual({
       success: true,
-      scope: 'local_database_account',
+      scope: 'local_database_account_v1',
     });
     expect(prisma.user.delete).toHaveBeenCalledWith({ where: { id: 'del-1' } });
     expect(prisma._store.user.find((u) => u.id === 'del-1')).toBeUndefined();
     expect(prisma._store.consentRecord[0]).toMatchObject({
       ipAddress: null,
-      metadata: null,
+      metadata: { erasedOnAccountDeletion: true },
     });
     expect(prisma._store.dataDeletionRequest[0]).toMatchObject({
       status: 'completed',
@@ -967,9 +970,9 @@ describe('DELETE /admin/users/:id', () => {
     });
     const audit = prisma._store.auditLog.find((row) => row.action === 'local_account_deleted');
     expect(audit).toMatchObject({
-      entityId: 'del-1',
+      entityId: privacySubjectRef,
       metadata: {
-        scope: 'local_database_account',
+        scope: 'local_database_account_v1',
         retainedPrivacyEvidence: true,
       },
     });
@@ -980,11 +983,15 @@ describe('DELETE /admin/users/:id', () => {
     const SUPER = { userId: 'super-1', email: 'super@example.com', role: 'super_admin' };
     seedAuthUser(prisma, SUPER);
     const superCookie = authCookie(SUPER);
-    prisma._store.user.push({ id: 'del-fail', email: 'failure@example.com', role: 'user' });
+    const failedPrivacyRef = '44444444-4444-4444-8444-444444444444';
+    prisma._store.user.push({
+      id: 'del-fail', privacySubjectRef: failedPrivacyRef,
+      email: 'failure@example.com', role: 'user',
+    });
     prisma._store.consentRecord.push({
       id: 'consent-fail',
       userId: 'del-fail',
-      subjectRef: 'del-fail',
+      subjectRef: failedPrivacyRef,
       consentType: 'research',
       version: '1.0',
       granted: true,
@@ -1013,7 +1020,12 @@ describe('DELETE /admin/users/:id', () => {
     seedAuthUser(prisma, SUPER);
     const superCookie = authCookie(SUPER);
 
-    prisma._store.user.push({ id: 'del-2', email: 'trial-verify@example.com', role: 'user' });
+    prisma._store.user.push({
+      id: 'del-2',
+      privacySubjectRef: '55555555-5555-4555-8555-555555555555',
+      email: 'trial-verify@example.com',
+      role: 'user',
+    });
 
     const res = await app.inject({
       method: 'DELETE',
