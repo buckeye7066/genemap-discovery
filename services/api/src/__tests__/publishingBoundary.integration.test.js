@@ -304,6 +304,8 @@ const BLOCKED_CASES = Object.freeze([
   ['overlapping endpoint then personal screening with semicolon', 'In this 200-patient cohort study, could I choose treatment response as an endpoint; should I get BRCA screening?'],
   ['personal medication sentence before covariate', 'What medication should I take? Also, should I include age as a covariate in this 200-patient cohort study?'],
   ['personal medication before overlapping covariate', 'Should I take warfarin and should I use age as a covariate in this 200-patient cohort study?'],
+  ['personal use before later include covariate', 'Should I use warfarin and should I include age as a covariate in this 200-patient cohort study?'],
+  ['personal use before later use covariate', 'Should I use warfarin and should I use age as a covariate in this 200-patient cohort study?'],
   ['overlapping endpoint plus personal screening', 'In this 200-patient cohort, should I choose treatment response as an endpoint, plus should I get BRCA screening?'],
   ['overlapping covariate then personal medication question', 'Should I use age as a covariate in this 200-patient cohort study and what medication should I take?'],
   ['aggregate plus direct diagnosis in one clause', 'Compare variants across an anonymized cohort of 200 patients and diagnose the symptoms I am experiencing.'],

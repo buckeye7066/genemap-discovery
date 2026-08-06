@@ -411,8 +411,9 @@ const DIRECT_DIAGNOSIS_OR_CARE =
   /(?:\b(?:can|could|would|will)\s+you\s+(?:diagnos\w*|treat|screen|prescribe|recommend)\b|(?:^|[.!?]\s*)\s*(?:diagnos\w*|treat me|screen me|prescribe)\b|\b(?:diagnos\w*|treat|screen|prescribe|recommend)\b[^.;!?\n]{0,160}\b(?:me|my|myself|i\s+(?:am|have|experience|feel)|you|your|yourself)\b|\b(?:me|my|myself|i\s+(?:am|have|experience|feel)|you|your|yourself)\b[^.;!?\n]{0,160}\b(?:diagnos\w*|treat|screen|prescribe|recommend)\b|\b(?:diagnos\w*|treat|screen|assess|evaluate|interpret|classify)\s+(?:me|myself)\b)/i;
 const PERSONAL_CLINICAL_DECISION =
   /\b(?:should|can|could|would)\s+i\s+(?:take|use|choose|receive|start|stop|change|increase|decrease|get|undergo|schedule)\b|\bi\s+(?:should|can|could|would|need\s+to|ought\s+to)\s+(?:take|use|choose|receive|start|stop|change|increase|decrease|get|undergo|schedule)\b|\bwhat\s+(?:treatment|medicine|medication|drug|dose)\s+should\s+i\s+(?:take|use|choose|receive)\b|\b(?:for|to)\s+myself\b/i;
-const RESEARCH_DESIGN_DECISION =
-  /\b(?:include|use|choose)\b[\s\S]{0,100}\bas\s+(?:an?\s+)?(?:[\w-]+\s+){0,2}(?:covariate|endpoint|outcome|variable)\b/i;
+const RESEARCH_DESIGN_ACTION = /\b(?:include|use|choose)\b/i;
+const RESEARCH_DESIGN_TARGET =
+  /\bas\s+(?:an?\s+)?(?:[\w-]+\s+){0,2}(?:covariate|endpoint|outcome|variable)\b/i;
 const PERSONAL_CLINICAL_HELP =
   /\bi\s+(?:need|want)\b[\s\S]{0,100}\b(?:help|advice|guidance|options?)\b[\s\S]{0,100}\b(?:symptoms?|pain|diagnos\w*|risk|variants?|mutations?|medications?|dos(?:e|ing)|treatments?|screen\w*|disease|condition)\b|\bi\s+(?:need|want)\b[\s\S]{0,100}\b(?:symptoms?|pain|diagnos\w*|risk|variants?|mutations?|medications?|dos(?:e|ing)|treatments?|screen\w*)\b[\s\S]{0,80}\b(?:help|advice|guidance|options?)\b/i;
 const PERSONAL_SYMPTOM_OR_FUTURE_DISEASE =
@@ -445,6 +446,28 @@ function rangesOverlap(leftStart, leftEnd, rightStart, rightEnd) {
   return leftStart < rightEnd && rightStart < leftEnd;
 }
 
+function researchDesignDecisionSpans(text) {
+  const source = String(text);
+  const actions = Array.from(regexMatches(RESEARCH_DESIGN_ACTION, source));
+  const targets = Array.from(regexMatches(RESEARCH_DESIGN_TARGET, source));
+
+  return actions.flatMap((action, index) => {
+    const actionStart = action.index;
+    const actionEnd = actionStart + action[0].length;
+    const nextActionStart = actions[index + 1]?.index ?? Number.POSITIVE_INFINITY;
+    const target = targets.find(
+      (candidate) => candidate.index >= actionEnd
+        && candidate.index < nextActionStart
+        && candidate.index - actionEnd <= 100
+    );
+    if (!target) return [];
+    return [{
+      start: actionStart,
+      end: target.index + target[0].length,
+    }];
+  });
+}
+
 function hasUnexemptedPersonalClinicalDecision(text) {
   const source = String(text);
   const clauses = splitIntentClauseSpans(source);
@@ -464,9 +487,9 @@ function hasUnexemptedPersonalClinicalDecision(text) {
     // "should I get screening" elsewhere in the request.
     const hasClauseLocalResearchDesign = clause
       && isAggregateResearchIntent(clause.text)
-      && Array.from(regexMatches(RESEARCH_DESIGN_DECISION, clause.text)).some((designDecision) => {
-        const designStart = clause.start + designDecision.index;
-        const designEnd = designStart + designDecision[0].length;
+      && researchDesignDecisionSpans(clause.text).some((designDecision) => {
+        const designStart = clause.start + designDecision.start;
+        const designEnd = clause.start + designDecision.end;
         return rangesOverlap(decisionStart, decisionEnd, designStart, designEnd);
       });
 
