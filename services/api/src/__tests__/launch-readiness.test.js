@@ -88,6 +88,17 @@ const VALID_EVIDENCE = {
     policyDocument: 'docs/DATA_RETENTION.md',
     deletionRequestSlaDays: 30,
     backupRetentionDays: 30,
+    privacyMaintenanceScheduled: true,
+    privacyMaintenanceEvidence: 'ops://privacy-maintenance/schedule/run-123',
+    externalDeletionReconciliation: true,
+    externalDeletionReconciliationEvidence: 'ops://restore/reconciliation/run-123',
+  },
+  release: {
+    approvedSha: 'a'.repeat(40),
+    webSha: 'a'.repeat(40),
+    apiSha: 'a'.repeat(40),
+    boundaryPreservingRollbackTested: true,
+    rollbackEvidence: 'ops://rollback/run-123',
   },
   legalCompliance: {
     legalReviewCompleted: true,
@@ -149,6 +160,47 @@ describe('production launch verification', () => {
   it('accepts complete operational launch evidence', () => {
     const checks = validateEvidence(VALID_EVIDENCE, { now: NOW });
     expect(failures(checks)).toEqual([]);
+  });
+
+  it('rejects missing privacy schedule and restore reconciliation evidence', () => {
+    const checks = validateEvidence({
+      ...VALID_EVIDENCE,
+      dataRetention: {
+        ...VALID_EVIDENCE.dataRetention,
+        privacyMaintenanceScheduled: false,
+        privacyMaintenanceEvidence: 'REPLACE_WITH_SCHEDULE',
+        externalDeletionReconciliation: false,
+        externalDeletionReconciliationEvidence: 'TODO',
+      },
+    }, { now: NOW });
+
+    const ids = failures(checks).map((check) => check.id);
+    expect(ids).toEqual(expect.arrayContaining([
+      'retention.privacyMaintenanceScheduled',
+      'retention.privacyMaintenanceEvidence',
+      'retention.externalDeletionReconciliation',
+      'retention.externalDeletionReconciliationEvidence',
+    ]));
+  });
+
+  it('rejects mismatched release identities and untested rollback', () => {
+    const checks = validateEvidence({
+      ...VALID_EVIDENCE,
+      release: {
+        approvedSha: 'a'.repeat(40),
+        webSha: 'b'.repeat(40),
+        apiSha: 'a'.repeat(40),
+        boundaryPreservingRollbackTested: false,
+        rollbackEvidence: 'REPLACE_WITH_ROLLBACK',
+      },
+    }, { now: NOW });
+
+    const ids = failures(checks).map((check) => check.id);
+    expect(ids).toEqual(expect.arrayContaining([
+      'release.alignment',
+      'release.boundaryPreservingRollbackTested',
+      'release.rollbackEvidence',
+    ]));
   });
 
   it('rejects missing backup restore evidence', () => {
