@@ -59,14 +59,6 @@ const KNOWN_EDUCATION_TOPICS = new Set(
   TOPICS_CATALOG.flatMap(({ topics }) => topics.flatMap(({ id, title }) => [id, title]))
     .map((value) => value.trim().toLowerCase())
 );
-const GENETICS_DOMAIN =
-  /\b(?:gene|genes|genetic|genetics|genomic|genomics|dna|rna|chromosome|variant|mutation|allele|phenotype|genotype|crispr|gwas|hpo|vcf|pharmacogenomics?)\b/i;
-const PROMPT_CONTROL_OR_UNRELATED_OUTPUT =
-  /\b(?:ignore|disregard|override|bypass|forget)\b[\s\S]{0,80}\b(?:previous|prior|above|system|developer|instructions?|prompt|rules?)\b|\b(?:system|developer)\s*:\s*|\b(?:phish(?:ing)?|malware|ransomware|credential theft|real[- ]estate advertisement|marketing copy|quarterly sales|sales forecast|vacation itinerary)\b|\b(?:write|compose|draft|send|create|generate)\b[\s\S]{0,80}\b(?:email|advertisement|ad copy|malware|ransomware|exploit|social media post)\b/i;
-const PERSONAL_OR_EXECUTABLE_TOPIC =
-  /\b(?:i|me|my|mine|you|your|yours|mom|mother|dad|father|child|patient|participant|subject|diagnos\w*|prescribe|recommend|dos(?:e|ing|age)|screen(?:ing)?|treat(?:ment)?|medication|medicine)\b/i;
-const CUSTOM_EDUCATION_TOPIC_SHAPE =
-  /^[\p{L}\p{N}][\p{L}\p{N} \t&'’()+,./?-]{0,159}$/u;
 
 function rawPathname(url = '') {
   return String(url).split('?')[0].split('#')[0] || '/';
@@ -150,11 +142,10 @@ function isRouteOwnedGeneticsTopic(body) {
   if (['prompt', 'messages', 'context', 'taskInput'].some(
     (field) => Object.prototype.hasOwnProperty.call(body, field)
   )) return false;
-  if (isKnownEducationTopic(topic)) return true;
-  return CUSTOM_EDUCATION_TOPIC_SHAPE.test(topic)
-    && GENETICS_DOMAIN.test(topic)
-    && !PROMPT_CONTROL_OR_UNRELATED_OUTPUT.test(topic)
-    && !PERSONAL_OR_EXECUTABLE_TOPIC.test(topic);
+  // Fixed education routes are catalog-only. A genetics keyword in arbitrary
+  // prose is not authorization to execute a prompt. New concepts must be
+  // reviewed and added to educationCatalog.js before publication.
+  return isKnownEducationTopic(topic);
 }
 
 function block(message) {
