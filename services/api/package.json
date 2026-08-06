@@ -15,7 +15,8 @@
     "typecheck": "node --check src/index.js && node --check src/config/env.js",
     "test": "vitest run",
     "test:integration": "vitest run src/__tests__/postgres-integration.test.js",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "privacy:maintenance": "node src/workers/privacyMaintenance.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.111.0",
