@@ -5,6 +5,7 @@ import {
   claimDeletionRequestById,
   claimDueDeletionRequests,
   processClaimedDeletionRequest,
+  processDeletionRequestNow,
   pruneExpiredSessions,
   runPrivacyMaintenance,
   serializeDeletionRequest,
@@ -15,6 +16,7 @@ const SUBJECT = '11111111-1111-4111-8111-111111111111';
 const OTHER = '22222222-2222-4222-8222-222222222222';
 const PRIVACY_REF = '99999999-9999-4999-8999-999999999999';
 const NOW = new Date('2026-08-06T13:00:00.000Z');
+const FINISHED = new Date('2026-08-06T13:00:10.000Z');
 
 function seedRequest(overrides = {}) {
   const row = {
@@ -57,13 +59,15 @@ describe('privacy deletion lifecycle', () => {
     const claim = await claimDeletionRequestById(prisma, row.id, { now: NOW });
     expect(claim).toMatchObject({ status: 'processing', attemptCount: 1 });
 
-    const result = await processClaimedDeletionRequest(prisma, claim, { now: NOW });
+    const result = await processClaimedDeletionRequest(prisma, claim, {
+      clock: () => FINISHED,
+    });
     expect(result).toMatchObject({
       outcome: 'completed',
       request: {
         status: 'completed',
         deletedTypes: SELF_SERVICE_PURGE_TYPES,
-        completedAt: NOW,
+        completedAt: FINISHED,
       },
     });
     for (const storeName of ['medicalData', 'aIConversation', 'searchHistory']) {
@@ -84,8 +88,8 @@ describe('privacy deletion lifecycle', () => {
     });
 
     const result = await processClaimedDeletionRequest(prisma, claim, {
-      now: NOW,
       retryBaseMs: 1_000,
+      clock: () => FINISHED,
     });
     prisma.aIConversation.deleteMany.mockImplementation(originalDelete);
 
@@ -100,11 +104,60 @@ describe('privacy deletion lifecycle', () => {
         leaseExpiresAt: null,
       },
     });
-    expect(result.request.nextAttemptAt).toEqual(new Date(NOW.getTime() + 1_000));
+    expect(result.request.nextAttemptAt).toEqual(new Date(FINISHED.getTime() + 1_000));
     for (const storeName of ['medicalData', 'aIConversation', 'searchHistory']) {
       expect(prisma._store[storeName]).toHaveLength(1);
     }
     expect(JSON.stringify(result)).not.toMatch(/patient@example\.invalid|private database detail/u);
+  });
+
+  it('retains the processing lease when retry-state persistence is unavailable', async () => {
+    const row = seedRequest({ id: 'retry-write-failure' });
+    const claim = await claimDeletionRequestById(prisma, row.id, { now: NOW });
+    prisma.medicalData.deleteMany.mockRejectedValueOnce(
+      new Error('purge patient@example.invalid')
+    );
+    prisma.dataDeletionRequest.updateMany.mockRejectedValueOnce(
+      new Error('retry persistence private canary')
+    );
+
+    const result = await processClaimedDeletionRequest(prisma, claim, {
+      clock: () => FINISHED,
+    });
+
+    expect(result).toMatchObject({
+      outcome: 'processing_retained',
+      request: {
+        id: 'retry-write-failure',
+        status: 'processing',
+        attemptCount: 1,
+      },
+    });
+    expect(JSON.stringify(result)).not.toMatch(/patient@example\.invalid|private canary/u);
+  });
+
+  it('reports a concurrent completion instead of a false claim miss', async () => {
+    const row = seedRequest({ id: 'completed-race' });
+    const originalUpdateMany = prisma.dataDeletionRequest.updateMany.getMockImplementation();
+    prisma.dataDeletionRequest.updateMany.mockImplementationOnce(async () => {
+      Object.assign(row, {
+        status: 'completed',
+        completedAt: FINISHED,
+        deletedTypes: [...SELF_SERVICE_PURGE_TYPES],
+        nextAttemptAt: null,
+        failureCode: null,
+      });
+      return { count: 0 };
+    });
+    try {
+      const result = await processDeletionRequestNow(prisma, row.id, { now: NOW });
+      expect(result).toMatchObject({
+        outcome: 'completed',
+        request: { id: 'completed-race', status: 'completed' },
+      });
+    } finally {
+      prisma.dataDeletionRequest.updateMany.mockImplementation(originalUpdateMany);
+    }
   });
 
   it('claims due requests once and skips future, completed, and live-lease rows', async () => {
