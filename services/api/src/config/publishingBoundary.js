@@ -231,6 +231,10 @@ const SAFE_BARE_ARTIFACT_PREFIX =
   /^(?:i have|we have|what (?:is|are)|types of|the human|raw|copy[- ]number|how (?:an?|the|does|do)(?:\s+(?:gene|protein|pathway)['’]s)?|(?:(?:an?|the)\s+)?(?:aggregate|anonymized|deidentified|public|synthetic)\s+cohort['’]s|(?:an?|the) (?:gene|protein|pathway)|(?:rare|common|novel|known|candidate|putative|predicted|pathogenic|benign|coding|noncoding|germline|somatic|structural|genetic|genomic|human|mouse|yeast|aggregate|anonymized|deidentified|public|synthetic|reference|target|disease[- ]associated|protein[- ]altering|early[- ]onset|late[- ]onset|loss[- ]of[- ]function|gain[- ]of[- ]function|population[- ]level|cohort[- ]level|treatment[- ]response)(?:\s+(?:disease|associated|gene|genes|cohort|population|level|variants?|mutations?|calls?|data|results?|response|function))?)$/i;
 const SAFE_JOINED_ARTIFACT_PREFIX =
   /^(?:(?:need|plan|aim|want)\s+to\s+)?(?:analy[sz]e|process|review|interpret|classify|evaluate|assess|summari[sz]e|annotate|compare|identify|study|model|test|explore|investigate)(?:\s+(?:the|these|those|rare|common|novel|known|candidate|genetic|genomic|structural|copy[- ]number)){0,4}$/i;
+const SAFE_PRIOR_ARTIFACT_CONNECTOR = new RegExp(
+  String.raw`^${GENOMIC_ARTIFACT}\s+(?:and|plus|with|alongside|together\s+with|as\s+well\s+as|combined\s+with)$`,
+  'i'
+);
 const FROM_SENSITIVE_SOURCE = /\bfrom\b/i;
 const EXPLICIT_AGGREGATE_DATA_SOURCE =
   /\bfrom\s+(?:(?:an?|the)\s+)?(?:(?:(?:anonymized|de-identified|deidentified|non-identifiable|aggregate|synthetic|public)\s+){1,3}(?:cohort|population|data ?set|data|records?|samples?|biobank|repository)|\d+(?:\s+|-)\s*(?:patients?|participants?|subjects?|samples?|controls?))\b/i;
@@ -278,7 +282,11 @@ function hasIndividualGenomicOwnership(text) {
     // a bounded, non-person research/education descriptor. This blocks names
     // in any casing without trying to infer a name lexicon, while keeping
     // explicit phrases such as "rare disease variants" publishable.
-    if (!SAFE_BARE_ARTIFACT_PREFIX.test(match[1].trim())) return true;
+    const owner = match[1].trim();
+    if (
+      !SAFE_BARE_ARTIFACT_PREFIX.test(owner)
+      && !SAFE_PRIOR_ARTIFACT_CONNECTOR.test(owner)
+    ) return true;
   }
   for (const match of String(text).matchAll(JOINED_OWNER_BEFORE_GENOMIC_ARTIFACT)) {
     const owner = match[1].trim();
@@ -388,6 +396,16 @@ const PERSONALIZED_PGX_OR_DOSING =
 const PERSONAL_HEREDITY =
   /\b(?:could|can|might)\s+my\s+(?!(?:data|data ?set|model|study|analysis|experiment|lab|research|project)\b)[\w -]{1,60}\s+be\s+(?:genetic|hereditary|inherited)\b|\b(?:is|could|does)\s+[a-z0-9_-]{2,20}\s+(?:the reason\s+)?why\s+i have\b/i;
 
+function hasUnsafePersonalRecommendation(text) {
+  const recommendations = String(text).matchAll(
+    /\b(?:recommend|advise|tell)\b[^.;!?\n]{0,120}\b(?:me\s+to|that\s+i\s+(?:should\s+)?)\s*(?:take|use|choose|receive|start|stop|change|increase|decrease|get|undergo|schedule)\b([^.;!?\n]*)/gi
+  );
+  for (const match of recommendations) {
+    if (!SAFE_TAKING_OR_USING_OBJECT.test(match[1])) return true;
+  }
+  return false;
+}
+
 function hasDirectPersonalOrClinicalExecution(text) {
   if (
     PERSONAL_SENSITIVE_OWNERSHIP.test(text)
@@ -402,6 +420,7 @@ function hasDirectPersonalOrClinicalExecution(text) {
     || DIRECT_SENSITIVE_OBJECT.test(text)
     || PERSONALIZED_PGX_OR_DOSING.test(text)
     || PERSONAL_HEREDITY.test(text)
+    || hasUnsafePersonalRecommendation(text)
   ) return true;
 
   if (PERSONAL_CLINICAL_DECISION.test(text)) {
