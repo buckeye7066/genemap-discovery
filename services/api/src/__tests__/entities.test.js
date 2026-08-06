@@ -720,18 +720,57 @@ describe('Consent Records', () => {
 // ─── Data Deletion Requests ──────────────────────────────────────────────────
 
 describe('Data Deletion Requests', () => {
-  it('POST /entities/data-deletion-request — should create request', async () => {
+  it('POST /entities/data-deletion-request — completes only the finite content purge', async () => {
+    const canary = 'free-form patient deletion category';
+    for (const storeName of ['medicalData', 'aIConversation', 'searchHistory']) {
+      prisma._store[storeName].push(
+        { id: `${storeName}-a`, userId: 'user-a' },
+        { id: `${storeName}-b`, userId: 'user-b' },
+      );
+    }
+
     const res = await app.inject({
       method: 'POST',
       url: '/entities/data-deletion-request',
       headers: { cookie: cookieA },
-      payload: { deletedTypes: ['medical_data', 'search_history'] },
+      payload: { deletedTypes: [canary] },
     });
 
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body);
-    expect(body.request.status).toBe('pending');
-    expect(body.request.userId).toBe('user-a');
+    expect(body.request).toMatchObject({
+      status: 'completed',
+      userId: 'user-a',
+      deletedTypes: ['medicalData', 'aiConversations', 'searchHistory'],
+    });
+    expect(JSON.stringify(body)).not.toContain(canary);
+    for (const storeName of ['medicalData', 'aIConversation', 'searchHistory']) {
+      expect(prisma._store[storeName].map((row) => row.userId)).toEqual(['user-b']);
+    }
+    expect(JSON.stringify(prisma._store.auditLog)).not.toContain(canary);
+  });
+
+  it('returns a retained failed state instead of a stale pending success', async () => {
+    const originalTransaction = prisma.$transaction;
+    prisma.$transaction = vi.fn().mockRejectedValue(new Error('private database canary'));
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/entities/data-deletion-request',
+        headers: { cookie: cookieA },
+        payload: { deletedTypes: ['patient@example.invalid'] },
+      });
+
+      expect(res.statusCode).toBe(503);
+      const body = JSON.parse(res.body);
+      expect(body).toMatchObject({
+        code: 'DELETION_NOT_COMPLETED',
+        request: { status: 'failed', userId: 'user-a' },
+      });
+      expect(JSON.stringify(body)).not.toMatch(/patient@example\.invalid|database canary/u);
+    } finally {
+      prisma.$transaction = originalTransaction;
+    }
   });
 
   it('GET /entities/data-deletion-request — should return own requests', async () => {
