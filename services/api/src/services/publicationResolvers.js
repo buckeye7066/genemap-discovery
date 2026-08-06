@@ -55,9 +55,16 @@ function hasObsoleteLabel(value) {
   return /^obsolete\s+/iu.test(String(value || '').trim());
 }
 
+function hasForbiddenControlCharacter(value) {
+  return Array.from(value).some((character) => {
+    const codePoint = character.codePointAt(0);
+    return codePoint <= 0x1f || codePoint === 0x7f;
+  });
+}
+
 function safeCanonicalLabel(value) {
   const label = String(value || '').trim();
-  return label && label.length <= 256 && !/[\u0000-\u001f\u007f]/u.test(label)
+  return label && label.length <= 256 && !hasForbiddenControlCharacter(label)
     ? label
     : '';
 }
