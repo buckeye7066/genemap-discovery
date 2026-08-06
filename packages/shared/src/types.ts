@@ -569,36 +569,58 @@ export interface AdminAnalyticsStats {
   totalUsers: number;
   activeSubscriptions: number;
   totalSearches: number;
-  totalConversations: number;
-  totalMedicalRecords: number;
   totalGeneSets: number;
   totalActivities: number;
 }
 
+export type AdminActivityCategory =
+  | 'gene_view'
+  | 'search'
+  | 'search_view'
+  | 'project_create'
+  | 'project_update'
+  | 'learning_activity'
+  | 'login'
+  | 'page_view'
+  | 'other';
+
+export type AdminSearchCategory =
+  | 'premium'
+  | 'free'
+  | 'disease'
+  | 'hpo_term'
+  | 'mondo_term'
+  | 'gene'
+  | 'phenotype'
+  | 'free_text'
+  | 'other';
+
+export interface AdminActivityTypeCount {
+  activityType: AdminActivityCategory;
+  count: number;
+}
+
+export interface AdminSearchTypeCount {
+  queryType: AdminSearchCategory;
+  count: number;
+}
+
+export interface AdminDailyActivity {
+  /** UTC calendar date in YYYY-MM-DD form. */
+  date: string;
+  activities: number;
+  searches: number;
+}
+
 /**
- * Agent-mesh report surface. Operational metadata only — counts, agent ids,
- * topics and the short operational claim text. Never user or medical content.
+ * Aggregate-only administrator metrics. This contract deliberately cannot
+ * carry raw query text, record contents, activity metadata, or user identity.
  */
-export interface AgentLessonSummary {
-  authorAgent: string;
-  topic: string;
-  claim: string;
-  timesSeen: number;
-  /** agentId -> ISO timestamp the lesson was consumed. */
-  consumedBy: Record<string, string>;
-}
-
-export interface AgentMeshSummary {
-  messagesLast7d: number;
-  lessons: AgentLessonSummary[];
-}
-
 export interface AdminAnalytics {
   stats: AdminAnalyticsStats;
-  recentActivity: unknown[];
-  recentSearches: unknown[];
-  recentConversations: unknown[];
-  agentMesh?: AgentMeshSummary;
+  activityTypeBreakdown: AdminActivityTypeCount[];
+  searchTypeBreakdown: AdminSearchTypeCount[];
+  dailyActivity: AdminDailyActivity[];
 }
 
 // The admin API emits the same snake_case contract as /auth/me (a Base44
