@@ -1,7 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { loadEnv } from '../services/api/src/config/env.js';
-import { extractWebReleaseSha } from './lib/release-identity.mjs';
 
 const DEFAULT_TIMEOUT_MS = 8000;
 const DEFAULT_EVIDENCE_FILE = 'ops/production-launch-evidence.json';
@@ -413,19 +412,29 @@ export async function checkHttpEndpoints(opts) {
       redirect: 'error',
     });
     const contentType = response.headers?.get?.('content-type') || '';
-    const html = await response.text();
+    await response.text();
     checks.push(response.ok && contentType.includes('text/html')
       ? pass('http.web', 'web app returned HTML')
       : fail('http.web', `web app expected HTML 200, got ${response.status} ${contentType}`));
-    const liveWebSha = extractWebReleaseSha(html);
-    checks.push(response.ok && liveWebSha === approvedSha
-      ? pass('http.webReleaseSha', 'live web shell reports the approved release SHA')
-      : fail(
-        'http.webReleaseSha',
-        `live web release SHA does not match approved SHA (reported ${liveWebSha || 'missing or ambiguous'})`
-      ));
   } catch (err) {
     checks.push(fail('http.web', `web request failed: ${err.message}`));
+  }
+
+  try {
+    const { response, body } = await fetchJson(
+      fetchImpl,
+      `${webBase}/release-identity.json`,
+      timeoutMs
+    );
+    checks.push(
+      response.status === 200 && body?.releaseSha === approvedSha
+        ? pass('http.webReleaseSha', 'live web asset reports the approved release SHA')
+        : fail(
+          'http.webReleaseSha',
+          `live web release SHA does not match approved SHA (reported ${body?.releaseSha || 'missing'})`
+        )
+    );
+  } catch (err) {
     checks.push(fail('http.webReleaseSha', 'live web release identity could not be verified'));
   }
 
