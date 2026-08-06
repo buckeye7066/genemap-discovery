@@ -4,6 +4,13 @@ export const MANDATED_RESEARCH_EXAMPLES = Object.freeze([
   'I have RNA-seq from 30 patients with symptoms and controls; compare variants at the cohort level.',
 ]);
 
+export function isValidAggregateSampleCount(value) {
+  const sampleCount = Number(value);
+  return Number.isInteger(sampleCount)
+    && sampleCount >= 2
+    && sampleCount <= 1_000_000;
+}
+
 const EXAMPLE_TASK_INPUTS = Object.freeze([
   {
     version: 1,

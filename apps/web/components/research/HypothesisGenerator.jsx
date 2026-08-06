@@ -11,6 +11,7 @@ import { Lightbulb, Loader2, Sparkles, Info } from "lucide-react";
 import ReactMarkdown from 'react-markdown';
 import {
   MANDATED_RESEARCH_EXAMPLES,
+  isValidAggregateSampleCount,
   parseAggregateResearchExample,
 } from '@/lib/researchTaskFixtures';
 import {
@@ -55,6 +56,7 @@ export default function HypothesisGenerator() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [hypotheses, setHypotheses] = useState(null);
   const [error, setError] = useState('');
+  const sampleCountIsValid = isValidAggregateSampleCount(sampleCount);
 
   const loadExample = (example) => {
     const parsed = parseAggregateResearchExample(example);
@@ -79,8 +81,8 @@ export default function HypothesisGenerator() {
       const selectedDataTypes = Object.entries(dataTypes)
         .filter(([_, selected]) => selected)
         .map(([type]) => type);
-      if (!Number.isInteger(Number(sampleCount)) || Number(sampleCount) < 2 || selectedDataTypes.length === 0) {
-        setError('Enter at least 2 samples and select at least one aggregate data type.');
+      if (!sampleCountIsValid || selectedDataTypes.length === 0) {
+        setError('Enter an integer from 2 to 1,000,000 and select at least one aggregate data type.');
         return;
       }
       const focus = focusKind === 'curated'
@@ -154,7 +156,7 @@ export default function HypothesisGenerator() {
           <div className="grid md:grid-cols-2 gap-4">
             <div>
               <Label htmlFor="sample-count">Aggregate sample count</Label>
-              <Input id="sample-count" type="number" min="2" max="1000000" value={sampleCount} onChange={(event) => setSampleCount(Number(event.target.value))} disabled={isGenerating} />
+              <Input id="sample-count" type="number" min="2" max="1000000" step="1" value={sampleCount} onChange={(event) => setSampleCount(Number(event.target.value))} disabled={isGenerating} aria-invalid={!sampleCountIsValid} />
             </div>
             <div>
               <Label htmlFor="classification">Data classification</Label>
@@ -230,7 +232,7 @@ export default function HypothesisGenerator() {
 
           <Button
             onClick={handleGenerate}
-            disabled={isGenerating || Number(sampleCount) < 2 || !Object.values(dataTypes).some(Boolean)}
+            disabled={isGenerating || !sampleCountIsValid || !Object.values(dataTypes).some(Boolean)}
             className="w-full bg-amber-600 hover:bg-amber-700"
           >
             {isGenerating ? (

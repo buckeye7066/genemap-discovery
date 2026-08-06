@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   MANDATED_RESEARCH_EXAMPLES,
+  isValidAggregateSampleCount,
   parseAggregateResearchExample,
 } from '../researchTaskFixtures';
 
@@ -29,5 +30,18 @@ describe('legacy research example parser', () => {
     const first = parseAggregateResearchExample(MANDATED_RESEARCH_EXAMPLES[0]);
     first.cohort.sampleCount = 999;
     expect(parseAggregateResearchExample(MANDATED_RESEARCH_EXAMPLES[0]).cohort.sampleCount).toBe(50);
+  });
+
+  it.each([
+    [2, true],
+    ['50', true],
+    [1_000_000, true],
+    ['', false],
+    [1, false],
+    [2.5, false],
+    [Number.NaN, false],
+    [1_000_001, false],
+  ])('validates the complete publication cohort range for %s', (value, expected) => {
+    expect(isValidAggregateSampleCount(value)).toBe(expected);
   });
 });

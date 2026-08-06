@@ -679,7 +679,11 @@ Provide comprehensive, evidence-based analysis formatted with clear sections.`;
               </Badge>
             )}
             {(!gene.phenotypes || gene.phenotypes.length === 0) && (
-              <span className="text-sm text-slate-500 italic">Loading phenotype data...</span>
+              <span className="text-sm text-slate-500 italic">
+                {gene.detailsPending
+                  ? 'Loading phenotype data...'
+                  : 'No candidate phenotype terms are available for this research lead.'}
+              </span>
             )}
           </div>
         </div>

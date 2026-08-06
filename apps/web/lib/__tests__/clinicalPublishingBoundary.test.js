@@ -90,6 +90,20 @@ describe('clinical publishing boundary', () => {
     expect(searchPage).toContain('PhenotypeSearchService.findCandidates(');
   });
 
+  it('keeps guided research, completed empty states, and quizzes aligned with their contracts', () => {
+    const hypothesis = read('../../components/research/HypothesisGenerator.jsx');
+    const geneCard = read('../../components/search/GeneCard.jsx');
+    const quiz = read('../../pages/QuizMode.jsx');
+
+    expect(hypothesis).toContain('!sampleCountIsValid');
+    expect(hypothesis).toContain('step="1"');
+    expect(geneCard).toContain('gene.detailsPending');
+    expect(geneCard).toContain('No candidate phenotype terms are available');
+    expect(quiz).toContain('topic: topicId');
+    expect(quiz).not.toContain('topic: topicTitle');
+    expect(quiz).not.toContain("id: 'general-genetics'");
+  });
+
   it('removes unrelated arbitrary generation from published support and icon routes', () => {
     const support = read('../../pages/ContactSupport.jsx');
     const pageConfig = read('../../pages.config.js');
