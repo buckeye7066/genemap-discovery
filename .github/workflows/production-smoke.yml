@@ -29,44 +29,66 @@ jobs:
 
       - name: Check API liveness
         run: |
-          body="$(curl --fail --silent --show-error --max-time 15 "$API_URL/healthz")"
-          BODY="$body" node -e '
-            const body = JSON.parse(process.env.BODY);
-            if (body.status !== "ok") {
-              throw new Error(`/healthz expected status ok, got ${JSON.stringify(body)}`);
-            }
-          '
+          node --input-type=module <<'NODE'
+          const response = await fetch(`${process.env.API_URL}/healthz`, {
+            redirect: 'error',
+            signal: AbortSignal.timeout(15_000),
+          });
+          const body = await response.json();
+          if (response.status !== 200 || body.status !== 'ok') {
+            throw new Error(
+              `/healthz expected 200 status ok, got ${response.status} ${JSON.stringify(body)}`
+            );
+          }
+          NODE
 
       - name: Check API readiness and publication boundary
         run: |
-          body="$(curl --fail --silent --show-error --max-time 15 "$API_URL/readyz")"
-          BODY="$body" node -e '
-            const body = JSON.parse(process.env.BODY);
-            if (
-              body.status !== "ready" ||
-              body.publicationMode !== "education_research" ||
-              body.medicalEncryption !== true
-            ) {
-              throw new Error(
-                `/readyz expected ready, publicationMode=education_research, and medicalEncryption=true; got ${JSON.stringify(body)}`
-              );
-            }
-          '
+          node --input-type=module <<'NODE'
+          const response = await fetch(`${process.env.API_URL}/readyz`, {
+            redirect: 'error',
+            signal: AbortSignal.timeout(15_000),
+          });
+          const body = await response.json();
+          if (
+            response.status !== 200 ||
+            body.status !== 'ready' ||
+            body.publicationMode !== 'education_research' ||
+            body.medicalEncryption !== true
+          ) {
+            throw new Error(
+              `/readyz expected 200 ready, publicationMode=education_research, and medicalEncryption=true; got ${response.status} ${JSON.stringify(body)}`
+            );
+          }
+          NODE
 
       - name: Check coordinated web and API release identity
         run: |
-          api_body="$(curl --fail --silent --show-error --max-time 15 "$API_URL/readyz")"
-          web_html="$(curl --fail --silent --show-error --proto '=https' --max-time 20 "$WEB_URL")"
-          API_BODY="$api_body" WEB_HTML="$web_html" node --input-type=module <<'NODE'
+          node --input-type=module <<'NODE'
           import { extractWebReleaseSha } from './scripts/lib/release-identity.mjs';
 
-          const api = JSON.parse(process.env.API_BODY);
-          const webSha = extractWebReleaseSha(process.env.WEB_HTML);
-          if (!/^[a-f0-9]{40}$/u.test(api.releaseSha || '')) {
-            throw new Error(`API readiness is missing an immutable release SHA: ${JSON.stringify(api)}`);
+          const [apiResponse, webResponse] = await Promise.all([
+            fetch(`${process.env.API_URL}/readyz`, {
+              redirect: 'error',
+              signal: AbortSignal.timeout(15_000),
+            }),
+            fetch(process.env.WEB_URL, {
+              redirect: 'error',
+              signal: AbortSignal.timeout(20_000),
+            }),
+          ]);
+          const api = await apiResponse.json();
+          const webHtml = await webResponse.text();
+          const webSha = extractWebReleaseSha(webHtml);
+          if (apiResponse.status !== 200 || !/^[a-f0-9]{40}$/u.test(api.releaseSha || '')) {
+            throw new Error(
+              `API readiness is missing an immutable release SHA: ${apiResponse.status} ${JSON.stringify(api)}`
+            );
           }
-          if (!webSha) {
-            throw new Error('Web shell is missing one unambiguous immutable release SHA marker.');
+          if (webResponse.status !== 200 || !webSha) {
+            throw new Error(
+              `Web shell must return 200 with one unambiguous immutable release SHA marker; got ${webResponse.status}`
+            );
           }
           if (webSha !== api.releaseSha) {
             throw new Error(
@@ -95,6 +117,7 @@ jobs:
               headers: probe.body ? { 'content-type': 'application/json' } : undefined,
               body: probe.body ? JSON.stringify(probe.body) : undefined,
               signal: AbortSignal.timeout(15_000),
+              redirect: 'error',
             });
             const raw = await response.text();
             let body;
@@ -118,45 +141,72 @@ jobs:
 
       - name: Check production CORS for web origin
         run: |
-          headers="$(mktemp)"
-          curl --fail --silent --show-error --max-time 15 \
-            --output /dev/null \
-            --dump-header "$headers" \
-            --request OPTIONS \
-            --header "Origin: $WEB_URL" \
-            --header "Access-Control-Request-Method: GET" \
-            "$API_URL/healthz"
-          grep -Fi "access-control-allow-origin: $WEB_URL" "$headers"
-          grep -Fi "access-control-allow-credentials: true" "$headers"
+          node --input-type=module <<'NODE'
+          const response = await fetch(`${process.env.API_URL}/healthz`, {
+            method: 'OPTIONS',
+            headers: {
+              origin: process.env.WEB_URL,
+              'access-control-request-method': 'GET',
+            },
+            redirect: 'error',
+            signal: AbortSignal.timeout(15_000),
+          });
+          if (![200, 204].includes(response.status)) {
+            throw new Error(`CORS preflight expected 200/204, got ${response.status}`);
+          }
+          if (response.headers.get('access-control-allow-origin') !== process.env.WEB_URL) {
+            throw new Error('CORS preflight did not return the exact production web origin.');
+          }
+          if (response.headers.get('access-control-allow-credentials') !== 'true') {
+            throw new Error('CORS preflight did not allow credentials.');
+          }
+          NODE
 
       - name: Check API security headers
         run: |
-          headers="$(mktemp)"
-          curl --fail --silent --show-error --max-time 15 \
-            --output /dev/null --dump-header "$headers" "$API_URL/healthz"
-          # helmet should set these on every API response.
-          grep -Fi "strict-transport-security:" "$headers"
-          grep -Fi "x-content-type-options: nosniff" "$headers"
-          grep -Fi "x-frame-options:" "$headers"
+          node --input-type=module <<'NODE'
+          const response = await fetch(`${process.env.API_URL}/healthz`, {
+            redirect: 'error',
+            signal: AbortSignal.timeout(15_000),
+          });
+          if (response.status !== 200) throw new Error(`API security probe got ${response.status}`);
+          if (!response.headers.get('strict-transport-security')) throw new Error('API HSTS missing.');
+          if (response.headers.get('x-content-type-options') !== 'nosniff') {
+            throw new Error('API nosniff header missing.');
+          }
+          if (!response.headers.get('x-frame-options')) throw new Error('API frame header missing.');
+          NODE
 
       - name: Check web security headers
         run: |
-          headers="$(mktemp)"
-          curl --fail --silent --show-error --proto '=https' --max-time 20 \
-            --output /dev/null --dump-header "$headers" "$WEB_URL"
-          grep -Fi "strict-transport-security:" "$headers"
-          grep -Fi "x-content-type-options: nosniff" "$headers"
+          node --input-type=module <<'NODE'
+          const response = await fetch(process.env.WEB_URL, {
+            redirect: 'error',
+            signal: AbortSignal.timeout(20_000),
+          });
+          if (response.status !== 200) throw new Error(`Web security probe got ${response.status}`);
+          if (!response.headers.get('strict-transport-security')) throw new Error('Web HSTS missing.');
+          if (response.headers.get('x-content-type-options') !== 'nosniff') {
+            throw new Error('Web nosniff header missing.');
+          }
+          NODE
 
       - name: Check web app shell
         run: |
-          html="$(curl --fail --silent --show-error --proto '=https' --max-time 20 "$WEB_URL")"
-          case "$html" in
-            *'<title>GeneMap Discovery | Genetics Education &amp; Research Leads</title>'*'<div id="root"'*) ;;
-            *)
-              echo "Web app did not return the expected GeneMap HTML shell."
-              exit 1
-              ;;
-          esac
+          node --input-type=module <<'NODE'
+          const response = await fetch(process.env.WEB_URL, {
+            redirect: 'error',
+            signal: AbortSignal.timeout(20_000),
+          });
+          const html = await response.text();
+          if (
+            response.status !== 200 ||
+            !html.includes('<title>GeneMap Discovery | Genetics Education &amp; Research Leads</title>') ||
+            !html.includes('<div id="root"')
+          ) {
+            throw new Error(`Web app did not return the expected 200 GeneMap HTML shell; got ${response.status}`);
+          }
+          NODE
 
   # Browser-level smoke: renders the deployed app in Chromium and asserts the
   # public/auth surface (login form, legal pages, redirects, headers) actually
