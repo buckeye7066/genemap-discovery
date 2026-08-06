@@ -1,50 +1,42 @@
 import { apiClient } from '@genemap/shared';
 
-// Same-message dedupe so a tight render loop or a repeatedly-rejected promise
-// can't flood the backend (which has its own throttle, but we avoid the chatter
-// at the source too).
 const DEDUPE_MS = 60_000;
-let lastReport = { message: null, at: 0 };
+const ALLOWED_ERROR_CLASSES = new Set([
+  'Error',
+  'TypeError',
+  'ReferenceError',
+  'RangeError',
+]);
+let lastReport = { key: null, at: 0 };
 
 /**
- * Report a client-side error to the backend, which decides whether to email the
- * owner. Fire-and-forget: never throws, swallows all failures.
+ * Send only a finite, non-identifying operational event. Error messages,
+ * stacks, routes, user values, and caller-supplied status codes can contain
+ * sensitive free text and must never leave the browser through this path.
  *
- * @param {any} error               an Error (or anything thrown)
- * @param {object} [info]
- * @param {string} [info.componentStack]  React error-boundary component stack
- * @param {number} [info.statusCode]
+ * @param {unknown} error
+ * @param {{ componentStack?: string }} [info]
  */
 export function reportClientError(error, info = {}) {
   try {
-    const err = /** @type {any} */ (error);
-    const message =
-      err && err.message ? String(err.message) : String(err || 'Unknown client error');
+    const candidate = /** @type {{ name?: unknown }} */ (error);
+    const candidateName = typeof candidate?.name === 'string' ? candidate.name : 'Error';
+    const errorClass = ALLOWED_ERROR_CLASSES.has(candidateName) ? candidateName : 'Error';
+    const eventCode = info.componentStack ? 'react_render_error' : 'client_runtime_error';
+    const key = `${eventCode}:${errorClass}`;
 
     const now = Date.now();
-    if (lastReport.message === message && now - lastReport.at < DEDUPE_MS) return;
-    lastReport = { message, at: now };
+    if (lastReport.key === key && now - lastReport.at < DEDUPE_MS) return;
+    lastReport = { key, at: now };
 
-    const payload = {
-      message,
-      name: (err && err.name) || 'Error',
-      stack: (err && err.stack) || '',
-      componentStack: info.componentStack || '',
-      route: typeof window !== 'undefined' ? window.location.pathname : '',
-      statusCode: info.statusCode,
-    };
-
-    // Reuse the shared ApiClient so the report inherits the resolved API base
-    // URL + CSRF handling. Detached + swallowed: reporting must never surface
-    // its own error to the caller.
     Promise.resolve(
       apiClient.request('/report-client-error', {
         method: 'POST',
-        body: JSON.stringify(payload),
-      })
+        body: JSON.stringify({ eventCode, errorClass }),
+      }),
     ).catch(() => {});
   } catch {
-    /* swallow — error reporting must never itself throw */
+    /* reporting must never affect the user-visible error path */
   }
 }
 
