@@ -328,13 +328,12 @@ describe('production launch verification', () => {
     ]));
   });
 
-  it('self-test executes the verifier end-to-end and confirms fail-closed behaviour', () => {
-    // This is what the release gate runs instead of `node --check`: it actually
-    // imports env.js and exercises the env + evidence validators against a
-    // synthetic hardened fixture, then confirms the verifier still rejects a
-    // non-live Stripe key. A green self-test proves the script runs, not merely
-    // that it parses.
-    const result = runSelfTest(NOW);
+  it('self-test executes env, evidence, and live release checks end-to-end', async () => {
+    // This is what the release gate runs instead of `node --check`: it imports
+    // env.js and exercises env, evidence, HTTP publication-mode, and deployed
+    // SHA validation with synthetic responses, then confirms a non-live Stripe
+    // key is still rejected.
+    const result = await runSelfTest(NOW);
     expect(result.problems).toEqual([]);
     expect(result.ok).toBe(true);
   });
