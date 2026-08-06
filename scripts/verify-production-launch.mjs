@@ -430,7 +430,7 @@ export async function checkHttpEndpoints(opts) {
     const mediaType = contentType.split(';', 1)[0].trim().toLowerCase();
     const cacheDirectives = (response.headers?.get?.('cache-control') || '')
       .split(',')
-      .map((directive) => directive.trim().split('=', 1)[0].toLowerCase())
+      .map((directive) => directive.trim().toLowerCase())
       .filter(Boolean);
     const keys = body && typeof body === 'object' && !Array.isArray(body)
       ? Object.keys(body)
