@@ -27,6 +27,8 @@ export const PUBLICATION_TASK_VALUES = Object.freeze(Object.values(PUBLICATION_T
 const HIDDEN_PATH_PREFIXES = Object.freeze([
   '/clinical-trials',
   '/genomics/vcf',
+  '/genomics/variant',
+  '/genomics/clinvar',
   '/entities/medical-data',
   '/entities/conversations',
 ]);
@@ -155,17 +157,24 @@ function block(message) {
   };
 }
 
+export function hiddenPathBoundaryDecision({ url, routeUrl } = {}) {
+  if (HIGH_RISK_CLINICAL_FEATURES_ENABLED) return null;
+  const path = policyPath({ routeUrl, url });
+  if (!HIDDEN_PATH_PREFIXES.some((prefix) => hasPathPrefix(path, prefix))) return null;
+  return {
+    statusCode: 404,
+    code: 'FEATURE_NOT_AVAILABLE',
+    message: 'This feature is not available in the education and exploratory-research build.',
+  };
+}
+
 export function publicationBoundaryDecision({ url, routeUrl, body } = {}) {
   if (HIGH_RISK_CLINICAL_FEATURES_ENABLED) return null;
 
+  const hiddenDecision = hiddenPathBoundaryDecision({ url, routeUrl });
+  if (hiddenDecision) return hiddenDecision;
+
   const path = policyPath({ routeUrl, url });
-  if (HIDDEN_PATH_PREFIXES.some((prefix) => hasPathPrefix(path, prefix))) {
-    return {
-      statusCode: 404,
-      code: 'FEATURE_NOT_AVAILABLE',
-      message: 'This feature is not available in the education and exploratory-research build.',
-    };
-  }
   if (SAFE_NON_GENERATION_EDUCATION_ROUTES.has(path)) return null;
 
   const routeOwnedTask = ROUTE_OWNED_TASKS.get(path);
@@ -217,6 +226,23 @@ export function publicationBoundaryDecision({ url, routeUrl, body } = {}) {
   return null;
 }
 
+export async function enforceHiddenPathBoundary(request, reply) {
+  const rawUrl = request?.raw?.url || request?.url;
+  const routeUrl = request?.routeOptions?.url;
+  const decision = hiddenPathBoundaryDecision({ url: rawUrl, routeUrl });
+  if (!decision) return undefined;
+
+  request?.log?.info?.(
+    { path: policyPath({ routeUrl, url: rawUrl }), boundaryCode: decision.code },
+    'publication boundary blocked request'
+  );
+  return reply.code(decision.statusCode).send({
+    error: decision.message,
+    code: decision.code,
+    publicationMode: PUBLICATION_MODE,
+  });
+}
+
 export async function enforcePublishingBoundary(request, reply) {
   const rawUrl = request?.raw?.url || request?.url;
   const routeUrl = request?.routeOptions?.url;
@@ -246,4 +272,5 @@ export const __test = {
   requestedTask,
   safeDecodePath,
   HIDDEN_PATH_PREFIXES,
+  hiddenPathBoundaryDecision,
 };
