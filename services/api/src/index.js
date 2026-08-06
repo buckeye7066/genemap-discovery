@@ -30,6 +30,7 @@ import clinicalTrialRoutes from './routes/clinicalTrials.js';
 import clientErrorRoutes from './routes/clientError.js';
 import {
   PUBLICATION_MODE,
+  enforceHiddenPathBoundary,
   enforcePublishingBoundary,
 } from './config/publishingBoundary.js';
 
@@ -118,11 +119,12 @@ fastify.addHook(
   })
 );
 
-// Enforce the public education/research product boundary at the API choke
-// point. UI hiding is not security: direct calls to clinical, medical-record,
-// VCF, PGx, dosing, and diagnostic paths are rejected here as well. Register
-// it before CSRF so a disabled path has the same fail-closed response whether
-// or not a caller supplies cookie-auth request headers.
+// Reject hidden path families during onRequest, before content-type parsing,
+// so the publication build never accepts a VCF/medical/clinical request body.
+fastify.addHook('onRequest', enforceHiddenPathBoundary);
+
+// Enforce bounded generation contracts after parsing their small structured
+// bodies. Register before CSRF and child route authentication/handlers.
 fastify.addHook('preHandler', enforcePublishingBoundary);
 
 // Global CSRF guard for state-changing requests on cookie-authenticated paths.
