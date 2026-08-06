@@ -97,11 +97,16 @@ async function requireConsent(prisma, userId, consentType, minVersion) {
   }
 }
 
+const SELF_SERVICE_PURGE_TYPES = Object.freeze([
+  'medicalData',
+  'aiConversations',
+  'searchHistory',
+]);
+
 /**
- * Process a pending DataDeletionRequest by deleting the user's medical
- * data, AI conversations, and search history in a single transaction so
- * that any partial failure rolls back. Audit logs intentionally remain so
- * we can still answer "who requested deletion and when" for compliance.
+ * Process the currently implemented, limited content purge in one transaction.
+ * This is not account closure or processor/backup deletion. Any partial
+ * database failure rolls the purge back.
  */
 async function processDeletionRequest(prisma, requestId) {
   return prisma.$transaction(async (tx) => {
@@ -117,7 +122,7 @@ async function processDeletionRequest(prisma, requestId) {
       data: {
         status: 'completed',
         completedAt: new Date(),
-        deletedTypes: ['medicalData', 'aiConversations', 'searchHistory'],
+        deletedTypes: [...SELF_SERVICE_PURGE_TYPES],
       },
     });
   });
@@ -827,15 +832,13 @@ export default async function entityRoutes(fastify) {
     return { records };
   });
 
-  // ─── Data Deletion Requests (HIPAA Compliance) ─────────────
-  fastify.post('/data-deletion-request', async (request) => {
-    const { deletedTypes } = request.body || {};
-
+  // ─── Limited self-service content purge ─────────────────────
+  fastify.post('/data-deletion-request', async (request, reply) => {
     const deletionRequest = await prisma.dataDeletionRequest.create({
       data: {
         userId: request.user.userId,
         status: 'pending',
-        deletedTypes: deletedTypes || [],
+        deletedTypes: [...SELF_SERVICE_PURGE_TYPES],
       },
     });
 
@@ -846,20 +849,39 @@ export default async function entityRoutes(fastify) {
         action: 'data_deletion_requested',
         entityType: 'data_deletion_request',
         entityId: deletionRequest.id,
-        metadata: { deletedTypes: deletedTypes || [] },
+        metadata: { deletedTypes: [...SELF_SERVICE_PURGE_TYPES] },
       },
       { required: true }
     );
 
-    // Self-service deletion runs immediately for the requester. Admin
-    // override / cool-off windows can later wrap this in a queue.
+    // This limited purge runs immediately. A full account/processor deletion
+    // requires the separately reviewed workflow documented in DATA_RETENTION.
     try {
-      await processDeletionRequest(prisma, deletionRequest.id);
-    } catch (err) {
-      console.error('[entities] processDeletionRequest failed:', err.message);
+      const processedRequest = await processDeletionRequest(prisma, deletionRequest.id);
+      return { request: processedRequest || deletionRequest };
+    } catch {
+      request.log.error(
+        { requestId: request.id, deletionRequestId: deletionRequest.id },
+        'deletion request processing failed'
+      );
+      let failedRequest = deletionRequest;
+      try {
+        failedRequest = await prisma.dataDeletionRequest.update({
+          where: { id: deletionRequest.id },
+          data: { status: 'failed' },
+        });
+      } catch {
+        request.log.error(
+          { requestId: request.id, deletionRequestId: deletionRequest.id },
+          'deletion request failure state could not be persisted'
+        );
+      }
+      return reply.code(503).send({
+        request: failedRequest,
+        error: 'The content purge did not complete; the request was retained for operator review.',
+        code: 'DELETION_NOT_COMPLETED',
+      });
     }
-
-    return { request: deletionRequest };
   });
 
   fastify.get('/data-deletion-request', async (request) => {
