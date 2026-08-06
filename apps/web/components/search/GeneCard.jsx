@@ -1,5 +1,4 @@
 import React, { useState, memo } from "react";
-import { lazyWithRetry } from "@/lib/lazyWithRetry";
 import { apiClient } from "@genemap/shared";
 import { useAuth } from '../../lib/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,14 +23,6 @@ import {
   AlertTriangle,
   Info
 } from "lucide-react";
-import { Separator } from "@/components/ui/separator";
-const GeneExpressionChart = lazyWithRetry(() => import("../visualizations/GeneExpressionChart"));
-const ChromosomeView = lazyWithRetry(() => import("../visualizations/ChromosomeView"));
-const PhenotypeNetwork = lazyWithRetry(() => import("../visualizations/PhenotypeNetwork"));
-const ProteinDomains = lazyWithRetry(() => import("../visualizations/ProteinDomains"));
-const ProteinStructure = lazyWithRetry(() => import("../visualizations/ProteinStructure"));
-const ProteinInteractions = lazyWithRetry(() => import("../visualizations/ProteinInteractions"));
-const GenomeBrowser = lazyWithRetry(() => import("../visualizations/GenomeBrowser"));
 import { exportGeneReport, exportJSON, copyShareableLink } from "../../lib/exportUtils";
 import { Download, Copy, Printer } from "lucide-react";
 
@@ -366,56 +357,6 @@ function GeneCard({ gene, rank, isSelected = false, onSelect = null }) {
           </div>
         )}
 
-        {isExpanded && (
-          <>
-            <Separator className="my-4" />
-
-            <div className="space-y-4">
-              <GenomeBrowser 
-                genes={[gene]} 
-                onGeneClick={(clickedGene) => {
-                  if (clickedGene.symbol !== gene.symbol) {
-                    window.open(`/search?query=${clickedGene.symbol}`, '_blank');
-                  }
-                }}
-              />
-
-              <ChromosomeView
-                gene={gene}
-                userEducationLevel={user?.education_level}
-              />
-
-              {gene.expressionData && gene.expressionData.length > 0 && (
-                <GeneExpressionChart
-                  expressionData={gene.expressionData}
-                  userEducationLevel={user?.education_level}
-                />
-              )}
-
-              {gene.phenotypes && gene.phenotypes.length > 3 && (
-                <PhenotypeNetwork
-                  phenotypes={gene.phenotypes}
-                  userEducationLevel={user?.education_level}
-                />
-              )}
-
-              <ProteinDomains
-                gene={gene}
-                userEducationLevel={user?.education_level}
-              />
-
-              <ProteinStructure
-                gene={gene}
-                userEducationLevel={user?.education_level}
-              />
-
-              <ProteinInteractions
-                gene={gene}
-                userEducationLevel={user?.education_level}
-              />
-            </div>
-          </>
-        )}
 
       </CardContent>
     </Card>
