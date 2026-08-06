@@ -3,6 +3,7 @@ import Fastify from 'fastify';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   PUBLICATION_TASKS,
+  enforceHiddenPathBoundary,
   enforcePublishingBoundary,
 } from '../config/publishingBoundary.js';
 import { TOPICS_CATALOG } from '../config/educationCatalog.js';
@@ -93,7 +94,10 @@ async function buildBoundaryApp() {
   const app = Fastify({ logger: false });
   const handler = vi.fn(async () => ({ ok: true }));
   const auth = vi.fn(async () => undefined);
+  const bodyParser = vi.fn((_request, body, done) => done(null, { body }));
 
+  app.addContentTypeParser('application/x-genemap-vcf', { parseAs: 'string' }, bodyParser);
+  app.addHook('onRequest', enforceHiddenPathBoundary);
   app.addHook('preHandler', enforcePublishingBoundary);
   app.register(async (routes) => {
     routes.addHook('preHandler', auth);
@@ -133,7 +137,7 @@ async function buildBoundaryApp() {
   }, { prefix: '/education' });
   app.route({ method: ['GET', 'POST'], url: '/*', handler });
   await app.ready();
-  return { app, handler, auth };
+  return { app, handler, auth, bodyParser };
 }
 
 async function buildResolverGuardApp(dependencies) {
@@ -170,13 +174,15 @@ describe('structured publication boundary in real Fastify', () => {
   let app;
   let handler;
   let auth;
+  let bodyParser;
 
   beforeAll(async () => {
-    ({ app, handler, auth } = await buildBoundaryApp());
+    ({ app, handler, auth, bodyParser } = await buildBoundaryApp());
   });
   beforeEach(() => {
     handler.mockClear();
     auth.mockClear();
+    bodyParser.mockClear();
   });
   afterAll(async () => app.close());
 
@@ -227,15 +233,30 @@ describe('structured publication boundary in real Fastify', () => {
     expect(handler).not.toHaveBeenCalled();
   });
 
+  it('rejects VCF content before a body parser sees it', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/genomics/vcf/parse',
+      headers: { 'content-type': 'application/x-genemap-vcf' },
+      payload: '#CHROM POS ID REF ALT\nchr1 123 rs1 A G',
+    });
+    expect(response.statusCode).toBe(404);
+    expect(bodyParser).not.toHaveBeenCalled();
+    expect(auth).not.toHaveBeenCalled();
+    expect(handler).not.toHaveBeenCalled();
+  });
+
   it('registers the production boundary before CSRF and route plugins', () => {
     const source = readFileSync(new URL('../index.js', import.meta.url), 'utf8');
+    const earlyBoundaryIndex = source.indexOf("fastify.addHook('onRequest', enforceHiddenPathBoundary)");
     const boundaryIndex = source.indexOf("fastify.addHook('preHandler', enforcePublishingBoundary)");
     const csrfIndex = source.indexOf("fastify.addHook('preHandler', requireCsrf)");
     const entitiesIndex = source.indexOf("fastify.register(entityRoutes");
     const genomicsIndex = source.indexOf("fastify.register(genomicsRoutes");
     const trialsIndex = source.indexOf("fastify.register(clinicalTrialRoutes");
 
-    expect(boundaryIndex).toBeGreaterThan(-1);
+    expect(earlyBoundaryIndex).toBeGreaterThan(-1);
+    expect(boundaryIndex).toBeGreaterThan(earlyBoundaryIndex);
     expect(csrfIndex).toBeGreaterThan(boundaryIndex);
     expect(entitiesIndex).toBeGreaterThan(boundaryIndex);
     expect(genomicsIndex).toBeGreaterThan(boundaryIndex);
