@@ -343,8 +343,9 @@ describe('production launch verification', () => {
       new URL('../../../../.github/workflows/production-smoke.yml', import.meta.url),
       'utf8'
     );
-    expect(workflow).toContain("extractWebReleaseSha");
-    expect(workflow).toContain("--proto '=https'");
+    expect(workflow).toContain('extractWebReleaseSha');
+    expect(workflow).toContain("redirect: 'error'");
+    expect(workflow).toMatch(/response\.status !== 200/u);
     expect(workflow).not.toContain('--location');
   });
 
