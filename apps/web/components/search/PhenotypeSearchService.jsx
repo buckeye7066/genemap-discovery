@@ -90,6 +90,7 @@ export class PhenotypeSearchService {
 
       return {
         query: phenotypeQuery,
+        publicationReference: queryReference,
         candidateGenes: baseGenes,
         isPremium: effectivePremium,
         hpoTerms: analysis.hpoTerms || [],
