@@ -38,6 +38,11 @@ const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
 const GLOBAL_RATE_LIMIT_MAX = 100;
 const AUTH_RATE_LIMIT_MAX = 10;
 
+const railwayCommitSha = process.env.RAILWAY_GIT_COMMIT_SHA || '';
+const releaseSha = /^[a-f0-9]{40}$/u.test(railwayCommitSha)
+  ? railwayCommitSha
+  : null;
+
 // Load + validate env BEFORE constructing anything that depends on it.
 // loadEnv() throws in production if required secrets are missing.
 const env = loadEnv();
@@ -201,6 +206,7 @@ fastify.get('/readyz', { config: { rateLimit: false } }, async (request, reply) 
     status: 'ready',
     degraded: rateLimitProtection.emergency,
     publicationMode: PUBLICATION_MODE,
+    releaseSha,
     medicalEncryption: env.hasMedicalEncryption(),
     rateLimitStore: rateLimitStoreStatus(rateLimitRedis),
     rateLimitProtection,
