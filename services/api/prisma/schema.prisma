@@ -385,6 +385,10 @@ model ProjectAnnotation {
   @@map("project_annotations")
 }
 
+// subjectRef identity, lifecycle-state coherence, legacy rolling-write
+// normalization, and account-deletion scrubbing are enforced by migration-only
+// PostgreSQL triggers/checks in 20260806130000_privacy_deletion_lifecycle.
+// prisma db push and schema drift alone do not reproduce or prove them.
 model ConsentRecord {
   id          String   @id @default(uuid())
   userId      String?  @map("user_id")
