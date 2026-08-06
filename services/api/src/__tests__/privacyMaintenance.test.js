@@ -13,13 +13,14 @@ import {
 let prisma;
 const SUBJECT = '11111111-1111-4111-8111-111111111111';
 const OTHER = '22222222-2222-4222-8222-222222222222';
+const PRIVACY_REF = '99999999-9999-4999-8999-999999999999';
 const NOW = new Date('2026-08-06T13:00:00.000Z');
 
 function seedRequest(overrides = {}) {
   const row = {
     id: overrides.id || 'deletion-1',
     userId: SUBJECT,
-    subjectRef: SUBJECT,
+    subjectRef: PRIVACY_REF,
     scope: 'legacy_content_v1',
     status: 'pending',
     requestedAt: new Date(NOW.getTime() - 60_000),
@@ -172,10 +173,28 @@ describe('privacy deletion lifecycle', () => {
         status: 'operator_review',
         attemptCount: 5,
         nextAttemptAt: null,
-        failureCode: 'local_purge_failed',
+        failureCode: 'retry_exhausted',
       },
     });
     expect(JSON.stringify(result)).not.toContain('private canary');
+  });
+
+  it('moves an expired fifth lease to operator review without a sixth attempt', async () => {
+    seedRequest({
+      id: 'exhausted-lease',
+      status: 'processing',
+      attemptCount: 5,
+      nextAttemptAt: null,
+      leaseExpiresAt: new Date(NOW.getTime() - 1),
+    });
+
+    const summary = await runPrivacyMaintenance(prisma, { now: NOW, maxAttempts: 5 });
+    expect(summary).toMatchObject({ claimed: 0, operatorReview: 1 });
+    expect(prisma._store.dataDeletionRequest[0]).toMatchObject({
+      status: 'operator_review',
+      attemptCount: 5,
+      failureCode: 'retry_exhausted',
+    });
   });
 
   it('prunes only sessions at or before the expiry boundary', async () => {
