@@ -69,7 +69,7 @@ VALUES
     '11111111-1111-4111-8111-111111111111',
     'completed',
     CURRENT_TIMESTAMP - INTERVAL '1 hour',
-    NULL,
+    CURRENT_TIMESTAMP - INTERVAL '30 minutes',
     ARRAY['medicalData', 'aiConversations', 'searchHistory']::TEXT[]
   );
 SQL
@@ -80,16 +80,23 @@ psql "$DATABASE_URL" -v ON_ERROR_STOP=1 >/dev/null <<'SQL'
 DO $privacy_upgrade$
 DECLARE
   subject_id CONSTANT TEXT := '11111111-1111-4111-8111-111111111111';
+  privacy_ref UUID;
   row_record RECORD;
 BEGIN
+  SELECT "privacy_subject_ref" INTO privacy_ref
+  FROM "users" WHERE "id" = subject_id;
+  IF privacy_ref IS NULL THEN
+    RAISE EXCEPTION 'independent privacy subject was not backfilled';
+  END IF;
+
   SELECT * INTO row_record FROM "consent_records" WHERE "id" = 'consent-upgrade';
-  IF row_record."subject_ref" <> subject_id OR row_record."user_id" <> subject_id THEN
+  IF row_record."subject_ref" <> privacy_ref OR row_record."user_id" <> subject_id THEN
     RAISE EXCEPTION 'consent subject reference was not backfilled';
   END IF;
 
   SELECT * INTO row_record FROM "data_deletion_requests" WHERE "id" = 'deletion-pending';
   IF row_record."status" <> 'pending'
-     OR row_record."subject_ref" <> subject_id
+     OR row_record."subject_ref" <> privacy_ref
      OR row_record."next_attempt_at" IS NULL
      OR cardinality(row_record."deleted_types") <> 0 THEN
     RAISE EXCEPTION 'pending deletion backfill is incorrect';
@@ -110,20 +117,51 @@ BEGIN
     RAISE EXCEPTION 'completed deletion evidence was not preserved';
   END IF;
 
+  -- Legacy-style writes omit every newly added column. Defaults and triggers
+  -- must keep those writes safe during a rolling deployment.
+  INSERT INTO "consent_records" (
+    "id", "user_id", "consent_type", "version", "granted"
+  )
+  VALUES ('consent-legacy-write', subject_id, 'research', '1.0', FALSE);
+
+  INSERT INTO "data_deletion_requests" (
+    "id", "user_id", "status", "deleted_types"
+  )
+  VALUES (
+    'deletion-legacy-write',
+    subject_id,
+    'pending',
+    ARRAY['rolling-client-canary']::TEXT[]
+  );
+
+  SELECT * INTO row_record
+  FROM "data_deletion_requests" WHERE "id" = 'deletion-legacy-write';
+  IF row_record."subject_ref" <> privacy_ref
+     OR row_record."status" <> 'pending'
+     OR cardinality(row_record."deleted_types") <> 0
+     OR row_record."updated_at" IS NULL THEN
+    RAISE EXCEPTION 'legacy deletion insert was not normalized';
+  END IF;
+
   DELETE FROM "users" WHERE "id" = subject_id;
 
-  IF EXISTS (
-    SELECT 1 FROM "consent_records"
-    WHERE "id" = 'consent-upgrade'
-      AND ("user_id" IS NOT NULL OR "subject_ref" <> subject_id)
-  ) THEN
-    RAISE EXCEPTION 'consent evidence did not survive account deletion';
+  IF (
+    SELECT COUNT(*) FROM "consent_records"
+    WHERE "subject_ref" = privacy_ref
+      AND "user_id" IS NULL
+      AND "ip_address" IS NULL
+      AND "metadata" = '{"erasedOnAccountDeletion":true}'::JSONB
+  ) <> 2 THEN
+    RAISE EXCEPTION 'consent evidence did not survive in scrubbed form';
   END IF;
 
   IF (
     SELECT COUNT(*) FROM "data_deletion_requests"
-    WHERE "subject_ref" = subject_id AND "user_id" IS NULL
-  ) <> 3 THEN
+    WHERE "subject_ref" = privacy_ref
+      AND "user_id" IS NULL
+      AND "status" = 'completed'
+      AND cardinality("deleted_types") = 3
+  ) <> 4 THEN
     RAISE EXCEPTION 'deletion evidence did not survive account deletion';
   END IF;
 
@@ -136,7 +174,7 @@ BEGIN
     VALUES (
       'invalid-status',
       NULL,
-      subject_id,
+      privacy_ref,
       'legacy_content_v1',
       'free_form_status',
       CURRENT_TIMESTAMP,
