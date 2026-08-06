@@ -10,82 +10,8 @@ import {
 import { getSources } from '../services/educationSources.js';
 import { assertNoRawGenomicLLM } from '../services/genomicGuard.js';
 import { AppError } from '../utils/errors.js';
-import { MAX_MESSAGE_CHARS } from '../config/llmLimits.js';
-
-const TOPICS_CATALOG = [
-  {
-    category: 'DNA Basics',
-    topics: [
-      { id: 'what-is-dna', title: 'What is DNA?', description: 'The molecule of life' },
-      { id: 'dna-structure', title: 'DNA Structure', description: 'The double helix and base pairing' },
-      { id: 'dna-replication', title: 'DNA Replication', description: 'How DNA copies itself' },
-      { id: 'genes-and-chromosomes', title: 'Genes & Chromosomes', description: 'How DNA is organized' },
-    ],
-  },
-  {
-    category: 'How Genes Work',
-    topics: [
-      { id: 'transcription', title: 'Transcription', description: 'From DNA to RNA' },
-      { id: 'translation', title: 'Translation', description: 'From RNA to Protein' },
-      { id: 'gene-expression', title: 'Gene Expression', description: 'When and how genes are turned on' },
-      { id: 'gene-regulation', title: 'Gene Regulation', description: 'Controlling gene activity' },
-    ],
-  },
-  {
-    category: 'Inheritance',
-    topics: [
-      { id: 'mendelian-genetics', title: 'Mendelian Genetics', description: 'Dominant and recessive traits' },
-      { id: 'punnett-squares', title: 'Punnett Squares', description: 'Predicting offspring traits' },
-      { id: 'sex-linked-traits', title: 'Sex-Linked Traits', description: 'Genes on the X and Y chromosomes' },
-      { id: 'complex-inheritance', title: 'Complex Inheritance', description: 'Beyond simple dominance' },
-    ],
-  },
-  {
-    category: 'Mutations & Variation',
-    topics: [
-      { id: 'what-are-mutations', title: 'What Are Mutations?', description: 'Changes in the DNA sequence' },
-      { id: 'types-of-mutations', title: 'Types of Mutations', description: 'Point mutations, insertions, deletions' },
-      { id: 'genetic-variation', title: 'Genetic Variation', description: 'Why we are all different' },
-      { id: 'snps-and-polymorphisms', title: 'SNPs & Polymorphisms', description: 'Common genetic differences' },
-    ],
-  },
-  {
-    category: 'Genomics & Technology',
-    topics: [
-      { id: 'human-genome-project', title: 'The Human Genome Project', description: 'Mapping all human genes' },
-      { id: 'dna-sequencing', title: 'DNA Sequencing', description: 'Reading the genetic code' },
-      { id: 'crispr', title: 'CRISPR Gene Editing', description: 'Editing genes with molecular scissors' },
-      { id: 'genetic-testing', title: 'Genetic Testing', description: 'What your DNA can tell you' },
-    ],
-  },
-  {
-    category: 'Genetics & Health',
-    topics: [
-      { id: 'genetic-diseases', title: 'Genetic Diseases', description: 'When genes cause illness' },
-      { id: 'cancer-genetics', title: 'Cancer Genetics', description: 'How genes relate to cancer' },
-      { id: 'pharmacogenomics', title: 'Pharmacogenomics', description: 'How genes affect drug response' },
-      { id: 'gene-therapy', title: 'Gene Therapy', description: 'Treating disease by fixing genes' },
-    ],
-  },
-  {
-    category: 'Evolution & Population Genetics',
-    topics: [
-      { id: 'natural-selection', title: 'Natural Selection', description: 'Survival of the fittest' },
-      { id: 'population-genetics', title: 'Population Genetics', description: 'Genes in groups' },
-      { id: 'molecular-evolution', title: 'Molecular Evolution', description: 'How DNA changes over time' },
-      { id: 'phylogenetics', title: 'Phylogenetics', description: 'The tree of life' },
-    ],
-  },
-  {
-    category: 'Advanced Topics',
-    topics: [
-      { id: 'epigenetics', title: 'Epigenetics', description: 'Changes beyond the DNA sequence' },
-      { id: 'rna-world', title: 'The RNA World', description: 'Non-coding RNA and regulation' },
-      { id: 'systems-biology', title: 'Systems Biology', description: 'Networks and pathways' },
-      { id: 'synthetic-biology', title: 'Synthetic Biology', description: 'Engineering life' },
-    ],
-  },
-];
+import { TOPICS_CATALOG } from '../config/educationCatalog.js';
+import { composePublicationPrompt } from '../config/publicationTaskContracts.js';
 
 // Index every catalog topic by BOTH its id and its lower-cased title, so a
 // request that passes either (the client sends the title) resolves to the
@@ -100,9 +26,10 @@ for (const { category, topics } of TOPICS_CATALOG) {
 }
 
 /**
- * Resolve authoritative references for a requested topic. A known topic gets
- * its glossary + category + general sources; an unknown/custom topic still gets
- * the general NIH/NHGRI references so every explanation is source-grounded.
+ * Resolve authoritative references for a requested catalog topic. The global
+ * publication boundary rejects unknown/custom topics before these handlers;
+ * the general source fallback remains defensive for catalog entries without a
+ * dedicated glossary record and for isolated unit tests of this helper.
  */
 function sourcesForTopic(topic) {
   const meta = TOPIC_INDEX.get(String(topic ?? '').trim().toLowerCase());
@@ -139,11 +66,7 @@ const levelField = z.preprocess(
 const explainSchema = z.object({
   topic: z.string().min(1).max(500),
   level: levelField,
-  // Bound the optional free-text context by the same shared LLM input ceiling
-  // so an enriched explanation request can't be unbounded, while still allowing
-  // the large medical/genomic context the app legitimately prepends.
-  context: z.string().max(MAX_MESSAGE_CHARS).optional(),
-});
+}).strict();
 
 const imageSchema = z.object({
   topic: z.string().min(1).max(500),
@@ -156,19 +79,27 @@ const quizSchema = z.object({
   questionCount: z.number().min(1).max(20).optional(),
 });
 
-// Reject client-supplied system prompts. Allowing role: 'system' from the
-// browser lets a user override the educational guard rails (level, persona,
-// safety instructions). Only the server adds the system message.
 const chatSchema = z.object({
-  messages: z.array(z.object({
-    role: z.enum(['user', 'assistant']),
-    content: z.string().min(1).max(MAX_MESSAGE_CHARS),
-  })).min(1).max(50),
-  level: z.string().min(1),
-  // Optional topic context so the tutor turn can carry the same authoritative
-  // references the explanation does. Falls back to the latest user message.
-  topic: z.string().trim().max(500).optional(),
-});
+  publicationTask: z.literal('genetics_education'),
+  taskInput: z.object({
+    version: z.literal(1),
+    topic: z.string().min(1).max(200),
+    level: z.enum([
+      'elementary',
+      'middle_school',
+      'high_school',
+      'undergraduate',
+      'graduate',
+      'postgraduate',
+    ]),
+    interaction: z.enum([
+      'explain_another_way',
+      'give_example',
+      'compare_concepts',
+      'check_understanding',
+    ]),
+  }).strict(),
+}).strict();
 
 // Validate quiz-progress writes. Without this, a missing `topicId` made Prisma
 // drop the filter (`where: { userId, topicId: undefined }`) so findFirst matched
@@ -204,17 +135,13 @@ export default async function educationRoutes(fastify) {
   });
 
   fastify.post('/explain', { preHandler: [authenticate, checkEducationEntitlement, enforceUsageLimit] }, async (request) => {
-    const { topic, level, context } = explainSchema.parse(request.body);
+    const { topic, level } = explainSchema.parse(request.body);
 
-    // The optional `context` field is prepended to the prompt sent to a cloud
-    // LLM. Enforce the same no-cloud-genomic default the /llm proxy does so a
-    // raw VCF can't be smuggled to OpenAI/Anthropic via the education surface.
-    const allowGenomic = await assertNoRawGenomicLLM(prisma, request.user?.userId, `${topic}\n${context || ''}`);
+    const allowGenomic = await assertNoRawGenomicLLM(prisma, request.user?.userId, topic);
 
     const levelPrompt = LEVEL_PROMPTS[level] || LEVEL_PROMPTS.undergraduate;
     const prompt = [
       `You are a genetics educator. ${levelPrompt}`,
-      context ? `\nAdditional context: ${context}` : '',
       `\nTopic to explain: ${topic}`,
       '\nStructure your response with these sections:',
       '## The Big Picture',
@@ -364,14 +291,19 @@ export default async function educationRoutes(fastify) {
   });
 
   fastify.post('/chat', { preHandler: [authenticate, checkEducationEntitlement, enforceUsageLimit] }, async (request) => {
-    const { messages, level, topic } = chatSchema.parse(request.body);
+    const { publicationTask, taskInput } = chatSchema.parse(request.body);
+    const composed = composePublicationPrompt(publicationTask, taskInput, {
+      routePath: '/education/chat',
+    });
+    if (!composed.ok) {
+      throw new AppError(composed.reason || 'The guided tutor request is invalid.', 400);
+    }
+    const { topic, level } = composed.value;
 
-    // Tutor-chat turns also reach a cloud LLM; block a raw genomic dump pasted
-    // into the conversation by default (same policy as /llm/chat).
     const allowGenomic = await assertNoRawGenomicLLM(
       prisma,
       request.user?.userId,
-      messages.map((m) => m.content).join('\n'),
+      composed.prompt,
     );
 
     const levelPrompt = LEVEL_PROMPTS[level] || LEVEL_PROMPTS.undergraduate;
@@ -379,7 +311,7 @@ export default async function educationRoutes(fastify) {
       `You are a friendly genetics tutor. ${levelPrompt} Be encouraging, ask follow-up questions to check understanding, and provide examples when helpful. If the student seems confused, try a different approach or analogy.`,
     );
 
-    const fullMessages = [systemMessage, ...messages];
+    const fullMessages = [systemMessage, { role: 'user', content: composed.prompt }];
     // Keep the chat on the default (higher-quality) model — tutor turns are
     // short, so latency is not the problem here — but still cap the wait so a
     // stalled upstream returns a clean error instead of an empty gateway body.
@@ -387,14 +319,17 @@ export default async function educationRoutes(fastify) {
     if (request.user?.userId) {
       try {
         await prisma.learningSession.create({
-          data: { userId: request.user.userId, topic: 'chat', level, type: 'chat', content: { messageCount: messages.length } },
+          data: {
+            userId: request.user.userId,
+            topic,
+            level,
+            type: 'chat',
+            content: { interaction: taskInput.interaction, taskInputVersion: taskInput.version },
+          },
         });
       } catch { /* non-critical */ }
     }
-    // Ground the tutor turn too: prefer an explicit topic, else fall back to
-    // the latest user message. Unknown topics still yield the general refs.
-    const lastUserMessage = [...messages].reverse().find((m) => m.role === 'user');
-    const sources = sourcesForTopic(topic || lastUserMessage?.content || '');
+    const sources = sourcesForTopic(topic);
 
     return { response, role: 'assistant', sources, usage: request.usageInfo || null, tier: request.entitlements?.tier || 'free' };
   });

@@ -1,383 +1,194 @@
-# Backup and Recovery Guide
+# Backup and recovery
 
-## Backup Strategy
+This guide describes the repository's manual snapshot scripts. It does not
+claim that a hosting provider backup, schedule, retention policy, restore SLA,
+or alert exists unless current operational evidence has been recorded outside
+the repository.
 
-### Automated Backups
+## What the scripts do
 
-#### Railway PostgreSQL
-- **Frequency**: Daily automatic backups by Railway
-- **Retention**: 7 days (free tier) or 30 days (pro tier)
-- **Location**: Railway infrastructure
+`scripts/backup-snapshot.sh` and `scripts/backup-snapshot.ps1`:
 
-#### Manual Backups
+1. export only files tracked at the current Git `HEAD`;
+2. refuse to run if common credential-file names are tracked;
+3. create a PostgreSQL custom-format dump when `DATABASE_URL` is present;
+4. encrypt the database dump and the final database-bearing archive with
+   authenticated [`age`](https://age-encryption.org/) encryption;
+5. write a SHA-256 checksum next to the archive;
+6. optionally copy only the final archive and checksum to a pre-existing
+   absolute `DRIVE_DIR`.
 
-Run before any critical operation:
+Untracked files and uncommitted changes are intentionally excluded. A complete
+snapshot is tied to the Git commit recorded in `backup-info.txt`.
+
+The scripts fail without producing a final artifact when the database dump,
+encryption, archive, or checksum step fails. If `DATABASE_URL` is absent, the
+operator must explicitly set `BACKUP_CODE_ONLY=true`; otherwise the command
+fails instead of silently calling a source-only snapshot a complete backup.
+
+## Prerequisites
+
+- `git`, `tar`, and a SHA-256 implementation (`sha256sum` on Bash)
+- `pg_dump` at least as new as the PostgreSQL server
+- `age`
+- an age recipient whose private identity is stored outside the application,
+  repository, CI logs, and backup destination
+- a database connection string supplied through `DATABASE_URL`
+
+The scripts pass the connection string to libpq through `PGDATABASE`, not as a
+`pg_dump` command-line argument. Do not print either database or key material.
+
+## Create a complete backup
+
+Linux/macOS:
 
 ```bash
-# Bash (Linux/Mac)
+export DATABASE_URL='postgresql://...'
+export BACKUP_AGE_RECIPIENT='age1...'
 ./scripts/backup-snapshot.sh
-
-# PowerShell (Windows)
-./scripts/backup-snapshot.ps1
 ```
 
-### What Gets Backed Up
+PowerShell:
 
-1. **Database Schema**: Full Prisma schema
-2. **Database Data**: All tables via pg_dump
-3. **Environment Config**: .env.example files (no secrets)
-4. **Application Code**: Git repository state
-5. **Configuration**: All config files
-
-### Backup Locations
-
-- **Local**: `./backups/` directory (gitignored)
-- **Remote**: Optional cloud storage (S3, Google Drive, etc.)
-
-## Backup Scripts
-
-### Bash Script (Linux/Mac)
-
-Located at: `scripts/backup-snapshot.sh`
-
-Usage:
-```bash
-# Basic backup
-./scripts/backup-snapshot.sh
-
-# With remote storage
-DRIVE_DIR="/mnt/cloud-storage" ./scripts/backup-snapshot.sh
-```
-
-### PowerShell Script (Windows)
-
-Located at: `scripts/backup-snapshot.ps1`
-
-Usage:
 ```powershell
-# Basic backup
+$env:DATABASE_URL = 'postgresql://...'
+$env:BACKUP_AGE_RECIPIENT = 'age1...'
 .\scripts\backup-snapshot.ps1
-
-# With remote storage
-$env:DRIVE_DIR="D:\CloudStorage"; .\scripts\backup-snapshot.ps1
 ```
 
-## Manual Database Backup
+The result is:
 
-### Using pg_dump (Railway)
+```text
+backups/genemap-backup-YYYYMMDD-HHMMSS.tar.gz.age
+backups/genemap-backup-YYYYMMDD-HHMMSS.tar.gz.age.sha256
+```
 
-> **Two gotchas, both verified the hard way:**
-> 1. The API's `DATABASE_URL` points at the **private** host
->    `postgres.railway.internal`, which is **not reachable** from a laptop/CI —
->    `pg_dump` fails with *"could not translate host name"*. For an off-platform
->    dump use the **public** URL from the Postgres service
->    (`DATABASE_PUBLIC_URL`, exposed via Railway's TCP proxy).
-> 2. Production runs **PostgreSQL 18**, and `pg_dump` must be **>= the server
->    major version**. A `pg_dump` 16 against an 18 server aborts with
->    *"server version mismatch"*. Install a 18+ client (e.g. `postgresql-client-18`).
+The outer archive is encrypted. Its database dump is also encrypted as
+`database.dump.age`, so extracting the outer archive never places a plaintext
+database dump on disk.
+
+To create an explicitly source-only archive:
 
 ```bash
-# Off-platform dump via the PUBLIC proxy URL (runs the command with the
-# Postgres service's env injected, so $DATABASE_PUBLIC_URL resolves):
-railway run --service Postgres sh -c 'pg_dump "$DATABASE_PUBLIC_URL"' > backup-$(date +%Y%m%d-%H%M%S).sql
-
-# Compressed:
-railway run --service Postgres sh -c 'pg_dump "$DATABASE_PUBLIC_URL"' | gzip > backup-$(date +%Y%m%d-%H%M%S).sql.gz
-
-# Schema only (small, safe sanity check that backups work — no data leaves the host):
-railway run --service Postgres sh -c 'pg_dump --schema-only "$DATABASE_PUBLIC_URL"' > schema-$(date +%Y%m%d).sql
+BACKUP_CODE_ONLY=true ./scripts/backup-snapshot.sh
 ```
 
-> NOTE: a full dump contains application data. Medical/genomic fields are stored
-> encrypted at rest (AES-256-GCM), so a dump holds ciphertext, not plaintext —
-> but still treat backup files as sensitive and store them encrypted.
+Source-only output ends in `.tar.gz` and must not be recorded as a database
+backup or restore point.
 
-### Using Prisma Studio
+## Remote copy
+
+`DRIVE_DIR` is optional and must already be an absolute, writable directory
+other than the filesystem root:
 
 ```bash
-# Open Prisma Studio
-railway run pnpm db:studio
-
-# Export data manually from UI
-# (Limited to small datasets)
+DRIVE_DIR=/mnt/approved-backup-target ./scripts/backup-snapshot.sh
 ```
 
-## Verified Restore Drill (PG18, Docker — no local Postgres install)
+Configuring a path does not establish vendor retention, immutability, regional
+storage, deletion propagation, access logging, or a service-level agreement.
+Those controls must be verified for the actual storage operator and recorded in
+the processor register before production use.
 
-This exact procedure was run against production and **passed** (24/24 tables
-restored with identical row counts). It needs only Docker, because the pg18
-client + a throwaway target both come from the `postgres:18` image — no need to
-install a matching `pg_dump` locally.
+## Verify an artifact
+
+Run the checksum from the backup directory:
 
 ```bash
-# 1. Get the PUBLIC connection string into an env var (never printed):
-export DBPUB="$(railway run --service Postgres sh -c 'printf %s "$DATABASE_PUBLIC_URL"')"
-
-# 2. Dump production with a pg18 client (must be >= server major):
-docker run --rm postgres:18 pg_dump --no-owner --no-privileges "$DBPUB" > prod-dump.sql
-
-# 3. Start a throwaway pg18 target and restore into it:
-docker run -d --name pg18-drill -e POSTGRES_PASSWORD=drill -e POSTGRES_DB=restoretest postgres:18
-# (wait a few seconds for it to accept connections)
-docker exec -i pg18-drill psql -U postgres -d restoretest -v ON_ERROR_STOP=1 < prod-dump.sql
-
-# 4. Verify row-count parity for every table (prints "MISMATCH" if any differ):
-CQ="SELECT table_name, (xpath('/row/c/text()', query_to_xml(format('SELECT count(*) AS c FROM %I.%I', table_schema, table_name), false, true, '')))[1]::text::int FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE' ORDER BY 1;"
-docker run --rm postgres:18 psql "$DBPUB" -tA -F'|' -c "$CQ" | sort > src.txt
-docker exec pg18-drill psql -U postgres -d restoretest -tA -F'|' -c "$CQ" | sort > tgt.txt
-diff src.txt tgt.txt && echo "RESTORE OK — all tables match" || echo "MISMATCH — investigate"
-
-# 5. CLEAN UP — the dump contains real PII; destroy it and the container:
-docker rm -f pg18-drill
-rm -f prod-dump.sql src.txt tgt.txt
+cd backups
+sha256sum -c genemap-backup-YYYYMMDD-HHMMSS.tar.gz.age.sha256
 ```
 
-The drill **reads** production only (pg_dump); it never writes to prod. Treat
-the dump file as sensitive (it contains user PII; medical fields are ciphertext)
-and delete it when done.
+A checksum proves transport integrity only. A backup is not accepted until a
+restore drill succeeds in an isolated environment.
 
-## Recovery Procedures
+## Restore drill
 
-### Restore from Local Backup
-
-1. **Locate Backup File**
-```bash
-ls -lht backups/
-# Find the backup you need: genemap-backup-YYYYMMDD-HHMMSS.zip
-```
-
-2. **Extract Backup**
-```bash
-unzip backups/genemap-backup-20240128-120000.zip -d restore-temp/
-cd restore-temp/
-```
-
-3. **Restore Database**
-```bash
-# Connect to Railway database
-railway connect
-
-# Restore SQL dump
-psql $DATABASE_URL < database-dump.sql
-```
-
-4. **Verify Restoration**
-```sql
--- Check record counts
-SELECT COUNT(*) FROM users;
-SELECT COUNT(*) FROM subscriptions;
-SELECT COUNT(*) FROM institutional_licenses;
-```
-
-### Restore from Railway Backup
-
-1. **Access Railway Dashboard**
-   - Navigate to your PostgreSQL service
-   - Click "Backups" tab
-
-2. **Select Backup**
-   - Choose backup point to restore
-   - Click "Restore"
-
-3. **Verify Restoration**
-```bash
-railway run pnpm db:studio
-# Check data in Prisma Studio
-```
-
-### Disaster Recovery (Full System)
-
-If entire system needs restoration:
-
-1. **Restore Infrastructure**
-   - Recreate Railway project if needed
-   - Recreate PostgreSQL database
-   - Reconfigure environment variables
-
-2. **Restore Database**
-   ```bash
-   # From backup file
-   psql $NEW_DATABASE_URL < backup.sql
-   ```
-
-3. **Deploy Application**
-   ```bash
-   # Backend
-   cd services/api
-   railway up
-   
-   # Frontend
-   cd apps/web
-   vercel --prod
-   ```
-
-4. **Verify Services**
-   ```bash
-   # Health check
-   curl https://api.yourdomain.com/health
-   
-   # Test authentication
-   curl -X POST https://api.yourdomain.com/auth/login \
-     -H "Content-Type: application/json" \
-     -d '{"email":"test@example.com","password":"testpass"}'
-   ```
-
-## Backup Testing
-
-### Monthly Backup Test
-
-Execute on first Monday of each month:
-
-1. **Create Test Backup**
-   ```bash
-   ./scripts/backup-snapshot.sh
-   ```
-
-2. **Restore to Test Environment**
-   ```bash
-   # Create test database
-   psql $TEST_DATABASE_URL < backup.sql
-   ```
-
-3. **Verify Data Integrity**
-   ```bash
-   # Run validation queries
-   railway run node scripts/validate-backup.js
-   ```
-
-4. **Document Results**
-   - Record test date
-   - Note any issues
-   - Update procedures if needed
-
-## Backup Retention Policy
-
-### Local Backups
-- **Keep**: Last 7 daily backups
-- **Keep**: Last 4 weekly backups
-- **Keep**: Last 12 monthly backups
-- **Delete**: Older than 1 year
-
-### Railway Automatic Backups
-- **Keep**: Railway default retention (7-30 days)
-- **Manual snapshots**: Before major changes
-
-### Cleanup Script
+Never test a restore against production. Keep the restored environment isolated
+from application traffic and outbound processors.
 
 ```bash
-# Delete local backups older than 30 days
-find backups/ -name "genemap-backup-*.zip" -mtime +30 -delete
+# 1. Verify integrity.
+sha256sum -c genemap-backup-YYYYMMDD-HHMMSS.tar.gz.age.sha256
+
+# 2. Decrypt and extract the outer archive.
+age --decrypt --identity /secure/path/backup-identity.txt \
+  --output restore.tar.gz \
+  genemap-backup-YYYYMMDD-HHMMSS.tar.gz.age
+mkdir restore-work
+tar -xzf restore.tar.gz -C restore-work
+
+# 3. Decrypt the nested custom-format database dump.
+age --decrypt --identity /secure/path/backup-identity.txt \
+  --output database.dump \
+  restore-work/genemap-backup-*/database.dump.age
+
+# 4. Restore only into an empty, isolated test database.
+pg_restore --exit-on-error --no-owner --no-privileges \
+  --dbname "$RESTORE_TEST_DATABASE_URL" database.dump
 ```
 
-## Data Export (For Migration)
+After validation, securely remove plaintext restore files and destroy the test
+database. Do not expose the restored service until deletion requests and legal
+holds have been reconciled against a deletion/tombstone ledger that is newer
+than the backup.
 
-### Export Users
-```sql
-COPY (
-  SELECT id, email, role, created_at, updated_at
-  FROM users
-) TO '/tmp/users-export.csv' WITH CSV HEADER;
-```
+The repository does not currently provide that external tombstone ledger.
+Consequently, a restored production database must remain quarantined until an
+operator performs and records that reconciliation; otherwise previously deleted
+data could be resurrected.
 
-### Export Subscriptions
-```sql
-COPY (
-  SELECT 
-    s.id, s.user_id, s.stripe_customer_id, 
-    s.stripe_subscription_id, s.status, s.plan_type,
-    s.current_period_end, s.created_at, s.updated_at
-  FROM subscriptions s
-  WHERE s.status IN ('active', 'trialing')
-) TO '/tmp/subscriptions-export.csv' WITH CSV HEADER;
-```
+## Restore acceptance record
 
-### Export Institutional Licenses
-```sql
-COPY (
-  SELECT 
-    il.id, il.organization_name, il.contact_email,
-    il.license_type, il.max_seats, il.assigned_seats,
-    il.status, il.start_date, il.end_date, il.renewal_date,
-    il.stripe_customer_id, il.stripe_subscription_id
-  FROM institutional_licenses il
-  WHERE il.status = 'active'
-) TO '/tmp/licenses-export.csv' WITH CSV HEADER;
-```
+For every drill, record evidence with at least:
 
-## Security Considerations
+- drill date and operator;
+- source Git SHA and backup checksum;
+- PostgreSQL server and `pg_dump` versions;
+- start/end timestamps and measured RTO;
+- backup age and measured RPO;
+- schema migration state;
+- expected and restored table counts;
+- row-count or stronger integrity comparison for every table;
+- deletion/tombstone reconciliation result;
+- confirmation that outbound integrations remained disabled;
+- plaintext cleanup and test-environment destruction time.
 
-### What NOT to Backup
-- ❌ `.env` files with secrets
-- ❌ `node_modules/` directories
-- ❌ Built assets (`dist/`, `.next/`)
-- ❌ Temporary files
-- ❌ Log files (unless needed for debugging)
+Do not reuse an old table count as proof. Schema changes require a new drill and
+new evidence.
 
-### Backup Encryption
+## Retention and deletion
 
-For sensitive backups:
+The scripts do not delete local or remote backups automatically. Production
+operation requires a separately approved, enforced policy covering:
 
-```bash
-# Encrypt backup
-gpg --symmetric --cipher-algo AES256 backup.sql
+- backup cadence and RPO/RTO targets;
+- immutable retention period and automatic expiry;
+- access review and alerting on failed or missing backups;
+- age identity custody, recovery, rotation, and revocation;
+- deletion-request handling for live data, restored data, and processor copies;
+- cryptographic erasure when an expired backup cannot be selectively edited;
+- a boundary-safe application and API artifact to restore alongside the data.
 
-# Decrypt backup
-gpg --decrypt backup.sql.gpg > backup.sql
-```
+Until those controls and a current restore drill are evidenced, backup readiness
+must be reported as incomplete.
 
-### Access Control
+## Key handling
 
-- Limit backup access to authorized personnel
-- Use secure storage locations
-- Encrypt backups containing sensitive data
-- Audit backup access logs
+- Store the age private identity in a dedicated secret or key-management system,
+  separate from both the database and backup storage.
+- Grant decrypt access only to named recovery operators and audit every use.
+- Keep at least one tested recovery identity in a separately controlled location.
+- Rotate recipients under an approved procedure; never delete the last usable
+  identity before all retained archives have expired or been re-encrypted.
+- Never commit identities, database URLs, `.npmrc`, `.env` files, private keys,
+  service-account files, or plaintext dumps.
 
-## Recovery Time Objectives (RTO)
+## Operational status
 
-| Scenario | Target RTO | Target RPO |
-|----------|------------|------------|
-| Single table corruption | 30 minutes | 1 hour |
-| Database corruption | 2 hours | 24 hours |
-| Full system failure | 4 hours | 24 hours |
-| Disaster recovery | 8 hours | 24 hours |
+Repository code alone cannot verify hosting-provider backups, remote-storage
+controls, schedules, alerts, key custody, or a completed restore. Production
+launch evidence must identify the live services, exact settings, reviewer,
+review date, and evidence location. Unsupported statements such as “daily
+provider backups” or a fixed provider retention period must not be published.
 
-**RTO** = Recovery Time Objective (how long to restore)  
-**RPO** = Recovery Point Objective (how much data loss acceptable)
-
-## Monitoring Backup Health
-
-### Daily Checks
-- [ ] Railway automatic backup completed
-- [ ] Local backup script ran successfully
-- [ ] Backup file size reasonable (not 0 bytes)
-
-### Weekly Checks
-- [ ] Test restore from backup
-- [ ] Verify data integrity
-- [ ] Check storage space
-
-### Monthly Checks
-- [ ] Full backup restoration test
-- [ ] Update backup procedures
-- [ ] Review retention policy
-
-## Emergency Contacts
-
-- **Database Admin**: [Name] [Contact]
-- **DevOps**: [Name] [Contact]
-- **Backup Storage Provider**: [Support Contact]
-
-## Backup Checklist
-
-### Before Major Change
-- [ ] Create manual backup
-- [ ] Verify backup file created
-- [ ] Test backup restoration
-- [ ] Document backup location
-- [ ] Notify team of backup completion
-
-### After Major Change
-- [ ] Verify system functioning
-- [ ] Create post-change backup
-- [ ] Document changes made
-- [ ] Update backup procedures if needed

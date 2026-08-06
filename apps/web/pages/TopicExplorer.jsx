@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, BookOpen, Image, MessageSquare, HelpCircle, RefreshCw, Send } from 'lucide-react';
+import { ArrowLeft, BookOpen, Image, MessageSquare, HelpCircle, RefreshCw } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 
 /**
@@ -42,6 +42,17 @@ const ChatBubble = React.memo(function ChatBubble({ msg }) {
     </div>
   );
 });
+
+const TUTOR_ACTIONS = Object.freeze([
+  ['explain_another_way', 'Explain another way'],
+  ['give_example', 'Give a general example'],
+  ['compare_concepts', 'Compare related concepts'],
+  ['check_understanding', 'Check my understanding'],
+]);
+
+const EDUCATION_LEVELS = new Set([
+  'elementary', 'middle_school', 'high_school', 'undergraduate', 'graduate', 'postgraduate',
+]);
 
 // Landing view for /topicexplorer with no ?topic — lets the user browse and
 // pick a topic without having to detour through the Learn Genetics page.
@@ -125,7 +136,6 @@ export default function TopicExplorer() {
   const [sources, setSources] = useState([]);
   const [imageData, setImageData] = useState(null);
   const [chatMessages, setChatMessages] = useState([]);
-  const [chatInput, setChatInput] = useState('');
   const [loading, setLoading] = useState({ explanation: false, image: false, chat: false });
 
   // Reset per-topic state whenever the topic changes. Without this, switching
@@ -135,7 +145,6 @@ export default function TopicExplorer() {
   useEffect(() => {
     setImageData(null);
     setChatMessages([]);
-    setChatInput('');
     setExplanation('');
     setSources([]);
   }, [topicId]);
@@ -163,7 +172,7 @@ export default function TopicExplorer() {
     }
     setLoading(prev => ({ ...prev, explanation: true }));
     try {
-      const res = await apiClient.getExplanation({ topic: topicTitle, level: level || 'undergraduate' });
+      const res = await apiClient.getExplanation({ topic: topicId, level: level || 'undergraduate' });
       setExplanation(res.explanation || '');
       setSources(Array.isArray(res.sources) ? res.sources : []);
     } catch (err) {
@@ -183,7 +192,7 @@ export default function TopicExplorer() {
     }
     setLoading(prev => ({ ...prev, image: true }));
     try {
-      const res = await apiClient.generateImage({ topic: topicTitle, level: level || 'undergraduate' });
+      const res = await apiClient.generateImage({ topic: topicId, level: level || 'undergraduate' });
       setImageData(res);
     } catch (err) {
       setImageData({ error: err.message });
@@ -192,28 +201,19 @@ export default function TopicExplorer() {
     }
   };
 
-  const sendChat = async () => {
-    if (!chatInput.trim()) return;
-    const userMsg = { role: 'user', content: chatInput };
-    const updatedMessages = [...chatMessages, userMsg];
-    setChatMessages(updatedMessages);
-    setChatInput('');
+  const sendChat = async (interaction, label) => {
+    setChatMessages((previous) => [...previous, { role: 'user', content: label }]);
     setLoading(prev => ({ ...prev, chat: true }));
 
     try {
-      // The backend only accepts user/assistant turns (it injects its own
-      // safety/system prompt). Fold the topic context into the FIRST user turn
-      // so the tutor still knows what's being studied, without sending a
-      // client-supplied system message that the API rejects as invalid.
-      const outgoing = updatedMessages.map((m, i) =>
-        i === 0 && m.role === 'user'
-          ? { ...m, content: `(I'm learning about "${topicTitle}".) ${m.content}` }
-          : m
-      );
       const res = await apiClient.chat({
-        messages: outgoing,
-        level: level || 'undergraduate',
-        topic: topicTitle,
+        publicationTask: 'genetics_education',
+        taskInput: {
+          version: 1,
+          topic: topicId,
+          level: EDUCATION_LEVELS.has(level) ? level : 'undergraduate',
+          interaction,
+        },
       });
       setChatMessages(prev => [...prev, { role: 'assistant', content: res.response }]);
     } catch (err) {
@@ -294,15 +294,15 @@ export default function TopicExplorer() {
                 <MessageSquare className="w-5 h-5 text-blue-600" />
                 AI Genetics Tutor
               </CardTitle>
-              <p className="text-sm text-slate-500">Ask questions about {topicTitle}</p>
+              <p className="text-sm text-slate-500">Choose a guided way to explore {topicTitle}. Free-form clinical or patient-data requests are not accepted.</p>
             </CardHeader>
             <CardContent className="space-y-4 p-4">
               <div className="h-80 overflow-y-auto space-y-3 p-3 bg-gradient-to-b from-slate-50/50 to-white rounded-lg scrollbar-thin">
                 {chatMessages.length === 0 && (
                   <div className="text-center py-12">
                     <MessageSquare className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-                    <p className="text-slate-500 font-medium">Ask me anything about {topicTitle}!</p>
-                    <p className="text-sm text-slate-400 mt-1">I'll explain at your level.</p>
+                    <p className="text-slate-500 font-medium">Explore {topicTitle} with a guided tutor action.</p>
+                    <p className="text-sm text-slate-400 mt-1">The server composes a general genetics-education prompt.</p>
                   </div>
                 )}
                 {chatMessages.map((msg, i) => (
@@ -320,21 +320,19 @@ export default function TopicExplorer() {
                   </div>
                 )}
               </div>
-              <div className="flex gap-2">
-                <Input
-                  value={chatInput}
-                  onChange={(e) => setChatInput(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && sendChat()}
-                  placeholder={`Ask about ${topicTitle}...`}
-                  className="flex-1 h-11 bg-white/80"
-                />
-                <Button
-                  onClick={sendChat}
-                  disabled={loading.chat || !chatInput.trim()}
-                  className="h-11 px-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-500/20"
-                >
-                  <Send className="w-4 h-4" />
-                </Button>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {TUTOR_ACTIONS.map(([interaction, label]) => (
+                  <Button
+                    key={interaction}
+                    type="button"
+                    variant="outline"
+                    onClick={() => sendChat(interaction, label)}
+                    disabled={loading.chat}
+                    className="h-auto min-h-11 whitespace-normal"
+                  >
+                    {label}
+                  </Button>
+                ))}
               </div>
               <SourceList sources={sources} title="References for this topic" />
             </CardContent>

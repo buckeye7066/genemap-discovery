@@ -5,6 +5,9 @@ on:
   schedule:
     - cron: '*/15 * * * *'
 
+permissions:
+  contents: read
+
 concurrency:
   group: production-smoke
   cancel-in-progress: true
@@ -19,7 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: '24'
 
@@ -33,15 +36,59 @@ jobs:
             }
           '
 
-      - name: Check API readiness and medical encryption
+      - name: Check API readiness and publication boundary
         run: |
           body="$(curl --fail --silent --show-error --max-time 15 "$API_URL/readyz")"
           BODY="$body" node -e '
             const body = JSON.parse(process.env.BODY);
-            if (body.status !== "ready" || body.medicalEncryption !== true) {
-              throw new Error(`/readyz expected ready with medicalEncryption=true, got ${JSON.stringify(body)}`);
+            if (
+              body.status !== "ready" ||
+              body.publicationMode !== "education_research" ||
+              body.medicalEncryption !== true
+            ) {
+              throw new Error(
+                `/readyz expected ready, publicationMode=education_research, and medicalEncryption=true; got ${JSON.stringify(body)}`
+              );
             }
           '
+
+      - name: Check disabled clinical API paths
+        run: |
+          node --input-type=module <<'NODE'
+          const baseUrl = process.env.API_URL.replace(/\/+$/, '');
+          const probes = [
+            { method: 'GET', path: '/clinical-trials/search?gene=BRCA1' },
+            { method: 'POST', path: '/genomics/vcf/parse', body: {} },
+            { method: 'GET', path: '/entities/medical-data' },
+            { method: 'GET', path: '/entities/conversations' },
+          ];
+
+          for (const probe of probes) {
+            const response = await fetch(`${baseUrl}${probe.path}`, {
+              method: probe.method,
+              headers: probe.body ? { 'content-type': 'application/json' } : undefined,
+              body: probe.body ? JSON.stringify(probe.body) : undefined,
+              signal: AbortSignal.timeout(15_000),
+            });
+            const raw = await response.text();
+            let body;
+            try {
+              body = JSON.parse(raw);
+            } catch {
+              throw new Error(`${probe.method} ${probe.path} returned non-JSON: ${raw.slice(0, 200)}`);
+            }
+            if (
+              response.status !== 404 ||
+              body.code !== 'FEATURE_NOT_AVAILABLE' ||
+              body.publicationMode !== 'education_research'
+            ) {
+              throw new Error(
+                `${probe.method} ${probe.path} escaped the publication boundary: ` +
+                `${response.status} ${JSON.stringify(body)}`
+              );
+            }
+          }
+          NODE
 
       - name: Check production CORS for web origin
         run: |
@@ -78,7 +125,7 @@ jobs:
         run: |
           html="$(curl --fail --silent --show-error --location --max-time 20 "$WEB_URL")"
           case "$html" in
-            *'<title>GeneMap Discovery</title>'*'<div id="root"'*) ;;
+            *'<title>GeneMap Discovery | Genetics Education &amp; Research Leads</title>'*'<div id="root"'*) ;;
             *)
               echo "Web app did not return the expected GeneMap HTML shell."
               exit 1
@@ -93,9 +140,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: '24'
           cache: 'pnpm'
@@ -103,8 +152,9 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Install Chromium
         run: pnpm --filter @genemap/web exec playwright install --with-deps chromium
-      - name: Run public-surface e2e against production
+      - name: Run public and boundary e2e against production
         run: pnpm --filter @genemap/web e2e
         env:
           CI: 'true'
           PLAYWRIGHT_BASE_URL: ${{ env.WEB_URL }}
+          PLAYWRIGHT_API_URL: ${{ env.API_URL }}
