@@ -2,6 +2,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
+import { extractWebReleaseSha } from '../../../../scripts/lib/release-identity.mjs';
 
 let checkHttpEndpoints;
 let parseArgs;
@@ -221,6 +222,7 @@ describe('production launch verification', () => {
       if (url.endsWith('/readyz')) {
         return mockResponse(200, {
           status: 'ready',
+          publicationMode: 'education_research',
           medicalEncryption: true,
           releaseSha: approvedSha,
         });
@@ -243,6 +245,56 @@ describe('production launch verification', () => {
     expect(failures(checks)).toEqual([]);
   });
 
+  it('reads one real head marker regardless of attribute order and ignores inert text', () => {
+    const approvedSha = 'a'.repeat(40);
+    const liveSha = 'b'.repeat(40);
+    const html = `<!doctype html>
+      <!-- <head><meta name="genemap-release-sha" content="${approvedSha}"></head> -->
+      <html>
+        <head>
+          <script>const marker = '<meta name="genemap-release-sha" content="${approvedSha}">'</script>
+          <meta content="${liveSha}" data-purpose="release" name="genemap-release-sha">
+        </head>
+        <body><meta name="genemap-release-sha" content="${approvedSha}"></body>
+      </html>`;
+
+    expect(extractWebReleaseSha(html)).toBe(liveSha);
+    expect(extractWebReleaseSha(`<html><head>
+      <meta name="genemap-release-sha" content="${liveSha}">
+      <meta content="${liveSha}" name="genemap-release-sha">
+    </head></html>`)).toBeNull();
+  });
+
+  it('rejects redirects and the wrong publication mode', async () => {
+    const approvedSha = 'a'.repeat(40);
+    const redirectingFetch = async (url) => {
+      if (url.endsWith('/healthz')) return mockResponse(200, { status: 'ok' });
+      if (url.endsWith('/readyz')) {
+        return mockResponse(200, {
+          status: 'ready',
+          publicationMode: 'clinical',
+          medicalEncryption: true,
+          releaseSha: approvedSha,
+        });
+      }
+      return mockResponse(302, '', 'text/html; charset=utf-8');
+    };
+
+    const checks = await checkHttpEndpoints({
+      apiUrl: 'https://api.example.com',
+      webUrl: 'https://app.example.com',
+      approvedSha,
+      fetchImpl: redirectingFetch,
+      timeoutMs: 1000,
+    });
+
+    expect(failures(checks).map((check) => check.id)).toEqual(expect.arrayContaining([
+      'http.readyz',
+      'http.web',
+      'http.webReleaseSha',
+    ]));
+  });
+
   it('rejects healthy deployments that report a different release SHA', async () => {
     const approvedSha = 'a'.repeat(40);
     const fetchImpl = async (url) => {
@@ -250,6 +302,7 @@ describe('production launch verification', () => {
       if (url.endsWith('/readyz')) {
         return mockResponse(200, {
           status: 'ready',
+          publicationMode: 'education_research',
           medicalEncryption: true,
           releaseSha: 'b'.repeat(40),
         });
