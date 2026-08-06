@@ -175,7 +175,87 @@ describe('clinical publishing boundary', () => {
     expect(card).toContain('exportGeneReport(gene)');
     expect(card).toContain('exportJSON(gene');
     expect(card).toContain('copyShareableLink(gene');
-    expect(card).toContain('<GenomeBrowser');
+    expect(card).not.toContain('lazyWithRetry');
+    expect(card).not.toContain('../visualizations/');
+    expect(card).not.toContain('<GenomeBrowser');
+    expect(card).not.toContain('<ProteinDomains');
+    expect(card).not.toContain('<ProteinStructure');
+    expect(card).not.toContain('<ProteinInteractions');
+  });
+
+  it('keeps research-project export neutral and non-clinical', () => {
+    const projects = read('../../components/research/ProjectManager.jsx');
+
+    for (const forbidden of [
+      'FHIRExporter',
+      'FHIR',
+      'healthcare systems',
+      'clinical systems',
+      'EHR',
+      'PHI',
+      'apiClient.invokeLLM',
+    ]) {
+      expect(projects).not.toContain(forbidden);
+    }
+
+    expect(projects).toContain('Export Project Summary (JSON)');
+    expect(projects).toContain('do not include personal');
+  });
+
+  it('ships no high-risk endpoint methods in the public shared client', () => {
+    const sharedClient = read('../../../../packages/shared/src/client.ts');
+
+    for (const forbidden of [
+      '/entities/medical-data',
+      '/entities/conversations',
+      '/genomics/vcf',
+      '/genomics/variant',
+      '/genomics/clinvar',
+      '/clinical-trials',
+      'getMedicalData(',
+      'getConversations(',
+      'parseVcf(',
+      'searchClinicalTrials(',
+      'HIPAA Compliance',
+    ]) {
+      expect(sharedClient).not.toContain(forbidden);
+    }
+
+    expect(sharedClient).toContain('/genomics/enrich');
+    expect(sharedClient).toContain('/genomics/publication-concepts/search');
+  });
+
+  it('keeps administrator analytics aggregate-only', () => {
+    const analytics = read('../../pages/AdminAnalytics.jsx');
+
+    for (const forbidden of [
+      'Medical Records',
+      'Medical Data Upload Types',
+      'Robert (Clinical)',
+      'Anastasia (Counselor)',
+      'Top 10 Search Queries',
+      'recentSearches',
+      'recentActivity',
+      'recentConversations',
+      'medicalDataTypeBreakdown',
+      'agentMesh',
+      'search.query',
+      'activity.entityId',
+      'activity.metadata',
+    ]) {
+      expect(analytics).not.toContain(forbidden);
+    }
+
+    expect(analytics).toContain('Aggregate Platform Analytics');
+    expect(analytics).toContain('Individual search text');
+    expect(analytics).toContain('activityTypeBreakdown');
+    expect(analytics).toContain('searchTypeBreakdown');
+  });
+
+  it('does not initiate unused third-party font connections', () => {
+    const webShell = read('../../index.html');
+    expect(webShell).not.toContain('fonts.googleapis.com');
+    expect(webShell).not.toContain('fonts.gstatic.com');
   });
 
   it('keeps public policy and subscription claims inside the same boundary', () => {
