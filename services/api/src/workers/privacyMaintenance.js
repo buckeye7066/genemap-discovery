@@ -15,5 +15,10 @@ try {
   console.error(JSON.stringify({ event: 'privacy_maintenance_failed' }));
   process.exitCode = 1;
 } finally {
-  await prisma.$disconnect();
+  try {
+    await prisma.$disconnect();
+  } catch {
+    console.error(JSON.stringify({ event: 'privacy_maintenance_disconnect_failed' }));
+    process.exitCode = 1;
+  }
 }
