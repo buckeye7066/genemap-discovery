@@ -93,12 +93,16 @@ async function requireProjectAccess(prisma, projectId, userId, roles = ['owner',
  * A later revocation must override an older grant.
  */
 async function requireConsent(prisma, userId, consentType, minVersion) {
-  const consent = await prisma.consentRecord.findFirst({
+  const events = await prisma.consentRecord.findMany({
     where: { userId, consentType, version: minVersion },
-    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    orderBy: { createdAt: 'desc' },
+    take: 2,
   });
+  const latest = events[0];
+  const ambiguousTimestamp = latest && events[1]
+    && new Date(latest.createdAt).getTime() === new Date(events[1].createdAt).getTime();
 
-  if (!consent?.granted) {
+  if (!latest?.granted || ambiguousTimestamp) {
     throw new ForbiddenError(`Consent required: ${consentType} v${minVersion}`);
   }
 }
