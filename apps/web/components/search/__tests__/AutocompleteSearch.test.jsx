@@ -37,7 +37,10 @@ describe('resolver-backed publication autocomplete', () => {
     fireEvent.change(screen.getByLabelText(/reviewed research concept/i), {
       target: { value: 'remote seizure' },
     });
-    fireEvent.click(await screen.findByRole('button', { name: /seizure/i }));
+    const remoteDescription = await screen.findByText(
+      'HP:0001250 · NLM Clinical Tables HPO API v3',
+    );
+    fireEvent.click(remoteDescription.closest('button'));
     expect(onSearch).toHaveBeenCalledOnce();
     expect(onSearch).toHaveBeenCalledWith(
       'Seizure',
@@ -181,7 +184,10 @@ describe('resolver-backed publication autocomplete', () => {
     render(<SearchForm onSearch={onSearch} isLoading={false} />);
     const input = screen.getByLabelText(/reviewed research concept/i);
     fireEvent.change(input, { target: { value: 'remote seizure' } });
-    fireEvent.click(await screen.findByRole('button', { name: /seizure/i }));
+    const remoteDescription = await screen.findByText(
+      'HP:0001250 · NLM Clinical Tables HPO API v3',
+    );
+    fireEvent.click(remoteDescription.closest('button'));
     fireEvent.click(screen.getByRole('button', { name: 'Cystic Fibrosis' }));
     fireEvent.click(screen.getByRole('button', { name: 'polydactyly' }));
 
