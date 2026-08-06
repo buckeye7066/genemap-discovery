@@ -143,6 +143,27 @@ BEGIN
     RAISE EXCEPTION 'legacy deletion insert was not normalized';
   END IF;
 
+  -- A status-only write must never manufacture completion evidence.
+  BEGIN
+    UPDATE "data_deletion_requests"
+    SET "status" = 'completed', "completed_at" = NULL
+    WHERE "id" = 'deletion-pending';
+    RAISE EXCEPTION 'timestamp-less completion was accepted';
+  EXCEPTION
+    WHEN check_violation THEN NULL;
+  END;
+
+  IF (
+    SELECT COUNT(*)
+    FROM pg_constraint
+    WHERE conname IN (
+      'data_deletion_requests_requested_types_check',
+      'data_deletion_requests_state_evidence_check'
+    )
+  ) <> 2 THEN
+    RAISE EXCEPTION 'declarative deletion evidence constraints are missing';
+  END IF;
+
   DELETE FROM "users" WHERE "id" = subject_id;
 
   IF (
@@ -164,6 +185,17 @@ BEGIN
   ) <> 4 THEN
     RAISE EXCEPTION 'deletion evidence did not survive account deletion';
   END IF;
+
+  -- Once the FK has nulled user_id, the retained pseudonym cannot be changed
+  -- or relinked to manufacture a different evidence chain.
+  BEGIN
+    UPDATE "consent_records"
+    SET "subject_ref" = gen_random_uuid()
+    WHERE "id" = 'consent-upgrade';
+    RAISE EXCEPTION 'orphaned subject_ref mutation was accepted';
+  EXCEPTION
+    WHEN check_violation THEN NULL;
+  END;
 
   BEGIN
     INSERT INTO "data_deletion_requests" (
