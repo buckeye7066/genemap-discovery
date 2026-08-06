@@ -5,11 +5,9 @@ vi.mock('../services/genomicDatabases.js', () => ({
   lookupVariant: vi.fn(async (id) => ({ _id: id, dbsnp: { rsid: id } })),
   lookupGene: vi.fn(async (symbol) => ({ id: 'ENSG00000012048', display_name: symbol })),
   searchClinVar: vi.fn(async () => ({ esearchresult: { idlist: ['123'] } })),
-  // Shape captured verbatim from a live NCBI esummary response (db=clinvar,
-  // uid 17677, the BRCA1 c.5266dup record). NCBI replaced the flat
-  // `clinical_significance` + top-level `review_status` fields with the
-  // germline/oncogenicity/clinical-impact blocks below; a mock still using the
-  // old names would keep this suite green while the UI rendered nothing.
+  // Intentionally unrelated pathogenic first-hit fixture. The A>G query below
+  // must never fetch or inherit this c.5266dup record without exact normalized
+  // allele and genome-assembly identity.
   getClinVarVariant: vi.fn(async () => ({
     result: {
       123: {
@@ -95,7 +93,10 @@ describe('VCF genomics routes', () => {
     expect(prisma._store.auditLog.some((row) => row.action === 'vcf.parse')).toBe(false);
   });
 
-  it('enriches variants with source-grounded metadata', async () => {
+  it('keeps unbound ClinVar search hits as follow-up candidates only', async () => {
+    const db = await import('../services/genomicDatabases.js');
+    db.getClinVarVariant.mockClear();
+
     const res = await app.inject({
       method: 'POST',
       url: '/genomics/vcf/enrich',
@@ -120,18 +121,90 @@ describe('VCF genomics routes', () => {
       status: 'found',
       source: { name: 'MyVariant.info' },
     });
-    expect(body.enrichedVariants[0].annotations.clinVar).toMatchObject({
-      status: 'found',
-      source: { name: 'ClinVar E-utilities', reviewStatus: 'reviewed by expert panel' },
-      // The classification is the single most consequential value the VCF
-      // pipeline produces. Assert it by value: a null here means the user is
-      // shown an annotated variant with no pathogenicity verdict.
-      classification: 'Pathogenic',
-      reviewStatus: 'reviewed by expert panel',
-      recordTitle: 'NM_007294.4(BRCA1):c.5266dup (p.Gln1756fs)',
+
+    const clinVar = body.enrichedVariants[0].annotations.clinVar;
+    expect(clinVar).toMatchObject({
+      status: 'candidate_only',
+      evidenceClass: 'unverified_search_candidates',
+      claimLevelEvidenceAttached: false,
+      source: {
+        name: 'ClinVar E-utilities',
+        databaseRelease: null,
+      },
+      unverifiedCandidates: [{
+        recordId: '123',
+        evidenceClass: 'unverified_search_candidate',
+        url: 'https://www.ncbi.nlm.nih.gov/clinvar/variation/123/',
+      }],
     });
-    expect(body.enrichedVariants[0].clinicalConfirmationRequired).toBe(true);
+    for (const forbiddenClaim of [
+      'classification',
+      'reviewStatus',
+      'lastEvaluated',
+      'recordTitle',
+      'accession',
+      'data',
+    ]) {
+      expect(clinVar).not.toHaveProperty(forbiddenClaim);
+    }
+    expect(clinVar.limitation).toMatch(/no ClinVar claim is attached/i);
+    expect(body.enrichedVariants[0].evidenceSummary).toMatch(/no ClinVar classification is attached/i);
+    expect(body.enrichedVariants[0]).not.toHaveProperty('clinicalConfirmationRequired');
+    expect(body.enrichedVariants[0]).not.toHaveProperty('questionsForClinician');
+    expect(db.getClinVarVariant).not.toHaveBeenCalled();
     expect(prisma._store.auditLog.some((row) => row.action === 'vcf.enrich')).toBe(true);
+  });
+
+  it('sanitizes, deduplicates, and caps ClinVar follow-up candidate IDs', async () => {
+    const db = await import('../services/genomicDatabases.js');
+    db.getClinVarVariant.mockClear();
+    db.searchClinVar.mockResolvedValueOnce({
+      esearchresult: {
+        idlist: [
+          '123',
+          ' 123 ',
+          'not-a-record',
+          '',
+          ...Array.from({ length: 25 }, (_, index) => String(1000 + index)),
+        ],
+      },
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/genomics/vcf/enrich',
+      headers: { cookie: cookie() },
+      payload: {
+        variants: [{
+          chromosome: 'chr17',
+          position: 43071077,
+          rsid: 'rs80357906',
+          ref: 'A',
+          alt: 'G',
+          gene: 'BRCA1',
+          stableVariantKey: 'chr17:43071077:A>G',
+        }],
+      },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const candidates = JSON.parse(res.body)
+      .enrichedVariants[0]
+      .annotations.clinVar
+      .unverifiedCandidates;
+    expect(candidates).toHaveLength(20);
+    expect(candidates.map(({ recordId }) => recordId)).toEqual(
+      expect.arrayContaining(['123', '1000'])
+    );
+    expect(new Set(candidates.map(({ recordId }) => recordId)).size).toBe(20);
+    for (const candidate of candidates) {
+      expect(candidate.recordId).toMatch(/^\d+$/u);
+      expect(candidate.evidenceClass).toBe('unverified_search_candidate');
+      expect(candidate.url).toBe(
+        `https://www.ncbi.nlm.nih.gov/clinvar/variation/${candidate.recordId}/`
+      );
+    }
+    expect(db.getClinVarVariant).not.toHaveBeenCalled();
   });
 
   it('rejects empty enrichment batches', async () => {
@@ -185,7 +258,8 @@ describe('VCF genomics routes', () => {
     expect(body.enrichedVariants).toHaveLength(60);
     const firstKey = 'chr17:43071077:A>G';
     expect(body.byKey[firstKey]).toBeDefined();
-    expect(body.byKey[firstKey].annotations.clinVar.status).toBe('found');
+    expect(body.byKey[firstKey].annotations.clinVar.status).toBe('candidate_only');
+    expect(body.byKey[firstKey].annotations.clinVar).not.toHaveProperty('classification');
     expect(prisma._store.auditLog.some((row) => row.action === 'vcf.enrich_cohort')).toBe(true);
   });
 
