@@ -206,7 +206,8 @@ describe('VCF genomics routes', () => {
     expect(body.enrichedVariants).toHaveLength(60);
     const firstKey = 'chr17:43071077:A>G';
     expect(body.byKey[firstKey]).toBeDefined();
-    expect(body.byKey[firstKey].annotations.clinVar.status).toBe('found');
+    expect(body.byKey[firstKey].annotations.clinVar.status).toBe('candidate_only');
+    expect(body.byKey[firstKey].annotations.clinVar).not.toHaveProperty('classification');
     expect(prisma._store.auditLog.some((row) => row.action === 'vcf.enrich_cohort')).toBe(true);
   });
 
