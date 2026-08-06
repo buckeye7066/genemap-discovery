@@ -1,5 +1,7 @@
 const DELETION_SCOPE = 'legacy_content_v1';
-const LOCAL_PURGE_FAILURE = 'local_purge_failed';
+const FAILURE_LOCAL_PURGE = 'local_purge_failed';
+const FAILURE_RETRY_EXHAUSTED = 'retry_exhausted';
+const FAILURE_SUBJECT_UNAVAILABLE = 'subject_unavailable';
 const DEFAULT_LEASE_MS = 5 * 60 * 1000;
 const DEFAULT_RETRY_BASE_MS = 5 * 60 * 1000;
 const DEFAULT_RETRY_MAX_MS = 24 * 60 * 60 * 1000;
@@ -13,6 +15,7 @@ export const SELF_SERVICE_PURGE_TYPES = Object.freeze([
 ]);
 
 export const PRIVACY_DELETION_SCOPE = DELETION_SCOPE;
+export const MAX_DELETION_ATTEMPTS = DEFAULT_MAX_ATTEMPTS;
 
 class StaleDeletionLeaseError extends Error {
   constructor() {
@@ -41,6 +44,9 @@ function dueWhere(now) {
         status: 'retry_scheduled',
         nextAttemptAt: { lte: now },
       },
+      // Transitional state written by a rolling older #113 API. The database
+      // trigger normally converts it, and the worker also fails closed here.
+      { status: 'failed' },
       {
         status: 'processing',
         leaseExpiresAt: { lte: now },
@@ -64,14 +70,46 @@ function claimEligibility(record, now) {
   if (record.status === 'retry_scheduled') {
     return { nextAttemptAt: { lte: now } };
   }
+  if (record.status === 'failed') return {};
   return null;
 }
 
-async function tryClaim(prisma, record, { now, leaseMs }) {
+async function moveOneToOperatorReview(prisma, record, eligibility, failureCode) {
+  const attemptCount = Number(record.attemptCount || 0);
+  const result = await prisma.dataDeletionRequest.updateMany({
+    where: {
+      id: record.id,
+      status: record.status,
+      attemptCount,
+      ...eligibility,
+    },
+    data: {
+      status: 'operator_review',
+      completedAt: null,
+      deletedTypes: [],
+      nextAttemptAt: null,
+      leaseExpiresAt: null,
+      failureCode,
+    },
+  });
+  return result.count === 1;
+}
+
+async function tryClaim(prisma, record, { now, leaseMs, maxAttempts }) {
   const eligibility = claimEligibility(record, now);
   if (!eligibility) return null;
 
   const attemptCount = Number(record.attemptCount || 0);
+  if (attemptCount >= maxAttempts) {
+    await moveOneToOperatorReview(
+      prisma,
+      record,
+      eligibility,
+      FAILURE_RETRY_EXHAUSTED
+    );
+    return null;
+  }
+
   const result = await prisma.dataDeletionRequest.updateMany({
     where: {
       id: record.id,
@@ -87,6 +125,7 @@ async function tryClaim(prisma, record, { now, leaseMs }) {
       leaseExpiresAt: new Date(now.getTime() + leaseMs),
       failureCode: null,
       completedAt: null,
+      deletedTypes: [],
     },
   });
 
@@ -106,9 +145,7 @@ export function serializeDeletionRequest(record) {
     status: record.status,
     requestedAt: record.requestedAt || null,
     completedAt: record.completedAt || null,
-    requestedTypes: Array.isArray(record.requestedTypes)
-      ? [...record.requestedTypes]
-      : [...SELF_SERVICE_PURGE_TYPES],
+    requestedTypes: [...SELF_SERVICE_PURGE_TYPES],
     deletedTypes: Array.isArray(record.deletedTypes) ? [...record.deletedTypes] : [],
     failureCode: record.failureCode || null,
   };
@@ -128,11 +165,49 @@ export function serializeConsentRecord(record) {
 export async function claimDeletionRequestById(
   prisma,
   requestId,
-  { now = new Date(), leaseMs = DEFAULT_LEASE_MS } = {}
+  {
+    now = new Date(),
+    leaseMs = DEFAULT_LEASE_MS,
+    maxAttempts = DEFAULT_MAX_ATTEMPTS,
+  } = {}
 ) {
   const record = await prisma.dataDeletionRequest.findUnique({ where: { id: requestId } });
   if (!record) return null;
-  return tryClaim(prisma, record, { now, leaseMs });
+  return tryClaim(prisma, record, { now, leaseMs, maxAttempts });
+}
+
+export async function moveExhaustedDeletionRequests(
+  prisma,
+  {
+    now = new Date(),
+    limit = DEFAULT_BATCH_SIZE,
+    maxAttempts = DEFAULT_MAX_ATTEMPTS,
+  } = {}
+) {
+  const boundedLimit = Math.max(1, Math.min(Number(limit) || DEFAULT_BATCH_SIZE, 100));
+  const candidates = await prisma.dataDeletionRequest.findMany({
+    where: {
+      ...dueWhere(now),
+      attemptCount: { gte: maxAttempts },
+    },
+    orderBy: [{ requestedAt: 'asc' }, { id: 'asc' }],
+    take: boundedLimit,
+  });
+
+  let moved = 0;
+  for (const candidate of candidates) {
+    const eligibility = claimEligibility(candidate, now);
+    if (!eligibility) continue;
+    if (await moveOneToOperatorReview(
+      prisma,
+      candidate,
+      eligibility,
+      FAILURE_RETRY_EXHAUSTED
+    )) {
+      moved += 1;
+    }
+  }
+  return moved;
 }
 
 export async function claimDueDeletionRequests(
@@ -141,11 +216,15 @@ export async function claimDueDeletionRequests(
     now = new Date(),
     limit = DEFAULT_BATCH_SIZE,
     leaseMs = DEFAULT_LEASE_MS,
+    maxAttempts = DEFAULT_MAX_ATTEMPTS,
   } = {}
 ) {
   const boundedLimit = Math.max(1, Math.min(Number(limit) || DEFAULT_BATCH_SIZE, 100));
   const candidates = await prisma.dataDeletionRequest.findMany({
-    where: dueWhere(now),
+    where: {
+      ...dueWhere(now),
+      attemptCount: { lt: maxAttempts },
+    },
     orderBy: [{ requestedAt: 'asc' }, { id: 'asc' }],
     take: boundedLimit * 3,
   });
@@ -153,7 +232,7 @@ export async function claimDueDeletionRequests(
   const claims = [];
   for (const candidate of candidates) {
     if (claims.length >= boundedLimit) break;
-    const claim = await tryClaim(prisma, candidate, { now, leaseMs });
+    const claim = await tryClaim(prisma, candidate, { now, leaseMs, maxAttempts });
     if (claim) claims.push(claim);
   }
   return claims;
@@ -174,16 +253,34 @@ export async function processClaimedDeletionRequest(
   }
 
   const claimedAttempt = Number(claim.attemptCount || 0);
-  const subjectRef = String(claim.subjectRef || '');
-  if (!subjectRef) {
-    return { outcome: 'not_claimed', request: claim };
+  const userId = typeof claim.userId === 'string' ? claim.userId : '';
+  if (!userId) {
+    const moved = await prisma.dataDeletionRequest.updateMany({
+      where: {
+        id: claim.id,
+        status: 'processing',
+        attemptCount: claimedAttempt,
+      },
+      data: {
+        status: 'operator_review',
+        completedAt: null,
+        deletedTypes: [],
+        nextAttemptAt: null,
+        leaseExpiresAt: null,
+        failureCode: FAILURE_SUBJECT_UNAVAILABLE,
+      },
+    });
+    return {
+      outcome: moved.count === 1 ? 'operator_review' : 'stale',
+      request: await prisma.dataDeletionRequest.findUnique({ where: { id: claim.id } }),
+    };
   }
 
   try {
     const completed = await prisma.$transaction(async (tx) => {
-      await tx.medicalData.deleteMany({ where: { userId: subjectRef } });
-      await tx.aIConversation.deleteMany({ where: { userId: subjectRef } });
-      await tx.searchHistory.deleteMany({ where: { userId: subjectRef } });
+      await tx.medicalData.deleteMany({ where: { userId } });
+      await tx.aIConversation.deleteMany({ where: { userId } });
+      await tx.searchHistory.deleteMany({ where: { userId } });
 
       const updated = await tx.dataDeletionRequest.updateMany({
         where: {
@@ -229,7 +326,7 @@ export async function processClaimedDeletionRequest(
           ? null
           : retryAt(claimedAttempt, now, retryBaseMs, retryMaxMs),
         leaseExpiresAt: null,
-        failureCode: LOCAL_PURGE_FAILURE,
+        failureCode: operatorReview ? FAILURE_RETRY_EXHAUSTED : FAILURE_LOCAL_PURGE,
       },
     });
 
@@ -250,9 +347,10 @@ export async function processClaimedDeletionRequest(
 export async function processDeletionRequestNow(prisma, requestId, options = {}) {
   const claim = await claimDeletionRequestById(prisma, requestId, options);
   if (!claim) {
+    const request = await prisma.dataDeletionRequest.findUnique({ where: { id: requestId } });
     return {
-      outcome: 'not_claimed',
-      request: await prisma.dataDeletionRequest.findUnique({ where: { id: requestId } }),
+      outcome: request?.status === 'operator_review' ? 'operator_review' : 'not_claimed',
+      request,
     };
   }
   return processClaimedDeletionRequest(prisma, claim, options);
@@ -276,13 +374,23 @@ export async function runPrivacyMaintenance(
   } = {}
 ) {
   const sessionResult = await pruneExpiredSessions(prisma, { now });
-  const claims = await claimDueDeletionRequests(prisma, { now, limit, leaseMs });
+  const exhausted = await moveExhaustedDeletionRequests(prisma, {
+    now,
+    limit,
+    maxAttempts,
+  });
+  const claims = await claimDueDeletionRequests(prisma, {
+    now,
+    limit,
+    leaseMs,
+    maxAttempts,
+  });
   const summary = {
     expiredSessionsDeleted: Number(sessionResult?.count || 0),
     claimed: claims.length,
     completed: 0,
     retryScheduled: 0,
-    operatorReview: 0,
+    operatorReview: exhausted,
     stale: 0,
   };
 
