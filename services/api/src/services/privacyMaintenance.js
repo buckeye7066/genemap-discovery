@@ -162,6 +162,15 @@ export function serializeConsentRecord(record) {
   };
 }
 
+async function readDeletionRequest(prisma, requestId, fallback = null) {
+  try {
+    return await prisma.dataDeletionRequest.findUnique({ where: { id: requestId } })
+      || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 export async function claimDeletionRequestById(
   prisma,
   requestId,
@@ -246,6 +255,7 @@ export async function processClaimedDeletionRequest(
     maxAttempts = DEFAULT_MAX_ATTEMPTS,
     retryBaseMs = DEFAULT_RETRY_BASE_MS,
     retryMaxMs = DEFAULT_RETRY_MAX_MS,
+    clock = () => new Date(),
   } = {}
 ) {
   if (!claim || claim.status !== 'processing') {
@@ -272,7 +282,7 @@ export async function processClaimedDeletionRequest(
     });
     return {
       outcome: moved.count === 1 ? 'operator_review' : 'stale',
-      request: await prisma.dataDeletionRequest.findUnique({ where: { id: claim.id } }),
+      request: await readDeletionRequest(prisma, claim.id, claim),
     };
   }
 
@@ -282,6 +292,7 @@ export async function processClaimedDeletionRequest(
       await tx.aIConversation.deleteMany({ where: { userId } });
       await tx.searchHistory.deleteMany({ where: { userId } });
 
+      const completedAt = clock();
       const updated = await tx.dataDeletionRequest.updateMany({
         where: {
           id: claim.id,
@@ -290,7 +301,7 @@ export async function processClaimedDeletionRequest(
         },
         data: {
           status: 'completed',
-          completedAt: now,
+          completedAt,
           deletedTypes: [...SELF_SERVICE_PURGE_TYPES],
           nextAttemptAt: null,
           leaseExpiresAt: null,
@@ -307,39 +318,60 @@ export async function processClaimedDeletionRequest(
     if (error instanceof StaleDeletionLeaseError) {
       return {
         outcome: 'stale',
-        request: await prisma.dataDeletionRequest.findUnique({ where: { id: claim.id } }),
+        request: await readDeletionRequest(prisma, claim.id, claim),
       };
     }
 
+    const failureAt = clock();
     const operatorReview = claimedAttempt >= Math.max(1, Number(maxAttempts) || DEFAULT_MAX_ATTEMPTS);
-    const updated = await prisma.dataDeletionRequest.updateMany({
-      where: {
-        id: claim.id,
-        status: 'processing',
-        attemptCount: claimedAttempt,
-      },
-      data: {
-        status: operatorReview ? 'operator_review' : 'retry_scheduled',
-        completedAt: null,
-        deletedTypes: [],
-        nextAttemptAt: operatorReview
-          ? null
-          : retryAt(claimedAttempt, now, retryBaseMs, retryMaxMs),
-        leaseExpiresAt: null,
-        failureCode: operatorReview ? FAILURE_RETRY_EXHAUSTED : FAILURE_LOCAL_PURGE,
-      },
-    });
+    let updated;
+    try {
+      updated = await prisma.dataDeletionRequest.updateMany({
+        where: {
+          id: claim.id,
+          status: 'processing',
+          attemptCount: claimedAttempt,
+        },
+        data: {
+          status: operatorReview ? 'operator_review' : 'retry_scheduled',
+          completedAt: null,
+          deletedTypes: [],
+          nextAttemptAt: operatorReview
+            ? null
+            : retryAt(claimedAttempt, failureAt, retryBaseMs, retryMaxMs),
+          leaseExpiresAt: null,
+          failureCode: operatorReview ? FAILURE_RETRY_EXHAUSTED : FAILURE_LOCAL_PURGE,
+        },
+      });
+    } catch {
+      // The processing lease remains durable and recoverable after expiry.
+      return {
+        outcome: 'processing_retained',
+        request: await readDeletionRequest(prisma, claim.id, claim),
+      };
+    }
 
     if (updated.count !== 1) {
       return {
         outcome: 'stale',
-        request: await prisma.dataDeletionRequest.findUnique({ where: { id: claim.id } }),
+        request: await readDeletionRequest(prisma, claim.id, claim),
       };
     }
 
+    const retained = {
+      ...claim,
+      status: operatorReview ? 'operator_review' : 'retry_scheduled',
+      completedAt: null,
+      deletedTypes: [],
+      nextAttemptAt: operatorReview
+        ? null
+        : retryAt(claimedAttempt, failureAt, retryBaseMs, retryMaxMs),
+      leaseExpiresAt: null,
+      failureCode: operatorReview ? FAILURE_RETRY_EXHAUSTED : FAILURE_LOCAL_PURGE,
+    };
     return {
       outcome: operatorReview ? 'operator_review' : 'retry_scheduled',
-      request: await prisma.dataDeletionRequest.findUnique({ where: { id: claim.id } }),
+      request: await readDeletionRequest(prisma, claim.id, retained),
     };
   }
 }
@@ -348,10 +380,12 @@ export async function processDeletionRequestNow(prisma, requestId, options = {})
   const claim = await claimDeletionRequestById(prisma, requestId, options);
   if (!claim) {
     const request = await prisma.dataDeletionRequest.findUnique({ where: { id: requestId } });
-    return {
-      outcome: request?.status === 'operator_review' ? 'operator_review' : 'not_claimed',
-      request,
-    };
+    const persistedOutcome = {
+      completed: 'completed',
+      operator_review: 'operator_review',
+      retry_scheduled: 'retry_scheduled',
+    }[request?.status] || 'not_claimed';
+    return { outcome: persistedOutcome, request };
   }
   return processClaimedDeletionRequest(prisma, claim, options);
 }
@@ -371,35 +405,44 @@ export async function runPrivacyMaintenance(
     maxAttempts = DEFAULT_MAX_ATTEMPTS,
     retryBaseMs = DEFAULT_RETRY_BASE_MS,
     retryMaxMs = DEFAULT_RETRY_MAX_MS,
+    clock = () => new Date(),
   } = {}
 ) {
+  const boundedLimit = Math.max(1, Math.min(Number(limit) || DEFAULT_BATCH_SIZE, 100));
   const sessionResult = await pruneExpiredSessions(prisma, { now });
   const exhausted = await moveExhaustedDeletionRequests(prisma, {
     now,
-    limit,
-    maxAttempts,
-  });
-  const claims = await claimDueDeletionRequests(prisma, {
-    now,
-    limit,
-    leaseMs,
+    limit: boundedLimit,
     maxAttempts,
   });
   const summary = {
     expiredSessionsDeleted: Number(sessionResult?.count || 0),
-    claimed: claims.length,
+    claimed: 0,
     completed: 0,
     retryScheduled: 0,
     operatorReview: exhausted,
     stale: 0,
   };
 
-  for (const claim of claims) {
+  // Claim immediately before processing so later items do not burn attempts or
+  // age their leases while earlier items are still running.
+  for (let index = 0; index < boundedLimit; index += 1) {
+    const claimTime = index === 0 ? now : clock();
+    const claims = await claimDueDeletionRequests(prisma, {
+      now: claimTime,
+      limit: 1,
+      leaseMs,
+      maxAttempts,
+    });
+    const claim = claims[0];
+    if (!claim) break;
+
+    summary.claimed += 1;
     const result = await processClaimedDeletionRequest(prisma, claim, {
-      now,
       maxAttempts,
       retryBaseMs,
       retryMaxMs,
+      clock,
     });
     if (result.outcome === 'completed') summary.completed += 1;
     else if (result.outcome === 'retry_scheduled') summary.retryScheduled += 1;
