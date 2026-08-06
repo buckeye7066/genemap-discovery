@@ -3,7 +3,6 @@ import { checkEducationEntitlement, enforceUsageLimit, recordUsage } from '../mi
 import { generateExplanation } from '../services/llm.js';
 import { withHonestyPrefix } from '../services/scientificHonesty.js';
 import { assertNoRawGenomicLLM } from '../services/genomicGuard.js';
-import { consumePeerBriefing, recordProviderFailureLesson } from '../services/agentMesh.js';
 import { createAuditLog } from '../utils/audit.js';
 import { ValidationError } from '../utils/errors.js';
 import { MAX_PROMPT_CHARS } from '../config/llmLimits.js';
@@ -13,7 +12,6 @@ import {
   parsePublicationTaskInput,
 } from '../config/publicationTaskContracts.js';
 import { resolvePublicationTaskReferences } from '../services/publicationResolvers.js';
-import { isRegisteredAgent } from '@genemap/shared';
 
 // Hard ceiling on tokens per call. Premium users can request up to this
 // limit; free-tier users are additionally bounded by enforceUsageLimit.
@@ -125,56 +123,6 @@ function clampTemperature(requested) {
   return Math.max(0, Math.min(2, requested));
 }
 
-// ─── Agent mesh wiring ───────────────────────────────────────────────────────
-//
-// The optional `agent` body field finally tells this persona-less proxy WHO is
-// calling (see packages/shared/src/agentRegistry.ts). It is identity metadata,
-// never a generation parameter, and it is the only thing gating mesh access.
-//
-// An unregistered/absent id is IGNORED rather than rejected: the field is
-// additive, older web bundles and every non-persona caller (gene cards, VCF
-// analysis, autocomplete, ...) send no agent at all, and a 400 here would turn
-// a metadata mismatch into a broken feature. Every other field on this route
-// keeps its existing loud ValidationError behaviour.
-function resolveAgent(body) {
-  const candidate = body?.agent;
-  return isRegisteredAgent(candidate) ? candidate : null;
-}
-
-// The model this route actually asks for, as a stable string for mesh evidence.
-function effectiveModel(options) {
-  if (options?.provider) return String(options.provider);
-  return INVOKE_TEXT_MODEL || 'default';
-}
-
-// Detached mesh work. Mesh calls are a SIDE CHANNEL: they must never fail, slow,
-// or alter a user's request. Handles are retained only so tests can await the
-// background work deterministically instead of racing a floating promise.
-const backgroundMeshWork = [];
-
-function fireAndForgetMeshWork(request, promise) {
-  const tracked = Promise.resolve(promise).catch((error) => {
-    request?.log?.warn?.({ err: error }, '[agentMesh] background work failed');
-  });
-  backgroundMeshWork.push(tracked);
-  return tracked;
-}
-
-/**
- * Run-start: pull this agent's peer briefing. Fail-open — a mesh outage returns
- * null and the request proceeds exactly as it did before the mesh existed.
- */
-async function peerNoteFor(request, prisma, agent) {
-  if (!agent) return null;
-  try {
-    const briefing = await consumePeerBriefing(prisma, agent);
-    return briefing?.note || null;
-  } catch (error) {
-    request?.log?.warn?.({ err: error }, '[agentMesh] peer briefing failed');
-    return null;
-  }
-}
-
 export default async function llmRoutes(fastify) {
   const prisma = fastify.prisma;
 
@@ -193,43 +141,20 @@ export default async function llmRoutes(fastify) {
   fastify.post('/invoke', { preHandler: guarded }, async (request) => {
     const { options = {} } = request.body || {};
     const { publicationTask, taskInput, prompt } = request.publicationInvocation;
-    const agent = resolveAgent(request.body);
     const allowGenomic = await assertNoRawGenomicLLM(prisma, request.user.userId, prompt);
 
     const isPremium = Boolean(request.entitlements?.isPremium);
     const maxTokens = clampTokens(options.maxTokens, isPremium);
     const temperature = clampTemperature(options.temperature);
 
-    // Peer note rides in withHonestyPrefix's `extra` slot, which places it
-    // AFTER the scientific-honesty directive and BEFORE the user prompt. The
-    // guard rails stay the leading text of every generation — see
-    // services/scientificHonesty.js and __tests__/llm-chokepoint.test.js.
-    const peerNote = await peerNoteFor(request, prisma, agent);
-
-    let result;
-    try {
-      result = await generateExplanation(withHonestyPrefix(prompt, peerNote || ''), {
-        provider: options.provider,
-        model: options.provider ? undefined : INVOKE_TEXT_MODEL,
-        maxTokens,
-        temperature,
-        timeoutMs: LLM_TIMEOUT_MS,
-        allowGenomic,
-      });
-    } catch (error) {
-      // Run-end teaching hook. Fire-and-forget so the caller still gets the
-      // real provider error at the normal speed.
-      fireAndForgetMeshWork(
-        request,
-        recordProviderFailureLesson(prisma, {
-          agent,
-          model: effectiveModel(options),
-          error,
-          userId: request.user.userId,
-        })
-      );
-      throw error;
-    }
+    const result = await generateExplanation(withHonestyPrefix(prompt), {
+      provider: options.provider,
+      model: options.provider ? undefined : INVOKE_TEXT_MODEL,
+      maxTokens,
+      temperature,
+      timeoutMs: LLM_TIMEOUT_MS,
+      allowGenomic,
+    });
 
     await recordUsage(prisma, request.user.userId, 'explanation', {
       maxTokens,
@@ -246,7 +171,6 @@ export default async function llmRoutes(fastify) {
         taskInputVersion: taskInput.version,
         maxTokens,
         provider: options.provider || null,
-        agent,
       },
     });
 
@@ -270,12 +194,8 @@ export const __test = {
   clampTokens,
   clampTemperature,
   validatePrompt,
-  resolveAgent,
   structuredInvocation,
   structuredTaskRequest,
-  effectiveModel,
-  /** Await every detached mesh task so assertions never race the side channel. */
-  flushMeshWork: () => Promise.all(backgroundMeshWork.splice(0)),
   ABSOLUTE_MAX_TOKENS,
   DEFAULT_MAX_TOKENS,
   PREMIUM_MAX_TOKENS,
