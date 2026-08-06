@@ -51,6 +51,16 @@ vi.mock('stripe', () => {
 
 let app;
 let prisma;
+
+const STRUCTURED_LLM_PAYLOAD = Object.freeze({
+  publicationTask: 'aggregate_genomics_research',
+  taskInput: {
+    version: 1,
+    cohort: { sampleCount: 50, classification: 'deidentified_aggregate', hasControls: true },
+    modalities: ['wes'],
+    objective: 'identify_variants',
+  },
+});
 let StripeModule;
 const originalEnv = { ...process.env };
 
@@ -204,7 +214,7 @@ describe('E2E — LLM flow', () => {
         method: 'POST',
         url: '/llm/invoke',
         headers: { cookie: cookieHeader },
-        payload: { prompt: `q${i}` },
+        payload: STRUCTURED_LLM_PAYLOAD,
       });
       expect(ok.statusCode).toBe(200);
     }
@@ -217,7 +227,7 @@ describe('E2E — LLM flow', () => {
       method: 'POST',
       url: '/llm/invoke',
       headers: { cookie: cookieHeader },
-      payload: { prompt: 'one too many' },
+      payload: STRUCTURED_LLM_PAYLOAD,
     });
     expect(blocked.statusCode).toBe(403);
   });
@@ -247,7 +257,7 @@ describe('E2E — billing / entitlement flow', () => {
         method: 'POST',
         url: '/llm/invoke',
         headers: { cookie: cookieHeader },
-        payload: { prompt: `q${i}` },
+        payload: STRUCTURED_LLM_PAYLOAD,
       });
       expect(r.statusCode).toBe(200);
     }
@@ -255,7 +265,7 @@ describe('E2E — billing / entitlement flow', () => {
       method: 'POST',
       url: '/llm/invoke',
       headers: { cookie: cookieHeader },
-      payload: { prompt: 'over' },
+      payload: STRUCTURED_LLM_PAYLOAD,
     });
     expect(stuck.statusCode).toBe(403);
 
@@ -299,7 +309,7 @@ describe('E2E — billing / entitlement flow', () => {
       method: 'POST',
       url: '/llm/invoke',
       headers: { cookie: cookieHeader },
-      payload: { prompt: 'after upgrade' },
+      payload: STRUCTURED_LLM_PAYLOAD,
     });
     expect(ok.statusCode).toBe(200);
   });

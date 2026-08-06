@@ -28,7 +28,8 @@ test.describe('Legal pages (reachable logged-out)', () => {
     await page.goto('/privacypolicy');
     await expect(page.getByRole('heading', { name: /privacy policy/i })).toBeVisible();
     await expect(page.getByText(/last updated:/i)).toBeVisible();
-    await expect(page.getByText(/encrypted at rest/i)).toBeVisible();
+    await expect(page.getByRole('heading', { name: /publication-mode data boundary/i })).toBeVisible();
+    await expect(page.getByText(/does not offer personal medical-record upload/i)).toBeVisible();
   });
 
   test('Terms of Service emphasizes "not medical advice"', async ({ page }) => {
@@ -59,3 +60,4 @@ test.describe('Security headers', () => {
     expect(headers['strict-transport-security']).toBeTruthy();
   });
 });
+

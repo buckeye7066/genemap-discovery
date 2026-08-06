@@ -8,7 +8,12 @@ describe('normalizeSearchHistoryEntry', () => {
       query: 'hearing loss',
       queryType: 'premium',
       createdAt: '2026-06-23T00:00:00Z',
-      results: { hpoTerm: 'HP:0000365', candidateGenes: ['GJB2', 'MYO7A'], count: 2 },
+      results: {
+        hpoTerm: 'HP:0000365',
+        candidateGenes: ['GJB2', 'MYO7A'],
+        count: 2,
+        publicationReference: { kind: 'hpo', identifier: 'HP:0000365' },
+      },
     });
     expect(out).toMatchObject({
       id: 'a',
@@ -18,6 +23,7 @@ describe('normalizeSearchHistoryEntry', () => {
       hpoTerm: 'HP:0000365',
       candidateGenes: ['GJB2', 'MYO7A'],
       count: 2,
+      publicationReference: { kind: 'hpo', identifier: 'HP:0000365' },
     });
   });
 
@@ -37,6 +43,7 @@ describe('normalizeSearchHistoryEntry', () => {
     expect(out.hpoTerm).toBe('HP:0004322');
     expect(out.candidateGenes).toEqual(['FGFR3']);
     expect(out.count).toBe(1);
+    expect(out.publicationReference).toBeNull();
   });
 
   it('derives count from candidateGenes length when no explicit count', () => {
@@ -50,5 +57,6 @@ describe('normalizeSearchHistoryEntry', () => {
     expect(out.queryType).toBe('free');
     expect(out.candidateGenes).toEqual([]);
     expect(out.count).toBe(0);
+    expect(out.publicationReference).toBeNull();
   });
 });

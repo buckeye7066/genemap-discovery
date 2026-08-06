@@ -12,6 +12,18 @@ vi.mock('../services/llm.js', () => ({
 let app;
 let prisma;
 
+const STRUCTURED_RESEARCH_INPUT = Object.freeze({
+  version: 1,
+  cohort: { sampleCount: 50, classification: 'deidentified_aggregate', hasControls: true },
+  modalities: ['wes'],
+  objective: 'identify_variants',
+});
+const invokePayload = (options = {}) => ({
+  publicationTask: 'aggregate_genomics_research',
+  taskInput: STRUCTURED_RESEARCH_INPUT,
+  ...(Object.keys(options).length ? { options } : {}),
+});
+
 beforeAll(async () => {
   prisma = createPrismaMock();
   app = await buildTestApp(prisma, { csrf: false, includeLlm: true });
@@ -123,7 +135,7 @@ describe('LLM route protection', () => {
       method: 'POST',
       url: '/llm/invoke',
       headers: { cookie: authCookie({ userId: 'free-user', email: 'free@example.com', role: 'user' }) },
-      payload: { prompt: 'Explain BRCA1', options: { maxTokens: 999999 } },
+      payload: invokePayload({ maxTokens: 999999 }),
     });
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body);
@@ -144,7 +156,7 @@ describe('LLM route protection', () => {
       method: 'POST',
       url: '/llm/invoke',
       headers: { cookie: authCookie({ userId: 'free-user', email: 'free@example.com', role: 'user' }) },
-      payload: { prompt: 'too many calls' },
+      payload: invokePayload(),
     });
     expect(res.statusCode).toBe(403);
     const body = JSON.parse(res.body);
@@ -163,7 +175,7 @@ describe('LLM route protection', () => {
         method: 'POST',
         url: '/llm/invoke',
         headers: { cookie },
-        payload: { prompt: `call ${i}` },
+        payload: invokePayload(),
       });
       expect(res.statusCode).toBe(200);
     }
@@ -180,7 +192,7 @@ describe('LLM route protection', () => {
       method: 'POST',
       url: '/llm/invoke',
       headers: { cookie },
-      payload: { prompt: 'one too many' },
+      payload: invokePayload(),
     });
     expect(blocked.statusCode).toBe(403);
     expect(JSON.parse(blocked.body).error).toMatch(/daily limit/i);
@@ -193,41 +205,23 @@ describe('LLM route protection', () => {
     ).toHaveLength(5);
   });
 
-  it('per-route counters are independent: chat usage does not consume the explanation budget', async () => {
+  it('retired arbitrary chat never consumes usage and structured invoke remains available', async () => {
     const cookie = authCookie({ userId: 'free-user', email: 'free@example.com', role: 'user' });
 
-    // 10 chat calls (the default chat limit) must all succeed.
-    for (let i = 0; i < 10; i++) {
-      const res = await app.inject({
-        method: 'POST',
-        url: '/llm/chat',
-        headers: { cookie },
-        payload: { messages: [{ role: 'user', content: `m${i}` }] },
-      });
-      expect(res.statusCode).toBe(200);
-    }
-    expect(
-      prisma._store.learningSession.filter(
-        (s) => s.userId === 'free-user' && s.type === 'chat',
-      ),
-    ).toHaveLength(10);
-
-    // 11th chat call is denied.
     const blocked = await app.inject({
       method: 'POST',
       url: '/llm/chat',
       headers: { cookie },
-      payload: { messages: [{ role: 'user', content: 'over' }] },
+      payload: { messages: [{ role: 'user', content: 'arbitrary' }] },
     });
-    expect(blocked.statusCode).toBe(403);
+    expect(blocked.statusCode).toBeGreaterThanOrEqual(400);
+    expect(prisma._store.learningSession).toHaveLength(0);
 
-    // But the user can still call /llm/invoke because the explanation
-    // counter is independent.
     const stillOk = await app.inject({
       method: 'POST',
       url: '/llm/invoke',
       headers: { cookie },
-      payload: { prompt: 'this should work' },
+      payload: invokePayload(),
     });
     expect(stillOk.statusCode).toBe(200);
   });
@@ -243,7 +237,7 @@ describe('LLM route protection', () => {
       method: 'POST',
       url: '/llm/invoke',
       headers: { cookie },
-      payload: { prompt: 'will fail' },
+      payload: invokePayload(),
     });
     expect(res.statusCode).toBeGreaterThanOrEqual(500);
 
@@ -268,7 +262,7 @@ describe('LLM route protection', () => {
         method: 'POST',
         url: '/llm/invoke',
         headers: { cookie },
-        payload: { prompt: `premium ${i}` },
+        payload: invokePayload(),
       });
       expect(res.statusCode).toBe(200);
     }

@@ -10,9 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import DnaIcon from "../components/icons/DnaIcon";
-import { Search, AlertCircle, GitCompare, BookmarkPlus, Library, Sparkles, BarChart3, Brain } from "lucide-react";
-import { Link } from "react-router-dom";
-import { createPageUrl } from "@/utils";
+import { Search, AlertCircle, GitCompare, BookmarkPlus, Library, Brain } from "lucide-react";
 
 import SearchForm from "../components/search/SearchForm";
 import GeneResults from "../components/search/GeneResults";
@@ -21,9 +19,11 @@ const GeneComparison = lazy(() => import("../components/search/GeneComparison"))
 const GeneInputForm = lazy(() => import("../components/search/GeneInputForm"));
 const GeneSetComparison = lazy(() => import("../components/search/GeneSetComparison"));
 const SavedGeneSets = lazy(() => import("../components/search/SavedGeneSets"));
-const GenomeBrowser = lazy(() => import("../components/visualizations/GenomeBrowser"));
-const ComparativeGenomics = lazy(() => import("../components/search/ComparativeGenomics"));
 import { PhenotypeSearchService } from "../components/search/PhenotypeSearchService";
+import {
+  resolvePublicationSearchReference,
+  resolvePublicationUrlReference,
+} from "../lib/publicationConceptCatalog";
 
 export default function SearchPage() {
   const queryClient = useQueryClient();
@@ -40,7 +40,6 @@ export default function SearchPage() {
   const [searchType, setSearchType] = useState("free");
   const [selectedGenes, setSelectedGenes] = useState([]);
   const [showComparison, setShowComparison] = useState(false);
-  const [showComparativeGenomics, setShowComparativeGenomics] = useState(false);
   const [userInputGenes, setUserInputGenes] = useState([]);
   const [geneSetComparison, setGeneSetComparison] = useState(null);
   const [showSavedSets, setShowSavedSets] = useState(false);
@@ -51,11 +50,22 @@ export default function SearchPage() {
     const queryParam = urlParams.get('query');
     if (queryParam) {
       setSearchQuery(queryParam);
-      handleSearch(queryParam, false);
+      const resolved = resolvePublicationUrlReference(queryParam);
+      // Arbitrary URL text may prefill the guided form, but it cannot silently
+      // invoke generation. Dynamic labels must be selected through the
+      // deterministic resolver; exact HPO/MONDO ids are revalidated server-side.
+      if (resolved) {
+        handleSearch(queryParam, false, resolved.searchMode, resolved.reference);
+      }
     }
   }, []);
 
-  const handleSearch = async (query, isPremium = false) => {
+  const handleSearch = async (
+    query,
+    isPremium = false,
+    searchMode = 'free_text',
+    selectedReference = null,
+  ) => {
     if (!query.trim()) {
       setError("Please enter a phenotype to search for");
       return;
@@ -72,14 +82,26 @@ export default function SearchPage() {
     setSearchType(isPremium ? "premium" : "free");
     setSelectedGenes([]); // Clear selection on new search
     setShowComparison(false);
-    setShowComparativeGenomics(false); // Clear comparative genomics on new search
     setGeneSetComparison(null); // Clear gene set comparison on new phenotype search
 
     try {
+      // Normalize every invocation again at the page boundary. A prior
+      // autocomplete identifier is never retained when the user types, pastes,
+      // switches mode, clicks an example, or follows a different URL.
+      const publicationReference = resolvePublicationSearchReference(
+        query,
+        searchMode,
+        selectedReference,
+      );
       // FAST: render candidate genes (with authoritative coordinates) as soon as
       // they're found, then drop the blocking spinner. The slow per-gene LLM
       // enrichment happens after this, in the background.
-      const base = await PhenotypeSearchService.findCandidates(query, isPremium);
+      const base = await PhenotypeSearchService.findCandidates(
+        query,
+        isPremium,
+        searchMode,
+        publicationReference,
+      );
       if (!isCurrent()) return;
       setSearchResults(base);
       setIsLoading(false);
@@ -114,6 +136,7 @@ export default function SearchPage() {
             hpoTerm: enriched.hpoTerms?.[0] || null,
             candidateGenes: enriched.candidateGenes.map(g => g.symbol),
             count: enriched.candidateGenes.length,
+            publicationReference,
           },
         });
       } catch (historyError) {
@@ -175,10 +198,7 @@ export default function SearchPage() {
         return;
       }
 
-      // A gene set is NOT medical data. saveMedicalData() requires
-      // dataType+content and is gated behind a HIPAA consent record, so the
-      // previous call here failed (400 / 403) and never persisted a set.
-      // saveGeneSet() targets POST /entities/gene-sets, whose contract is
+      // Gene sets use the dedicated research-project contract:
       // { name, description, genes, metadata }.
       await apiClient.saveGeneSet({
         name,
@@ -233,15 +253,6 @@ export default function SearchPage() {
   const handleClearSelection = () => {
     setSelectedGenes([]);
     setShowComparison(false);
-    setShowComparativeGenomics(false); // Also clear comparative genomics when selection is cleared
-  };
-
-  const handleCompareGenomics = () => {
-    setShowComparativeGenomics(true);
-  };
-
-  const handleCloseComparativeGenomics = () => {
-    setShowComparativeGenomics(false);
   };
 
   return (
@@ -257,29 +268,11 @@ export default function SearchPage() {
             Phenotype → Gene Discovery
           </h1>
           <p className="text-base sm:text-lg text-slate-600 max-w-2xl mx-auto px-4">
-            Search phenotypes or input genes of interest for comprehensive analysis
+            Generate exploratory candidate-gene leads and verify them in primary sources
           </p>
-          
-          {/* Quick Actions */}
-          {selectedGenes.length > 0 && (
-            <div className="mt-4 flex gap-2 justify-center">
-              <Link to={createPageUrl("VisualizationHub")}>
-                <Button variant="outline" className="gap-2">
-                  <BarChart3 className="w-4 h-4" />
-                  Visualization Hub
-                </Button>
-              </Link>
-              <Link to={createPageUrl("AIAssistants")}>
-                <Button variant="outline" className="gap-2">
-                  <Brain className="w-4 h-4" />
-                  AI Tools
-                </Button>
-              </Link>
-            </div>
-          )}
         </div>
 
-        {!showComparison && !showSavedSets && !showComparativeGenomics && (
+        {!showComparison && !showSavedSets && (
           <>
             <div className="grid lg:grid-cols-2 gap-6 mb-6">
               {/* Phenotype Search */}
@@ -347,7 +340,7 @@ export default function SearchPage() {
               <Alert className="mb-4 bg-blue-50 border-blue-200">
                 <Brain className="h-4 w-4 text-blue-600 animate-pulse" />
                 <AlertDescription className="text-blue-900">
-                  Genes found — adding summaries, phenotypes, and tissue expression…
+                  Genes found — adding exploratory summaries and candidate phenotype terms…
                 </AlertDescription>
               </Alert>
             )}
@@ -371,18 +364,7 @@ export default function SearchPage() {
                   selectedGenes={selectedGenes}
                   onGeneSelect={handleGeneSelect}
                 />
-                
-                {selectedGenes.length > 0 && (
-                  <div className="mt-6">
-                    <GenomeBrowser 
-                      genes={selectedGenes}
-                      onGeneClick={(gene) => {
-                        const element = document.getElementById(`gene-${gene.symbol}`);
-                        element?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                      }}
-                    />
-                  </div>
-                )}
+
               </ErrorBoundary>
             )}
 
@@ -395,8 +377,8 @@ export default function SearchPage() {
                       Start Your Discovery
                     </h3>
                     <p className="text-slate-500 mb-1">
-                      Type a trait or symptom above (a &ldquo;phenotype&rdquo;), or enter a gene
-                      name. Not sure where to begin? Try one of these:
+                      Choose a reviewed phenotype or disease above, or enter a gene
+                      name in the separate gene-set field. Not sure where to begin? Try one of these:
                     </p>
                   </div>
 
@@ -404,10 +386,10 @@ export default function SearchPage() {
                   <div className="flex flex-wrap justify-center gap-2 mt-4 max-w-2xl mx-auto">
                     {[
                       "short stature",
-                      "hearing loss",
                       "cystic fibrosis",
                       "intellectual disability",
-                      "BRCA1",
+                      "polydactyly",
+                      "seizures",
                       "rheumatoid arthritis",
                     ].map((example) => (
                       <button
@@ -430,10 +412,6 @@ export default function SearchPage() {
                     <div className="flex gap-2">
                       <dt className="font-semibold text-slate-700 shrink-0">Gene set</dt>
                       <dd className="text-slate-500">a saved list of genes</dd>
-                    </div>
-                    <div className="flex gap-2">
-                      <dt className="font-semibold text-slate-700 shrink-0">VCF</dt>
-                      <dd className="text-slate-500">a genetic variant file</dd>
                     </div>
                     <div className="flex gap-2">
                       <dt className="font-semibold text-slate-700 shrink-0">HPO</dt>
@@ -460,14 +438,6 @@ export default function SearchPage() {
           />
         )}
 
-        {showComparativeGenomics && ( // New conditional rendering for ComparativeGenomics
-          <ComparativeGenomics
-            genes={selectedGenes}
-            onClose={handleCloseComparativeGenomics}
-            userEducationLevel={user?.education_level}
-          />
-        )}
-
         {showSavedSets && (
           <SavedGeneSets
             onLoad={handleLoadGeneSet}
@@ -475,8 +445,8 @@ export default function SearchPage() {
           />
         )}
 
-        {/* Floating Compare Button - Enhanced with Comparative Genomics */}
-        {selectedGenes.length > 0 && !showComparison && !showSavedSets && !showComparativeGenomics && ( // Updated condition
+        {/* Floating gene comparison button */}
+        {selectedGenes.length > 0 && !showComparison && !showSavedSets && (
           <div className="fixed bottom-4 sm:bottom-6 right-4 sm:right-6 left-4 sm:left-auto z-50">
             <div className="bg-white rounded-2xl shadow-2xl border-2 border-blue-200 p-3 sm:p-4 max-w-sm mx-auto sm:mx-0">
               <div className="flex flex-col gap-3">
@@ -488,32 +458,22 @@ export default function SearchPage() {
                     {selectedGenes.map(g => g.symbol).join(', ')}
                   </p>
                 </div>
-                <div className="flex flex-col gap-2">
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleClearSelection}
-                      className="flex-1 min-h-[44px] touch-manipulation"
-                    >
-                      Clear
-                    </Button>
-                    <Button
-                      onClick={handleCompareGenes}
-                      disabled={selectedGenes.length < 2}
-                      className="flex-1 bg-blue-600 hover:bg-blue-700 min-h-[44px] touch-manipulation"
-                    >
-                      <GitCompare className="w-4 h-4 mr-2" />
-                      Compare
-                    </Button>
-                  </div>
-                  <Button // New button for Comparative Genomics
-                    onClick={handleCompareGenomics}
-                    disabled={selectedGenes.length < 2}
-                    className="w-full bg-purple-600 hover:bg-purple-700 min-h-[44px] touch-manipulation"
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleClearSelection}
+                    className="flex-1 min-h-[44px] touch-manipulation"
                   >
-                    <Sparkles className="w-4 h-4 mr-2" />
-                    Comparative Genomics
+                    Clear
+                  </Button>
+                  <Button
+                    onClick={handleCompareGenes}
+                    disabled={selectedGenes.length < 2}
+                    className="flex-1 bg-blue-600 hover:bg-blue-700 min-h-[44px] touch-manipulation"
+                  >
+                    <GitCompare className="w-4 h-4 mr-2" />
+                    Compare
                   </Button>
                 </div>
               </div>

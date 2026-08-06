@@ -84,7 +84,7 @@ describe('peerAgentIds', () => {
   });
 });
 
-describe('invokeLLM agent option', () => {
+describe('invokePublicationTask agent option', () => {
   it('sends `agent` as a sibling field, not inside options', async () => {
     const calls: Array<{ url: string; body?: unknown }> = [];
     global.fetch = (async (url: string, config: { body?: string }) => {
@@ -93,9 +93,25 @@ describe('invokeLLM agent option', () => {
     }) as unknown as typeof fetch;
 
     const client = new ApiClient('http://localhost:3000');
-    await client.invokeLLM('hello', { agent: 'robert', maxTokens: 100 });
+    await client.invokePublicationTask(
+      'candidate_gene_research',
+      {
+        version: 1,
+        operation: 'gene_profile',
+        gene: { symbol: 'BRCA1' },
+        audience: 'researcher',
+      },
+      { agent: 'robert', maxTokens: 100 },
+    );
 
     const body = JSON.parse(String(calls[0].body));
+    expect(body.publicationTask).toBe('candidate_gene_research');
+    expect(body.taskInput).toEqual({
+      version: 1,
+      operation: 'gene_profile',
+      gene: { symbol: 'BRCA1' },
+      audience: 'researcher',
+    });
     expect(body.agent).toBe('robert');
     expect(body.options).toEqual({ maxTokens: 100 });
     expect(body.options.agent).toBeUndefined();
@@ -109,7 +125,15 @@ describe('invokeLLM agent option', () => {
     }) as unknown as typeof fetch;
 
     const client = new ApiClient('http://localhost:3000');
-    await client.invokeLLM('hello');
+    await client.invokePublicationTask(
+      'candidate_gene_research',
+      {
+        version: 1,
+        operation: 'gene_profile',
+        gene: { symbol: 'BRCA1' },
+        audience: 'researcher',
+      },
+    );
 
     const body = JSON.parse(String(calls[0].body));
     expect('agent' in body).toBe(false);
