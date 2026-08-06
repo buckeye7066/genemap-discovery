@@ -72,7 +72,7 @@ function GeneCard({ gene, rank, isPremium, isSelected = false, onSelect = null }
   const [showClinicalAnalysis, setShowClinicalAnalysis] = useState(false);
   const [variantInput, setVariantInput] = useState(""); // Added
   const [variantAnalysis, setVariantAnalysis] = useState(null); // Added
-  const [isAnalyzingVariant, setIsAnalyzingVariant] = useState(false); // Added
+  const isAnalyzingVariant = false; // Hard-disabled in publication builds.
   const [showClinicalTrials, setShowClinicalTrials] = useState(false); // Added
 
   React.useEffect(() => {
