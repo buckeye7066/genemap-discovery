@@ -3,9 +3,52 @@ import { createAuditLog } from '../utils/audit.js';
 import { ValidationError, NotFoundError } from '../utils/errors.js';
 import { FREE_PERIOD_DAYS, computeFreePeriodEnd, grantOrExtendFreePeriod } from '../utils/freePeriod.js';
 
-// How many agent-mesh lessons the analytics report carries. Bounded so the
-// owner dashboard stays a summary, not a log dump.
-const AGENT_MESH_LESSON_LIMIT = 20;
+const SAFE_ACTIVITY_TYPES = Object.freeze(['page_view', 'gene_view']);
+const SAFE_SEARCH_TYPES = Object.freeze(['free', 'premium', 'general']);
+const OTHER_GROUP = 'other';
+
+function safeGroupBreakdown(rows, { field, outputKey, allowed }) {
+  const counts = new Map();
+  for (const row of rows || []) {
+    const rawLabel = typeof row?.[field] === 'string' ? row[field] : '';
+    const label = allowed.includes(rawLabel) ? rawLabel : OTHER_GROUP;
+    const count = Number(row?._count?._all);
+    if (!Number.isFinite(count) || count <= 0) continue;
+    counts.set(label, (counts.get(label) || 0) + count);
+  }
+
+  return [...allowed, OTHER_GROUP]
+    .filter((label) => counts.has(label))
+    .map((label) => ({ [outputKey]: label, count: counts.get(label) }));
+}
+
+function startOfUtcDay(value) {
+  const date = value instanceof Date ? value : new Date(value);
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+}
+
+function buildDailyActivity(activityRows, searchRows, timelineStart) {
+  const byDate = new Map();
+  for (let offset = 0; offset < 7; offset++) {
+    const date = new Date(timelineStart);
+    date.setUTCDate(timelineStart.getUTCDate() + offset);
+    const key = date.toISOString().slice(0, 10);
+    byDate.set(key, { date: key, activities: 0, searches: 0 });
+  }
+
+  const increment = (rows, key) => {
+    for (const row of rows || []) {
+      const date = new Date(row?.createdAt);
+      if (!Number.isFinite(date.getTime())) continue;
+      const bucket = byDate.get(date.toISOString().slice(0, 10));
+      if (bucket) bucket[key] += 1;
+    }
+  };
+
+  increment(activityRows, 'activities');
+  increment(searchRows, 'searches');
+  return [...byDate.values()];
+}
 
 function normalizeEmail(email) {
   return String(email || '').trim().toLowerCase();
@@ -575,81 +618,66 @@ export default async function adminRoutes(fastify) {
   });
 
   fastify.get('/analytics', async () => {
+    const todayUtc = startOfUtcDay(new Date());
+    const timelineStart = new Date(todayUtc);
+    timelineStart.setUTCDate(todayUtc.getUTCDate() - 6);
+    const timelineEnd = new Date(todayUtc);
+    timelineEnd.setUTCDate(todayUtc.getUTCDate() + 1);
+    const timelineWhere = { createdAt: { gte: timelineStart, lt: timelineEnd } };
+
     const [
-      totalUsers, activeSubscriptions, totalSearches,
-      totalConversations, totalMedicalRecords, totalGeneSets, totalActivities,
-      recentActivity, recentSearches, recentConversations, medicalDataTypeBreakdown,
-      agentMessagesLast7d, agentLessons,
+      totalUsers,
+      activeSubscriptions,
+      totalSearches,
+      totalGeneSets,
+      totalActivities,
+      activityGroups,
+      searchGroups,
+      recentActivityDates,
+      recentSearchDates,
     ] = await Promise.all([
       prisma.user.count(),
       prisma.subscription.count({ where: { status: 'active' } }),
       prisma.searchHistory.count(),
-      prisma.aIConversation.count(),
-      prisma.medicalData.count(),
       prisma.geneSet.count(),
       prisma.userActivity.count(),
-      prisma.userActivity.findMany({
-        orderBy: { createdAt: 'desc' },
-        take: 200,
-        include: { user: { select: { email: true, displayName: true } } },
-      }),
-      // The dashboard's distribution charts need the rows, not just counts.
-      // Keep these lean (no PII beyond what the chart aggregates). Medical
-      // records are deliberately NOT listed here — only their count is exposed.
-      prisma.searchHistory.findMany({
-        orderBy: { createdAt: 'desc' },
-        take: 500,
-        select: { id: true, query: true, queryType: true, createdAt: true },
-      }),
-      prisma.aIConversation.findMany({
-        orderBy: { createdAt: 'desc' },
-        take: 500,
-        select: { id: true, assistantType: true, createdAt: true },
-      }),
-      // Upload-TYPE counts only (e.g. "vcf": 4, "lab_report": 1) — never the
-      // record rows themselves, so the dashboard can chart the mix without
-      // any PHI (content/title/fileUrl) leaving the server.
-      prisma.medicalData.groupBy({
-        by: ['dataType'],
+      prisma.userActivity.groupBy({
+        by: ['activityType'],
         _count: { _all: true },
       }),
-      // Agent mesh (services/api/src/services/agentMesh.js). Both stores hold
-      // OPERATIONAL metadata only — agent ids, topics, model names, counts —
-      // so the whole surface is safe to report verbatim. Bounded on purpose.
-      prisma.agentMessage.count({
-        where: { createdAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) } },
+      prisma.searchHistory.groupBy({
+        by: ['queryType'],
+        _count: { _all: true },
       }),
-      prisma.agentLesson.findMany({
-        orderBy: { updatedAt: 'desc' },
-        take: AGENT_MESH_LESSON_LIMIT,
-        select: {
-          authorAgent: true, topic: true, claim: true, timesSeen: true, consumedBy: true,
-        },
+      prisma.userActivity.findMany({
+        where: timelineWhere,
+        select: { createdAt: true },
+      }),
+      prisma.searchHistory.findMany({
+        where: timelineWhere,
+        select: { createdAt: true },
       }),
     ]);
 
     return {
       stats: {
-        totalUsers, activeSubscriptions, totalSearches,
-        totalConversations, totalMedicalRecords, totalGeneSets, totalActivities,
+        totalUsers,
+        activeSubscriptions,
+        totalSearches,
+        totalGeneSets,
+        totalActivities,
       },
-      recentActivity,
-      recentSearches,
-      recentConversations,
-      medicalDataTypeBreakdown: medicalDataTypeBreakdown.map((row) => ({
-        dataType: row.dataType,
-        count: row._count._all,
-      })),
-      agentMesh: {
-        messagesLast7d: agentMessagesLast7d,
-        lessons: (agentLessons || []).map((row) => ({
-          authorAgent: row.authorAgent,
-          topic: row.topic,
-          claim: row.claim,
-          timesSeen: row.timesSeen,
-          consumedBy: row.consumedBy && typeof row.consumedBy === 'object' ? row.consumedBy : {},
-        })),
-      },
+      activityTypeBreakdown: safeGroupBreakdown(activityGroups, {
+        field: 'activityType',
+        outputKey: 'activityType',
+        allowed: SAFE_ACTIVITY_TYPES,
+      }),
+      searchTypeBreakdown: safeGroupBreakdown(searchGroups, {
+        field: 'queryType',
+        outputKey: 'queryType',
+        allowed: SAFE_SEARCH_TYPES,
+      }),
+      dailyActivity: buildDailyActivity(recentActivityDates, recentSearchDates, timelineStart),
     };
   });
 
