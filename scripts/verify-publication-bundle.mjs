@@ -151,6 +151,27 @@ if (!existsSync(indexPath)) {
   }
 }
 
+const releaseIdentityPath = path.join(distRoot, 'release-identity.json');
+if (!existsSync(releaseIdentityPath)) {
+  violations.push('release-identity.json: missing release identity asset');
+} else {
+  try {
+    const identity = JSON.parse(readFileSync(releaseIdentityPath, 'utf8'));
+    const keys = identity && typeof identity === 'object' && !Array.isArray(identity)
+      ? Object.keys(identity)
+      : [];
+    if (
+      keys.length !== 1 ||
+      keys[0] !== 'releaseSha' ||
+      !(/^[a-f0-9]{40}$/u.test(identity.releaseSha) || identity.releaseSha === 'unavailable')
+    ) {
+      violations.push('release-identity.json: expected exactly one valid releaseSha field');
+    }
+  } catch {
+    violations.push('release-identity.json: invalid JSON');
+  }
+}
+
 if (violations.length > 0) {
   throw new Error(
     `High-risk or malformed code reached the publication bundle:\n${violations.join('\n')}`,
