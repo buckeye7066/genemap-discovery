@@ -273,6 +273,12 @@ describe('production launch verification', () => {
     expect(extractWebReleaseSha(`<html><head>
       <meta name="genemap-release-sha" content="${liveSha}" content="${approvedSha}">
     </head><body></body></html>`)).toBeNull();
+    expect(extractWebReleaseSha(`<!doctype html><html><body><script>
+      const decoy = '<head><meta name="genemap-release-sha" content="${approvedSha}"></head>';
+    </script></body></html>`)).toBeNull();
+    expect(extractWebReleaseSha(`<html><body><head>
+      <meta name="genemap-release-sha" content="${approvedSha}">
+    </head></body></html>`)).toBeNull();
   });
 
   it('rejects redirects and the wrong publication mode', async () => {
