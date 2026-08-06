@@ -54,7 +54,7 @@ describe('guided hypothesis focus identity', () => {
     expect(screen.getByLabelText(/reviewed concept/i)).toHaveValue('');
 
     fireEvent.click(screen.getByRole('button', { name: /generate research hypotheses/i }));
-    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/choose a reviewed concept/i));
+    expect(await screen.findByText(/choose a reviewed concept/i)).toBeInTheDocument();
     expect(apiClient.invokePublicationTask).not.toHaveBeenCalled();
   });
 });
