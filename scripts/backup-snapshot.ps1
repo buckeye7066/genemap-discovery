@@ -1,132 +1,205 @@
-# GeneMap Discovery - Backup Snapshot Script (PowerShell)
-# Creates a timestamped backup of the repository and database
+# GeneMap Discovery - manual backup snapshot (PowerShell)
+# Database-bearing snapshots fail closed and use authenticated age encryption.
+# Set BACKUP_CODE_ONLY=true to explicitly create a tracked-source-only archive.
 
+Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-$Timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
+$Timestamp = (Get-Date).ToUniversalTime().ToString("yyyyMMdd-HHmmss")
 $BackupName = "genemap-backup-$Timestamp"
-$BackupDir = "./backups"
-$TempDir = "$env:TEMP\$BackupName"
-
-Write-Host "=== GeneMap Discovery Backup Script ===" -ForegroundColor Cyan
-Write-Host "Timestamp: $Timestamp"
-Write-Host ""
-
-# Create directories
-New-Item -ItemType Directory -Force -Path $BackupDir | Out-Null
-New-Item -ItemType Directory -Force -Path $TempDir | Out-Null
-
-# Get repository root
 $RepoRoot = Split-Path -Parent $PSScriptRoot
-Set-Location $RepoRoot
+$BackupDir = Join-Path $RepoRoot "backups"
+$TempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("genemap-backup-" + [guid]::NewGuid().ToString("N"))
+$StagingDir = Join-Path $TempRoot $BackupName
+$DatabaseIncluded = $false
+$FinalExtension = "tar.gz"
+$FinalPath = $null
 
-Write-Host "[1/5] Copying repository files..." -ForegroundColor Yellow
+function Require-Command([string]$Name) {
+    if (-not (Get-Command $Name -ErrorAction SilentlyContinue)) {
+        throw "Required command '$Name' is not installed."
+    }
+}
 
-$ExcludePatterns = @(
-    "node_modules",
-    "dist",
-    ".next",
-    "build",
-    ".env",
-    ".env.local",
-    ".env.production",
-    "backups",
-    ".git",
-    "*.log"
-)
+function Assert-SafeTrackedSource {
+    $TrackedPaths = @(& git -C $RepoRoot ls-tree -r --name-only HEAD)
+    if ($LASTEXITCODE -ne 0) {
+        throw "Unable to enumerate tracked source files."
+    }
 
-# Copy files excluding patterns
-Get-ChildItem -Path $RepoRoot -Recurse | Where-Object {
-    $item = $_
-    $exclude = $false
-    foreach ($pattern in $ExcludePatterns) {
-        if ($item.FullName -like "*\$pattern\*" -or $item.Name -like $pattern) {
-            $exclude = $true
-            break
+    $UnsafePaths = @($TrackedPaths | Where-Object {
+        $_ -match '(^|/)(\.env($|\.)|\.npmrc$|credentials\.json$|service-account[^/]*\.json$|[^/]+\.(pem|key)$)' -and
+        $_ -notmatch '(^|/)\.env(\.[^/]*)?\.example$'
+    })
+    if ($UnsafePaths.Count -gt 0) {
+        throw "Refusing to archive tracked credential-like files: $($UnsafePaths -join ', ')"
+    }
+}
+
+function Assert-SafeRemoteDirectory([string]$Path) {
+    if (-not [System.IO.Path]::IsPathRooted($Path)) {
+        throw "DRIVE_DIR must be an absolute path."
+    }
+    if (-not (Test-Path -LiteralPath $Path -PathType Container)) {
+        throw "DRIVE_DIR must already exist and be a directory."
+    }
+
+    $Separators = [char[]]@([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
+    $FullPath = [System.IO.Path]::GetFullPath($Path).TrimEnd($Separators)
+    $RootPath = [System.IO.Path]::GetPathRoot($FullPath).TrimEnd($Separators)
+    if ($FullPath -eq $RootPath) {
+        throw "DRIVE_DIR cannot be a filesystem root."
+    }
+}
+
+function Set-OwnerOnlyUnixMode([string]$Path) {
+    if ([System.Environment]::OSVersion.Platform -ne [System.PlatformID]::Win32NT) {
+        Require-Command "chmod"
+        & chmod 600 $Path
+        if ($LASTEXITCODE -ne 0) {
+            throw "Unable to restrict permissions on $Path."
         }
     }
-    -not $exclude
-} | ForEach-Object {
-    $dest = $_.FullName.Replace($RepoRoot, $TempDir)
-    $destDir = Split-Path -Parent $dest
-    if (!(Test-Path $destDir)) {
-        New-Item -ItemType Directory -Force -Path $destDir | Out-Null
-    }
-    if (!$_.PSIsContainer) {
-        Copy-Item $_.FullName -Destination $dest -Force
-    }
 }
 
-Write-Host "[2/5] Backing up database (if DATABASE_URL is set)..." -ForegroundColor Yellow
-$DbDumpSuccess = $false
-if ($env:DATABASE_URL) {
-    Write-Host "  Exporting database..."
-    try {
-        & pg_dump $env:DATABASE_URL > "$TempDir\database-dump.sql"
-        $DbDumpSuccess = $true
+try {
+    Write-Host "=== GeneMap Discovery Backup Script ===" -ForegroundColor Cyan
+    Write-Host "Timestamp (UTC): $Timestamp"
+
+    foreach ($CommandName in @("git", "tar")) {
+        Require-Command $CommandName
     }
-    catch {
-        Write-Host "  Warning: Database backup failed. Continuing without DB dump." -ForegroundColor Yellow
-        Write-Host "  (This is normal if database is not accessible)"
+    & git -C $RepoRoot rev-parse --verify HEAD *> $null
+    if ($LASTEXITCODE -ne 0) {
+        throw "The repository does not have a readable HEAD commit."
     }
-}
-else {
-    Write-Host "  DATABASE_URL not set, skipping database backup"
-    Write-Host "  (Database will be backed up by Railway automatically)"
-}
+    Assert-SafeTrackedSource
 
-Write-Host "[3/5] Creating backup metadata..." -ForegroundColor Yellow
+    New-Item -ItemType Directory -Force -Path $BackupDir | Out-Null
+    New-Item -ItemType Directory -Force -Path $StagingDir | Out-Null
 
-$GitBranch = & git branch --show-current 2>$null
-if (!$GitBranch) { $GitBranch = "N/A" }
+    Write-Host "[1/6] Exporting tracked repository files..." -ForegroundColor Yellow
+    $SourceTar = Join-Path $TempRoot "tracked-source.tar"
+    & git -C $RepoRoot archive --format=tar "--output=$SourceTar" HEAD
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $SourceTar -PathType Leaf)) {
+        throw "Git source export failed."
+    }
+    & tar -xf $SourceTar -C $StagingDir
+    if ($LASTEXITCODE -ne 0) {
+        throw "Tracked source extraction failed."
+    }
+    Remove-Item -LiteralPath $SourceTar -Force
 
-$GitCommit = & git rev-parse HEAD 2>$null
-if (!$GitCommit) { $GitCommit = "N/A" }
+    Write-Host "[2/6] Creating database dump..." -ForegroundColor Yellow
+    if ($env:DATABASE_URL) {
+        Require-Command "pg_dump"
+        Require-Command "age"
+        if (-not $env:BACKUP_AGE_RECIPIENT) {
+            throw "BACKUP_AGE_RECIPIENT is required when DATABASE_URL is set."
+        }
 
-$MetadataContent = @"
+        $DumpPath = Join-Path $TempRoot "database.dump"
+        $PreviousPgDatabase = $env:PGDATABASE
+        try {
+            $env:PGDATABASE = $env:DATABASE_URL
+            & pg_dump --format=custom --no-owner --no-privileges "--file=$DumpPath"
+            if ($LASTEXITCODE -ne 0) {
+                throw "pg_dump failed with exit code $LASTEXITCODE."
+            }
+        }
+        finally {
+            $env:PGDATABASE = $PreviousPgDatabase
+        }
+        if (-not (Test-Path -LiteralPath $DumpPath -PathType Leaf) -or (Get-Item -LiteralPath $DumpPath).Length -le 0) {
+            throw "pg_dump produced an empty file."
+        }
+
+        $EncryptedDump = Join-Path $StagingDir "database.dump.age"
+        & age --recipient $env:BACKUP_AGE_RECIPIENT --output $EncryptedDump $DumpPath
+        if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $EncryptedDump -PathType Leaf) -or (Get-Item -LiteralPath $EncryptedDump).Length -le 0) {
+            Remove-Item -LiteralPath $EncryptedDump -Force -ErrorAction SilentlyContinue
+            throw "Database-dump encryption failed."
+        }
+        Remove-Item -LiteralPath $DumpPath -Force
+
+        $DatabaseIncluded = $true
+        $FinalExtension = "tar.gz.age"
+    }
+    elseif ($env:BACKUP_CODE_ONLY -eq "true") {
+        Write-Host "  DATABASE_URL is absent; creating the explicitly requested code-only snapshot."
+    }
+    else {
+        throw "DATABASE_URL is not set. Set it for a complete encrypted backup, or set BACKUP_CODE_ONLY=true explicitly."
+    }
+
+    Write-Host "[3/6] Creating backup metadata..." -ForegroundColor Yellow
+    $GitBranch = (& git -C $RepoRoot branch --show-current 2>$null)
+    if (-not $GitBranch) { $GitBranch = "N/A" }
+    $GitCommit = (& git -C $RepoRoot rev-parse HEAD)
+    $Metadata = @"
 GeneMap Discovery Backup
 ========================
-Date: $(Get-Date)
+Date (UTC): $((Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ"))
 Git Branch: $GitBranch
 Git Commit: $GitCommit
+Source Scope: tracked files at Git commit only
+Database Included: $($DatabaseIncluded.ToString().ToLowerInvariant())
+Database Dump Encrypted: $($DatabaseIncluded.ToString().ToLowerInvariant())
+Outer Archive Encrypted: $($DatabaseIncluded.ToString().ToLowerInvariant())
 Backup Type: Manual Snapshot
 "@
+    Set-Content -LiteralPath (Join-Path $StagingDir "backup-info.txt") -Value $Metadata -Encoding UTF8
 
-Set-Content -Path "$TempDir\backup-info.txt" -Value $MetadataContent
+    Write-Host "[4/6] Creating final archive..." -ForegroundColor Yellow
+    $PlainArchive = Join-Path $TempRoot "$BackupName.tar.gz"
+    & tar -czf $PlainArchive -C $TempRoot $BackupName
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $PlainArchive -PathType Leaf) -or (Get-Item -LiteralPath $PlainArchive).Length -le 0) {
+        throw "Archive creation failed."
+    }
 
-Write-Host "[4/5] Creating ZIP archive..." -ForegroundColor Yellow
-$ZipPath = "$RepoRoot\$BackupDir\$BackupName.zip"
-Compress-Archive -Path $TempDir\* -DestinationPath $ZipPath -Force
+    $FinalPath = Join-Path $BackupDir "$BackupName.$FinalExtension"
+    if ($DatabaseIncluded) {
+        & age --recipient $env:BACKUP_AGE_RECIPIENT --output $FinalPath $PlainArchive
+        if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $FinalPath -PathType Leaf) -or (Get-Item -LiteralPath $FinalPath).Length -le 0) {
+            Remove-Item -LiteralPath $FinalPath -Force -ErrorAction SilentlyContinue
+            throw "Final archive encryption failed."
+        }
+        Remove-Item -LiteralPath $PlainArchive -Force
+    }
+    else {
+        Move-Item -LiteralPath $PlainArchive -Destination $FinalPath -Force
+    }
+    Set-OwnerOnlyUnixMode $FinalPath
 
-Write-Host "[5/5] Cleaning up temporary files..." -ForegroundColor Yellow
-Remove-Item -Recurse -Force $TempDir
+    Write-Host "[5/6] Writing integrity checksum..." -ForegroundColor Yellow
+    $Hash = (Get-FileHash -LiteralPath $FinalPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    $ChecksumPath = "$FinalPath.sha256"
+    Set-Content -LiteralPath $ChecksumPath -Value "$Hash  $([System.IO.Path]::GetFileName($FinalPath))" -Encoding ASCII
+    Set-OwnerOnlyUnixMode $ChecksumPath
 
-$BackupSize = (Get-Item $ZipPath).Length / 1MB
-$BackupSizeMB = [math]::Round($BackupSize, 2)
+    $RemoteCopied = $false
+    if ($env:DRIVE_DIR) {
+        Assert-SafeRemoteDirectory $env:DRIVE_DIR
+        Write-Host "[6/6] Copying archive and checksum to configured storage..." -ForegroundColor Yellow
+        Copy-Item -LiteralPath $FinalPath, $ChecksumPath -Destination $env:DRIVE_DIR -Force
+        $RemoteCopied = $true
+    }
+    else {
+        Write-Host "[6/6] Remote copy not requested."
+    }
 
-Write-Host ""
-Write-Host "✅ Backup complete!" -ForegroundColor Green
-Write-Host "   Location: $ZipPath"
-Write-Host "   Size: $BackupSizeMB MB"
-Write-Host ""
-
-if ($env:DRIVE_DIR) {
-    Write-Host "Copying to remote storage: $env:DRIVE_DIR" -ForegroundColor Yellow
-    New-Item -ItemType Directory -Force -Path $env:DRIVE_DIR | Out-Null
-    Copy-Item $ZipPath -Destination $env:DRIVE_DIR -Force
-    Write-Host "✅ Remote copy complete!" -ForegroundColor Green
-    Write-Host ""
+    $SizeMb = [math]::Round((Get-Item -LiteralPath $FinalPath).Length / 1MB, 2)
+    Write-Host "Backup complete: $FinalPath ($SizeMb MB)" -ForegroundColor Green
+    Write-Host "  Database included: $DatabaseIncluded"
+    Write-Host "  Database-bearing archive encrypted: $DatabaseIncluded"
+    Write-Host "  Remote copy completed: $RemoteCopied"
 }
-
-Write-Host "Backup summary:" -ForegroundColor Cyan
-Write-Host "  - Repository code: ✅"
-Write-Host "  - Configuration files: ✅"
-
-$DbStatus = if ($DbDumpSuccess) { "✅" } else { "⚠️  (skipped)" }
-Write-Host "  - Database dump: $DbStatus"
-
-$RemoteStatus = if ($env:DRIVE_DIR) { "✅" } else { "⚠️  (not configured)" }
-Write-Host "  - Remote copy: $RemoteStatus"
-
-Write-Host ""
-Write-Host "To restore this backup, see docs/BACKUP.md"
+catch {
+    [Console]::Error.WriteLine("Backup failed: $($_.Exception.Message)")
+    exit 1
+}
+finally {
+    if (Test-Path -LiteralPath $TempRoot) {
+        Remove-Item -LiteralPath $TempRoot -Recurse -Force
+    }
+}
