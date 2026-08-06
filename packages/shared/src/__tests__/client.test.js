@@ -380,6 +380,28 @@ describe('Error handling', () => {
   });
 });
 
+
+describe('bounded publication task client', () => {
+  it('never forwards retired persona metadata', async () => {
+    await client.invokePublicationTask(
+      'candidate_gene_research',
+      {
+        version: 1,
+        operation: 'gene_profile',
+        gene: { symbol: 'BRCA1' },
+        audience: 'researcher',
+      },
+      { agent: 'robert', maxTokens: 100 },
+    );
+
+    const body = JSON.parse(fetchCalls[0].body);
+    expect(fetchCalls[0].url).toBe('http://localhost:3000/llm/invoke');
+    expect(body.publicationTask).toBe('candidate_gene_research');
+    expect(body.options).toEqual({ maxTokens: 100 });
+    expect('agent' in body).toBe(false);
+  });
+});
+
 // ── Silent token refresh on 401 ───────────────────────────────────────────────
 
 describe('401 auto-refresh interceptor', () => {
