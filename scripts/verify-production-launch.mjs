@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { loadEnv } from '../services/api/src/config/env.js';
+import { extractWebReleaseSha } from './lib/release-identity.mjs';
 
 const DEFAULT_TIMEOUT_MS = 8000;
 const DEFAULT_EVIDENCE_FILE = 'ops/production-launch-evidence.json';
@@ -331,7 +332,10 @@ async function fetchJson(fetchImpl, url, timeoutMs) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await fetchImpl(url, { signal: controller.signal });
+    const response = await fetchImpl(url, {
+      signal: controller.signal,
+      redirect: 'error',
+    });
     const text = await response.text();
     let body = null;
     try {
@@ -378,9 +382,20 @@ export async function checkHttpEndpoints(opts) {
 
   try {
     const { response, body } = await fetchJson(fetchImpl, `${apiBase}/readyz`, timeoutMs);
-    checks.push(response.ok && body?.status === 'ready' && body?.medicalEncryption === true
-      ? pass('http.readyz', '/readyz returned ready with medicalEncryption=true')
-      : fail('http.readyz', `/readyz expected ready + encryption, got status ${response.status}`));
+    checks.push(
+      response.ok
+      && body?.status === 'ready'
+      && body?.publicationMode === 'education_research'
+      && body?.medicalEncryption === true
+        ? pass(
+          'http.readyz',
+          '/readyz returned ready in education_research mode with medicalEncryption=true'
+        )
+        : fail(
+          'http.readyz',
+          `/readyz expected ready + education_research + encryption, got status ${response.status}`
+        )
+    );
     checks.push(response.ok && body?.releaseSha === approvedSha
       ? pass('http.apiReleaseSha', 'live API reports the approved release SHA')
       : fail(
@@ -393,20 +408,21 @@ export async function checkHttpEndpoints(opts) {
   }
 
   try {
-    const response = await fetchImpl(webBase, { signal: AbortSignal.timeout(timeoutMs) });
+    const response = await fetchImpl(webBase, {
+      signal: AbortSignal.timeout(timeoutMs),
+      redirect: 'error',
+    });
     const contentType = response.headers?.get?.('content-type') || '';
     const html = await response.text();
     checks.push(response.ok && contentType.includes('text/html')
       ? pass('http.web', 'web app returned HTML')
       : fail('http.web', `web app expected HTML 200, got ${response.status} ${contentType}`));
-    const releaseTag = html.match(
-      /<meta\s+name=["']genemap-release-sha["']\s+content=["']([a-f0-9]{40})["'][^>]*>/iu
-    );
-    checks.push(response.ok && releaseTag?.[1] === approvedSha
+    const liveWebSha = extractWebReleaseSha(html);
+    checks.push(response.ok && liveWebSha === approvedSha
       ? pass('http.webReleaseSha', 'live web shell reports the approved release SHA')
       : fail(
         'http.webReleaseSha',
-        `live web release SHA does not match approved SHA (reported ${releaseTag?.[1] || 'missing'})`
+        `live web release SHA does not match approved SHA (reported ${liveWebSha || 'missing or ambiguous'})`
       ));
   } catch (err) {
     checks.push(fail('http.web', `web request failed: ${err.message}`));
