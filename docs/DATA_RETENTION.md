@@ -53,8 +53,9 @@ The following remain release blockers, not promises:
 verified full account closure. It requests exactly three legacy categories in
 one transaction. deletedTypes remains empty until that transaction commits.
 If immediate processing cannot complete, the durable request returns 202
-Accepted with a sanitized retry_scheduled, processing, or operator_review
-status. retry_scheduled and expired processing leases remain worker-eligible;
+Accepted with a sanitized pending, retry_scheduled, processing, or
+operator_review status. A pending request is due and worker-eligible;
+retry_scheduled requests and expired processing leases are also worker-eligible.
 operator_review is terminal and requires an accountable operator. A 5xx is
 reserved for failure to create and retain the request itself.
 
