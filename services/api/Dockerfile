@@ -61,4 +61,4 @@ EXPOSE 3000
 # Apply committed migrations against $DATABASE_URL, then start the server.
 # `migrate deploy` is non-interactive and will refuse to run if the schema
 # diverges from migration history — that's a feature, not a bug.
-CMD ["sh", "-c", "pnpm --filter @genemap/api db:migrate:deploy && node services/api/src/index.js"]
+CMD ["sh", "-c", "pnpm --filter @genemap/api release:identity:verify && pnpm --filter @genemap/api db:migrate:deploy && node services/api/src/index.js"]
