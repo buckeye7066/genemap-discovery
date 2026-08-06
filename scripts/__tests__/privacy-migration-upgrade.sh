@@ -31,9 +31,20 @@ if [[ "$target_found" != true ]]; then
   exit 1
 fi
 
+staged_prisma="$(mktemp -d)"
+trap 'rm -rf "$staged_prisma"' EXIT
+mkdir -p "$staged_prisma/migrations"
+cp "$repo_root/services/api/prisma/schema.prisma" "$staged_prisma/schema.prisma"
+cp "$migration_root/migration_lock.toml" "$staged_prisma/migrations/migration_lock.toml"
+
 for migration in "${prior_migrations[@]}"; do
-  psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$migration" >/dev/null
+  cp -R "$(dirname "$migration")" "$staged_prisma/migrations/"
 done
+
+(
+  cd "$repo_root/services/api"
+  corepack pnpm exec prisma migrate deploy --schema "$staged_prisma/schema.prisma"
+) >/dev/null
 
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 >/dev/null <<'SQL'
 INSERT INTO "users" ("id", "email", "password_hash", "role", "updated_at")
@@ -88,7 +99,11 @@ VALUES
   );
 SQL
 
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$target" >/dev/null
+cp -R "$(dirname "$target")" "$staged_prisma/migrations/"
+(
+  cd "$repo_root/services/api"
+  corepack pnpm exec prisma migrate deploy --schema "$staged_prisma/schema.prisma"
+) >/dev/null
 
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 >/dev/null <<'SQL'
 DO $privacy_upgrade$
