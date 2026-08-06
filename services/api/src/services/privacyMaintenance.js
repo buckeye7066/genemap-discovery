@@ -251,7 +251,6 @@ export async function processClaimedDeletionRequest(
   prisma,
   claim,
   {
-    now = new Date(),
     maxAttempts = DEFAULT_MAX_ATTEMPTS,
     retryBaseMs = DEFAULT_RETRY_BASE_MS,
     retryMaxMs = DEFAULT_RETRY_MAX_MS,
