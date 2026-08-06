@@ -47,8 +47,8 @@ The following are release blockers, not promises:
 
 `POST /entities/data-deletion-request` is a limited content purge, not verified
 full account closure. It currently deletes three legacy categories in one
-transaction. If processing fails, the request can remain pending and there is
-no durable retry worker. The public policy must not represent this endpoint as
+transaction. If processing fails, the route attempts to mark the request
+`failed` and returns 503, but there is still no durable retry worker or alert. The public policy must not represent this endpoint as
 complete erasure of the account, provider logs, or backups.
 
 A production-ready deletion design requires:
