@@ -108,6 +108,7 @@ SET
 
 ALTER TABLE "data_deletion_requests"
   ALTER COLUMN "subject_ref" SET NOT NULL,
+  ALTER COLUMN "updated_at" SET DEFAULT CURRENT_TIMESTAMP,
   ALTER COLUMN "updated_at" SET NOT NULL,
   ALTER COLUMN "deleted_types" SET DEFAULT ARRAY[]::TEXT[],
   ALTER COLUMN "deleted_types" SET NOT NULL,
