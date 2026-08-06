@@ -31,6 +31,7 @@ const HIDDEN_PATH_PREFIXES = Object.freeze([
   '/genomics/clinvar',
   '/entities/medical-data',
   '/entities/conversations',
+  '/admin/self-test',
 ]);
 const MAX_PATH_DECODE_PASSES = 2;
 
