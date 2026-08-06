@@ -4,11 +4,10 @@ import { apiClient } from "@genemap/shared";
 import { useAuth } from "../lib/AuthContext";
 import { Link, useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { normalizeSearchHistoryEntry } from "../lib/searchHistory";
 import {
-  publicationConceptByLabel,
-  publicationHpoReference,
-} from "../lib/publicationConceptCatalog";
+  normalizeSearchHistoryEntry,
+  publicationReferenceFromSearchHistoryEntry,
+} from "../lib/searchHistory";
 import { log } from "../components/shared/logger";
 import { DASHBOARD_REFRESH_INTERVAL_MS } from "../components/shared/constants";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -134,9 +133,8 @@ export default function Dashboard() {
           .map(a => a.entityId || a.metadata?.gene_symbol)
           .filter(Boolean)
       )];
-      const allPhenotypes = searches.map(s => normalizeSearchHistoryEntry(s).query).filter(Boolean);
-      const recentConcepts = allPhenotypes
-        .map((value) => publicationConceptByLabel(value) || publicationHpoReference(value))
+      const recentConcepts = searches
+        .map(publicationReferenceFromSearchHistoryEntry)
         .filter(Boolean)
         .slice(0, 3);
       const allowedLevels = new Set([
