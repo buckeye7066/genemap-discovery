@@ -157,7 +157,7 @@ export default function ProfilePage() {
         phoneNumber: phoneNumber,
         mailingListOptIn: mailingListOptIn,
         demographicsCollected: true,
-        // Research / personalization profile.
+        // Optional learning/research profile.
         age,
         educationLevel: educationLevel,
         fieldOfStudy: fieldOfStudy,
@@ -216,7 +216,7 @@ export default function ProfilePage() {
             Your Profile
           </h1>
           <p className="text-lg text-slate-600">
-            Manage your account settings and personalize your experience
+            Manage your account and optional learning or research information.
           </p>
         </div>
 
@@ -321,7 +321,7 @@ export default function ProfilePage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <GraduationCap className="w-5 h-5 text-purple-600" />
-                AI Personalization & Research Profile
+                Learning & Research Profile
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -515,8 +515,10 @@ export default function ProfilePage() {
                 <Alert className="bg-blue-50 border-blue-200">
                   <Sparkles className="h-4 w-4 text-blue-600" />
                   <AlertDescription className="text-blue-900 text-sm">
-                    This information helps our AI assistants provide personalized explanations
-                    and helps connect you with relevant research opportunities.
+                    Your selected education level may adjust the reading level of education features.
+                    Other optional profile fields are stored with your account and are not for clinical
+                    interpretation. Do not enter personal medical records, personal genomic data,
+                    protected health information, or patient identifiers.
                   </AlertDescription>
                 </Alert>
 
