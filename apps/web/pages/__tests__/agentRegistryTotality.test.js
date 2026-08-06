@@ -15,10 +15,10 @@ describe('published agent boundary', () => {
     }
   });
 
-  it('does not register or navigate to retired clinical persona pages', () => {
+  it('does not register or navigate to retired persona or registry-review pages', () => {
     const pageConfig = read('../../pages.config.js');
     const layout = read('../../Layout.jsx');
-    for (const retired of ['AIAssistants', 'Anastasia', 'RobertClinical']) {
+    for (const retired of ['AIAssistants', 'Anastasia', 'RobertClinical', 'FunctionReviewer']) {
       expect(pageConfig).not.toContain(`./pages/${retired}`);
       expect(layout).not.toContain(`createPageUrl("${retired}")`);
     }
