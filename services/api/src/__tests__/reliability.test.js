@@ -3,10 +3,9 @@ import { buildTestApp, createPrismaMock, authCookie } from './setup.js';
 import { parseJsonFromLLM, isConnectionResetError } from '../services/llm.js';
 import { normalizeQuery } from '../services/genomicDatabases.js';
 import { __test as llmInternals } from '../routes/llm.js';
-import { __test as reporterInternals } from '../services/errorReporter.js';
 import { routeLabel } from '../middleware/errorHandler.js';
 
-// ─── routeLabel (no PII to logs / Sentry / owner email) ──────────────────────
+// ─── routeLabel (no user values in structured logs) ──────────────────────────
 describe('routeLabel', () => {
   it('prefers the route pattern, which carries no user values', () => {
     const req = { routeOptions: { url: '/genomics/gene/:symbol' }, url: '/genomics/gene/BRCA1?token=secret' };
@@ -84,26 +83,6 @@ describe('isConnectionResetError', () => {
   it('does not misclassify ordinary errors as connection resets', () => {
     expect(isConnectionResetError(new Error('model does not exist'))).toBe(false);
     expect(isConnectionResetError(null)).toBe(false);
-  });
-});
-
-// ─── error reporter: transient transport noise is non-actionable ─────────────
-describe('errorReporter transient-connection triage', () => {
-  it('classifies "Premature close" as non-actionable (log-only, no owner page)', () => {
-    expect(reporterInternals.isNonActionable({ name: 'Error', message: 'Premature close' }, 500)).toBe(true);
-    expect(reporterInternals.isNonActionable({ message: 'socket hang up' })).toBe(true);
-    expect(reporterInternals.isNonActionable({ message: 'read ECONNRESET' })).toBe(true);
-  });
-
-  it('still pages the owner for genuine server bugs', () => {
-    expect(reporterInternals.isNonActionable({ name: 'TypeError', message: "Cannot read properties of undefined (reading 'x')" }, 500)).toBe(false);
-    expect(reporterInternals.isNonActionable({ message: 'relation "users" does not exist' }, 500)).toBe(false);
-  });
-
-  it('heuristic labels a premature close as low severity, not high', () => {
-    const analysis = reporterInternals.heuristicAnalysis({ name: 'Error', message: 'Premature close' }, { statusCode: 500 });
-    expect(analysis.severity).toBe('low');
-    expect(analysis.cause).toMatch(/reset|closed/i);
   });
 });
 
