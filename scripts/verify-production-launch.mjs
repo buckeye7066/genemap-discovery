@@ -349,6 +349,7 @@ export async function checkHttpEndpoints(opts) {
   const {
     apiUrl,
     webUrl,
+    approvedSha,
     fetchImpl = globalThis.fetch,
     timeoutMs = DEFAULT_TIMEOUT_MS,
   } = opts;
@@ -356,6 +357,7 @@ export async function checkHttpEndpoints(opts) {
 
   checks.push(checkUrl('http.apiUrl', apiUrl, { requireHttps: true }));
   checks.push(checkUrl('http.webUrl', webUrl, { requireHttps: true }));
+  checks.push(checkGitSha('http.approvedSha', approvedSha));
   if (checks.some((check) => check.status === 'fail')) return checks;
   if (typeof fetchImpl !== 'function') {
     checks.push(fail('http.fetch', 'global fetch is not available'));
@@ -379,18 +381,36 @@ export async function checkHttpEndpoints(opts) {
     checks.push(response.ok && body?.status === 'ready' && body?.medicalEncryption === true
       ? pass('http.readyz', '/readyz returned ready with medicalEncryption=true')
       : fail('http.readyz', `/readyz expected ready + encryption, got status ${response.status}`));
+    checks.push(response.ok && body?.releaseSha === approvedSha
+      ? pass('http.apiReleaseSha', 'live API reports the approved release SHA')
+      : fail(
+        'http.apiReleaseSha',
+        `live API release SHA does not match approved SHA (reported ${body?.releaseSha || 'missing'})`
+      ));
   } catch (err) {
     checks.push(fail('http.readyz', `/readyz request failed: ${err.message}`));
+    checks.push(fail('http.apiReleaseSha', 'live API release identity could not be verified'));
   }
 
   try {
     const response = await fetchImpl(webBase, { signal: AbortSignal.timeout(timeoutMs) });
     const contentType = response.headers?.get?.('content-type') || '';
+    const html = await response.text();
     checks.push(response.ok && contentType.includes('text/html')
       ? pass('http.web', 'web app returned HTML')
       : fail('http.web', `web app expected HTML 200, got ${response.status} ${contentType}`));
+    const releaseTag = html.match(
+      /<meta\s+name=["']genemap-release-sha["']\s+content=["']([a-f0-9]{40})["'][^>]*>/iu
+    );
+    checks.push(response.ok && releaseTag?.[1] === approvedSha
+      ? pass('http.webReleaseSha', 'live web shell reports the approved release SHA')
+      : fail(
+        'http.webReleaseSha',
+        `live web release SHA does not match approved SHA (reported ${releaseTag?.[1] || 'missing'})`
+      ));
   } catch (err) {
     checks.push(fail('http.web', `web request failed: ${err.message}`));
+    checks.push(fail('http.webReleaseSha', 'live web release identity could not be verified'));
   }
 
   return checks;
@@ -403,12 +423,14 @@ export async function runLaunchVerification(opts = {}) {
   checks.push(...validateLaunchEnv(source).checks);
 
   const evidenceFile = opts.evidenceFile || DEFAULT_EVIDENCE_FILE;
+  let evidence = null;
   if (!existsSync(evidenceFile)) {
     checks.push(fail('evidence.file', `missing launch evidence file: ${evidenceFile}`));
   } else {
     try {
+      evidence = parseJsonFile(evidenceFile);
       checks.push(pass('evidence.file', `loaded ${evidenceFile}`));
-      checks.push(...validateEvidence(parseJsonFile(evidenceFile), { now: opts.now }));
+      checks.push(...validateEvidence(evidence, { now: opts.now }));
     } catch (err) {
       checks.push(fail('evidence.file', `could not parse evidence file: ${err.message}`));
     }
@@ -423,6 +445,7 @@ export async function runLaunchVerification(opts = {}) {
     checks.push(...await checkHttpEndpoints({
       apiUrl: opts.apiUrl || source.PRODUCTION_API_URL || source.API_URL,
       webUrl: opts.webUrl || source.PRODUCTION_WEB_URL || source.WEB_URL,
+      approvedSha: evidence?.release?.approvedSha || '',
       fetchImpl: opts.fetchImpl,
       timeoutMs: opts.timeoutMs || DEFAULT_TIMEOUT_MS,
     }));
