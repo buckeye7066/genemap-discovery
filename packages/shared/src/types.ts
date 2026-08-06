@@ -533,6 +533,14 @@ export interface ConsentRecord {
   createdAt?: string;
 }
 
+/**
+ * @deprecated Deletion scope is server-owned. This input remains only so
+ * existing SDK callers continue to compile; requestDataDeletion ignores it.
+ */
+export interface DataDeletionRequest {
+  deletedTypes?: string[];
+}
+
 export type LocalDeletionScope = 'legacy_content_v1';
 export type LocalDeletionType = 'medicalData' | 'aiConversations' | 'searchHistory';
 export type DeletionLifecycleStatus =
