@@ -21,6 +21,12 @@ describe('Vercel release identity', () => {
     })).toThrow(/VERCEL_GIT_COMMIT_SHA/u);
   });
 
+  it('fails closed when the source-controlled Vercel build flag is set', () => {
+    expect(() => resolveVercelReleaseSha({
+      GENEMAP_REQUIRE_RELEASE_IDENTITY: '1',
+    })).toThrow(/VERCEL_GIT_COMMIT_SHA/u);
+  });
+
   it('marks local builds as unverifiable without blocking them', () => {
     expect(resolveVercelReleaseSha({})).toBe('unavailable');
   });
