@@ -372,7 +372,7 @@ export async function checkHttpEndpoints(opts) {
 
   try {
     const { response, body } = await fetchJson(fetchImpl, `${apiBase}/healthz`, timeoutMs);
-    checks.push(response.ok && body?.status === 'ok'
+    checks.push(response.status === 200 && body?.status === 'ok'
       ? pass('http.healthz', '/healthz returned status ok')
       : fail('http.healthz', `/healthz expected 200 {status:"ok"}, got ${response.status}`));
   } catch (err) {
@@ -382,7 +382,7 @@ export async function checkHttpEndpoints(opts) {
   try {
     const { response, body } = await fetchJson(fetchImpl, `${apiBase}/readyz`, timeoutMs);
     checks.push(
-      response.ok
+      response.status === 200
       && body?.status === 'ready'
       && body?.publicationMode === 'education_research'
       && body?.medicalEncryption === true
@@ -395,7 +395,7 @@ export async function checkHttpEndpoints(opts) {
           `/readyz expected ready + education_research + encryption, got status ${response.status}`
         )
     );
-    checks.push(response.ok && body?.releaseSha === approvedSha
+    checks.push(response.status === 200 && body?.releaseSha === approvedSha
       ? pass('http.apiReleaseSha', 'live API reports the approved release SHA')
       : fail(
         'http.apiReleaseSha',
@@ -413,7 +413,7 @@ export async function checkHttpEndpoints(opts) {
     });
     const contentType = response.headers?.get?.('content-type') || '';
     await response.text();
-    checks.push(response.ok && contentType.includes('text/html')
+    checks.push(response.status === 200 && contentType.includes('text/html')
       ? pass('http.web', 'web app returned HTML')
       : fail('http.web', `web app expected HTML 200, got ${response.status} ${contentType}`));
   } catch (err) {
@@ -587,7 +587,8 @@ export async function runSelfTest(now = new Date()) {
 
   const approvedSha = evidence.release.approvedSha;
   const fetchImpl = async (url) => {
-    const isWeb = !url.includes('api.example.com');
+    const isReleaseAsset = url.endsWith('/release-identity.json');
+    const isWebShell = !url.includes('api.example.com') && !isReleaseAsset;
     const body = url.endsWith('/healthz')
       ? { status: 'ok' }
       : url.endsWith('/readyz')
@@ -597,14 +598,16 @@ export async function runSelfTest(now = new Date()) {
             medicalEncryption: true,
             releaseSha: approvedSha,
           }
-        : `<!doctype html><html><head><meta content="${approvedSha}" name="genemap-release-sha"></head></html>`;
+        : isReleaseAsset
+          ? { releaseSha: approvedSha }
+          : '<!doctype html><html><head></head><body><div id="root"></div></body></html>';
     return {
       ok: true,
       status: 200,
       headers: {
         get(name) {
           if (name.toLowerCase() !== 'content-type') return '';
-          return isWeb ? 'text/html; charset=utf-8' : 'application/json';
+          return isWebShell ? 'text/html; charset=utf-8' : 'application/json';
         },
       },
       async text() {
