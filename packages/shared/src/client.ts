@@ -29,7 +29,6 @@ import type {
   License,
   LicenseSeatAssignment,
   ConsentRecord,
-  DataDeletionRequest,
   DeletionRequestStatus,
   Annotation,
   AdminAnalytics,
@@ -720,8 +719,11 @@ export class ApiClient {
     const res = await this.request<{ records: ConsentRecord[] }>('/entities/consent');
     return res.records;
   }
-  async requestDataDeletion(data: DataDeletionRequest = {}): Promise<{ request: { id: string } }> {
-    return this.request('/entities/data-deletion-request', { method: 'POST', body: JSON.stringify(data) });
+  async requestDataDeletion(): Promise<{ request: DeletionRequestStatus }> {
+    return this.request('/entities/data-deletion-request', {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
   }
   async getDeletionRequestStatus(): Promise<DeletionRequestStatus[]> {
     const res = await this.request<{ requests: DeletionRequestStatus[] }>(
