@@ -254,6 +254,7 @@ export async function processClaimedDeletionRequest(
     maxAttempts = DEFAULT_MAX_ATTEMPTS,
     retryBaseMs = DEFAULT_RETRY_BASE_MS,
     retryMaxMs = DEFAULT_RETRY_MAX_MS,
+    sessionLimit = 1_000,
     clock = () => new Date(),
   } = {}
 ) {
@@ -389,9 +390,24 @@ export async function processDeletionRequestNow(prisma, requestId, options = {})
   return processClaimedDeletionRequest(prisma, claim, options);
 }
 
-export async function pruneExpiredSessions(prisma, { now = new Date() } = {}) {
-  return prisma.session.deleteMany({
+export async function pruneExpiredSessions(
+  prisma,
+  { now = new Date(), limit = 1_000 } = {}
+) {
+  const boundedLimit = Math.max(1, Math.min(Number(limit) || 1_000, 10_000));
+  const candidates = await prisma.session.findMany({
     where: { expiresAt: { lte: now } },
+    orderBy: [{ expiresAt: 'asc' }, { id: 'asc' }],
+    select: { id: true },
+    take: boundedLimit,
+  });
+  const ids = candidates.map((session) => session.id);
+  if (ids.length === 0) return { count: 0 };
+  return prisma.session.deleteMany({
+    where: {
+      id: { in: ids },
+      expiresAt: { lte: now },
+    },
   });
 }
 
@@ -408,14 +424,13 @@ export async function runPrivacyMaintenance(
   } = {}
 ) {
   const boundedLimit = Math.max(1, Math.min(Number(limit) || DEFAULT_BATCH_SIZE, 100));
-  const sessionResult = await pruneExpiredSessions(prisma, { now });
   const exhausted = await moveExhaustedDeletionRequests(prisma, {
     now,
     limit: boundedLimit,
     maxAttempts,
   });
   const summary = {
-    expiredSessionsDeleted: Number(sessionResult?.count || 0),
+    expiredSessionsDeleted: 0,
     claimed: 0,
     completed: 0,
     retryScheduled: 0,
@@ -448,6 +463,14 @@ export async function runPrivacyMaintenance(
     else if (result.outcome === 'operator_review') summary.operatorReview += 1;
     else summary.stale += 1;
   }
+
+  // Session cleanup is bounded and runs after deletion processing so a large or
+  // degraded session table cannot starve durable privacy requests.
+  const sessionResult = await pruneExpiredSessions(prisma, {
+    now: clock(),
+    limit: sessionLimit,
+  });
+  summary.expiredSessionsDeleted = Number(sessionResult?.count || 0);
 
   return summary;
 }
