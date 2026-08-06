@@ -264,6 +264,22 @@ describe('privacy deletion lifecycle', () => {
     expect(prisma._store.searchHistory).toHaveLength(1);
   });
 
+  it('bounds each expired-session sweep', async () => {
+    prisma._store.session.push(
+      { id: 'expired-1', expiresAt: new Date(NOW.getTime() - 3) },
+      { id: 'expired-2', expiresAt: new Date(NOW.getTime() - 2) },
+      { id: 'expired-3', expiresAt: new Date(NOW.getTime() - 1) },
+      { id: 'future', expiresAt: new Date(NOW.getTime() + 1) }
+    );
+
+    await expect(pruneExpiredSessions(prisma, { now: NOW, limit: 2 }))
+      .resolves.toEqual({ count: 2 });
+    expect(prisma._store.session.map((row) => row.id)).toEqual(['expired-3', 'future']);
+    await expect(pruneExpiredSessions(prisma, { now: NOW, limit: 2 }))
+      .resolves.toEqual({ count: 1 });
+    expect(prisma._store.session.map((row) => row.id)).toEqual(['future']);
+  });
+
   it('returns aggregate maintenance results and a narrow public projection', async () => {
     prisma._store.session.push({ id: 'expired', expiresAt: NOW });
     seedRequest({ id: 'maintained' });
