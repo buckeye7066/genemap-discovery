@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import Fastify from 'fastify';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -91,17 +92,32 @@ const ROOT_ADVERSARIAL_PROMPTS = Object.freeze([
 async function buildBoundaryApp() {
   const app = Fastify({ logger: false });
   const handler = vi.fn(async () => ({ ok: true }));
+  const auth = vi.fn(async () => undefined);
 
   app.addHook('preHandler', enforcePublishingBoundary);
   app.register(async (routes) => {
+    routes.addHook('preHandler', auth);
     routes.post('/vcf/parse', handler);
+    routes.post('/vcf/enrich', handler);
+    routes.post('/vcf/enrich-cohort', handler);
+    routes.get('/variant/search', handler);
+    routes.get('/variant/:id', handler);
+    routes.get('/clinvar/search', handler);
   }, { prefix: '/genomics' });
   app.register(async (routes) => {
+    routes.addHook('preHandler', auth);
+    routes.get('/search', handler);
     routes.get('/:trialId', handler);
   }, { prefix: '/clinical-trials' });
   app.register(async (routes) => {
-    routes.get('/medical-data/:recordId', handler);
-    routes.get('/conversations/:conversationId', handler);
+    routes.addHook('preHandler', auth);
+    routes.get('/medical-data', handler);
+    routes.post('/medical-data', handler);
+    routes.put('/medical-data/:recordId', handler);
+    routes.delete('/medical-data/:recordId', handler);
+    routes.get('/conversations', handler);
+    routes.post('/conversations', handler);
+    routes.put('/conversations/:conversationId', handler);
   }, { prefix: '/entities' });
   app.register(async (routes) => {
     routes.post('/invoke', handler);
@@ -117,7 +133,7 @@ async function buildBoundaryApp() {
   }, { prefix: '/education' });
   app.route({ method: ['GET', 'POST'], url: '/*', handler });
   await app.ready();
-  return { app, handler };
+  return { app, handler, auth };
 }
 
 async function buildResolverGuardApp(dependencies) {
@@ -153,11 +169,15 @@ async function buildResolverGuardApp(dependencies) {
 describe('structured publication boundary in real Fastify', () => {
   let app;
   let handler;
+  let auth;
 
   beforeAll(async () => {
-    ({ app, handler } = await buildBoundaryApp());
+    ({ app, handler, auth } = await buildBoundaryApp());
   });
-  beforeEach(() => handler.mockClear());
+  beforeEach(() => {
+    handler.mockClear();
+    auth.mockClear();
+  });
   afterAll(async () => app.close());
 
   it.each([
@@ -177,6 +197,49 @@ describe('structured publication boundary in real Fastify', () => {
     expect(response.statusCode).toBe(404);
     expect(response.json()).toMatchObject({ code: 'FEATURE_NOT_AVAILABLE' });
     expect(handler).not.toHaveBeenCalled();
+    expect(auth).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['POST', '/genomics/vcf/parse'],
+    ['POST', '/genomics/vcf/enrich'],
+    ['POST', '/genomics/vcf/enrich-cohort'],
+    ['GET', '/genomics/variant/search?q=rs123'],
+    ['GET', '/genomics/variant/rs123'],
+    ['GET', '/genomics/clinvar/search?q=BRCA1'],
+    ['GET', '/clinical-trials/search?gene=BRCA1'],
+    ['GET', '/clinical-trials/NCT12345678'],
+    ['GET', '/entities/medical-data'],
+    ['POST', '/entities/medical-data'],
+    ['PUT', '/entities/medical-data/record-1'],
+    ['DELETE', '/entities/medical-data/record-1'],
+    ['GET', '/entities/conversations'],
+    ['POST', '/entities/conversations'],
+    ['PUT', '/entities/conversations/conversation-1'],
+  ])('blocks the real hidden route before auth and handler: %s %s', async (method, url) => {
+    const response = await app.inject({ method, url, payload: ['POST', 'PUT'].includes(method) ? {} : undefined });
+    expect(response.statusCode).toBe(404);
+    expect(response.json()).toMatchObject({
+      code: 'FEATURE_NOT_AVAILABLE',
+      publicationMode: 'education_research',
+    });
+    expect(auth).not.toHaveBeenCalled();
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it('registers the production boundary before CSRF and route plugins', () => {
+    const source = readFileSync(new URL('../index.js', import.meta.url), 'utf8');
+    const boundaryIndex = source.indexOf("fastify.addHook('preHandler', enforcePublishingBoundary)");
+    const csrfIndex = source.indexOf("fastify.addHook('preHandler', requireCsrf)");
+    const entitiesIndex = source.indexOf("fastify.register(entityRoutes");
+    const genomicsIndex = source.indexOf("fastify.register(genomicsRoutes");
+    const trialsIndex = source.indexOf("fastify.register(clinicalTrialRoutes");
+
+    expect(boundaryIndex).toBeGreaterThan(-1);
+    expect(csrfIndex).toBeGreaterThan(boundaryIndex);
+    expect(entitiesIndex).toBeGreaterThan(boundaryIndex);
+    expect(genomicsIndex).toBeGreaterThan(boundaryIndex);
+    expect(trialsIndex).toBeGreaterThan(boundaryIndex);
   });
 
   it.each([
