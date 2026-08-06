@@ -427,14 +427,18 @@ export async function checkHttpEndpoints(opts) {
       timeoutMs
     );
     const contentType = response.headers?.get?.('content-type') || '';
-    const cacheControl = response.headers?.get?.('cache-control') || '';
+    const mediaType = contentType.split(';', 1)[0].trim().toLowerCase();
+    const cacheDirectives = (response.headers?.get?.('cache-control') || '')
+      .split(',')
+      .map((directive) => directive.trim().split('=', 1)[0].toLowerCase())
+      .filter(Boolean);
     const keys = body && typeof body === 'object' && !Array.isArray(body)
       ? Object.keys(body)
       : [];
     checks.push(
       response.status === 200
-      && contentType.includes('application/json')
-      && cacheControl.includes('no-store')
+      && mediaType === 'application/json'
+      && cacheDirectives.includes('no-store')
       && keys.length === 1
       && keys[0] === 'releaseSha'
       && body.releaseSha === approvedSha
