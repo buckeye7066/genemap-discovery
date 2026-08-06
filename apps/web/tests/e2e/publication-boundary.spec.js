@@ -9,6 +9,7 @@ const REMOVED_ROUTES = [
   '/visualizationhub',
   '/gsea',
   '/functionreviewer',
+  '/adminfunctiontester',
 ];
 
 const FORBIDDEN_NAVIGATION = [
