@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 const read = (relativePath) => readFileSync(new URL(relativePath, import.meta.url), 'utf8');
@@ -21,6 +21,14 @@ describe('published agent boundary', () => {
     for (const retired of ['AIAssistants', 'Anastasia', 'RobertClinical', 'FunctionReviewer', 'AdminFunctionTester']) {
       expect(pageConfig).not.toContain(`./pages/${retired}`);
       expect(layout).not.toContain(`createPageUrl("${retired}")`);
+    }
+
+    for (const retiredFile of [
+      new URL('../FunctionReviewer.jsx', import.meta.url),
+      new URL('../AdminFunctionTester.jsx', import.meta.url),
+      new URL('../../components/functionRegistry.js', import.meta.url),
+    ]) {
+      expect(existsSync(retiredFile)).toBe(false);
     }
   });
 
