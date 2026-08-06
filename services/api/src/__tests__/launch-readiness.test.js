@@ -114,7 +114,12 @@ function failures(checks) {
   return checks.filter((check) => check.status === 'fail');
 }
 
-function mockResponse(status, body, contentType = 'application/json') {
+function mockResponse(
+  status,
+  body,
+  contentType = 'application/json',
+  cacheControl = 'no-store, max-age=0'
+) {
   return {
     ok: status >= 200 && status < 300,
     status,
@@ -122,7 +127,7 @@ function mockResponse(status, body, contentType = 'application/json') {
       get(name) {
         const normalized = name.toLowerCase();
         if (normalized === 'content-type') return contentType;
-        if (normalized === 'cache-control') return 'no-store, max-age=0';
+        if (normalized === 'cache-control') return cacheControl;
         return '';
       },
     },
@@ -314,6 +319,42 @@ describe('production launch verification', () => {
       'http.apiReleaseSha',
       'http.webReleaseSha',
     ]));
+  });
+
+  it.each([
+    ['JSONP media type', 'application/jsonp', 'no-store'],
+    ['lookalike cache directive', 'application/json', 'public, x-no-store=1'],
+  ])('rejects a deceptive release asset %s', async (_label, contentType, cacheControl) => {
+    const approvedSha = 'a'.repeat(40);
+    const fetchImpl = async (url) => {
+      if (url.endsWith('/healthz')) return mockResponse(200, { status: 'ok' });
+      if (url.endsWith('/readyz')) {
+        return mockResponse(200, {
+          status: 'ready',
+          publicationMode: 'education_research',
+          medicalEncryption: true,
+          releaseSha: approvedSha,
+        });
+      }
+      if (url.endsWith('/release-identity.json')) {
+        return mockResponse(200, { releaseSha: approvedSha }, contentType, cacheControl);
+      }
+      return mockResponse(
+        200,
+        '<!doctype html><html><head></head><body><div id="root"></div></body></html>',
+        'text/html; charset=utf-8'
+      );
+    };
+
+    const checks = await checkHttpEndpoints({
+      apiUrl: 'https://api.example.com',
+      webUrl: 'https://app.example.com',
+      approvedSha,
+      fetchImpl,
+      timeoutMs: 1000,
+    });
+
+    expect(failures(checks).map((check) => check.id)).toContain('http.webReleaseSha');
   });
 
   it('rejects non-200 responses even when their bodies look valid', async () => {
