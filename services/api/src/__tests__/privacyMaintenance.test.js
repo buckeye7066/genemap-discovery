@@ -280,6 +280,56 @@ describe('privacy deletion lifecycle', () => {
     expect(prisma._store.session.map((row) => row.id)).toEqual(['future']);
   });
 
+  it('claims each queued request immediately before its own processing starts', async () => {
+    seedRequest({
+      id: 'queue-first',
+      requestedAt: new Date(NOW.getTime() - 60_000),
+    });
+    seedRequest({
+      id: 'queue-second',
+      userId: OTHER,
+      subjectRef: '88888888-8888-4888-8888-888888888888',
+      requestedAt: new Date(NOW.getTime() - 30_000),
+    });
+
+    const observations = [];
+    const originalDelete = prisma.medicalData.deleteMany.getMockImplementation();
+    prisma.medicalData.deleteMany.mockImplementation(async (args) => {
+      observations.push({
+        first: prisma._store.dataDeletionRequest.find((row) => row.id === 'queue-first')?.status,
+        second: prisma._store.dataDeletionRequest.find((row) => row.id === 'queue-second')?.status,
+      });
+      return originalDelete(args);
+    });
+
+    let tick = 0;
+    const clock = () => new Date(FINISHED.getTime() + (tick++ * 1_000));
+    let summary;
+    try {
+      summary = await runPrivacyMaintenance(prisma, {
+        now: NOW,
+        limit: 2,
+        clock,
+      });
+    } finally {
+      prisma.medicalData.deleteMany.mockImplementation(originalDelete);
+    }
+
+    expect(summary).toMatchObject({ claimed: 2, completed: 2 });
+    expect(observations[0]).toEqual({
+      first: 'processing',
+      second: 'pending',
+    });
+    const first = prisma._store.dataDeletionRequest.find((row) => row.id === 'queue-first');
+    const second = prisma._store.dataDeletionRequest.find((row) => row.id === 'queue-second');
+    expect(first).toMatchObject({ status: 'completed', lastAttemptAt: NOW });
+    expect(second).toMatchObject({
+      status: 'completed',
+      lastAttemptAt: new Date(FINISHED.getTime() + 1_000),
+    });
+    expect(second.lastAttemptAt.getTime()).toBeGreaterThan(first.lastAttemptAt.getTime());
+  });
+
   it('returns aggregate maintenance results and a narrow public projection', async () => {
     prisma._store.session.push({ id: 'expired', expiresAt: NOW });
     seedRequest({ id: 'maintained' });
