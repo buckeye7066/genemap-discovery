@@ -317,6 +317,33 @@ describe('clinical publishing boundary', () => {
     expect(playListing).not.toContain('Ready-to-paste');
   });
 
+  it('keeps operational error signals finite and non-identifying', () => {
+    const browserReporter = read('../reportClientError.js');
+    const clientRoute = read('../../../../services/api/src/routes/clientError.js');
+    const errorHandler = read('../../../../services/api/src/middleware/errorHandler.js');
+    const firstLogin = read('../../../../services/api/src/services/firstLoginNotifier.js');
+    const browserSentry = read('../sentry.js');
+    const apiSentry = read('../../../../services/api/src/config/sentry.js');
+
+    expect(browserReporter).toContain('JSON.stringify({ eventCode, errorClass })');
+    for (const forbidden of ['err.message', 'err.stack', 'window.location', 'statusCode: info']) {
+      expect(browserReporter).not.toContain(forbidden);
+    }
+    for (const forbidden of ['verifyAccessToken', 'reportErrorToOwner', 'body.message', 'body.stack', 'body.route']) {
+      expect(clientRoute).not.toContain(forbidden);
+    }
+    expect(errorHandler).not.toContain('reportErrorToOwner');
+    expect(errorHandler).not.toContain('captureException');
+    expect(errorHandler).toContain('message: isProd ? undefined : sanitizeError(error)');
+    for (const forbidden of ['sendEmail', 'user.email', 'user.fullName', 'FIRST_LOGIN_REPORT_EMAIL']) {
+      expect(firstLogin).not.toContain(forbidden);
+    }
+    for (const sentry of [browserSentry, apiSentry]) {
+      expect(sentry).not.toContain('@sentry/');
+      expect(sentry).toContain('return false');
+    }
+  });
+
   it('keeps profile fields outside personalized clinical promises', () => {
     const profile = read('../../pages/Profile.jsx');
 
