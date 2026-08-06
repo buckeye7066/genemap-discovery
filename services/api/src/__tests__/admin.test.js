@@ -64,6 +64,31 @@ describe('Admin access control', () => {
   });
 });
 
+// ─── Retired operational diagnostics ────────────────────────────────────────
+
+describe('GET /admin/self-test', () => {
+  it('is not published and executes no database diagnostics', async () => {
+    const diagnostics = [
+      prisma.$queryRaw,
+      prisma.user.count,
+      prisma.learningSession.count,
+      prisma.subscription.count,
+      prisma.userActivity.count,
+    ];
+    diagnostics.forEach((diagnostic) => diagnostic.mockClear());
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/admin/self-test',
+      headers: { cookie: superCookie },
+    });
+
+    expect(res.statusCode).toBe(404);
+    expect(res.body).not.toMatch(/OPENAI_API_KEY|ANTHROPIC_API_KEY|STRIPE_SECRET_KEY|MEDICAL_DATA_ENCRYPTION_KEY|database\./u);
+    diagnostics.forEach((diagnostic) => expect(diagnostic).not.toHaveBeenCalled());
+  });
+});
+
 // ─── GET /admin/users ────────────────────────────────────────────────────────
 
 describe('GET /admin/users', () => {
