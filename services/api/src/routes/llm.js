@@ -31,11 +31,9 @@ const STRUCTURED_LLM_TASKS = new Set([
 
 const LLM_TIMEOUT_MS = Number(process.env.LLM_TIMEOUT_MS || 30_000);
 
-// Match the education routes' model choice. The default gpt-4o "routinely runs
-// 25-40s" on large prompts (see education.js), and Anastasia/Robert send LARGER
-// prompts than education does — so on gpt-4o they intermittently blew past
-// LLM_TIMEOUT_MS and returned the user an empty/timeout error. The faster model
-// returns comfortably inside the window with more than enough quality here.
+// Match the education routes' model choice. Structured research inputs can be
+// larger than a guided tutor request, so keep a bounded fast default that stays
+// inside LLM_TIMEOUT_MS. Explicit provider selection still uses its own model.
 // Only applied when the caller doesn't pin a specific provider (so an explicit
 // provider still uses its own default model). Override via LLM_INVOKE_TEXT_MODEL.
 const INVOKE_TEXT_PROVIDER = process.env.LLM_TEXT_PROVIDER || 'openai';
