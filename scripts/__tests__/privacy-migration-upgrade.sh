@@ -12,10 +12,24 @@ if [[ ! -f "$target" ]]; then
   exit 1
 fi
 
-mapfile -t prior_migrations < <(
-  find "$migration_root" -mindepth 2 -maxdepth 2 -name migration.sql \
-    ! -path "$target" -print | sort
+mapfile -t ordered_migrations < <(
+  find "$migration_root" -mindepth 2 -maxdepth 2 -name migration.sql -print | sort
 )
+
+prior_migrations=()
+target_found=false
+for migration in "${ordered_migrations[@]}"; do
+  if [[ "$migration" == "$target" ]]; then
+    target_found=true
+    break
+  fi
+  prior_migrations+=("$migration")
+done
+
+if [[ "$target_found" != true ]]; then
+  echo "privacy lifecycle migration is not in the ordered migration chain" >&2
+  exit 1
+fi
 
 for migration in "${prior_migrations[@]}"; do
   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$migration" >/dev/null
