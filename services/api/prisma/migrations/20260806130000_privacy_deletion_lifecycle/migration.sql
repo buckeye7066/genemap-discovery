@@ -171,6 +171,27 @@ ALTER TABLE "data_deletion_requests"
         'subject_unavailable',
         'legacy_state_requires_review'
       )
+    ),
+  ADD CONSTRAINT "data_deletion_requests_requested_types_check"
+    CHECK (
+      "requested_types"
+        = ARRAY['medicalData', 'aiConversations', 'searchHistory']::TEXT[]
+    ),
+  ADD CONSTRAINT "data_deletion_requests_state_evidence_check"
+    CHECK (
+      (
+        "status" = 'completed'
+        AND "completed_at" IS NOT NULL
+        AND "deleted_types"
+          = ARRAY['medicalData', 'aiConversations', 'searchHistory']::TEXT[]
+        AND "failure_code" IS NULL
+      )
+      OR
+      (
+        "status" <> 'completed'
+        AND "completed_at" IS NULL
+        AND "deleted_types" = ARRAY[]::TEXT[]
+      )
     );
 
 
@@ -179,13 +200,34 @@ ALTER TABLE "data_deletion_requests"
 CREATE FUNCTION privacy_evidence_subject_ref()
 RETURNS trigger
 LANGUAGE plpgsql
+SET search_path = pg_catalog, public
 AS $privacy_evidence_subject_ref$
 DECLARE
   expected_ref UUID;
 BEGIN
+  -- Evidence identity is immutable after insertion. The only allowed user-id
+  -- transition is the FK's non-null -> null SET NULL action; subject_ref must
+  -- remain unchanged through that transition.
+  IF TG_OP = 'UPDATE' THEN
+    IF NEW."subject_ref" IS DISTINCT FROM OLD."subject_ref" THEN
+      RAISE EXCEPTION 'subject_ref is immutable' USING ERRCODE = '23514';
+    END IF;
+    IF OLD."user_id" IS NULL AND NEW."user_id" IS NOT NULL THEN
+      RAISE EXCEPTION 'orphaned privacy evidence cannot be relinked' USING ERRCODE = '23514';
+    END IF;
+    IF OLD."user_id" IS NOT NULL
+       AND NEW."user_id" IS NOT NULL
+       AND NEW."user_id" IS DISTINCT FROM OLD."user_id" THEN
+      RAISE EXCEPTION 'privacy evidence user is immutable' USING ERRCODE = '23514';
+    END IF;
+  END IF;
+
   IF NEW."user_id" IS NULL THEN
     IF NEW."subject_ref" IS NULL THEN
       RAISE EXCEPTION 'subject_ref required' USING ERRCODE = '23514';
+    END IF;
+    IF TG_OP = 'INSERT' THEN
+      RAISE EXCEPTION 'privacy evidence requires a live user at creation' USING ERRCODE = '23514';
     END IF;
     RETURN NEW;
   END IF;
@@ -223,6 +265,7 @@ CREATE TRIGGER data_deletion_requests_subject_ref_trigger
 CREATE FUNCTION normalize_deletion_lifecycle()
 RETURNS trigger
 LANGUAGE plpgsql
+SET search_path = pg_catalog, public
 AS $normalize_deletion_lifecycle$
 BEGIN
   NEW."updated_at" := CURRENT_TIMESTAMP;
@@ -234,7 +277,9 @@ BEGIN
   END IF;
 
   IF NEW."status" = 'completed' THEN
-    NEW."completed_at" := COALESCE(NEW."completed_at", CURRENT_TIMESTAMP);
+    IF NEW."completed_at" IS NULL THEN
+      RAISE EXCEPTION 'completed deletion requires completed_at' USING ERRCODE = '23514';
+    END IF;
     NEW."deleted_types" := ARRAY['medicalData', 'aiConversations', 'searchHistory']::TEXT[];
     NEW."attempt_count" := GREATEST(COALESCE(NEW."attempt_count", 0), 1);
     NEW."last_attempt_at" := COALESCE(NEW."last_attempt_at", NEW."completed_at");
@@ -257,8 +302,7 @@ END
 $normalize_deletion_lifecycle$;
 
 CREATE TRIGGER data_deletion_requests_lifecycle_trigger
-  BEFORE INSERT OR UPDATE OF
-    "status", "completed_at", "deleted_types", "requested_types"
+  BEFORE INSERT OR UPDATE
   ON "data_deletion_requests"
   FOR EACH ROW EXECUTE FUNCTION normalize_deletion_lifecycle();
 
@@ -266,6 +310,7 @@ CREATE TRIGGER data_deletion_requests_lifecycle_trigger
 CREATE FUNCTION privacy_subject_ref_immutable()
 RETURNS trigger
 LANGUAGE plpgsql
+SET search_path = pg_catalog, public
 AS $privacy_subject_ref_immutable$
 BEGIN
   IF NEW."privacy_subject_ref" IS DISTINCT FROM OLD."privacy_subject_ref" THEN
@@ -286,6 +331,7 @@ CREATE TRIGGER users_privacy_subject_ref_immutable_trigger
 CREATE FUNCTION pseudonymize_user_privacy_evidence()
 RETURNS trigger
 LANGUAGE plpgsql
+SET search_path = pg_catalog, public
 AS $pseudonymize_user_privacy_evidence$
 BEGIN
   UPDATE "consent_records"
