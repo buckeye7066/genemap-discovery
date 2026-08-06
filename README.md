@@ -1,6 +1,8 @@
 # GeneMap Discovery
 
-A genomic analysis platform for discovering candidate genes, analyzing genetic variants, and exploring population data.
+An approachable genetics-education and early-research platform for reviewed learning topics and provenance-aware candidate-gene exploration.
+
+The publishable build is education and exploratory research only. It does not accept personal medical records or VCF uploads and does not provide diagnosis, personal risk, pharmacogenomics, treatment, dosing, drug-avoidance, screening, urgency, or trial-matching guidance.
 
 ## Architecture
 
@@ -151,13 +153,13 @@ genemap-discovery/
 - Stripe webhook integration with idempotency
 - Self-test mode for non-Stripe test runs
 
-### Genomics
+### Genetics education and early research
 
-- Authenticated public-database proxies for variants, genes, ClinVar, and HPO terms
-- Deterministic VCF parsing through the API
-- Source-grounded VCF enrichment using public database lookups
-- Raw VCF content is not sent to cloud LLMs by default
-- Research and education only; not diagnostic or medical advice
+- Reviewed genetics-topic catalog and bounded tutor tasks
+- Candidate-gene and phenotype lookup with explicit source links
+- Human, model-organism, and computational evidence are labeled separately where available
+- Personal medical-data, variant/ClinVar, VCF, clinical-trial, and persona-routed AI paths return the publication-boundary response before handlers run
+- Research and education only; not diagnostic, treatment, or medication advice
 
 ### Premium Features
 
@@ -211,15 +213,12 @@ VITE_API_URL=http://localhost:3000
 - `POST /billing/institutional-checkout` - create institutional checkout
 - `POST /billing/webhook` - Stripe webhook handler
 
-### Genomics
+### Published genetics lookup
 
-- `GET /genomics/variant/search`
-- `GET /genomics/variant/:id`
 - `GET /genomics/gene/:symbol`
-- `GET /genomics/clinvar/search`
 - `GET /genomics/phenotype/search`
-- `POST /genomics/vcf/parse`
-- `POST /genomics/vcf/enrich`
+
+Variant, ClinVar, VCF, medical-data, conversation, and clinical-trial routes are intentionally unavailable in the education/research publication mode.
 
 ### Health
 
@@ -231,7 +230,7 @@ VITE_API_URL=http://localhost:3000
 
 See [services/api/prisma/schema.prisma](services/api/prisma/schema.prisma) for the complete schema.
 
-Key models include `User`, `Session`, `Subscription`, `InstitutionalLicense`, `LicenseAssignment`, `AuditLog`, `StripeEvent`, `ConsentRecord`, `DataDeletionRequest`, and `MedicalData`.
+Key active models include `User`, `Session`, `Subscription`, `InstitutionalLicense`, `LicenseAssignment`, `AuditLog`, `StripeEvent`, `ConsentRecord`, and `DataDeletionRequest`. Legacy clinical-era tables remain migration/retention concerns and are not publishable product features.
 
 ## Scripts
 
