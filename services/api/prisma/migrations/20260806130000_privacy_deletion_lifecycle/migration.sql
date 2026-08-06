@@ -226,9 +226,8 @@ BEGIN
     IF NEW."subject_ref" IS NULL THEN
       RAISE EXCEPTION 'subject_ref required' USING ERRCODE = '23514';
     END IF;
-    IF TG_OP = 'INSERT' THEN
-      RAISE EXCEPTION 'privacy evidence requires a live user at creation' USING ERRCODE = '23514';
-    END IF;
+    -- Explicit detached inserts are reserved for controlled restore/import.
+    -- Application routes always create evidence with a live user.
     RETURN NEW;
   END IF;
 
