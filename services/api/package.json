@@ -16,7 +16,7 @@
     "test": "vitest run",
     "test:integration": "vitest run src/__tests__/postgres-integration.test.js",
     "test:watch": "vitest",
-    "privacy:maintenance": "node src/workers/privacyMaintenance.js"
+    "privacy:maintenance": "node --env-file-if-exists=.env src/workers/privacyMaintenance.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.111.0",
