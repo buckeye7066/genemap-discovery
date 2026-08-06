@@ -19,7 +19,6 @@ const ContactSupport = lazyWithRetry(() => import('./pages/ContactSupport'));
 const AdminMessages = lazyWithRetry(() => import('./pages/AdminMessages'));
 const Home = lazyWithRetry(() => import('./pages/Home'));
 const AdminFunctionTester = lazyWithRetry(() => import('./pages/AdminFunctionTester'));
-const FunctionReviewer = lazyWithRetry(() => import('./pages/FunctionReviewer'));
 const LearnGenetics = lazyWithRetry(() => import('./pages/LearnGenetics'));
 const TopicExplorer = lazyWithRetry(() => import('./pages/TopicExplorer'));
 const QuizMode = lazyWithRetry(() => import('./pages/QuizMode'));
@@ -52,7 +51,6 @@ export const PAGES = {
     "AdminMessages": AdminMessages,
     "Home": Home,
     "AdminFunctionTester": AdminFunctionTester,
-    "FunctionReviewer": FunctionReviewer,
     "PrivacyPolicy": PrivacyPolicy,
     "TermsOfService": TermsOfService,
 }
@@ -82,14 +80,13 @@ export const adminPages = [
 
 // Super-admin ONLY. These either change access controls / grant privileges
 // (SuperAdminSetup) or are developer diagnostics that enumerate the backend
-// API surface (Function Tester/Reviewer) and must not ship to plain admins.
+// API surface (Function Tester) and must not ship to plain admins.
 // Gated to super_admin in the router (App.jsx) and hidden from a plain admin's
 // nav (Layout.jsx `superAdminOnly`). A page here is intentionally NOT in
 // adminPages, so the only gate that applies is the stricter super_admin one.
 export const superAdminPages = [
     "SuperAdminSetup",
     "AdminFunctionTester",
-    "FunctionReviewer",
 ];
 
 export const pagesConfig = {
