@@ -453,7 +453,7 @@ describe('publishable route decision', () => {
     (url) => expect(publicationBoundaryDecision({ url, body: {} })).toMatchObject({ statusCode: 403 }),
   );
 
-  it('rejects missing, unknown, conflicting, route-mismatched, and high-risk agent tasks', () => {
+  it('rejects missing, unknown, conflicting, route-mismatched, and persona-routed tasks', () => {
     expect(publicationBoundaryDecision({ url: '/llm/invoke', body: {} })).toMatchObject({ statusCode: 403 });
     expect(publicationBoundaryDecision({
       url: '/llm/invoke',
@@ -470,9 +470,20 @@ describe('publishable route decision', () => {
       url: '/education/chat',
       body: structuredBody(PUBLICATION_TASKS.AGGREGATE_GENOMICS_RESEARCH, RESEARCH_FIXTURES[0].input),
     })).toMatchObject({ statusCode: 403 });
-    expect(publicationBoundaryDecision({
-      url: '/llm/invoke',
-      body: { ...structuredBody(PUBLICATION_TASKS.RESEARCH_HYPOTHESIS, RESEARCH_FIXTURES[0].input), agent: 'robert' },
-    })).toMatchObject({ statusCode: 403 });
+    for (const body of [
+      {
+        ...structuredBody(PUBLICATION_TASKS.RESEARCH_HYPOTHESIS, RESEARCH_FIXTURES[0].input),
+        agent: 'arbitrary-persona',
+      },
+      {
+        ...structuredBody(PUBLICATION_TASKS.RESEARCH_HYPOTHESIS, RESEARCH_FIXTURES[0].input),
+        options: { agent: 'another-persona' },
+      },
+    ]) {
+      expect(publicationBoundaryDecision({ url: '/llm/invoke', body })).toMatchObject({
+        statusCode: 403,
+        code: 'EDUCATION_RESEARCH_BOUNDARY',
+      });
+    }
   });
 });
