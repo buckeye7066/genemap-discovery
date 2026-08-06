@@ -149,6 +149,15 @@ describe('clinical publishing boundary', () => {
       expect(source).not.toContain('createPageUrl("GSEA")');
       expect(source).not.toContain('createPageUrl("AIAssistants")');
     }
+
+    for (const forbidden of [
+      'GenomeBrowser',
+      'ComparativeGenomics',
+      '../components/visualizations/',
+      'apiClient.invokeLLM',
+    ]) {
+      expect(search).not.toContain(forbidden);
+    }
   });
 
   it('excludes high-risk clinical surfaces from the published GeneCard bundle', () => {
