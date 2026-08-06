@@ -7,15 +7,12 @@ const releaseSha = resolveVercelReleaseSha(process.env)
 
 const releaseIdentityPlugin = {
   name: 'genemap-release-identity',
-  transformIndexHtml() {
-    return [{
-      tag: 'meta',
-      attrs: {
-        name: 'genemap-release-sha',
-        content: releaseSha,
-      },
-      injectTo: 'head',
-    }]
+  generateBundle() {
+    this.emitFile({
+      type: 'asset',
+      fileName: 'release-identity.json',
+      source: `${JSON.stringify({ releaseSha })}\n`,
+    })
   },
 }
 
