@@ -2,7 +2,7 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "vite",
   "installCommand": "pnpm install --frozen-lockfile",
-  "buildCommand": "pnpm --filter @genemap/shared build && pnpm --filter @genemap/web build",
+  "buildCommand": "GENEMAP_REQUIRE_RELEASE_IDENTITY=1 pnpm --filter @genemap/shared build && pnpm --filter @genemap/web build",
   "outputDirectory": "apps/web/dist",
   "rewrites": [
     { "source": "/((?!assets/|icons/|\\.well-known/).*)", "destination": "/index.html" }
