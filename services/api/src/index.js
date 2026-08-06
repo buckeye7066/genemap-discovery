@@ -6,6 +6,7 @@ import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
 import { PrismaClient } from '@prisma/client';
 import { loadEnv } from './config/env.js';
+import { resolveRailwayReleaseSha } from './config/releaseIdentity.js';
 import { initSentry } from './config/sentry.js';
 import {
   createEmergencyRateLimitHook,
@@ -38,14 +39,12 @@ const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
 const GLOBAL_RATE_LIMIT_MAX = 100;
 const AUTH_RATE_LIMIT_MAX = 10;
 
-const railwayCommitSha = process.env.RAILWAY_GIT_COMMIT_SHA || '';
-const releaseSha = /^[a-f0-9]{40}$/u.test(railwayCommitSha)
-  ? railwayCommitSha
-  : null;
-
 // Load + validate env BEFORE constructing anything that depends on it.
 // loadEnv() throws in production if required secrets are missing.
 const env = loadEnv();
+const releaseSha = resolveRailwayReleaseSha(process.env, {
+  production: env.isProduction,
+});
 
 // Initialize error tracking as early as possible (no-op unless SENTRY_DSN set).
 const sentryEnabled = initSentry(env);
