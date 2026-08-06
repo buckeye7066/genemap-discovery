@@ -7,6 +7,7 @@ const distRoot = path.resolve(process.argv[2] || defaultDist);
 
 const forbiddenChunkPrefixes = [
   'FunctionReviewer',
+  'AdminFunctionTester',
   'AIAssistants',
   'Anastasia',
   'RobertClinical',
@@ -45,6 +46,8 @@ const forbiddenChunkPrefixes = [
 
 const forbiddenContent = [
   'components/functionRegistry',
+  '/admin/self-test',
+  'runFunctionTests',
   'apps/web/pages/RobertClinical.jsx',
   'apps/web/pages/Anastasia.jsx',
   'apps/web/pages/AIAssistants.jsx',
