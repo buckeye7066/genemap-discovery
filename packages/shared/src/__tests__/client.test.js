@@ -291,9 +291,12 @@ describe('Publication boundary', () => {
     'updateConversation',
     'lookupVariant',
     'lookupGene',
+    'searchVariants',
+    'searchPhenotypes',
     'searchClinVar',
     'parseVcf',
     'enrichVcfVariants',
+    'enrichVcfCohort',
     'searchClinicalTrials',
     'getClinicalTrial',
   ];
