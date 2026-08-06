@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import {
@@ -19,7 +18,6 @@ import {
 import {
   MessageSquare,
   Send,
-  Sparkles,
   Loader2,
   CheckCircle2,
   Mail,
@@ -32,7 +30,6 @@ export default function ContactSupport() {
   const [message, setMessage] = useState("");
   const [isIssue, setIsIssue] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isGenerating, setIsGenerating] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState(null);
   const [showCustomize, setShowCustomize] = useState(false);
@@ -104,37 +101,6 @@ export default function ContactSupport() {
       mono: "font-mono"
     };
     return fonts[fontFamily] || fonts.default;
-  };
-
-  const handleAIAssist = async () => {
-    if (!subject.trim()) {
-      setError("Please enter a subject first so AI can help draft your message");
-      return;
-    }
-
-    setIsGenerating(true);
-    setError(null);
-
-    try {
-      const prompt = `You are helping a user write a message to Dr. John White about their genomics platform issue.
-
-Subject: ${subject}
-
-Write a clear, professional message describing the issue. Include:
-1. What the user was trying to do
-2. What went wrong or what they need help with
-3. Any relevant context
-
-Keep it concise (3-4 sentences) and professional but friendly.`;
-
-      const response = await apiClient.invokeLLM(prompt);
-      // invokeLLM resolves to { result, disclaimer }; store only the text.
-      setMessage(response?.result || response);
-    } catch (err) {
-      setError("Failed to generate message. Please write it manually.");
-    } finally {
-      setIsGenerating(false);
-    }
   };
 
   const handleSubmit = async (e) => {
@@ -296,28 +262,8 @@ Keep it concise (3-4 sentences) and professional but friendly.`;
               </div>
 
               <div>
-                <div className="flex items-center justify-between mb-2">
+                <div className="mb-2">
                   <Label htmlFor="message">Message</Label>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={handleAIAssist}
-                    disabled={isGenerating || !subject.trim()}
-                    className="gap-2"
-                  >
-                    {isGenerating ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        Generating...
-                      </>
-                    ) : (
-                      <>
-                        <Sparkles className="w-4 h-4" />
-                        AI Draft
-                      </>
-                    )}
-                  </Button>
                 </div>
                 <Textarea
                   id="message"
@@ -341,11 +287,6 @@ Keep it concise (3-4 sentences) and professional but friendly.`;
                   className="text-sm font-normal cursor-pointer"
                 >
                   This is a technical issue or bug report
-                  {isIssue && (
-                    <Badge variant="outline" className="ml-2">
-                      AI assist available
-                    </Badge>
-                  )}
                 </Label>
               </div>
 

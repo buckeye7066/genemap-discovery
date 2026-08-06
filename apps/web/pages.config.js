@@ -4,16 +4,9 @@ import __Layout from './Layout.jsx';
 const Search = lazyWithRetry(() => import('./pages/Search'));
 const Premium = lazyWithRetry(() => import('./pages/Premium'));
 const History = lazyWithRetry(() => import('./pages/History'));
-const IconGenerator = lazyWithRetry(() => import('./pages/IconGenerator'));
 const Profile = lazyWithRetry(() => import('./pages/Profile'));
-const MedicalData = lazyWithRetry(() => import('./pages/MedicalData'));
-const Anastasia = lazyWithRetry(() => import('./pages/Anastasia'));
-const RobertClinical = lazyWithRetry(() => import('./pages/RobertClinical'));
-const VisualizationHub = lazyWithRetry(() => import('./pages/VisualizationHub'));
 const ResearchMode = lazyWithRetry(() => import('./pages/ResearchMode'));
 const Dashboard = lazyWithRetry(() => import('./pages/Dashboard'));
-const AIAssistants = lazyWithRetry(() => import('./pages/AIAssistants'));
-const VCFAnalysis = lazyWithRetry(() => import('./pages/VCFAnalysis'));
 const InstitutionalAdmin = lazyWithRetry(() => import('./pages/InstitutionalAdmin'));
 const InstitutionalPricing = lazyWithRetry(() => import('./pages/InstitutionalPricing'));
 const BannedUsers = lazyWithRetry(() => import('./pages/BannedUsers'));
@@ -21,7 +14,6 @@ const DemographicCollection = lazyWithRetry(() => import('./pages/DemographicCol
 const SuperAdminSetup = lazyWithRetry(() => import('./pages/SuperAdminSetup'));
 const AxiomNewsletter = lazyWithRetry(() => import('./pages/AxiomNewsletter'));
 const UsersLog = lazyWithRetry(() => import('./pages/UsersLog'));
-const GSEA = lazyWithRetry(() => import('./pages/GSEA'));
 const AdminAnalytics = lazyWithRetry(() => import('./pages/AdminAnalytics'));
 const ContactSupport = lazyWithRetry(() => import('./pages/ContactSupport'));
 const AdminMessages = lazyWithRetry(() => import('./pages/AdminMessages'));
@@ -45,16 +37,9 @@ export const PAGES = {
     "Search": Search,
     "Premium": Premium,
     "History": History,
-    "IconGenerator": IconGenerator,
     "Profile": Profile,
-    "MedicalData": MedicalData,
-    "Anastasia": Anastasia,
-    "RobertClinical": RobertClinical,
-    "VisualizationHub": VisualizationHub,
     "ResearchMode": ResearchMode,
     "Dashboard": Dashboard,
-    "AIAssistants": AIAssistants,
-    "VCFAnalysis": VCFAnalysis,
     "InstitutionalAdmin": InstitutionalAdmin,
     "InstitutionalPricing": InstitutionalPricing,
     "BannedUsers": BannedUsers,
@@ -62,7 +47,6 @@ export const PAGES = {
     "SuperAdminSetup": SuperAdminSetup,
     "AxiomNewsletter": AxiomNewsletter,
     "UsersLog": UsersLog,
-    "GSEA": GSEA,
     "AdminAnalytics": AdminAnalytics,
     "ContactSupport": ContactSupport,
     "AdminMessages": AdminMessages,
@@ -117,3 +101,11 @@ export const pagesConfig = {
     Pages: PAGES,
     Layout: __Layout,
 };
+
+// The publishable build deliberately omits MedicalData, VCFAnalysis,
+// AIAssistants, Anastasia, RobertClinical, VisualizationHub, and GSEA from both
+// the route map and lazy-import graph. The first group contains personalized
+// clinical execution. VisualizationHub and GSEA currently present LLM-generated
+// coordinates, expression values, interactions, p-values, or FDR values as if
+// they came from named databases or statistical computation. Those routes stay
+// unavailable until they use versioned source adapters or real calculations.

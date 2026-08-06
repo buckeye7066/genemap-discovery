@@ -357,7 +357,7 @@ export default function PremiumPage() {
               </div>
               <div className="flex items-center gap-2">
                 <Brain className="w-4 h-4 text-purple-600 flex-shrink-0" />
-                <span className="text-sm">Advanced AI models (GPT-4o & Claude)</span>
+                <span className="text-sm">Advanced AI study and research tools</span>
               </div>
               <div className="flex items-center gap-2">
                 <Zap className="w-4 h-4 text-amber-600 flex-shrink-0" />
@@ -365,11 +365,11 @@ export default function PremiumPage() {
               </div>
               <div className="flex items-center gap-2">
                 <Check className="w-4 h-4 text-green-600 flex-shrink-0" />
-                <span className="text-sm">All visualization tools</span>
+                <span className="text-sm">Learning progress and advanced topic paths</span>
               </div>
               <div className="flex items-center gap-2">
                 <Check className="w-4 h-4 text-green-600 flex-shrink-0" />
-                <span className="text-sm">VCF analysis & clinical tools</span>
+                <span className="text-sm">Saved gene sets & research projects</span>
               </div>
               <div className="flex items-center gap-2">
                 <Check className="w-4 h-4 text-green-600 flex-shrink-0" />

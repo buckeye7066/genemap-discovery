@@ -97,7 +97,6 @@ export type EducationLevel =
 export interface ExplanationRequest {
   topic: string;
   level: EducationLevel | string;
-  context?: string;
 }
 
 /**
@@ -133,11 +132,133 @@ export interface UserChatMessage {
   content: string;
 }
 
+/** Finite server-enforced intents available in the public education/research build. */
+export type PublicationTask =
+  | 'genetics_education'
+  | 'aggregate_genomics_research'
+  | 'candidate_gene_research'
+  | 'research_hypothesis'
+  | 'learning_activity_summary';
+
+export type ResearchCohortClassification =
+  | 'deidentified_aggregate'
+  | 'synthetic'
+  | 'public_dataset';
+
+export type ResearchModality =
+  | 'wes'
+  | 'wgs'
+  | 'rna_seq'
+  | 'genotype'
+  | 'phenotype'
+  | 'cnv'
+  | 'proteomics'
+  | 'metabolomics'
+  | 'epigenomics'
+  | 'treatment_response';
+
+export type ResearchObjective =
+  | 'identify_variants'
+  | 'association_analysis'
+  | 'compare_cohorts'
+  | 'multi_omic_hypothesis'
+  | 'covariate_design'
+  | 'cohort_summary';
+
+/** Immutable, reviewed publication concept. Arbitrary client labels are never executable input. */
+export interface CuratedPublicationConceptRef {
+  kind: 'curated_concept';
+  conceptId: string;
+  canonicalLabel: string;
+  conceptKind: 'disease' | 'phenotype';
+  source: 'genemap_curated';
+  version: 1;
+}
+
+/** Exact HPO identifier selected from a deterministic resolver/search result. */
+export interface HpoPublicationReference {
+  kind: 'hpo';
+  identifier: string;
+}
+
+/** Exact MONDO disease identifier selected from Monarch and revalidated server-side. */
+export interface MondoPublicationReference {
+  kind: 'mondo';
+  identifier: string;
+}
+
+export type PublicationResearchReference =
+  | CuratedPublicationConceptRef
+  | HpoPublicationReference
+  | MondoPublicationReference;
+
+export interface PublicationConceptSuggestion {
+  kind: 'hpo' | 'mondo';
+  identifier: string;
+  canonicalLabel: string;
+  source: 'NLM Clinical Tables HPO' | 'Monarch Initiative';
+  /** Upstream HTTP API generation; this is not an ontology-data release identifier. */
+  apiVersion: 'v3';
+}
+
+export interface AggregateResearchTaskInput {
+  version: 1;
+  cohort: {
+    sampleCount: number;
+    classification: ResearchCohortClassification;
+    hasControls: boolean;
+  };
+  modalities: ResearchModality[];
+  objective: ResearchObjective;
+  focus?: PublicationResearchReference;
+}
+
+export interface CandidateGeneTaskInput {
+  version: 1;
+  operation:
+    | 'classify_and_suggest'
+    | 'classify'
+    | 'suggest_candidates'
+    | 'gene_profile';
+  query?: PublicationResearchReference;
+  /** Server resolves this symbol against MyGene.info before any model call. */
+  gene?: { symbol: string };
+  audience?: 'general' | 'undergraduate' | 'graduate' | 'researcher' | 'medical_researcher';
+}
+
+export interface LearningActivityTaskInput {
+  version: 1;
+  educationLevel: EducationLevel;
+  recentGenes: string[];
+  recentConcepts: PublicationResearchReference[];
+}
+
+export interface GeneticsTutorTaskInput {
+  version: 1;
+  topic: string;
+  level: EducationLevel;
+  interaction:
+    | 'explain_another_way'
+    | 'give_example'
+    | 'compare_concepts'
+    | 'check_understanding';
+}
+
+export type PublicationTaskInput =
+  | AggregateResearchTaskInput
+  | CandidateGeneTaskInput
+  | LearningActivityTaskInput
+  | GeneticsTutorTaskInput;
+
+export type PublicationTaskRequest =
+  | { publicationTask: 'aggregate_genomics_research'; taskInput: AggregateResearchTaskInput }
+  | { publicationTask: 'research_hypothesis'; taskInput: AggregateResearchTaskInput }
+  | { publicationTask: 'candidate_gene_research'; taskInput: CandidateGeneTaskInput }
+  | { publicationTask: 'learning_activity_summary'; taskInput: LearningActivityTaskInput };
+
 export interface ChatRequest {
-  messages: UserChatMessage[];
-  level: EducationLevel | string;
-  /** Optional topic context so the tutor reply carries the topic's references. */
-  topic?: string;
+  publicationTask: 'genetics_education';
+  taskInput: GeneticsTutorTaskInput;
 }
 
 export interface LearningProgress {
@@ -157,10 +278,12 @@ export interface LLMOptions {
   maxTokens?: number;
   size?: string;
   quality?: string;
+  /** Server-enforced intent for a publishable text-generation request. */
+  publicationTask?: PublicationTask;
   /**
    * Calling persona id from the shared agent registry ('robert' | 'anastasia').
    * Sent as a sibling `agent` field on the request, not inside `options` — see
-   * ApiClient#invokeLLM. Unknown ids are ignored server-side.
+   * ApiClient#invokePublicationTask. Unknown ids are ignored server-side.
    */
   agent?: string;
 }
