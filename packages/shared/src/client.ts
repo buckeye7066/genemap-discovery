@@ -29,6 +29,7 @@ import type {
   License,
   LicenseSeatAssignment,
   ConsentRecord,
+  DataDeletionRequest,
   DeletionRequestStatus,
   Annotation,
   AdminAnalytics,
@@ -719,7 +720,12 @@ export class ApiClient {
     const res = await this.request<{ records: ConsentRecord[] }>('/entities/consent');
     return res.records;
   }
-  async requestDataDeletion(): Promise<{ request: DeletionRequestStatus }> {
+  async requestDataDeletion(
+    legacyRequest?: DataDeletionRequest
+  ): Promise<{ request: DeletionRequestStatus }> {
+    // Retained for source compatibility only. Deletion scope is server-owned,
+    // so caller categories are deliberately never serialized.
+    void legacyRequest;
     return this.request('/entities/data-deletion-request', {
       method: 'POST',
       body: JSON.stringify({}),
