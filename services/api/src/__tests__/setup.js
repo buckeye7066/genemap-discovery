@@ -27,7 +27,7 @@ process.env.LOG_LEVEL = 'silent';
 export function createPrismaMock() {
   const store = {};
   const uniqueFields = {
-    user: ['email'],
+    user: ['email', 'privacySubjectRef'],
     stripeEvent: ['stripeEventId'],
     subscription: ['stripeSubscriptionId'],
   };
@@ -124,10 +124,13 @@ export function createPrismaMock() {
     }),
 
     create: vi.fn(async ({ data }) => {
-      assertUnique(name, data);
+      const withDefaults = name === 'user' && !data.privacySubjectRef
+        ? { ...data, privacySubjectRef: crypto.randomUUID() }
+        : data;
+      assertUnique(name, withDefaults);
       const record = {
         id: crypto.randomUUID(),
-        ...data,
+        ...withDefaults,
         createdAt: new Date(),
         updatedAt: new Date(),
       };
@@ -527,6 +530,7 @@ export function seedAuthUser(prisma, userPayload) {
   if (existing) return;
   prisma._store.user.push({
     id: userPayload.userId,
+    privacySubjectRef: userPayload.privacySubjectRef || crypto.randomUUID(),
     email: userPayload.email,
     role: userPayload.role,
     passwordHash: '$2b$10$mockHashForAuthTests',
