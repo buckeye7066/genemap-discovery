@@ -33,7 +33,8 @@ assert_tracked_source_is_safe() {
   local unsafe_paths
   unsafe_paths=$(git -C "${REPO_ROOT}" ls-tree -r --name-only HEAD \
     | grep -E '(^|/)(\.env($|\.)|\.npmrc$|credentials\.json$|service-account[^/]*\.json$|[^/]+\.(pem|key)$)' \
-    | grep -Ev '(^|/)\.env(\.[^/]*)?\.example$|^\.npmrc    || true)
+    | grep -Ev '(^|/)\.env(\.[^/]*)?\.example$|^\.npmrc$' \
+    || true)
   if [[ -n "${unsafe_paths}" ]]; then
     echo "Error: refusing to archive tracked credential-like files:" >&2
     printf '%s\n' "${unsafe_paths}" >&2
@@ -43,8 +44,14 @@ assert_tracked_source_is_safe() {
   if git -C "${REPO_ROOT}" ls-tree --name-only HEAD -- .npmrc | grep -qx '.npmrc'; then
     local unsupported_npmrc
     unsupported_npmrc=$(git -C "${REPO_ROOT}" show HEAD:.npmrc \
-      | grep -Ev '^([[:space:]]*|#.*|node-linker=(hoisted|isolated|pnp)|strict-peer-dependencies=(true|false))}
-
+      | grep -Ev '^([[:space:]]*|#.*|node-linker=(hoisted|isolated|pnp)|strict-peer-dependencies=(true|false))$' \
+      || true)
+    if [[ -n "${unsupported_npmrc}" ]]; then
+      echo "Error: refusing to archive .npmrc with non-allowlisted settings." >&2
+      exit 1
+    fi
+  fi
+}
 echo "=== GeneMap Discovery Backup Script ==="
 echo "Timestamp (UTC): ${TIMESTAMP}"
 
