@@ -323,10 +323,12 @@ describe('Consent and data deletion methods', () => {
     expect(fetchCalls[0].url).toBe('http://localhost:3000/entities/consent');
   });
 
-  it('requestDataDeletion() should POST /entities/data-deletion-request', async () => {
-    await client.requestDataDeletion({ deletedTypes: ['search_history'] });
+  it('requestDataDeletion() posts an empty server-scoped request', async () => {
+    await client.requestDataDeletion();
     expect(fetchCalls[0].url).toBe('http://localhost:3000/entities/data-deletion-request');
     expect(fetchCalls[0].method).toBe('POST');
+    expect(fetchCalls[0].body).toBe('{}');
+    expect(fetchCalls[0].body).not.toContain('deletedTypes');
   });
 
   it('getDeletionRequestStatus() should GET /entities/data-deletion-request', async () => {
