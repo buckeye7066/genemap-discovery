@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { normalizeSearchHistoryEntry } from '../searchHistory.js';
+import {
+  normalizeSearchHistoryEntry,
+  publicationReferenceFromSearchHistoryEntry,
+} from '../searchHistory.js';
 
 describe('normalizeSearchHistoryEntry', () => {
   it('reads the current backend contract (query/queryType/results/createdAt)', () => {
@@ -8,7 +11,12 @@ describe('normalizeSearchHistoryEntry', () => {
       query: 'hearing loss',
       queryType: 'premium',
       createdAt: '2026-06-23T00:00:00Z',
-      results: { hpoTerm: 'HP:0000365', candidateGenes: ['GJB2', 'MYO7A'], count: 2 },
+      results: {
+        hpoTerm: 'HP:0000365',
+        publicationReference: { kind: 'hpo', identifier: 'HP:0000365' },
+        candidateGenes: ['GJB2', 'MYO7A'],
+        count: 2,
+      },
     });
     expect(out).toMatchObject({
       id: 'a',
@@ -16,6 +24,7 @@ describe('normalizeSearchHistoryEntry', () => {
       queryType: 'premium',
       createdAt: '2026-06-23T00:00:00Z',
       hpoTerm: 'HP:0000365',
+      publicationReference: { kind: 'hpo', identifier: 'HP:0000365' },
       candidateGenes: ['GJB2', 'MYO7A'],
       count: 2,
     });
@@ -51,4 +60,46 @@ describe('normalizeSearchHistoryEntry', () => {
     expect(out.candidateGenes).toEqual([]);
     expect(out.count).toBe(0);
   });
+
+  it('recovers only bounded references from current and legacy history', () => {
+    expect(publicationReferenceFromSearchHistoryEntry({
+      query: 'spoofed label',
+      results: {
+        publicationReference: {
+          kind: 'hpo',
+          identifier: 'hp:0001250',
+          canonicalLabel: 'browser-controlled text',
+        },
+      },
+    })).toEqual({ kind: 'hpo', identifier: 'HP:0001250' });
+
+    expect(publicationReferenceFromSearchHistoryEntry({
+      query: 'ignored label',
+      results: {
+        publicationReference: {
+          kind: 'curated_concept',
+          conceptId: 'disease:cystic-fibrosis',
+          canonicalLabel: 'spoofed',
+        },
+      },
+    })).toMatchObject({
+      kind: 'curated_concept',
+      conceptId: 'disease:cystic-fibrosis',
+      canonicalLabel: 'Cystic Fibrosis',
+    });
+
+    expect(publicationReferenceFromSearchHistoryEntry({
+      query: 'MONDO:0007947',
+    })).toEqual({ kind: 'mondo', identifier: 'MONDO:0007947' });
+
+    expect(publicationReferenceFromSearchHistoryEntry({
+      query: 'legacy label',
+      results: { hpoTerm: 'HP:0004322' },
+    })).toEqual({ kind: 'hpo', identifier: 'HP:0004322' });
+
+    expect(publicationReferenceFromSearchHistoryEntry({
+      query: 'Alice Smith BRCA1 result',
+    })).toBeNull();
+  });
+
 });
