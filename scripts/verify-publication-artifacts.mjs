@@ -15,6 +15,7 @@ const FORBIDDEN_PAGE_CHUNKS = [
   'FHIRExporter',
   'AskAIButtons',
   'GenomeBrowser',
+  'ComparativeGenomics',
   'ChromosomeView',
   'GeneExpressionChart',
   'PhenotypeNetwork',
@@ -41,6 +42,7 @@ const FORBIDDEN_PUBLISHED_STRINGS = [
   'HIPAA Compliant',
   'FHIRExporter',
   'RobertClinicalSupport',
+  'ComparativeGenomics',
 ];
 
 const EXPECTED_TITLE = '<title>GeneMap Discovery | Genetics Education &amp; Research Leads</title>';
