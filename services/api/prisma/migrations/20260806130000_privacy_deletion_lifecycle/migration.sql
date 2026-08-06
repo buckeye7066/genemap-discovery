@@ -168,6 +168,7 @@ ALTER TABLE "data_deletion_requests"
       OR "failure_code" IN (
         'local_purge_failed',
         'retry_exhausted',
+        'subject_unavailable',
         'legacy_state_requires_review'
       )
     );
