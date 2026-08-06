@@ -61,6 +61,57 @@ jobs:
       - name: migration_lock.toml exists
         run: test -f services/api/prisma/migrations/migration_lock.toml
 
+  backup-script-safeguards:
+    name: Backup script syntax and encryption contract
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - name: Parse Bash backup script
+        run: bash -n scripts/backup-snapshot.sh
+      - name: Parse PowerShell backup script
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path 'scripts/backup-snapshot.ps1'),
+            [ref]$tokens,
+            [ref]$errors
+          ) | Out-Null
+          if ($errors.Count -gt 0) {
+            $errors | ForEach-Object { Write-Error $_.Message }
+            exit 1
+          }
+      - name: Verify encrypted database artifact contract
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFile } from 'node:fs/promises';
+
+          const bash = await readFile('scripts/backup-snapshot.sh', 'utf8');
+          const powershell = await readFile('scripts/backup-snapshot.ps1', 'utf8');
+          for (const [name, source] of [['Bash', bash], ['PowerShell', powershell]]) {
+            for (const required of ['database.dump.age', 'tar.gz.age']) {
+              if (!source.includes(required)) {
+                throw new Error(`${name} backup script must emit ${required}`);
+              }
+            }
+          }
+
+          const logicalBash = bash.replace(/\\\r?\n\s*/g, ' ');
+          const bashDump = logicalBash.split(/\r?\n/).find((line) => /\bpg_dump\b/.test(line));
+          const powershellDump = powershell.split(/\r?\n/).find((line) => /\bpg_dump\b/.test(line));
+          if (!bashDump || !powershellDump) throw new Error('Both backup scripts must invoke pg_dump.');
+          if (/\bpg_dump\b.*DATABASE_URL/.test(bashDump) || /\bpg_dump\b.*DATABASE_URL/.test(powershellDump)) {
+            throw new Error('DATABASE_URL must be supplied through PGDATABASE, never as a pg_dump argument.');
+          }
+          if (!bash.includes('PGDATABASE="${DATABASE_URL}"') || !powershell.includes('$env:PGDATABASE = $env:DATABASE_URL')) {
+            throw new Error('Both backup scripts must pass the database URL through PGDATABASE.');
+          }
+          NODE
+
   test:
     runs-on: ubuntu-latest
     steps:
@@ -80,6 +131,8 @@ jobs:
         run: pnpm test:api
       - name: Shared tests (vitest)
         run: pnpm test:shared
+      - name: Web publication tests (vitest)
+        run: pnpm --filter @genemap/web test
 
   api-integration-postgres:
     runs-on: ubuntu-latest
@@ -137,12 +190,47 @@ jobs:
         run: pnpm build:web
         env:
           VITE_API_URL: http://localhost:3000
+      - name: Verify publication boundary in built web artifact
+        run: node scripts/verify-publication-artifacts.mjs apps/web/dist
       - name: Upload build artifact
         uses: actions/upload-artifact@v7
         with:
           name: web-dist
           path: apps/web/dist
           retention-days: 7
+
+  browser-publication-boundary:
+    name: Browser publication boundary
+    runs-on: ubuntu-latest
+    needs: [build-web]
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: 'pnpm'
+      - name: Install (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+      - name: Download exact-head web artifact
+        uses: actions/download-artifact@v7
+        with:
+          name: web-dist
+          path: apps/web/dist
+      - name: Reverify downloaded publication artifact
+        run: node scripts/verify-publication-artifacts.mjs apps/web/dist
+      - name: Install Chromium
+        run: pnpm --filter @genemap/web exec playwright install --with-deps chromium
+      - name: Run public and authenticated boundary journeys
+        run: >-
+          pnpm --filter @genemap/web exec playwright test
+          tests/e2e/public-surface.spec.js
+          tests/e2e/publication-boundary.spec.js
+        env:
+          CI: 'true'
+          PLAYWRIGHT_LOCAL_PREVIEW: '1'
+          PLAYWRIGHT_BASE_URL: http://127.0.0.1:4173
 
   desktop-build-smoke:
     # electron-builder is part of the shipped desktop toolchain. Build an unpacked
