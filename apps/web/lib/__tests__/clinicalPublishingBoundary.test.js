@@ -149,6 +149,15 @@ describe('clinical publishing boundary', () => {
       expect(source).not.toContain('createPageUrl("GSEA")');
       expect(source).not.toContain('createPageUrl("AIAssistants")');
     }
+
+    for (const forbidden of [
+      'GenomeBrowser',
+      'ComparativeGenomics',
+      '../components/visualizations/',
+      'apiClient.invokeLLM',
+    ]) {
+      expect(search).not.toContain(forbidden);
+    }
   });
 
   it('excludes high-risk clinical surfaces from the published GeneCard bundle', () => {
@@ -175,7 +184,12 @@ describe('clinical publishing boundary', () => {
     expect(card).toContain('exportGeneReport(gene)');
     expect(card).toContain('exportJSON(gene');
     expect(card).toContain('copyShareableLink(gene');
-    expect(card).toContain('<GenomeBrowser');
+    expect(card).not.toContain('lazyWithRetry');
+    expect(card).not.toContain('../visualizations/');
+    expect(card).not.toContain('<GenomeBrowser');
+    expect(card).not.toContain('<ProteinDomains');
+    expect(card).not.toContain('<ProteinStructure');
+    expect(card).not.toContain('<ProteinInteractions');
   });
 
   it('keeps research-project export neutral and non-clinical', () => {
@@ -189,12 +203,72 @@ describe('clinical publishing boundary', () => {
       'clinical systems',
       'EHR',
       'PHI',
+      'apiClient.invokeLLM',
     ]) {
       expect(projects).not.toContain(forbidden);
     }
 
     expect(projects).toContain('Export Project Summary (JSON)');
     expect(projects).toContain('do not include personal');
+  });
+
+  it('ships no high-risk endpoint methods in the public shared client', () => {
+    const sharedClient = read('../../../../packages/shared/src/client.ts');
+
+    for (const forbidden of [
+      '/entities/medical-data',
+      '/entities/conversations',
+      '/genomics/vcf',
+      '/genomics/variant',
+      '/genomics/clinvar',
+      '/clinical-trials',
+      'getMedicalData(',
+      'getConversations(',
+      'searchVariants(',
+      'searchPhenotypes(',
+      'parseVcf(',
+      'enrichVcfCohort(',
+      'searchClinicalTrials(',
+      'HIPAA Compliance',
+    ]) {
+      expect(sharedClient).not.toContain(forbidden);
+    }
+
+    expect(sharedClient).toContain('/genomics/enrich');
+    expect(sharedClient).toContain('/genomics/publication-concepts/search');
+  });
+
+  it('keeps administrator analytics aggregate-only', () => {
+    const analytics = read('../../pages/AdminAnalytics.jsx');
+
+    for (const forbidden of [
+      'Medical Records',
+      'Medical Data Upload Types',
+      'Robert (Clinical)',
+      'Anastasia (Counselor)',
+      'Top 10 Search Queries',
+      'recentSearches',
+      'recentActivity',
+      'recentConversations',
+      'medicalDataTypeBreakdown',
+      'agentMesh',
+      'search.query',
+      'activity.entityId',
+      'activity.metadata',
+    ]) {
+      expect(analytics).not.toContain(forbidden);
+    }
+
+    expect(analytics).toContain('Aggregate Platform Analytics');
+    expect(analytics).toContain('Individual search text');
+    expect(analytics).toContain('activityTypeBreakdown');
+    expect(analytics).toContain('searchTypeBreakdown');
+  });
+
+  it('does not initiate unused third-party font connections', () => {
+    const webShell = read('../../index.html');
+    expect(webShell).not.toContain('fonts.googleapis.com');
+    expect(webShell).not.toContain('fonts.gstatic.com');
   });
 
   it('does not import the retired clinical persona registry into the browser graph', () => {
@@ -223,7 +297,14 @@ describe('clinical publishing boundary', () => {
     expect(privacy).toContain('Publication-mode data boundary');
     expect(privacy).not.toContain('Health &amp; genetic data you upload');
     expect(privacy).not.toContain('Delete any uploaded record from the Medical Data page');
-    expect(terms).toContain('The published service does not accept personal medical records');
+    expect(privacy).not.toContain('Access to account data is scoped to the signed-in user');
+    expect(privacy).toContain('authorized Axiom Biolabs operators');
+    for (const provider of ['Vercel:', 'Railway:', 'Resend:', 'Sentry:', 'Redis rate-limit operator:', 'NLM Clinical Tables']) {
+      expect(privacy).toContain(provider);
+    }
+    expect(terms).not.toContain('The published service does not accept personal medical records');
+    expect(terms).toContain('Profile, project, annotation, and support fields can still accept free text');
+    expect(terms).not.toContain('AI providers acting as our processors');
     expect(premium).toContain('Saved gene sets & research projects');
     expect(premium).not.toContain('VCF analysis & clinical tools');
     expect(premium).not.toContain('All visualization tools');
@@ -231,6 +312,9 @@ describe('clinical publishing boundary', () => {
     const playListing = read('../../../../docs/play-store/listing.md');
     expect(playListing).not.toContain('compare expression, interactions');
     expect(playListing).not.toContain('Data Visualization Hub');
+    expect(playListing).toContain('Draft only');
+    expect(playListing).toContain('finite catalog of reviewed genetics topics');
+    expect(playListing).not.toContain('Ready-to-paste');
   });
 
   it('keeps candidate-search scope and provenance truthful', () => {
