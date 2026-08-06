@@ -148,6 +148,23 @@ BEGIN
     ARRAY['rolling-client-canary']::TEXT[]
   );
 
+  BEGIN
+    INSERT INTO "consent_records" (
+      "id", "user_id", "subject_ref", "consent_type", "version", "granted"
+    )
+    VALUES (
+      'consent-mismatched-ref',
+      subject_id,
+      gen_random_uuid(),
+      'research',
+      '1.0',
+      TRUE
+    );
+    RAISE EXCEPTION 'mismatched evidence subject_ref was accepted';
+  EXCEPTION
+    WHEN check_violation THEN NULL;
+  END;
+
   SELECT * INTO row_record
   FROM "data_deletion_requests" WHERE "id" = 'deletion-legacy-write';
   IF row_record."subject_ref" <> privacy_ref
