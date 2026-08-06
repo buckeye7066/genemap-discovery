@@ -237,7 +237,8 @@ runIfPostgres('Postgres integration smoke', () => {
       data: { role: 'super_admin' },
     });
     const target = await registerUser('privacy-target@example.com');
-    const subjectRef = target.user.id;
+    const targetUser = await prisma.user.findUnique({ where: { id: target.user.id } });
+    const subjectRef = targetUser.privacySubjectRef;
     const requestedAt = new Date('2026-08-06T12:00:00.000Z');
 
     const consent = await prisma.consentRecord.create({
@@ -300,7 +301,7 @@ runIfPostgres('Postgres integration smoke', () => {
       userId: null,
       subjectRef,
       ipAddress: null,
-      metadata: null,
+      metadata: { erasedOnAccountDeletion: true },
     });
 
     const retainedRequests = await prisma.dataDeletionRequest.findMany({
@@ -321,7 +322,7 @@ runIfPostgres('Postgres integration smoke', () => {
       where: {
         userId: admin.user.id,
         action: 'local_account_deleted',
-        entityId: target.user.id,
+        entityId: subjectRef,
       },
     });
     expect(audit).not.toBeNull();
@@ -330,11 +331,12 @@ runIfPostgres('Postgres integration smoke', () => {
 
   it('claims one due deletion exactly once under concurrent workers', async () => {
     const subject = await registerUser('privacy-claim@example.com');
+    const subjectUser = await prisma.user.findUnique({ where: { id: subject.user.id } });
     const now = new Date();
     await prisma.dataDeletionRequest.create({
       data: {
         userId: subject.user.id,
-        subjectRef: subject.user.id,
+        subjectRef: subjectUser.privacySubjectRef,
         scope: 'legacy_content_v1',
         status: 'pending',
         requestedTypes: [...SELF_SERVICE_PURGE_TYPES],
@@ -350,7 +352,7 @@ runIfPostgres('Postgres integration smoke', () => {
     expect([...left, ...right]).toHaveLength(1);
 
     const stored = await prisma.dataDeletionRequest.findFirst({
-      where: { subjectRef: subject.user.id },
+      where: { subjectRef: subjectUser.privacySubjectRef },
     });
     expect(stored).toMatchObject({ status: 'processing', attemptCount: 1 });
   });
