@@ -29,7 +29,7 @@ test.describe('Legal pages (reachable logged-out)', () => {
     await expect(page.getByRole('heading', { name: /privacy policy/i })).toBeVisible();
     await expect(page.getByText(/last updated:/i)).toBeVisible();
     await expect(page.getByRole('heading', { name: /publication-mode data boundary/i })).toBeVisible();
-    await expect(page.getByText(/does not offer personal medical-record upload/i)).toBeVisible();
+    await expect(page.getByText(/does not provide routes for personal medical-record upload/i)).toBeVisible();
   });
 
   test('Terms of Service emphasizes "not medical advice"', async ({ page }) => {
