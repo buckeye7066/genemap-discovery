@@ -1,11 +1,16 @@
 /**
  * Fail-closed publication boundary for the public education/research build.
  *
- * The boundary is an allow contract, not a growing disease/drug dictionary.
- * Arbitrary generation is unavailable. A request must name one of the small
- * publication tasks below and must positively satisfy that task's contract.
- * Fixed education routes receive their task from the matched server route.
+ * Public model execution is authorized only by a server-owned route or a
+ * versioned, structured task contract. Arbitrary prompt text is never an
+ * authorization signal and is rejected on the public generation routes.
  */
+import { TOPICS_CATALOG } from './educationCatalog.js';
+import {
+  hasRawGenerationInput,
+  validatePublicationTaskInput,
+} from './publicationTaskContracts.js';
+
 export const PUBLICATION_MODE = 'education_research';
 export const HIGH_RISK_CLINICAL_FEATURES_ENABLED = false;
 
@@ -25,51 +30,8 @@ const HIDDEN_PATH_PREFIXES = Object.freeze([
   '/entities/medical-data',
   '/entities/conversations',
 ]);
-
 const HIGH_RISK_AGENT_IDS = new Set(['robert', 'anastasia']);
 const MAX_PATH_DECODE_PASSES = 2;
-const ALL_PUBLICATION_TASKS = new Set(PUBLICATION_TASK_VALUES);
-
-// Fixed education routes accept the curated catalog verbatim. Custom topics
-// remain useful, but they must be a short, single genetics subject rather than
-// an arbitrary instruction that happens to be posted to an education URL.
-// Keep both ids and display titles because the web client currently sends the
-// title while API consumers may use the stable id returned by /education/topics.
-const KNOWN_EDUCATION_TOPIC_VALUES = Object.freeze([
-  'what-is-dna', 'what is dna?',
-  'dna-structure', 'dna structure',
-  'dna-replication', 'dna replication',
-  'genes-and-chromosomes', 'genes & chromosomes',
-  'transcription',
-  'translation',
-  'gene-expression', 'gene expression',
-  'gene-regulation', 'gene regulation',
-  'mendelian-genetics', 'mendelian genetics',
-  'punnett-squares', 'punnett squares',
-  'sex-linked-traits', 'sex-linked traits',
-  'complex-inheritance', 'complex inheritance',
-  'what-are-mutations', 'what are mutations?',
-  'types-of-mutations', 'types of mutations',
-  'genetic-variation', 'genetic variation',
-  'snps-and-polymorphisms', 'snps & polymorphisms',
-  'human-genome-project', 'the human genome project',
-  'dna-sequencing', 'dna sequencing',
-  'crispr', 'crispr gene editing',
-  'genetic-testing', 'genetic testing',
-  'genetic-diseases', 'genetic diseases',
-  'cancer-genetics', 'cancer genetics',
-  'pharmacogenomics',
-  'gene-therapy', 'gene therapy',
-  'natural-selection', 'natural selection',
-  'population-genetics', 'population genetics',
-  'molecular-evolution', 'molecular evolution',
-  'phylogenetics',
-  'epigenetics',
-  'rna-world', 'the rna world',
-  'systems-biology', 'systems biology',
-  'synthetic-biology', 'synthetic biology',
-]);
-const KNOWN_EDUCATION_TOPICS = new Set(KNOWN_EDUCATION_TOPIC_VALUES);
 
 const ROUTE_OWNED_TASKS = new Map([
   ['/education/explain', PUBLICATION_TASKS.GENETICS_EDUCATION],
@@ -77,10 +39,14 @@ const ROUTE_OWNED_TASKS = new Map([
   ['/education/image', PUBLICATION_TASKS.GENETICS_EDUCATION],
 ]);
 
-const CLIENT_TASK_ROUTES = new Set([
-  '/llm/invoke',
-  '/llm/chat',
-  '/education/chat',
+const CLIENT_TASK_ROUTES = new Map([
+  ['/llm/invoke', new Set([
+    PUBLICATION_TASKS.AGGREGATE_GENOMICS_RESEARCH,
+    PUBLICATION_TASKS.CANDIDATE_GENE_RESEARCH,
+    PUBLICATION_TASKS.RESEARCH_HYPOTHESIS,
+    PUBLICATION_TASKS.LEARNING_ACTIVITY_SUMMARY,
+  ])],
+  ['/education/chat', new Set([PUBLICATION_TASKS.GENETICS_EDUCATION])],
 ]);
 
 const SAFE_NON_GENERATION_EDUCATION_ROUTES = new Set([
@@ -88,6 +54,19 @@ const SAFE_NON_GENERATION_EDUCATION_ROUTES = new Set([
   '/education/progress',
   '/education/entitlements',
 ]);
+
+const KNOWN_EDUCATION_TOPICS = new Set(
+  TOPICS_CATALOG.flatMap(({ topics }) => topics.flatMap(({ id, title }) => [id, title]))
+    .map((value) => value.trim().toLowerCase())
+);
+const GENETICS_DOMAIN =
+  /\b(?:gene|genes|genetic|genetics|genomic|genomics|dna|rna|chromosome|variant|mutation|allele|phenotype|genotype|crispr|gwas|hpo|vcf|pharmacogenomics?)\b/i;
+const PROMPT_CONTROL_OR_UNRELATED_OUTPUT =
+  /\b(?:ignore|disregard|override|bypass|forget)\b[\s\S]{0,80}\b(?:previous|prior|above|system|developer|instructions?|prompt|rules?)\b|\b(?:system|developer)\s*:\s*|\b(?:phish(?:ing)?|malware|ransomware|credential theft|real[- ]estate advertisement|marketing copy|quarterly sales|sales forecast|vacation itinerary)\b|\b(?:write|compose|draft|send|create|generate)\b[\s\S]{0,80}\b(?:email|advertisement|ad copy|malware|ransomware|exploit|social media post)\b/i;
+const PERSONAL_OR_EXECUTABLE_TOPIC =
+  /\b(?:i|me|my|mine|you|your|yours|mom|mother|dad|father|child|patient|participant|subject|diagnos\w*|prescribe|recommend|dos(?:e|ing|age)|screen(?:ing)?|treat(?:ment)?|medication|medicine)\b/i;
+const CUSTOM_EDUCATION_TOPIC_SHAPE =
+  /^[\p{L}\p{N}][\p{L}\p{N} \t&'’()+,./?-]{0,159}$/u;
 
 function rawPathname(url = '') {
   return String(url).split('?')[0].split('#')[0] || '/';
@@ -102,8 +81,6 @@ function decodeAsciiEscapes(value) {
   });
 }
 
-// A bounded decode catches encoded route letters/slashes and one layer of
-// double encoding without letting malformed escapes throw from the hook.
 function safeDecodePath(value) {
   let current = value;
   for (let pass = 0; pass < MAX_PATH_DECODE_PASSES; pass += 1) {
@@ -137,9 +114,9 @@ function normalizePath(value = '') {
   return normalizeDotSegments(decoded).toLowerCase();
 }
 
-// Fastify's matched template is authoritative in preHandler. Wildcard routes
-// fall back to the safely decoded raw URL so encoded/dot-segment probes cannot
-// route around the policy.
+// Fastify's matched route template is authoritative in preHandler. Wildcard
+// routes use the safely decoded raw URL so encoded and dot-segment probes
+// cannot route around the policy.
 function policyPath({ routeUrl, url } = {}) {
   const matchedRoute = typeof routeUrl === 'string'
     && routeUrl.startsWith('/')
@@ -153,447 +130,6 @@ function hasPathPrefix(path, prefix) {
   return path === prefix || path.startsWith(`${prefix}/`);
 }
 
-function generationText(body) {
-  if (!body || typeof body !== 'object') return '';
-  const values = [body.prompt, body.topic, body.context];
-  if (Array.isArray(body.messages)) {
-    values.push(...body.messages.map((message) => message?.content));
-  }
-  return values.filter((value) => typeof value === 'string').join('\n');
-}
-
-const INTENT_CLAUSE_SEPARATOR = /(?:[.;!?]+|\b(?:then|but|however|also)\b)/gi;
-
-function splitIntentClauseSpans(text) {
-  const source = String(text);
-  const spans = [];
-  let start = 0;
-
-  const appendSpan = (end) => {
-    const segment = source.slice(start, end);
-    const leadingWhitespace = segment.match(/^\s*/)?.[0].length || 0;
-    const trailingWhitespace = segment.match(/\s*$/)?.[0].length || 0;
-    const clauseStart = start + leadingWhitespace;
-    const clauseEnd = end - trailingWhitespace;
-    if (clauseStart < clauseEnd) {
-      spans.push({
-        text: source.slice(clauseStart, clauseEnd),
-        start: clauseStart,
-        end: clauseEnd,
-      });
-    }
-  };
-
-  for (const separator of source.matchAll(new RegExp(
-    INTENT_CLAUSE_SEPARATOR.source,
-    INTENT_CLAUSE_SEPARATOR.flags
-  ))) {
-    appendSpan(separator.index);
-    start = separator.index + separator[0].length;
-  }
-  appendSpan(source.length);
-  return spans;
-}
-
-function splitIntentClauses(text) {
-  return splitIntentClauseSpans(text).map(({ text: clause }) => clause);
-}
-
-const AGGREGATE_EVIDENCE =
-  /(?:\b(?:anonymized|de-identified|deidentified|non-identifiable|aggregate|synthetic|public)\b[\s\S]{0,100}\b(?:cohort|population|data ?set|data|records?|samples?|biobank|repository)\b|\b\d+(?:\s+|-)\s*(?:patients?|participants?|subjects?|samples?|controls?)\b|\b(?:patient|participant|subject) cohort\b|\bpatients?\b[\s\S]{0,80}\bcontrols?\b|\bcohort[- ]level\b|\bpopulation[- ]level\b|\bassociation research\b)/i;
-const COHORT_OPERATION =
-  /\b(?:analy[sz](?:e|ing|is)|compar(?:e|ing|ison)|identif(?:y|ying|ication)|associat(?:e|ion)|model(?:ing)?|estimat(?:e|ing|ion)|test(?:ing)?|evaluat(?:e|ing|ion)|explor(?:e|ing|atory)|investigat(?:e|ing|ion)|includ(?:e|ing)|review(?:ing)?|summari[sz](?:e|ing)|prioriti[sz](?:e|ing)|annotat(?:e|ing|ion)|variant calling|covariates?|endpoints?|outcomes?|variables?|population[- ]level|cohort[- ]level|association research)\b/i;
-
-function isAggregateResearchIntent(text) {
-  return AGGREGATE_EVIDENCE.test(text) && COHORT_OPERATION.test(text);
-}
-
-const IDENTIFIER =
-  /\b(?:date of birth|dob|social security(?: number)?|ssn|medical record number|mrn|email address|phone number|home address)\b|\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i;
-const DATA_EXECUTION =
-  /\b(?:analy[sz]e|process|review|interpret|classify|evaluate|assess|upload|use|summari[sz]e|annotate)\b/i;
-const GENOMIC_ARTIFACT = String.raw`(?:raw\s+)?(?:(?:g?vcf|bcf|bam|cram|sam|fastq|fasta)(?:\s+(?:data|records?|files?|results?|reads?))?|(?:structural\s+)?variant\s+calls?|snp\s+calls?|(?:cnvs?|copy[- ]number)\s+(?:variants?|calls?|profiles?)|variants?|mutations?|alleles?|haplotypes?|polymorphisms?|snps?|(?:genomic|genetic|dna|genotyp\w*)\s+(?:data|records?|files?|results?|reads?|sequences?|alignments?)|(?:genome|exome|transcriptome|wes|wgs|rna[- ]?seq)(?:\s+(?:data|records?|files?|results?|reads?|sequences?|alignments?))?)`;
-const GENOMIC_DATA_ARTIFACT = String.raw`(?:raw\s+)?(?:(?:g?vcf|bcf|bam|cram|sam|fastq|fasta)(?:\s+(?:data|records?|files?|results?|reads?))?|(?:structural\s+)?variant\s+calls?|snp\s+calls?|(?:cnvs?|copy[- ]number)\s+(?:variants?|calls?|profiles?)|(?:genomic|genetic|dna|genotyp\w*)\s+(?:data|records?|files?|results?|reads?|sequences?|alignments?)|(?:genome|exome|transcriptome|wes|wgs|rna[- ]?seq)(?:\s+(?:data|records?|files?|results?|reads?|sequences?|alignments?))?)`;
-const SENSITIVE_DATA_MATERIAL = new RegExp(
-  String.raw`\b(?:raw\s+)?(?:patient|participant|subject|individual)[- ]level\b|\b${GENOMIC_DATA_ARTIFACT}\b|\b(?:patient|participant|subject)\s+(?:records?|files?|data)\b`,
-  'i'
-);
-const EXPLICITLY_IDENTIFIABLE =
-  /\b(?:identifiable|identified|non[- ]anonymized|not anonymized)\b[\s\S]{0,100}\b(?:patient|participant|subject|individual|data|records?|files?)\b/i;
-const NAMED_SENSITIVE_SOURCE =
-  /\bfrom\s+(?:(?:patient|participant|subject|dr)\.?\s+)?(?:\p{Lu}\.?|\p{Lu}[\p{Ll}'-]+)(?:\s+(?:\p{Lu}\.?|\p{Lu}[\p{Ll}'-]+)){1,2}\b/u;
-const POSSESSIVE_GENOMIC_ARTIFACT = new RegExp(
-  String.raw`([^,.;!?\n]{1,100})['’]s\s+(?:(?:gene|sample|specimen)\s+)?${GENOMIC_ARTIFACT}\b`,
-  'giu'
-);
-const ATTRIBUTED_GENOMIC_ARTIFACT = new RegExp(
-  String.raw`\b${GENOMIC_ARTIFACT}\b\s+(belong(?:s|ing)?\s+to|owned\s+by|submitted\s+by|provided\s+by|uploaded\s+by|of|for)\s+([^,.;!?\n]{1,100}?)(?=\s+\b(?:alongside|across|within|then)\b|[,.;!?\n]|$)`,
-  'giu'
-);
-const NAME_TOKEN = String.raw`(?:\p{L}\.|\p{L}[\p{L}'’.-]*)`;
-const NAMED_OWNER_BEFORE_GENOMIC_ARTIFACT = new RegExp(
-  String.raw`(?:\b(?:analy[sz]e|process|review|interpret|classify|evaluate|assess|upload|use|summari[sz]e|annotate|compare|explain)\s+|(?:^|[.;!?]\s*)(?!(?:analy[sz]e|process|review|interpret|classify|evaluate|assess|upload|use|summari[sz]e|annotate|compare|explain)\b))(${NAME_TOKEN}(?:\s+${NAME_TOKEN}){0,2}?)\s+(?:(?:gene|sample|specimen)\s+)?${GENOMIC_ARTIFACT}\b`,
-  'giu'
-);
-// A valid cohort clause cannot launder a second, individually attributed
-// artifact joined later in the same sentence. Capture the complete phrase
-// immediately before that later artifact and accept it only when it is itself
-// a bounded aggregate or genetics-education descriptor. This intentionally
-// avoids casing/name dictionaries: `and Jane Doe VCF`, `and JOHN DOE BAM`, and
-// `, maría garcía FASTQ` all take the same fail-closed path.
-const JOINED_OWNER_BEFORE_GENOMIC_ARTIFACT = new RegExp(
-  String.raw`(?:,(?!\s*(?:and|plus|alongside|including|with|together\s+with|as\s+well\s+as|combined\s+with)\b)|\b(?:and|plus|alongside|including|with|together\s+with|as\s+well\s+as|combined\s+with)\b)\s*((?:(?!\b(?:and|plus|alongside|including|with|together\s+with|as\s+well\s+as|combined\s+with)\b)[^,.;!?\n]){1,100}?)\s+${GENOMIC_ARTIFACT}\b`,
-  'giu'
-);
-const OWNER_PREFIX_ACTION =
-  /^[\s\S]*\b(?:analy[sz]e|process|review|interpret|classify|evaluate|assess|upload|use|summari[sz]e|annotate|compare|explain)\s+/i;
-const SAFE_AGGREGATE_OWNER =
-  /^(?:(?:an?|the)\s+)?(?:(?:(?:anonymized|de-identified|deidentified|non-identifiable|aggregate|synthetic|public)\s+){1,3})?(?:cohort|population|data ?set|biobank|repository|\d+(?:\s+|-)\s*(?:patients?|participants?|subjects?|samples?|controls?))(?:\s+(?:of|with|containing|including)\s+\d+(?:\s+|-)\s*(?:patients?|participants?|subjects?|samples?|controls?))?\s*$/i;
-const GENERIC_EDUCATIONAL_OWNER =
-  /^(?:(?:how|why|whether|when)\s+)?(?:(?:an?|the|this|that|each|any)\s+)?(?:(?:human|mouse|yeast|plant|model|target|candidate|reference|wild[- ]type|mutant|protein[- ]coding|tumou?r[- ]suppressor|dna[- ]repair)\s+){0,2}(?:gene|protein|enzyme|pathway|cell|tissue|organism|species|strain|model|study|research|laboratory|lab)\s*$/i;
-const NAMED_GENE_EDUCATIONAL_OWNER =
-  /^(?:(?:how|why|whether|when)\s+)?(?:(?:an?|the|this|that)\s+)?[A-Z][A-Z0-9-]{1,9}\s+gene\s*$/u;
-const GENERIC_ATTRIBUTION_OWNER =
-  /^(?:(?:an?|the|this|that|each|any)\s+)?(?:(?:general|human|mouse|yeast|plant|model|target|candidate|reference|disease[- ]associated|protein[- ]coding|tumou?r[- ]suppressor|dna[- ]repair|genetic|genomic)\s+){0,2}(?:genes?|proteins?|enzymes?|pathways?|cells?|tissues?|organisms?|species|strains?|models?|studies|research|genetics?\s+(?:students?|education|lessons?|courses?))(?:\s+in\s+general\s+genetics\s+education)?\s*$/i;
-const NAMED_GENE_ATTRIBUTION_OWNER =
-  /^(?:(?:an?|the|this|that)\s+)?[A-Z][A-Z0-9-]{1,9}\s+gene(?:\s+in\s+general\s+genetics\s+education)?\s*$/u;
-const SAFE_BARE_ARTIFACT_PREFIX =
-  /^(?:i have|we have|what (?:is|are)|types of|the human|raw|copy[- ]number|how (?:an?|the|does|do)(?:\s+(?:gene|protein|pathway)['’]s)?|(?:(?:an?|the)\s+)?(?:aggregate|anonymized|deidentified|public|synthetic)\s+cohort['’]s|(?:an?|the) (?:gene|protein|pathway)|(?:rare|common|novel|known|candidate|putative|predicted|pathogenic|benign|coding|noncoding|germline|somatic|structural|genetic|genomic|human|mouse|yeast|aggregate|anonymized|deidentified|public|synthetic|reference|target|disease[- ]associated|protein[- ]altering|early[- ]onset|late[- ]onset|loss[- ]of[- ]function|gain[- ]of[- ]function|population[- ]level|cohort[- ]level|treatment[- ]response)(?:\s+(?:disease|associated|gene|genes|cohort|population|level|variants?|mutations?|calls?|data|results?|response|function))?)$/i;
-const SAFE_JOINED_ARTIFACT_PREFIX =
-  /^(?:(?:need|plan|aim|want)\s+to\s+)?(?:analy[sz]e|process|review|interpret|classify|evaluate|assess|summari[sz]e|annotate|compare|identify|study|model|test|explore|investigate)(?:\s+(?:the|these|those|rare|common|novel|known|candidate|genetic|genomic|structural|copy[- ]number)){0,4}$/i;
-const SAFE_PRIOR_ARTIFACT_CONNECTOR = new RegExp(
-  String.raw`^${GENOMIC_ARTIFACT}\s+(?:and|plus|with|alongside|together\s+with|as\s+well\s+as|combined\s+with)$`,
-  'i'
-);
-const FROM_SENSITIVE_SOURCE = /\bfrom\b/i;
-const EXPLICIT_AGGREGATE_DATA_SOURCE =
-  /\bfrom\s+(?:(?:an?|the)\s+)?(?:(?:(?:anonymized|de-identified|deidentified|non-identifiable|aggregate|synthetic|public)\s+){1,3}(?:cohort|population|data ?set|data|records?|samples?|biobank|repository)|\d+(?:\s+|-)\s*(?:patients?|participants?|subjects?|samples?|controls?))\b/i;
-const EXPLICIT_AGGREGATE_SENSITIVE_CONTEXT = new RegExp(
-  String.raw`(?:\b(?:anonymized|de-identified|deidentified|non-identifiable|aggregate|synthetic|public)\b[\s\S]{0,100}\b${GENOMIC_DATA_ARTIFACT}\b|\b${GENOMIC_DATA_ARTIFACT}\b[\s\S]{0,100}\b(?:anonymized|de-identified|deidentified|non-identifiable|aggregate|synthetic|public)\b)`,
-  'i'
-);
-
-function hasIndividualGenomicOwnership(text) {
-  // Ownership is a separate fail-closed boundary from generic sensitive-data
-  // wording. A standalone VCF or set of variant calls is still an individual
-  // genomic artifact when it is attributed to a person; a later cohort count
-  // cannot sanitize that ownership. Only explicitly aggregate owners pass.
-  for (const match of String(text).matchAll(POSSESSIVE_GENOMIC_ARTIFACT)) {
-    const owner = match[1].replace(OWNER_PREFIX_ACTION, '').trim();
-    if (SAFE_AGGREGATE_OWNER.test(owner)) continue;
-    // Possessive descriptions of a gene/protein/pathway are ordinary genetics
-    // education, not patient ownership. Nested possession (for example,
-    // "Jane Doe's gene's variants") is never eligible for this exemption.
-    if (
-      !/['’]s\b/i.test(owner) &&
-      (GENERIC_EDUCATIONAL_OWNER.test(owner) || NAMED_GENE_EDUCATIONAL_OWNER.test(owner))
-    ) {
-      continue;
-    }
-    return true;
-  }
-  for (const match of String(text).matchAll(ATTRIBUTED_GENOMIC_ARTIFACT)) {
-    // The complete captured owner—not merely its prefix—must be an explicit
-    // aggregate form. "an anonymized cohort and Jane Doe" therefore cannot be
-    // laundered by the safe words at its start.
-    const relation = match[1].toLowerCase();
-    const owner = match[2].trim();
-    if (SAFE_AGGREGATE_OWNER.test(owner)) continue;
-    if (
-      /^(?:of|for)$/.test(relation) &&
-      (GENERIC_ATTRIBUTION_OWNER.test(owner) || NAMED_GENE_ATTRIBUTION_OWNER.test(owner))
-    ) {
-      continue;
-    }
-    return true;
-  }
-  for (const match of String(text).matchAll(NAMED_OWNER_BEFORE_GENOMIC_ARTIFACT)) {
-    // Bare words before an artifact are treated as an owner unless they match
-    // a bounded, non-person research/education descriptor. This blocks names
-    // in any casing without trying to infer a name lexicon, while keeping
-    // explicit phrases such as "rare disease variants" publishable.
-    const owner = match[1].trim();
-    if (
-      !SAFE_BARE_ARTIFACT_PREFIX.test(owner)
-      && !SAFE_PRIOR_ARTIFACT_CONNECTOR.test(owner)
-    ) return true;
-  }
-  for (const match of String(text).matchAll(JOINED_OWNER_BEFORE_GENOMIC_ARTIFACT)) {
-    const owner = match[1].trim();
-    if (
-      SAFE_AGGREGATE_OWNER.test(owner)
-      || SAFE_BARE_ARTIFACT_PREFIX.test(owner)
-      || SAFE_JOINED_ARTIFACT_PREFIX.test(owner)
-      || GENERIC_EDUCATIONAL_OWNER.test(owner)
-      || NAMED_GENE_EDUCATIONAL_OWNER.test(owner)
-    ) {
-      continue;
-    }
-    return true;
-  }
-  return false;
-}
-
-function hasUnsafeSensitiveData(text) {
-  if (
-    IDENTIFIER.test(text) ||
-    EXPLICITLY_IDENTIFIABLE.test(text) ||
-    hasIndividualGenomicOwnership(text)
-  ) {
-    return true;
-  }
-
-  return splitIntentClauses(text).some((clause) => {
-    if (!DATA_EXECUTION.test(clause) || !SENSITIVE_DATA_MATERIAL.test(clause)) return false;
-    if (NAMED_SENSITIVE_SOURCE.test(clause)) return true;
-    // A later cohort count must never sanitize an earlier person/source. Raw
-    // genomic material introduced with "from" is publishable only when the
-    // source immediately following "from" is itself explicitly aggregate,
-    // deidentified, synthetic/public, or count-based. This is deliberately
-    // case-independent and does not try to infer whether arbitrary words are a
-    // person's name.
-    if (FROM_SENSITIVE_SOURCE.test(clause) && !EXPLICIT_AGGREGATE_DATA_SOURCE.test(clause)) {
-      return true;
-    }
-    // Without a "from" source, require an aggregate/deidentification marker
-    // attached to the sensitive material itself. A cohort count elsewhere in
-    // the clause cannot sanitize an unidentified person's raw record.
-    if (!FROM_SENSITIVE_SOURCE.test(clause) && !EXPLICIT_AGGREGATE_SENSITIVE_CONTEXT.test(clause)) {
-      return true;
-    }
-    return !isAggregateResearchIntent(clause);
-  });
-}
-
-const PERSONAL_SENSITIVE_OWNERSHIP =
-  /\b(?:my|your|mine|yours)\s+(?:own\s+)?(?:[\w-]+\s+){0,3}(?:symptoms?|pain|headaches?|variants?|mutations?|genotyp\w*|phenotyp\w*|vcf|diagnos\w*|risk|medications?|medicines?|drugs?|dos(?:e|ing|age)|treatments?|therap(?:y|ies)|screening|prognosis|metabolizer|pharmacogen\w*|health|condition|disease|care|results?|report|test)\b/i;
-const OWNED_OR_CARRIED_GENOMICS =
-  /\b(?:variants?|mutations?|vcf|genotyp\w*|genomic data|genetic data|dna results?)\b[\s\S]{0,100}\b(?:belongs? to me|is mine|are mine|came from my|i (?:carry|carried|inherited))\b|\b(?:variants?|mutations?)\s+i\s+(?:carry|carried|inherited)\b/i;
-const FAMILY_OR_PATIENT_CARE =
-  /(?:\b(?:my|your)\s+(?:child|son|daughter|mother|father|parent|sibling|brother|sister|spouse|partner|family member|patient)\b[\s\S]{0,160}\b(?:risk|diagnos\w*|symptoms?|pain|variants?|mutations?|genotyp\w*|medications?|dos(?:e|ing)|treatments?|screen\w*|prognosis|pathogenic\w*)\b|\b(?:risk|diagnos\w*|symptoms?|pain|variants?|mutations?|genotyp\w*|medications?|dos(?:e|ing)|treatments?|screen\w*|prognosis|pathogenic\w*)\b[\s\S]{0,160}\b(?:my|your)\s+(?:child|son|daughter|mother|father|parent|sibling|brother|sister|spouse|partner|family member|patient)\b|\bthis patient\b[\s\S]{0,120}\b(?:risk|diagnos\w*|symptoms?|pain|treatment|medication|dose|screening)\b)/i;
-
-const SAFE_FIRST_PERSON_RESEARCH_OBJECT =
-  /^(?:\s*(?:an?|the|my)\s+)?(?:question|research question|idea|hypothesis|course|class|lesson|study|project|data ?set|data|model|analysis|research task|workflow|tool|method|software|script|pipeline)\b/i;
-
-function hasUnsafeFirstPersonClaim(text) {
-  const aggregateResearchIntent = isAggregateResearchIntent(text);
-  for (const clause of splitIntentClauses(text)) {
-    const claim = /\b(?:i have|i['’]ve got)\b([\s\S]*)/i.exec(clause);
-    if (!claim) continue;
-    if (isAggregateResearchIntent(clause)) continue;
-    // A cohort operation may be stated in the next semicolon-delimited clause
-    // (the exact RNA-seq workflow does this). The ownership clause itself must
-    // still carry explicit aggregate evidence; generic "I have ..." cannot
-    // borrow safe-looking research boilerplate from a later clause.
-    if (aggregateResearchIntent && AGGREGATE_EVIDENCE.test(clause)) continue;
-    if (SAFE_FIRST_PERSON_RESEARCH_OBJECT.test(claim[1])) continue;
-    return true;
-  }
-  return false;
-}
-
-const SAFE_TAKING_OR_USING_OBJECT =
-  /^(?:\s*(?:a|an|the|this|that|my)\s+)?(?:course|class|workshop|lesson|training|notes?|break|walk|look|approach|position|survey|exam|test|route|photos?|samples?|measurements?|data|data ?set|steps?|study|project|analysis|research|experiment|tool|method|software|package|library|algorithm|protocol|assay|code|script|pipeline|workflow|model)\b/i;
-
-function hasUnsafeMedicationDisclosure(text) {
-  const disclosures = text.matchAll(/\bi\s+(?:am\s+|['’]m\s+)?(?:currently\s+)?(?:take|taking|use|using)\b([^.;!?]*)/gi);
-  for (const match of disclosures) {
-    const prefix = text.slice(Math.max(0, match.index - 16), match.index);
-    // Modal choices are evaluated below as either a personal care decision or
-    // an explicit cohort-design decision; they are not bare disclosures.
-    if (/\b(?:should|can|could|would)\s*$/i.test(prefix)) continue;
-    if (!SAFE_TAKING_OR_USING_OBJECT.test(match[1])) return true;
-  }
-  return /\bi am positive for\s+(?!(?:using|taking)\s+(?:(?:a|an|the|this|that|my)\s+)?(?:course|class|study|project|method|tool|software|model)\b)\S+/i.test(text);
-}
-
-const DIRECT_DIAGNOSIS_OR_CARE =
-  /(?:\b(?:can|could|would|will)\s+you\s+(?:diagnos\w*|treat|screen|prescribe|recommend)\b|(?:^|[.!?]\s*)\s*(?:diagnos\w*|treat me|screen me|prescribe)\b|\b(?:diagnos\w*|treat|screen|prescribe|recommend)\b[^.;!?\n]{0,160}\b(?:me|my|myself|i\s+(?:am|have|experience|feel)|you|your|yourself)\b|\b(?:me|my|myself|i\s+(?:am|have|experience|feel)|you|your|yourself)\b[^.;!?\n]{0,160}\b(?:diagnos\w*|treat|screen|prescribe|recommend)\b|\b(?:diagnos\w*|treat|screen|assess|evaluate|interpret|classify)\s+(?:me|myself)\b)/i;
-const PERSONAL_CLINICAL_DECISION =
-  /\b(?:should|can|could|would)\s+i\s+(?:take|use|choose|receive|start|stop|change|increase|decrease|get|undergo|schedule)\b|\bi\s+(?:should|can|could|would|need\s+to|ought\s+to)\s+(?:take|use|choose|receive|start|stop|change|increase|decrease|get|undergo|schedule)\b|\bwhat\s+(?:treatment|medicine|medication|drug|dose)\s+should\s+i\s+(?:take|use|choose|receive)\b|\b(?:for|to)\s+myself\b/i;
-const RESEARCH_DESIGN_ACTION = /\b(?:include|use|choose)\b/i;
-const RESEARCH_DESIGN_TARGET =
-  /\bas\s+(?:an?\s+)?(?:[\w-]+\s+){0,2}(?:covariate|endpoint|outcome|variable)\b/i;
-const PERSONAL_CLINICAL_HELP =
-  /\bi\s+(?:need|want)\b[\s\S]{0,100}\b(?:help|advice|guidance|options?)\b[\s\S]{0,100}\b(?:symptoms?|pain|diagnos\w*|risk|variants?|mutations?|medications?|dos(?:e|ing)|treatments?|screen\w*|disease|condition)\b|\bi\s+(?:need|want)\b[\s\S]{0,100}\b(?:symptoms?|pain|diagnos\w*|risk|variants?|mutations?|medications?|dos(?:e|ing)|treatments?|screen\w*)\b[\s\S]{0,80}\b(?:help|advice|guidance|options?)\b/i;
-const PERSONAL_SYMPTOM_OR_FUTURE_DISEASE =
-  /\bmy\s+(?:[\w-]+\s+){0,2}(?:hurts?|aches?|is painful)\b|\b(?:symptoms?|pain)\b[\s\S]{0,100}\b(?:what should i do|what do i do|what could it be|could it be|do i need a doctor)\b|\bi(?:['’]ve| have)\s+been\s+(?:having|experiencing|feeling)\b[\s\S]{0,100}\b(?:symptoms?|pain)\b|\b(?:this|these|that|those)\s+(?:variants?|mutations?)\b[\s\S]{0,120}\b(?:symptoms?|pain)\b[\s\S]{0,80}\bi(?:['’]ve| have)\s+been\b|\b(?:will|might|could|may)\s+i\s+(?:get|develop|have|be diagnosed)\b/i;
-const PERSONAL_EXPLANATION_OR_ACTION =
-  /\bwhat does\b[\s\S]{0,100}\b(?:mean for me|my\s+(?:care|health|risk))\b|\bwhat should i do\s+(?:about|with|for)\s+my\b|\b(?:do|could|can|would)\s+(?:these|this|my)\s+(?:symptoms?|pain)\b[\s\S]{0,100}\b(?:mean|indicate|suggest|show|explain)\b/i;
-const DIRECT_SENSITIVE_OBJECT =
-  /\b(?:interpret|explain|assess|evaluate|classify)\w*\b[\s\S]{0,80}\b(?:this|these|that|those|my|your)\s+(?:genetic\s+)?(?:variants?|mutations?|vcf|results?|report|test)\b/i;
-const PERSONALIZED_PGX_OR_DOSING =
-  /\b(?:calculate|determine|estimate|recommend|adjust|choose)\b[\s\S]{0,140}\b(?:warfarin|dos(?:e|ing|age)|amount|requirement)\b[\s\S]{0,140}\b(?:cyp[0-9a-z-]*|genotyp\w*|phenotyp\w*|metabolizer|pharmacogen\w*)\b|\b(?:warfarin|medications?|medicines?|drugs?)\b[\s\S]{0,140}\b(?:cyp[0-9a-z-]*|genotyp\w*|phenotyp\w*|metabolizer|pharmacogen\w*)\b[\s\S]{0,100}\b(?:dose|dosing|amount|tonight|change|adjust|increase|decrease)\b/i;
-const PERSONAL_HEREDITY =
-  /\b(?:could|can|might)\s+my\s+(?!(?:data|data ?set|model|study|analysis|experiment|lab|research|project)\b)[\w -]{1,60}\s+be\s+(?:genetic|hereditary|inherited)\b|\b(?:is|could|does)\s+[a-z0-9_-]{2,20}\s+(?:the reason\s+)?why\s+i have\b/i;
-
-function hasUnsafePersonalRecommendation(text) {
-  const recommendations = String(text).matchAll(
-    /\b(?:recommend|advise|tell)\b[^.;!?\n]{0,120}\b(?:me\s+to|that\s+i\s+(?:should\s+)?)\s*(?:take|use|choose|receive|start|stop|change|increase|decrease|get|undergo|schedule)\b([^.;!?\n]*)/gi
-  );
-  for (const match of recommendations) {
-    if (!SAFE_TAKING_OR_USING_OBJECT.test(match[1])) return true;
-  }
-  return false;
-}
-
-function regexMatches(regex, text) {
-  const flags = regex.flags.includes('g') ? regex.flags : `${regex.flags}g`;
-  return String(text).matchAll(new RegExp(regex.source, flags));
-}
-
-function rangesOverlap(leftStart, leftEnd, rightStart, rightEnd) {
-  return leftStart < rightEnd && rightStart < leftEnd;
-}
-
-function researchDesignDecisionSpans(text) {
-  const source = String(text);
-  const actions = Array.from(regexMatches(RESEARCH_DESIGN_ACTION, source));
-  const targets = Array.from(regexMatches(RESEARCH_DESIGN_TARGET, source));
-
-  return actions.flatMap((action, index) => {
-    const actionStart = action.index;
-    const actionEnd = actionStart + action[0].length;
-    const nextActionStart = actions[index + 1]?.index ?? Number.POSITIVE_INFINITY;
-    const target = targets.find(
-      (candidate) => candidate.index >= actionEnd
-        && candidate.index < nextActionStart
-        && candidate.index - actionEnd <= 100
-    );
-    if (!target) return [];
-    return [{
-      start: actionStart,
-      end: target.index + target[0].length,
-    }];
-  });
-}
-
-function hasUnexemptedPersonalClinicalDecision(text) {
-  const source = String(text);
-  const clauses = splitIntentClauseSpans(source);
-
-  for (const personalDecision of regexMatches(PERSONAL_CLINICAL_DECISION, source)) {
-    const decisionStart = personalDecision.index;
-    const decisionEnd = decisionStart + personalDecision[0].length;
-    const clause = clauses.find(
-      ({ start, end }) => start <= decisionStart && decisionEnd <= end
-    );
-
-    // A research-design exemption is local to one decision predicate. The
-    // same clause must carry explicit aggregate evidence, and the research
-    // design match must overlap this exact personal-looking action (for
-    // example, "Should I use age as a covariate"). A separate safe covariate
-    // clause or predicate can never launder "should I take warfarin" or
-    // "should I get screening" elsewhere in the request.
-    const hasClauseLocalResearchDesign = clause
-      && isAggregateResearchIntent(clause.text)
-      && researchDesignDecisionSpans(clause.text).some((designDecision) => {
-        const designStart = clause.start + designDecision.start;
-        const designEnd = clause.start + designDecision.end;
-        return rangesOverlap(decisionStart, decisionEnd, designStart, designEnd);
-      });
-
-    if (!hasClauseLocalResearchDesign) return true;
-  }
-  return false;
-}
-
-function hasDirectPersonalOrClinicalExecution(text) {
-  if (
-    PERSONAL_SENSITIVE_OWNERSHIP.test(text)
-    || OWNED_OR_CARRIED_GENOMICS.test(text)
-    || FAMILY_OR_PATIENT_CARE.test(text)
-    || hasUnsafeFirstPersonClaim(text)
-    || hasUnsafeMedicationDisclosure(text)
-    || DIRECT_DIAGNOSIS_OR_CARE.test(text)
-    || PERSONAL_CLINICAL_HELP.test(text)
-    || PERSONAL_SYMPTOM_OR_FUTURE_DISEASE.test(text)
-    || PERSONAL_EXPLANATION_OR_ACTION.test(text)
-    || DIRECT_SENSITIVE_OBJECT.test(text)
-    || PERSONALIZED_PGX_OR_DOSING.test(text)
-    || PERSONAL_HEREDITY.test(text)
-    || hasUnsafePersonalRecommendation(text)
-  ) return true;
-
-  return hasUnexemptedPersonalClinicalDecision(text);
-}
-
-const GENETICS_DOMAIN =
-  /\b(?:gene|genes|genetic|genetics|genomic|genomics|dna|rna|chromosome|variant|mutation|allele|phenotype|genotype|crispr|gwas|hpo|vcf|pharmacogenomics?)\b/i;
-const EDUCATION_FRAME =
-  /\b(?:explain|describe|teach|learn(?:ing)?|lesson|course|what (?:is|are)|how (?:does|do|is|are)|why (?:does|do|is|are)|overview|definition|difference between|help me understand|tell me about|tell me more)\b/i;
-const CANDIDATE_RESEARCH_CONTRACT =
-  /\b(?:candidate[- ]gene|candidate genes|gene[- ]phenotype|genomics assistant|genetics search|gene symbols?|for the (?:human )?gene|phenotype terms?|hpo terms?)\b/i;
-const HYPOTHESIS_CONTRACT =
-  /\b(?:scientific hypothesis generator|generate (?:novel,? )?testable hypotheses|research hypotheses|multi-omic integration|experimental design|data analysis pipeline)\b/i;
-const LEARNING_SUMMARY_CONTRACT =
-  /\bgenetics education and research assistant\b[\s\S]{0,500}\blearning activity\b[\s\S]{0,1000}\bresearch-learning observations?\b/i;
-const PROMPT_CONTROL_OR_UNRELATED_OUTPUT =
-  /\b(?:ignore|disregard|override|bypass|forget)\b[\s\S]{0,80}\b(?:previous|prior|above|system|developer|instructions?|prompt|rules?)\b|\b(?:system|developer)\s*:\s*|\b(?:reveal|repeat|print|show)\b[\s\S]{0,80}\b(?:system|developer)\s+(?:message|prompt|instructions?)\b|\b(?:phish(?:ing)?|malware|ransomware|credential theft|steal (?:a )?password|real[- ]estate advertisement|marketing copy|quarterly sales|sales forecast|vacation itinerary)\b|\b(?:write|compose|draft|send|create|generate)\b[\s\S]{0,80}\b(?:phishing\s+)?(?:email|advertisement|ad copy|malware|ransomware|exploit|social media post)\b/i;
-const CUSTOM_EDUCATION_TOPIC_SHAPE =
-  /^[\p{L}\p{N}][\p{L}\p{N} \t&'’()+,./?-]{0,159}$/u;
-
-function isGenericGeneticsEducation(text) {
-  return !PROMPT_CONTROL_OR_UNRELATED_OUTPUT.test(text)
-    && EDUCATION_FRAME.test(text)
-    && GENETICS_DOMAIN.test(text);
-}
-
-function normalizedEducationTopic(value) {
-  return typeof value === 'string' ? value.trim().toLowerCase().replace(/\s+/g, ' ') : '';
-}
-
-function isKnownEducationTopic(value) {
-  return KNOWN_EDUCATION_TOPICS.has(normalizedEducationTopic(value));
-}
-
-function isCatalogEducationConversation(body) {
-  if (!isKnownEducationTopic(body?.topic) || !Array.isArray(body?.messages)) return false;
-  const topic = normalizedEducationTopic(body.topic);
-  const userText = body.messages
-    .filter((message) => message?.role === 'user' && typeof message?.content === 'string')
-    .map((message) => message.content)
-    .join('\n');
-  const normalizedUserText = normalizedEducationTopic(userText);
-  return Boolean(userText)
-    && normalizedUserText.includes(topic)
-    && EDUCATION_FRAME.test(userText)
-    && !PROMPT_CONTROL_OR_UNRELATED_OUTPUT.test(userText);
-}
-
-function isRouteOwnedGeneticsTopic(body) {
-  const topic = typeof body?.topic === 'string' ? body.topic.trim() : '';
-  if (!topic) return false;
-  if (typeof body?.context === 'string' && body.context.trim()) return false;
-
-  if (isKnownEducationTopic(topic)) return true;
-  return CUSTOM_EDUCATION_TOPIC_SHAPE.test(topic)
-    && !PROMPT_CONTROL_OR_UNRELATED_OUTPUT.test(topic)
-    && GENETICS_DOMAIN.test(topic);
-}
-
-function taskContractAllows(task, text, { body } = {}) {
-  if (!text.trim()) return false;
-  if (PROMPT_CONTROL_OR_UNRELATED_OUTPUT.test(text)) return false;
-
-  switch (task) {
-    case PUBLICATION_TASKS.GENETICS_EDUCATION:
-      return isGenericGeneticsEducation(text) || isCatalogEducationConversation(body);
-    case PUBLICATION_TASKS.AGGREGATE_GENOMICS_RESEARCH:
-      return isAggregateResearchIntent(text);
-    case PUBLICATION_TASKS.CANDIDATE_GENE_RESEARCH:
-      return CANDIDATE_RESEARCH_CONTRACT.test(text)
-        && (GENETICS_DOMAIN.test(text) || isAggregateResearchIntent(text));
-    case PUBLICATION_TASKS.RESEARCH_HYPOTHESIS:
-      return HYPOTHESIS_CONTRACT.test(text)
-        && (GENETICS_DOMAIN.test(text) || isAggregateResearchIntent(text));
-    case PUBLICATION_TASKS.LEARNING_ACTIVITY_SUMMARY:
-      return LEARNING_SUMMARY_CONTRACT.test(text);
-    default:
-      return false;
-  }
-}
-
 function requestedTask(body) {
   const topLevel = typeof body?.publicationTask === 'string' ? body.publicationTask.trim() : '';
   const optionLevel = typeof body?.options?.publicationTask === 'string'
@@ -601,6 +137,24 @@ function requestedTask(body) {
     : '';
   if (topLevel && optionLevel && topLevel !== optionLevel) return null;
   return topLevel || optionLevel || '';
+}
+
+function isKnownEducationTopic(value) {
+  return typeof value === 'string'
+    && KNOWN_EDUCATION_TOPICS.has(value.trim().toLowerCase());
+}
+
+function isRouteOwnedGeneticsTopic(body) {
+  const topic = typeof body?.topic === 'string' ? body.topic.trim() : '';
+  if (!topic) return false;
+  if (['prompt', 'messages', 'context', 'taskInput'].some(
+    (field) => Object.prototype.hasOwnProperty.call(body, field)
+  )) return false;
+  if (isKnownEducationTopic(topic)) return true;
+  return CUSTOM_EDUCATION_TOPIC_SHAPE.test(topic)
+    && GENETICS_DOMAIN.test(topic)
+    && !PROMPT_CONTROL_OR_UNRELATED_OUTPUT.test(topic)
+    && !PERSONAL_OR_EXECUTABLE_TOPIC.test(topic);
 }
 
 function block(message) {
@@ -622,15 +176,14 @@ export function publicationBoundaryDecision({ url, routeUrl, body } = {}) {
       message: 'This feature is not available in the education and exploratory-research build.',
     };
   }
-
   if (SAFE_NON_GENERATION_EDUCATION_ROUTES.has(path)) return null;
 
   const routeOwnedTask = ROUTE_OWNED_TASKS.get(path);
-  const needsClientTask = CLIENT_TASK_ROUTES.has(path);
+  const allowedClientTasks = CLIENT_TASK_ROUTES.get(path);
   const isUnknownGenerationRoute = !routeOwnedTask
-    && !needsClientTask
+    && !allowedClientTasks
     && (hasPathPrefix(path, '/llm') || hasPathPrefix(path, '/education'));
-  if (!routeOwnedTask && !needsClientTask && !isUnknownGenerationRoute) return null;
+  if (!routeOwnedTask && !allowedClientTasks && !isUnknownGenerationRoute) return null;
 
   const agent = typeof body?.agent === 'string' ? body.agent.trim().toLowerCase() : '';
   if (HIGH_RISK_AGENT_IDS.has(agent)) {
@@ -645,26 +198,27 @@ export function publicationBoundaryDecision({ url, routeUrl, body } = {}) {
     return block('This generation route is not available in the published build.');
   }
 
-  const task = routeOwnedTask || suppliedTask;
-  if (routeOwnedTask && suppliedTask && suppliedTask !== routeOwnedTask) {
-    return block('The supplied publication task does not match this education route.');
-  }
-  if (!routeOwnedTask && (!task || !ALL_PUBLICATION_TASKS.has(task))) {
-    return block('A recognized education or research publication task is required.');
-  }
-
-  const text = generationText(body);
-  if (hasUnsafeSensitiveData(text) || hasDirectPersonalOrClinicalExecution(text)) {
-    return block('GeneMap supports general genetics education and explicit aggregate research, not personal or identifiable clinical/genomic requests.');
+  if (routeOwnedTask) {
+    if (suppliedTask && suppliedTask !== routeOwnedTask) {
+      return block('The supplied publication task does not match this education route.');
+    }
+    return isRouteOwnedGeneticsTopic(body)
+      ? null
+      : block('This route accepts only a bounded genetics education topic.');
   }
 
-  const satisfiesTaskContract = routeOwnedTask
-    ? isRouteOwnedGeneticsTopic(body)
-    : taskContractAllows(task, text, { body });
-  if (!satisfiesTaskContract) {
-    return block('This request does not satisfy the declared education or aggregate-research task.');
+  if (!suppliedTask || !allowedClientTasks.has(suppliedTask)) {
+    return block('This route requires a recognized structured publication task.');
   }
-
+  if (hasRawGenerationInput(body)) {
+    return block('Raw prompts and message histories are not accepted by the published build.');
+  }
+  const validation = validatePublicationTaskInput(suppliedTask, body?.taskInput, {
+    routePath: path,
+  });
+  if (!validation.ok) {
+    return block(validation.reason || 'The structured publication task is invalid.');
+  }
   return null;
 }
 
@@ -690,20 +244,12 @@ export async function enforcePublishingBoundary(request, reply) {
 }
 
 export const __test = {
-  generationText,
-  hasDirectPersonalOrClinicalExecution,
-  hasIndividualGenomicOwnership,
-  hasUnsafeSensitiveData,
-  isAggregateResearchIntent,
-  isCatalogEducationConversation,
   isKnownEducationTopic,
   isRouteOwnedGeneticsTopic,
   normalizePath,
   policyPath,
   requestedTask,
   safeDecodePath,
-  splitIntentClauses,
-  taskContractAllows,
   HIDDEN_PATH_PREFIXES,
   HIGH_RISK_AGENT_IDS,
 };

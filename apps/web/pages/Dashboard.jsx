@@ -131,25 +131,22 @@ export default function Dashboard() {
           .filter(Boolean)
       )];
       const allPhenotypes = searches.map(s => normalizeSearchHistoryEntry(s).query).filter(Boolean);
-      const prompt = `As a genetics education and research assistant, summarize three patterns in this user's learning activity:
-
-**User Profile:**
-- Education: ${user.education_level || 'General'}
-- Recently viewed genes: ${uniqueGenes.slice(0, 5).join(', ')}
-- Recent phenotype searches: ${allPhenotypes.slice(0, 3).join(', ')}
-
-**Task:** Generate 3 brief research-learning observations (2-3 sentences each):
-1. A pattern or trend in their research
-2. A connection they might have missed
-3. A source-checking or learning next step
-
-Do not infer diagnosis, personal genetic risk, treatment, or clinical action.
-Keep each observation under 50 words, practical, and specific to the activity listed.`;
-
-      const response = await apiClient.invokeLLM(prompt, {
-        publicationTask: 'learning_activity_summary',
-      });
-      // invokeLLM resolves to { result, disclaimer }; render only the text.
+      const allowedLevels = new Set([
+        'elementary', 'middle_school', 'high_school', 'undergraduate',
+        'graduate', 'postgraduate',
+      ]);
+      const educationLevel = allowedLevels.has(user.education_level)
+        ? user.education_level
+        : 'undergraduate';
+      const response = await apiClient.invokePublicationTask(
+        'learning_activity_summary',
+        {
+          version: 1,
+          educationLevel,
+          recentGenes: uniqueGenes.slice(0, 5),
+          recentTopics: allPhenotypes.slice(0, 3),
+        },
+      );
       const insightText = typeof response === 'string' ? response : response?.result;
       if (insightText) setPersonalizedInsights(insightText);
     } catch (err) {

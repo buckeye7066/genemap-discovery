@@ -18,7 +18,7 @@ import type {
   LearningProgress,
   LLMOptions,
   LLMResponse,
-  LLMImageResponse,
+  PublicationTaskRequest,
   SearchHistoryEntry,
   ActivityEntry,
   MedicalData,
@@ -551,26 +551,21 @@ export class ApiClient {
   // it selects which agent's mesh inbox and lessons are loaded, and which agent
   // authors a lesson when the provider fails. Unknown/absent ids are ignored by
   // the server, so this is always safe to send.
-  invokeLLM(prompt: string, options: LLMOptions = {}): Promise<LLMResponse> {
-    const { agent, ...llmOptions } = options;
+  invokePublicationTask<T extends PublicationTaskRequest>(
+    publicationTask: T['publicationTask'],
+    taskInput: T['taskInput'],
+    options: LLMOptions = {},
+  ): Promise<LLMResponse> {
+    const { agent, publicationTask: _legacyTask, ...llmOptions } = options;
     return this.request('/llm/invoke', {
       method: 'POST',
-      body: JSON.stringify({ prompt, options: llmOptions, ...(agent ? { agent } : {}) }),
+      body: JSON.stringify({
+        publicationTask,
+        taskInput,
+        options: llmOptions,
+        ...(agent ? { agent } : {}),
+      }),
     });
-  }
-  llmChat(messages: Array<{ role: string; content: string }>, options: LLMOptions = {}): Promise<LLMResponse> {
-    const { agent, ...llmOptions } = options;
-    return this.request('/llm/chat', {
-      method: 'POST',
-      body: JSON.stringify({ messages, options: llmOptions, ...(agent ? { agent } : {}) }),
-    });
-  }
-  llmImage(prompt: string, options: LLMOptions = {}): Promise<LLMImageResponse> {
-    // Image generation is slower than a text call and can exceed the 40s
-    // default; give it the same 90s budget as generateImage() so the browser
-    // doesn't abort a still-running generation. (Without this, generic image
-    // generation was cut off at 40s while /education/image was not.)
-    return this.request('/llm/image', { method: 'POST', body: JSON.stringify({ prompt, options }), timeoutMs: 90_000 });
   }
 
   // ─── Admin ───────────────────────────────────────────────

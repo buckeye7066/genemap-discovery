@@ -126,12 +126,20 @@ describe('honesty directive is injected by AI routes', () => {
     expect(prompt).toContain('only ask about well-established');
   });
 
-  it('/education/chat leads the message array with the honesty system message', async () => {
+  it('/education/chat leads the guided tutor message array with the honesty system message', async () => {
     const res = await app.inject({
       method: 'POST',
       url: '/education/chat',
       headers: { cookie: authCookie(user, prisma) },
-      payload: { messages: [{ role: 'user', content: 'Will I get cancer?' }], level: 'high_school' },
+      payload: {
+        publicationTask: 'genetics_education',
+        taskInput: {
+          version: 1,
+          topic: 'crispr',
+          level: 'high_school',
+          interaction: 'give_example',
+        },
+      },
     });
     expect(res.statusCode).toBe(200);
     const [messages] = llmService.generateChatResponse.mock.calls[0];
@@ -139,29 +147,35 @@ describe('honesty directive is injected by AI routes', () => {
     expect(messages[0].content).toContain('Never fabricate');
   });
 
-  it('/llm/invoke (raw proxy) still injects the directive even with no persona', async () => {
+  it('/llm/invoke injects the directive before the server-composed structured task', async () => {
     const res = await app.inject({
       method: 'POST',
       url: '/llm/invoke',
       headers: { cookie: authCookie(user, prisma) },
-      payload: { prompt: 'Tell me about APOE' },
+      payload: {
+        publicationTask: 'candidate_gene_research',
+        taskInput: {
+          version: 1,
+          operation: 'classify_and_suggest',
+          query: { kind: 'disease', term: 'familial hypercholesterolemia' },
+          audience: 'undergraduate',
+        },
+      },
     });
     expect(res.statusCode).toBe(200);
     const [prompt] = llmService.generateExplanation.mock.calls[0];
     expect(prompt).toContain('Never fabricate');
-    expect(prompt).toContain('Tell me about APOE');
+    expect(prompt).toContain('disease: "familial hypercholesterolemia"');
   });
 
-  it('/llm/chat leads with the honesty system message and does not bill it', async () => {
+  it('/llm/chat is retired and never reaches the provider', async () => {
     const res = await app.inject({
       method: 'POST',
       url: '/llm/chat',
       headers: { cookie: authCookie(user, prisma) },
       payload: { messages: [{ role: 'user', content: 'What does BRCA1 do?' }] },
     });
-    expect(res.statusCode).toBe(200);
-    const [messages] = llmService.generateChatResponse.mock.calls[0];
-    expect(messages[0].role).toBe('system');
-    expect(messages[0].content).toContain('Never fabricate');
+    expect(res.statusCode).toBeGreaterThanOrEqual(400);
+    expect(llmService.generateChatResponse).not.toHaveBeenCalled();
   });
 });

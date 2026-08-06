@@ -49,11 +49,11 @@ export default function SearchPage() {
     const queryParam = urlParams.get('query');
     if (queryParam) {
       setSearchQuery(queryParam);
-      handleSearch(queryParam, false);
+      handleSearch(queryParam, false, /^HP:\d{7}$/i.test(queryParam) ? 'hpo_term' : 'free_text');
     }
   }, []);
 
-  const handleSearch = async (query, isPremium = false) => {
+  const handleSearch = async (query, isPremium = false, searchMode = 'free_text') => {
     if (!query.trim()) {
       setError("Please enter a phenotype to search for");
       return;
@@ -77,7 +77,7 @@ export default function SearchPage() {
       // FAST: render candidate genes (with authoritative coordinates) as soon as
       // they're found, then drop the blocking spinner. The slow per-gene LLM
       // enrichment happens after this, in the background.
-      const base = await PhenotypeSearchService.findCandidates(query, isPremium);
+      const base = await PhenotypeSearchService.findCandidates(query, isPremium, searchMode);
       if (!isCurrent()) return;
       setSearchResults(base);
       setIsLoading(false);

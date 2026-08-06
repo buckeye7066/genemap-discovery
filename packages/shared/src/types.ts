@@ -140,13 +140,94 @@ export type PublicationTask =
   | 'research_hypothesis'
   | 'learning_activity_summary';
 
+export type ResearchCohortClassification =
+  | 'deidentified_aggregate'
+  | 'synthetic'
+  | 'public_dataset';
+
+export type ResearchModality =
+  | 'wes'
+  | 'wgs'
+  | 'rna_seq'
+  | 'genotype'
+  | 'phenotype'
+  | 'cnv'
+  | 'proteomics'
+  | 'metabolomics'
+  | 'epigenomics'
+  | 'treatment_response';
+
+export type ResearchObjective =
+  | 'identify_variants'
+  | 'association_analysis'
+  | 'compare_cohorts'
+  | 'multi_omic_hypothesis'
+  | 'covariate_design'
+  | 'cohort_summary';
+
+export interface AggregateResearchTaskInput {
+  version: 1;
+  cohort: {
+    sampleCount: number;
+    classification: ResearchCohortClassification;
+    hasControls: boolean;
+  };
+  modalities: ResearchModality[];
+  objective: ResearchObjective;
+  focus?: {
+    kind: 'disease' | 'phenotype' | 'hpo' | 'gene';
+    term: string;
+  };
+}
+
+export interface CandidateGeneTaskInput {
+  version: 1;
+  operation:
+    | 'classify_and_suggest'
+    | 'classify'
+    | 'suggest_candidates'
+    | 'gene_profile';
+  query?: {
+    kind: 'disease' | 'phenotype' | 'hpo';
+    term: string;
+  };
+  gene?: { symbol: string; ensemblId?: string; entrezId?: string | number };
+  audience?: 'general' | 'undergraduate' | 'graduate' | 'researcher' | 'medical_researcher';
+}
+
+export interface LearningActivityTaskInput {
+  version: 1;
+  educationLevel: EducationLevel;
+  recentGenes: string[];
+  recentTopics: string[];
+}
+
+export interface GeneticsTutorTaskInput {
+  version: 1;
+  topic: string;
+  level: EducationLevel;
+  interaction:
+    | 'explain_another_way'
+    | 'give_example'
+    | 'compare_concepts'
+    | 'check_understanding';
+}
+
+export type PublicationTaskInput =
+  | AggregateResearchTaskInput
+  | CandidateGeneTaskInput
+  | LearningActivityTaskInput
+  | GeneticsTutorTaskInput;
+
+export type PublicationTaskRequest =
+  | { publicationTask: 'aggregate_genomics_research'; taskInput: AggregateResearchTaskInput }
+  | { publicationTask: 'research_hypothesis'; taskInput: AggregateResearchTaskInput }
+  | { publicationTask: 'candidate_gene_research'; taskInput: CandidateGeneTaskInput }
+  | { publicationTask: 'learning_activity_summary'; taskInput: LearningActivityTaskInput };
+
 export interface ChatRequest {
-  messages: UserChatMessage[];
-  level: EducationLevel | string;
-  /** Required by the publication boundary; arbitrary tutor generation is unavailable. */
-  publicationTask: PublicationTask;
-  /** Optional topic context so the tutor reply carries the topic's references. */
-  topic?: string;
+  publicationTask: 'genetics_education';
+  taskInput: GeneticsTutorTaskInput;
 }
 
 export interface LearningProgress {
@@ -171,7 +252,7 @@ export interface LLMOptions {
   /**
    * Calling persona id from the shared agent registry ('robert' | 'anastasia').
    * Sent as a sibling `agent` field on the request, not inside `options` — see
-   * ApiClient#invokeLLM. Unknown ids are ignored server-side.
+   * ApiClient#invokePublicationTask. Unknown ids are ignored server-side.
    */
   agent?: string;
 }

@@ -10,8 +10,8 @@ import {
 import { getSources } from '../services/educationSources.js';
 import { assertNoRawGenomicLLM } from '../services/genomicGuard.js';
 import { AppError } from '../utils/errors.js';
-import { MAX_MESSAGE_CHARS } from '../config/llmLimits.js';
 import { TOPICS_CATALOG } from '../config/educationCatalog.js';
+import { composePublicationPrompt } from '../config/publicationTaskContracts.js';
 
 // Index every catalog topic by BOTH its id and its lower-cased title, so a
 // request that passes either (the client sends the title) resolves to the
@@ -78,19 +78,27 @@ const quizSchema = z.object({
   questionCount: z.number().min(1).max(20).optional(),
 });
 
-// Reject client-supplied system prompts. Allowing role: 'system' from the
-// browser lets a user override the educational guard rails (level, persona,
-// safety instructions). Only the server adds the system message.
 const chatSchema = z.object({
-  messages: z.array(z.object({
-    role: z.enum(['user', 'assistant']),
-    content: z.string().min(1).max(MAX_MESSAGE_CHARS),
-  })).min(1).max(50),
-  level: z.string().min(1),
-  // Optional topic context so the tutor turn can carry the same authoritative
-  // references the explanation does. Falls back to the latest user message.
-  topic: z.string().trim().max(500).optional(),
-});
+  publicationTask: z.literal('genetics_education'),
+  taskInput: z.object({
+    version: z.literal(1),
+    topic: z.string().min(1).max(200),
+    level: z.enum([
+      'elementary',
+      'middle_school',
+      'high_school',
+      'undergraduate',
+      'graduate',
+      'postgraduate',
+    ]),
+    interaction: z.enum([
+      'explain_another_way',
+      'give_example',
+      'compare_concepts',
+      'check_understanding',
+    ]),
+  }).strict(),
+}).strict();
 
 // Validate quiz-progress writes. Without this, a missing `topicId` made Prisma
 // drop the filter (`where: { userId, topicId: undefined }`) so findFirst matched
@@ -282,14 +290,19 @@ export default async function educationRoutes(fastify) {
   });
 
   fastify.post('/chat', { preHandler: [authenticate, checkEducationEntitlement, enforceUsageLimit] }, async (request) => {
-    const { messages, level, topic } = chatSchema.parse(request.body);
+    const { publicationTask, taskInput } = chatSchema.parse(request.body);
+    const composed = composePublicationPrompt(publicationTask, taskInput, {
+      routePath: '/education/chat',
+    });
+    if (!composed.ok) {
+      throw new AppError(composed.reason || 'The guided tutor request is invalid.', 400);
+    }
+    const { topic, level } = composed.value;
 
-    // Tutor-chat turns also reach a cloud LLM; block a raw genomic dump pasted
-    // into the conversation by default (same policy as /llm/chat).
     const allowGenomic = await assertNoRawGenomicLLM(
       prisma,
       request.user?.userId,
-      messages.map((m) => m.content).join('\n'),
+      composed.prompt,
     );
 
     const levelPrompt = LEVEL_PROMPTS[level] || LEVEL_PROMPTS.undergraduate;
@@ -297,7 +310,7 @@ export default async function educationRoutes(fastify) {
       `You are a friendly genetics tutor. ${levelPrompt} Be encouraging, ask follow-up questions to check understanding, and provide examples when helpful. If the student seems confused, try a different approach or analogy.`,
     );
 
-    const fullMessages = [systemMessage, ...messages];
+    const fullMessages = [systemMessage, { role: 'user', content: composed.prompt }];
     // Keep the chat on the default (higher-quality) model — tutor turns are
     // short, so latency is not the problem here — but still cap the wait so a
     // stalled upstream returns a clean error instead of an empty gateway body.
@@ -305,14 +318,17 @@ export default async function educationRoutes(fastify) {
     if (request.user?.userId) {
       try {
         await prisma.learningSession.create({
-          data: { userId: request.user.userId, topic: 'chat', level, type: 'chat', content: { messageCount: messages.length } },
+          data: {
+            userId: request.user.userId,
+            topic,
+            level,
+            type: 'chat',
+            content: { interaction: taskInput.interaction, taskInputVersion: taskInput.version },
+          },
         });
       } catch { /* non-critical */ }
     }
-    // Ground the tutor turn too: prefer an explicit topic, else fall back to
-    // the latest user message. Unknown topics still yield the general refs.
-    const lastUserMessage = [...messages].reverse().find((m) => m.role === 'user');
-    const sources = sourcesForTopic(topic || lastUserMessage?.content || '');
+    const sources = sourcesForTopic(topic);
 
     return { response, role: 'assistant', sources, usage: request.usageInfo || null, tier: request.entitlements?.tier || 'free' };
   });

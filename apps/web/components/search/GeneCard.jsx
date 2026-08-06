@@ -247,9 +247,8 @@ Provide a cohesive, personalized synthesis that includes:
 
 Synthesize all the information into a cohesive, personalized narrative. Don't just repeat what's already said - add deeper insights and personal relevance.`;
 
-    const { result: response } = await apiClient.invokeLLM(prompt);
-
-    return response;
+    void prompt;
+    return 'Personalized clinical synthesis is not available in the published education/research build.';
   };
 
   const getRobertScoreInterpretation = async (geneSymbol, score, explanation, educationLevel) => {
@@ -276,9 +275,8 @@ Adjust your language complexity and focus based on the user's background. Be hon
 
 Keep your response concise (3-4 short paragraphs) and use clear formatting.`;
 
-    const { result: response } = await apiClient.invokeLLM(prompt);
-
-    return response;
+    void prompt;
+    return 'Personalized score interpretation is not available in the published education/research build.';
   };
 
   const getEducationContext = (level) => {
@@ -385,7 +383,9 @@ ${getEducationGuidance(user?.education_level)}
 
 Provide comprehensive, evidence-based analysis formatted with clear sections.`;
 
-      const { result: response } = await apiClient.invokeLLM(prompt);
+      const response = '';
+      void prompt;
+      throw new Error('Personal variant interpretation is not available in the published education/research build.');
 
       // Parse for high-risk indicators
       const hasHighRisk = response.toLowerCase().includes('pathogenic') || 
@@ -585,34 +585,37 @@ Provide comprehensive, evidence-based analysis formatted with clear sections.`;
 
         <div className="grid md:grid-cols-2 gap-4 mb-4">
           <div className="space-y-2">
-            <div className="flex items-center gap-2 text-sm">
-              <MapPin className="w-4 h-4 text-slate-500" />
-              <span className="font-medium">Location:</span>
-              <span className="text-slate-600">
-                {gene.chromosome}:{gene.start?.toLocaleString()}-{gene.end?.toLocaleString()}
-              </span>
-              <Badge variant="outline" className="text-xs">
-                {gene.genomeBuild}
-              </Badge>
-              {gene.coordinatesVerified ? (
-                <Badge className="text-xs bg-emerald-100 text-emerald-800 border border-emerald-200">
-                  ✓ Ensembl/NCBI
-                </Badge>
-              ) : (
-                <Badge className="text-xs bg-amber-100 text-amber-800 border border-amber-200">
-                  AI estimate
-                </Badge>
-              )}
-            </div>
-            <div className="flex items-center gap-2 text-sm">
-              <ExternalLink className="w-4 h-4 text-slate-500" />
-              <span className="font-medium">IDs:</span>
-              <span className="text-slate-600">
-                {gene.entrezId && `ENTREZ:${gene.entrezId}`}
-                {gene.entrezId && gene.ensemblId && " | "}
-                {gene.ensemblId}
-              </span>
-            </div>
+            {gene.coordinatesVerified ? (
+              <>
+                <div className="flex items-center gap-2 text-sm">
+                  <MapPin className="w-4 h-4 text-slate-500" />
+                  <span className="font-medium">Location:</span>
+                  <span className="text-slate-600">
+                    {gene.chromosome}:{gene.start?.toLocaleString()}-{gene.end?.toLocaleString()}
+                  </span>
+                  <Badge variant="outline" className="text-xs">
+                    {gene.genomeBuild}
+                  </Badge>
+                  <Badge className="text-xs bg-emerald-100 text-emerald-800 border border-emerald-200">
+                    ✓ Ensembl/NCBI
+                  </Badge>
+                </div>
+                <div className="flex items-center gap-2 text-sm">
+                  <ExternalLink className="w-4 h-4 text-slate-500" />
+                  <span className="font-medium">Verified IDs:</span>
+                  <span className="text-slate-600">
+                    {gene.entrezId && `ENTREZ:${gene.entrezId}`}
+                    {gene.entrezId && gene.ensemblId && " | "}
+                    {gene.ensemblId}
+                  </span>
+                </div>
+              </>
+            ) : (
+              <div className="flex items-center gap-2 text-sm text-amber-700">
+                <MapPin className="w-4 h-4" />
+                <span>Authoritative coordinates and identifiers unavailable</span>
+              </div>
+            )}
           </div>
           
           <div className="space-y-2">
@@ -620,7 +623,7 @@ Provide comprehensive, evidence-based analysis formatted with clear sections.`;
               <Tag className="w-4 h-4 text-slate-500" />
               <span className="font-medium">Sources:</span>
               <div className="flex gap-1">
-                {gene.sources.map((source, idx) => (
+                {(gene.sources || []).map((source, idx) => (
                   <Badge key={idx} variant="outline" className="text-xs">
                     {source}
                   </Badge>
@@ -630,10 +633,9 @@ Provide comprehensive, evidence-based analysis formatted with clear sections.`;
           </div>
         </div>
 
-        {/* Provenance: location/IDs are replaced with authoritative records
-            (MyGene.info → Ensembl/NCBI) when resolvable; otherwise the AI guess
-            is shown and clearly labeled. Phenotype HP: ids are validated against
-            HPO (unmatched ones are dropped rather than shown fabricated). */}
+        {/* Provenance: location/IDs are shown only after authoritative
+            verification. Phenotype HP: ids are validated against HPO;
+            unmatched/model-supplied identifiers are dropped. */}
         {gene.coordinatesVerified ? (
           <div className="mb-4 flex items-start gap-2 text-xs text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-md px-3 py-2">
             <Info className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
@@ -648,10 +650,9 @@ Provide comprehensive, evidence-based analysis formatted with clear sections.`;
           <div className="mb-4 flex items-start gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
             <Info className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
             <span>
-              <strong>AI-estimated metadata.</strong> Authoritative records weren&apos;t available for
-              this gene, so coordinates, IDs, and phenotype associations are AI-generated and not
-              validated against NCBI/Ensembl/HPO. Verify against official databases before any
-              clinical or research use.
+              <strong>Authoritative metadata unavailable.</strong> Coordinates and identifiers are
+              withheld. Candidate associations and summaries remain AI-suggested research leads;
+              verify them in official databases before research use and never use them clinically.
             </span>
           </div>
         )}

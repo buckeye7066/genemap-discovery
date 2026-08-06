@@ -43,7 +43,7 @@ export default function SearchForm({ onSearch, isLoading, initialQuery = "" }) {
   const handleSubmit = (e, isPremium = false) => {
     e.preventDefault();
     if (query.trim()) {
-      onSearch(query.trim(), isPremium);
+      onSearch(query.trim(), isPremium, searchMode);
     }
   };
 
@@ -57,15 +57,22 @@ export default function SearchForm({ onSearch, isLoading, initialQuery = "" }) {
           <AutocompleteSearch
             value={query}
             onChange={setQuery}
+            searchMode={searchMode}
             onSelect={(suggestion) => {
               if (suggestion.type === "disease") {
                 setSearchMode("disease");
               } else if (suggestion.type === "phenotype") {
                 setSearchMode("free_text");
+              } else if (suggestion.type === "hpo") {
+                setSearchMode("hpo_term");
               }
               // Picking a suggestion should run the search, not just refill the box.
               if (suggestion.text?.trim()) {
-                onSearch(suggestion.text.trim(), false);
+                onSearch(
+                  suggestion.text.trim(),
+                  false,
+                  suggestion.type === 'disease' ? 'disease' : suggestion.type === 'hpo' ? 'hpo_term' : 'free_text',
+                );
               }
             }}
             placeholder="e.g., Rheumatoid Arthritis, polydactyly, HP:0001166"
@@ -76,7 +83,7 @@ export default function SearchForm({ onSearch, isLoading, initialQuery = "" }) {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="free_text">Free Text</SelectItem>
+              <SelectItem value="free_text">Phenotype Label</SelectItem>
               <SelectItem value="disease">Disease Name</SelectItem>
               <SelectItem value="hpo_term">HPO Term</SelectItem>
             </SelectContent>
@@ -105,7 +112,7 @@ export default function SearchForm({ onSearch, isLoading, initialQuery = "" }) {
                 // suggested term like "Bronchiectasis").
                 setQuery(example);
                 setSearchMode("disease");
-                onSearch(example, false);
+                onSearch(example, false, 'disease');
               }}
               disabled={isLoading}
               className="text-xs hover:bg-emerald-50 border-emerald-200 touch-manipulation min-h-[36px]"
@@ -132,7 +139,7 @@ export default function SearchForm({ onSearch, isLoading, initialQuery = "" }) {
               onClick={() => {
                 setQuery(example);
                 setSearchMode("free_text");
-                onSearch(example, false);
+                onSearch(example, false, 'free_text');
               }}
               disabled={isLoading}
               className="text-xs hover:bg-blue-50 touch-manipulation min-h-[36px]"
@@ -158,7 +165,7 @@ export default function SearchForm({ onSearch, isLoading, initialQuery = "" }) {
                 type="button"
                 onClick={() => {
                   setQuery(example);
-                  onSearch(example, false);
+                  onSearch(example, false, 'hpo_term');
                 }}
                 disabled={isLoading}
                 className="text-xs hover:bg-slate-50 touch-manipulation min-h-[36px]"

@@ -44,18 +44,18 @@ describe('clinical publishing boundary', () => {
 
   it('declares a finite publication task on every surviving generation wrapper', () => {
     const wrappers = [
-      ['Dashboard', read('../../pages/Dashboard.jsx'), 'apiClient.invokeLLM(', 'learning_activity_summary'],
-      ['PhenotypeSearchService', read('../../components/search/PhenotypeSearchService.jsx'), 'apiClient.invokeLLM(', 'candidate_gene_research'],
-      ['AutocompleteSearch', read('../../components/search/AutocompleteSearch.jsx'), 'apiClient.invokeLLM(', 'candidate_gene_research'],
-      ['HypothesisGenerator', read('../../components/research/HypothesisGenerator.jsx'), 'apiClient.invokeLLM(', 'research_hypothesis'],
+      ['Dashboard', read('../../pages/Dashboard.jsx'), 'apiClient.invokePublicationTask(', 'learning_activity_summary'],
+      ['PhenotypeSearchService', read('../../components/search/PhenotypeSearchService.jsx'), 'apiClient.invokePublicationTask(', 'candidate_gene_research'],
+      ['HypothesisGenerator', read('../../components/research/HypothesisGenerator.jsx'), 'apiClient.invokePublicationTask(', 'research_hypothesis'],
       ['TopicExplorer', read('../../pages/TopicExplorer.jsx'), 'apiClient.chat(', 'genetics_education'],
     ];
 
     for (const [label, source, call, task] of wrappers) {
       const callCount = source.split(call).length - 1;
-      const taskCount = source.split(`publicationTask: '${task}'`).length - 1;
       expect(callCount, `${label} generation call count`).toBeGreaterThan(0);
-      expect(taskCount, `${label} task declarations`).toBe(callCount);
+      expect(source, `${label} task declaration`).toContain(`'${task}'`);
+      expect(source, `${label} versioned structured input`).toContain('version: 1');
+      expect(source, `${label} raw prompt call`).not.toContain('apiClient.invokeLLM(');
     }
 
     const sharedTypes = read('../../../../packages/shared/src/types.ts');
@@ -68,7 +68,19 @@ describe('clinical publishing boundary', () => {
     ]) {
       expect(sharedTypes).toContain(`'${task}'`);
     }
-    expect(sharedTypes).toContain('publicationTask: PublicationTask;');
+    expect(sharedTypes).toContain('export type PublicationTaskRequest');
+    expect(sharedTypes).toContain('version: 1;');
+
+    const sharedClient = read('../../../../packages/shared/src/client.ts');
+    expect(sharedClient).toContain('invokePublicationTask<T extends PublicationTaskRequest>');
+    expect(sharedClient).not.toContain('invokeLLM(');
+    expect(sharedClient).not.toContain('llmChat(');
+    expect(sharedClient).not.toContain('llmImage(');
+
+    const autocomplete = read('../../components/search/AutocompleteSearch.jsx');
+    expect(autocomplete).toContain('SAFE_SUGGESTIONS');
+    expect(autocomplete).not.toContain('apiClient.');
+    expect(autocomplete).not.toContain('invokePublicationTask');
   });
 
   it('removes unrelated arbitrary generation from published support and icon routes', () => {
@@ -140,13 +152,20 @@ describe('clinical publishing boundary', () => {
     expect(geneResults).not.toContain('Premium Search');
     expect(searchService).not.toContain('Use your knowledge of genetics and genomics databases');
     expect(searchService).not.toContain('Reference data from UniProt, HPA, or GTEx');
-    expect(searchService).toContain('do not imply that you queried them');
+    expect(searchService).toContain('merged.chromosome = null');
+    expect(searchService).toContain('merged.ensemblId = null');
+    const geneCard = read('../../components/search/GeneCard.jsx');
+    expect(geneCard).toContain('Authoritative coordinates and identifiers unavailable');
+    expect(geneCard).not.toContain('AI estimate');
+    const taskContracts = read('../../../../services/api/src/config/publicationTaskContracts.js');
+    expect(taskContracts).toContain('Do not claim that OMIM, ClinVar');
+    expect(taskContracts).toContain('Do not invent citations');
 
     const capIndex = searchService.indexOf('candidateGenes = candidateGenes.slice(0, maxCandidateLeads)');
     const enrichmentIndex = searchService.indexOf('this.safeEnrich(symbols, [])');
     expect(capIndex).toBeGreaterThan(-1);
     expect(enrichmentIndex).toBeGreaterThan(capIndex);
     expect(searchService).toContain('const usesDiseaseCandidateLimit = this.usesDiseaseCandidatePrompt');
-    expect(searchService).toContain('if (this.usesDiseaseCandidatePrompt(phenotypeAnalysis, originalQuery))');
+    expect(searchService).toContain('const isDisease = this.usesDiseaseCandidatePrompt');
   });
 });

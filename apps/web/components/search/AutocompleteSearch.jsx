@@ -1,19 +1,33 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Search, Dna } from "lucide-react";
-import { apiClient } from "@genemap/shared";
-import { parseLLMJson } from "../shared/llmJson";
+import { Search, Dna } from "lucide-react";
+
+// Publication mode keeps autocomplete deterministic. These labels are UI
+// examples, not model output and not claims that an external database was
+// queried. Arbitrary prefixes never reach a generation provider.
+const SAFE_SUGGESTIONS = Object.freeze([
+  { text: 'Cystic Fibrosis', type: 'disease', description: 'Curated search example' },
+  { text: 'Rheumatoid Arthritis', type: 'disease', description: 'Curated search example' },
+  { text: 'Trisomy 21', type: 'disease', description: 'Curated search example' },
+  { text: 'polydactyly', type: 'phenotype', description: 'Curated search example' },
+  { text: 'intellectual disability', type: 'phenotype', description: 'Curated search example' },
+  { text: 'short stature', type: 'phenotype', description: 'Curated search example' },
+  { text: 'seizures', type: 'phenotype', description: 'Curated search example' },
+  { text: 'HP:0001166', type: 'hpo', description: 'Curated HPO identifier example' },
+  { text: 'HP:0001250', type: 'hpo', description: 'Curated HPO identifier example' },
+  { text: 'HP:0004322', type: 'hpo', description: 'Curated HPO identifier example' },
+]);
 
 export default function AutocompleteSearch({ 
   value, 
   onChange, 
   onSelect, 
+  searchMode = 'free_text',
   placeholder = "Search for genes, diseases, or phenotypes...",
   disabled = false 
 }) {
   const [suggestions, setSuggestions] = useState([]);
-  const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const wrapperRef = useRef(null);
@@ -44,9 +58,9 @@ export default function AutocompleteSearch({
     }
   }, [disabled]);
 
-  // Fetch suggestions when user types
+  // Filter the bounded local catalog when the user types.
   useEffect(() => {
-    const fetchSuggestions = async () => {
+    const filterSuggestions = () => {
       // Don't fetch (or surface) suggestions while a search is in flight.
       if (disabled) {
         setShowSuggestions(false);
@@ -65,42 +79,26 @@ export default function AutocompleteSearch({
         return;
       }
 
-      setIsLoadingSuggestions(true);
-      try {
-        const suggestionPrompt = `Given the search query "${value}", suggest 5-8 relevant:
-- Gene symbols (if it looks like a gene name)
-- Disease names (if it looks like a disease)
-- Common phenotype terms related to the query
-
-Format as JSON array with objects containing:
-- text: the suggestion
-- type: "gene", "disease", or "phenotype"
-- description: brief 1-line description
-
-Focus on the most common and relevant matches. Return JSON: {"suggestions": [...]}`;
-        const raw = await apiClient.invokeLLM(suggestionPrompt, {
-          publicationTask: 'candidate_gene_research',
-        });
-        const response = parseLLMJson(raw, { suggestions: [] });
-
-        if (Array.isArray(response.suggestions) && response.suggestions.length > 0) {
-          setSuggestions(response.suggestions.slice(0, 8));
-          setShowSuggestions(true);
-        }
-      } catch (err) {
-        console.error("Error fetching suggestions:", err);
-        setSuggestions([]);
-      } finally {
-        setIsLoadingSuggestions(false);
-      }
+      const wantedType = searchMode === 'disease'
+        ? 'disease'
+        : searchMode === 'hpo_term'
+          ? 'hpo'
+          : 'phenotype';
+      const normalized = value.trim().toLowerCase();
+      const matches = SAFE_SUGGESTIONS.filter((suggestion) => (
+        suggestion.type === wantedType
+        && suggestion.text.toLowerCase().includes(normalized)
+      )).slice(0, 8);
+      setSuggestions(matches);
+      setShowSuggestions(matches.length > 0);
     };
 
     const timeoutId = setTimeout(() => {
-      fetchSuggestions();
-    }, 300); // Debounce
+      filterSuggestions();
+    }, 150);
 
     return () => clearTimeout(timeoutId);
-  }, [value]);
+  }, [disabled, searchMode, value]);
 
   const handleKeyDown = (e) => {
     if (!showSuggestions || suggestions.length === 0) return;
@@ -179,9 +177,6 @@ Focus on the most common and relevant matches. Return JSON: {"suggestions": [...
           disabled={disabled}
           className="pl-10 pr-10 text-lg py-3 min-h-[48px]"
         />
-        {isLoadingSuggestions && (
-          <Loader2 className="absolute right-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-blue-600 animate-spin" />
-        )}
       </div>
 
       {/* Suggestions Dropdown */}
