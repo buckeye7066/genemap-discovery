@@ -93,18 +93,6 @@ describe('/education/explain attaches sources', () => {
     }
   });
 
-  it('still returns general sources for an unknown/custom topic', async () => {
-    const res = await app.inject({
-      method: 'POST',
-      url: '/education/explain',
-      headers: { cookie: authCookie(user, prisma) },
-      payload: { topic: 'some obscure made-up topic', level: 'undergraduate' },
-    });
-    expect(res.statusCode).toBe(200);
-    const body = JSON.parse(res.body);
-    expect(body.sources.length).toBeGreaterThanOrEqual(1);
-    expect(body.sources.some((s) => s.url === 'https://medlineplus.gov/genetics/')).toBe(true);
-  });
 });
 
 describe('/education/chat attaches sources', () => {
@@ -134,22 +122,48 @@ describe('/education/chat attaches sources', () => {
       method: 'POST',
       url: '/education/chat',
       headers: { cookie: authCookie(user, prisma) },
-      payload: { messages: [{ role: 'user', content: 'how does it work?' }], level: 'high_school', topic: 'CRISPR' },
+      payload: {
+        publicationTask: 'genetics_education',
+        taskInput: {
+          version: 1,
+          topic: 'crispr',
+          level: 'high_school',
+          interaction: 'give_example',
+        },
+      },
     });
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body);
     expect(body.sources[0].url).toContain('genome.gov/genetics-glossary/CRISPR');
   });
 
-  it('falls back to general sources when no topic is recognized', async () => {
+  it('includes general sources for a bounded catalog topic without a glossary entry', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/education/chat',
+      headers: { cookie: authCookie(user, prisma) },
+      payload: {
+        publicationTask: 'genetics_education',
+        taskInput: {
+          version: 1,
+          topic: 'rna-world',
+          level: 'high_school',
+          interaction: 'explain_another_way',
+        },
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.sources.some((s) => s.url === 'https://medlineplus.gov/genetics/')).toBe(true);
+  });
+
+  it('rejects the retired arbitrary message contract', async () => {
     const res = await app.inject({
       method: 'POST',
       url: '/education/chat',
       headers: { cookie: authCookie(user, prisma) },
       payload: { messages: [{ role: 'user', content: 'hello there' }], level: 'high_school' },
     });
-    expect(res.statusCode).toBe(200);
-    const body = JSON.parse(res.body);
-    expect(body.sources.some((s) => s.url === 'https://medlineplus.gov/genetics/')).toBe(true);
+    expect(res.statusCode).toBe(400);
   });
 });

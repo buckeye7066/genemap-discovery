@@ -29,7 +29,6 @@ import {
   Edit2,
   Trash2,
   Share2,
-  Download,
   FileJson,
   Loader2,
   Info,
@@ -39,7 +38,6 @@ import {
 } from "lucide-react";
 import ProjectCollaboration from "./ProjectCollaboration";
 import ProjectVersionControl from "./ProjectVersionControl";
-import FHIRExporter from "../medical/FHIRExporter";
 
 function ProjectAnnotations({ project }) {
   const [annotations, setAnnotations] = useState([]);
@@ -382,7 +380,7 @@ export default function ProjectManager() {
                     <Label htmlFor="project-tags">Tags</Label>
                     <Input
                       id="project-tags"
-                      placeholder="e.g., oncology, clinical"
+                      placeholder="e.g., oncology, discovery"
                       value={newProject.tags}
                       onChange={(e) => setNewProject({ ...newProject, tags: e.target.value })}
                       className="mt-1"
@@ -517,25 +515,13 @@ export default function ProjectManager() {
                 <Alert className="bg-purple-50 border-purple-200">
                   <Info className="h-4 w-4 text-purple-600" />
                   <AlertDescription className="text-purple-900 text-sm">
-                    <strong>Secure Data Sharing:</strong> Export aggregated project data as FHIR-compliant 
-                    bundles for secure sharing with healthcare systems or research collaborators.
+                    <strong>Research export:</strong> Download a plain JSON summary for use with
+                    research collaborators. Review the project first and do not include personal,
+                    patient, medical-record, or individual genomic data.
                   </AlertDescription>
                 </Alert>
 
                 <div className="space-y-3">
-                  <FHIRExporter
-                    data={{
-                      project_id: selectedProject.id,
-                      project_name: selectedProject.name,
-                      genes: selectedProject.genes,
-                      phenotypes: selectedProject.phenotypes,
-                      status: selectedProject.status,
-                      analysis_results: selectedProject.analysis_results,
-                      version: selectedProject.current_version
-                    }}
-                    type="research_project"
-                  />
-
                   <Button
                     variant="outline"
                     className="w-full gap-2"
@@ -569,10 +555,9 @@ export default function ProjectManager() {
                   <div className="bg-slate-50 p-4 rounded border border-slate-200">
                     <h4 className="font-semibold text-slate-900 mb-2 text-sm">Sharing Options:</h4>
                     <ul className="space-y-1 text-xs text-slate-700">
-                      <li>• FHIR Bundle: For clinical systems integration</li>
-                      <li>• JSON Summary: For data sharing with collaborators</li>
-                      <li>• Team Access: Invite collaborators in Team tab</li>
-                      <li>• All exports exclude PHI unless explicitly included</li>
+                      <li>• JSON summary: Reviewable project metadata for research collaboration</li>
+                      <li>• Team access: Invite collaborators in the Team tab</li>
+                      <li>• Do not enter or export personal, patient, or individual genomic data</li>
                     </ul>
                   </div>
                 </div>

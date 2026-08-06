@@ -5,6 +5,10 @@ import { useAuth } from "../lib/AuthContext";
 import { Link, useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { normalizeSearchHistoryEntry } from "../lib/searchHistory";
+import {
+  publicationHistoryReplay,
+  publicationReferenceFromHistory,
+} from "../lib/publicationConceptCatalog";
 import { log } from "../components/shared/logger";
 import { DASHBOARD_REFRESH_INTERVAL_MS } from "../components/shared/constants";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -22,15 +26,13 @@ import {
   Clock,
   Sparkles,
   Users,
-  FileText,
   ChevronRight,
   Plus,
   Info,
   BookmarkPlus,
-  Brain,
-  Heart,
   RefreshCw,
-  Dna
+  Dna,
+  BookOpen
 } from "lucide-react";
 import OnboardingTour from "../components/dashboard/OnboardingTour";
 
@@ -41,9 +43,7 @@ export default function Dashboard() {
   const [recentGenes, setRecentGenes] = useState([]);
   const [recentSearches, setRecentSearches] = useState([]);
   const [projects, setProjects] = useState([]);
-  const [medicalRecords, setMedicalRecords] = useState([]);
   const [geneSets, setGeneSets] = useState([]);
-  const [aiConversations, setAiConversations] = useState([]);
   const [personalizedInsights, setPersonalizedInsights] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -52,9 +52,7 @@ export default function Dashboard() {
     recentGenes: true,
     recentSearches: true,
     projects: true,
-    medicalRecords: true,
     geneSets: true,
-    aiChats: true,
     insights: true,
     recommendations: true
   });
@@ -90,23 +88,17 @@ export default function Dashboard() {
         return;
       }
 
-      const userEmail = user.email;
-
-      const [activities, searches, userProjects, records, sets, conversations] = await Promise.all([
+      const [activities, searches, userProjects, sets] = await Promise.all([
         apiClient.getUserActivity().catch(() => []),
         apiClient.getSearchHistory().catch(() => []),
         apiClient.getProjects ? apiClient.getProjects().catch(() => []) : Promise.resolve([]),
-        apiClient.getMedicalData().catch(() => []),
         apiClient.getGeneSets().catch(() => []),
-        apiClient.getConversations().catch(() => [])
       ]);
 
       setRecentGenes(activities);
       setRecentSearches(searches);
       setProjects(userProjects);
-      setMedicalRecords(records);
       setGeneSets(sets);
-      setAiConversations(conversations);
 
       // Onboarding completion is persisted as `demographicsCollected`. Only show
       // the first-run tour to genuinely new accounts: an established user (e.g. a
@@ -116,15 +108,14 @@ export default function Dashboard() {
         !user.demographicsCollected &&
         activities.length === 0 &&
         searches.length === 0 &&
-        sets.length === 0 &&
-        conversations.length === 0
+        sets.length === 0
       ) {
         setShowOnboarding(true);
       }
 
       // Generate personalized insights
-      if (activities.length > 0 || records.length > 0 || searches.length > 0) {
-        generatePersonalizedInsights(user, activities, records, searches);
+      if (activities.length > 0 || searches.length > 0) {
+        generatePersonalizedInsights(user, activities, searches);
       }
 
     } catch (err) {
@@ -135,7 +126,7 @@ export default function Dashboard() {
     }
   };
 
-  const generatePersonalizedInsights = async (user, activities, records, searches) => {
+  const generatePersonalizedInsights = async (user, activities, searches) => {
     try {
       const uniqueGenes = [...new Set(
         activities
@@ -143,26 +134,28 @@ export default function Dashboard() {
           .map(a => a.entityId || a.metadata?.gene_symbol)
           .filter(Boolean)
       )];
-      const allPhenotypes = searches.map(s => normalizeSearchHistoryEntry(s).query).filter(Boolean);
-      const relevantGenes = records.flatMap(r => r.relevant_genes || []);
-
-      const prompt = `As an AI genomics advisor, provide 3 personalized insights for this user:
-
-**User Profile:**
-- Education: ${user.education_level || 'General'}
-- Recently viewed genes: ${uniqueGenes.slice(0, 5).join(', ')}
-- Recent phenotype searches: ${allPhenotypes.slice(0, 3).join(', ')}
-- Medical data genes: ${relevantGenes.slice(0, 5).join(', ')}
-
-**Task:** Generate 3 brief, actionable insights (2-3 sentences each):
-1. A pattern or trend in their research
-2. A connection they might have missed
-3. A next step recommendation
-
-Keep each insight under 50 words, practical, and personalized.`;
-
-      const response = await apiClient.invokeLLM(prompt);
-      // invokeLLM resolves to { result, disclaimer }; render only the text.
+      const recentConcepts = searches
+        .map(normalizeSearchHistoryEntry)
+        .map(publicationReferenceFromHistory)
+        .filter(Boolean)
+        .slice(0, 3);
+      const allowedLevels = new Set([
+        'elementary', 'middle_school', 'high_school', 'undergraduate',
+        'graduate', 'postgraduate',
+      ]);
+      const educationLevel = allowedLevels.has(user.education_level)
+        ? user.education_level
+        : 'undergraduate';
+      if (uniqueGenes.length === 0 && recentConcepts.length === 0) return;
+      const response = await apiClient.invokePublicationTask(
+        'learning_activity_summary',
+        {
+          version: 1,
+          educationLevel,
+          recentGenes: uniqueGenes.slice(0, 5),
+          recentConcepts,
+        },
+      );
       const insightText = typeof response === 'string' ? response : response?.result;
       if (insightText) setPersonalizedInsights(insightText);
     } catch (err) {
@@ -198,6 +191,7 @@ Keep each insight under 50 words, practical, and personalized.`;
   // show the same term repeated back-to-back (e.g. several "Cystic Fibrosis").
   const normalizedSearches = recentSearches
     .map(normalizeSearchHistoryEntry)
+    .map((search) => ({ ...search, replay: publicationHistoryReplay(search) }))
     .filter((s, i, arr) => i === 0 || (s.query || '').toLowerCase() !== (arr[i - 1].query || '').toLowerCase());
 
   if (isLoading) {
@@ -229,7 +223,7 @@ Keep each insight under 50 words, practical, and personalized.`;
                 {getGreeting()}, {(user?.fullName || user?.full_name || user?.displayName)?.split(' ')[0] || 'there'}
               </h1>
               <p className="text-slate-600 mt-1">
-                Welcome to your personalized genomics dashboard
+                Welcome to your genetics learning and research dashboard
               </p>
             </div>
             <div className="flex gap-2">
@@ -396,7 +390,10 @@ Keep each insight under 50 words, practical, and personalized.`;
                       {normalizedSearches.map((search, idx) => (
                         <Link
                           key={search.id || idx}
-                          to={`${createPageUrl("Search")}?query=${encodeURIComponent(search.query)}`}
+                          to={`${createPageUrl("Search")}?query=${encodeURIComponent(search.replay?.query || search.query)}`}
+                          title={search.replay?.autoRun
+                            ? 'Replay from the stored structured reference; external IDs are revalidated by the server.'
+                            : 'Open this legacy query for review. It will not run automatically.'}
                           className="block p-3 hover:bg-slate-50 rounded-lg transition-colors"
                         >
                           <div className="flex items-center justify-between">
@@ -408,6 +405,9 @@ Keep each insight under 50 words, practical, and personalized.`;
                                 </Badge>
                                 <Badge variant={search.queryType === 'premium' ? 'default' : 'secondary'} className="text-xs">
                                   {search.queryType}
+                                </Badge>
+                                <Badge variant="outline" className="text-xs">
+                                  {search.replay?.autoRun ? 'Structured replay' : 'Prefill only'}
                                 </Badge>
                                 {search.createdAt && (
                                   <span className="text-xs text-slate-500">
@@ -476,67 +476,6 @@ Keep each insight under 50 words, practical, and personalized.`;
               </Card>
             )}
 
-            {/* AI Chat Sessions */}
-            {widgetVisibility.aiChats && aiConversations.length > 0 && (
-              <Card className="shadow-lg">
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="flex items-center gap-2">
-                      <Brain className="w-5 h-5 text-indigo-600" />
-                      Recent AI Conversations
-                    </CardTitle>
-                    <Link to={createPageUrl("AIAssistants")}>
-                      <Button variant="ghost" size="sm">
-                        View All
-                      </Button>
-                    </Link>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2">
-                    {aiConversations.map((conv, idx) => (
-                      <Link
-                        key={idx}
-                        to={createPageUrl("AIAssistants")}
-                        className="block p-3 hover:bg-slate-50 rounded-lg transition-colors border border-slate-200"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-                            conv.assistantType === 'robert'
-                              ? 'bg-blue-100'
-                              : 'bg-purple-100'
-                          }`}>
-                            {conv.assistantType === 'robert' ? (
-                              <Brain className="w-4 h-4 text-blue-600" />
-                            ) : (
-                              <Heart className="w-4 h-4 text-purple-600" />
-                            )}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-1">
-                              <p className="text-xs font-semibold text-slate-900 capitalize">
-                                {conv.assistantType}
-                              </p>
-                              <Badge variant="outline" className="text-xs">
-                                {conv.messages?.length || 0} msgs
-                              </Badge>
-                            </div>
-                            <p className="text-xs text-slate-600 truncate">
-                              {conv.lastMessagePreview || conv.title || 'No preview'}
-                            </p>
-                            {conv.updatedAt && (
-                              <p className="text-xs text-slate-400 mt-1">
-                                {new Date(conv.updatedAt).toLocaleString()}
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      </Link>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
           </div>
 
           {/* Right Column */}
@@ -608,7 +547,7 @@ Keep each insight under 50 words, practical, and personalized.`;
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <Dna className="w-5 h-5 text-indigo-600" />
-                    Personalized Insights
+                    Research Activity Summary
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="text-sm text-slate-800 leading-relaxed">
@@ -629,47 +568,6 @@ Keep each insight under 50 words, practical, and personalized.`;
               </Card>
             )}
 
-            {/* Medical Records */}
-            {widgetVisibility.medicalRecords && medicalRecords.length > 0 && (
-              <Card className="shadow-lg">
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="flex items-center gap-2 text-sm">
-                      <FileText className="w-4 h-4 text-green-600" />
-                      Medical Records
-                    </CardTitle>
-                    <Link to={createPageUrl("MedicalData")}>
-                      <Button variant="ghost" size="sm">
-                        <Plus className="w-3 h-3" />
-                      </Button>
-                    </Link>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2">
-                    {medicalRecords.map((record, idx) => (
-                      <div
-                        key={idx}
-                        className="p-2 border border-slate-200 rounded text-xs"
-                      >
-                        <p className="font-medium text-slate-900">
-                          {record.dataType === 'genetic_test' ? '🧬' :
-                           record.dataType === 'blood_test' ? '💉' :
-                           record.dataType === 'vcf_file' ? '📊' : '📄'}{' '}
-                          {(record.dataType || 'record').replace(/_/g, ' ').toUpperCase()}
-                        </p>
-                        {record.createdAt && (
-                          <p className="text-slate-500 mt-1">
-                            {new Date(record.createdAt).toLocaleDateString()}
-                          </p>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
             {/* Recommendations */}
             {widgetVisibility.recommendations && (
               <Card className="shadow-lg bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-200">
@@ -680,20 +578,12 @@ Keep each insight under 50 words, practical, and personalized.`;
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-2">
-                  <Link to={createPageUrl("AIAssistants")}>
+                  <Link to={createPageUrl("TopicExplorer")}>
                     <Button variant="outline" size="sm" className="w-full justify-start gap-2">
-                      <Brain className="w-3 h-3" />
-                      New AI Chat
+                      <BookOpen className="w-3 h-3" />
+                      Continue Learning
                     </Button>
                   </Link>
-                  {geneViews.length >= 2 && (
-                    <Link to={createPageUrl("VisualizationHub")}>
-                      <Button variant="outline" size="sm" className="w-full justify-start gap-2">
-                        <TrendingUp className="w-3 h-3" />
-                        Compare Genes
-                      </Button>
-                    </Link>
-                  )}
                   <Link to={createPageUrl("Search")}>
                     <Button variant="outline" size="sm" className="w-full justify-start gap-2">
                       <Search className="w-3 h-3" />

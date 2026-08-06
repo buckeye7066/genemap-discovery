@@ -1,12 +1,18 @@
 import { authenticate } from '../middleware/auth.js';
 import { checkEducationEntitlement, enforceUsageLimit, recordUsage } from '../middleware/entitlements.js';
-import { generateExplanation, generateChatResponse, generateImage } from '../services/llm.js';
-import { withHonestyPrefix, honestySystemMessage } from '../services/scientificHonesty.js';
+import { generateExplanation } from '../services/llm.js';
+import { withHonestyPrefix } from '../services/scientificHonesty.js';
 import { assertNoRawGenomicLLM } from '../services/genomicGuard.js';
 import { consumePeerBriefing, recordProviderFailureLesson } from '../services/agentMesh.js';
 import { createAuditLog } from '../utils/audit.js';
 import { ValidationError } from '../utils/errors.js';
-import { MAX_PROMPT_CHARS, MAX_CHAT_MESSAGES, MAX_MESSAGE_CHARS } from '../config/llmLimits.js';
+import { MAX_PROMPT_CHARS } from '../config/llmLimits.js';
+import {
+  composePublicationPrompt,
+  hasRawGenerationInput,
+  parsePublicationTaskInput,
+} from '../config/publicationTaskContracts.js';
+import { resolvePublicationTaskReferences } from '../services/publicationResolvers.js';
 import { isRegisteredAgent } from '@genemap/shared';
 
 // Hard ceiling on tokens per call. Premium users can request up to this
@@ -14,6 +20,12 @@ import { isRegisteredAgent } from '@genemap/shared';
 const ABSOLUTE_MAX_TOKENS = 4096;
 const DEFAULT_MAX_TOKENS = 1500;
 const PREMIUM_MAX_TOKENS = 4096;
+const STRUCTURED_LLM_TASKS = new Set([
+  'aggregate_genomics_research',
+  'candidate_gene_research',
+  'research_hypothesis',
+  'learning_activity_summary',
+]);
 
 // Input-size ceilings live in ../config/llmLimits.js (env-tunable, single source
 // of truth). Token clamping only limits *output*; these bound the *input* so an
@@ -40,6 +52,64 @@ function validatePrompt(prompt) {
   if (prompt.length > MAX_PROMPT_CHARS) {
     throw new ValidationError(`prompt must be ${MAX_PROMPT_CHARS} characters or fewer`);
   }
+}
+
+function structuredTaskRequest(body) {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    throw new ValidationError('a structured publication task is required');
+  }
+  if (hasRawGenerationInput(body)) {
+    throw new ValidationError('raw prompt, messages, context, and topic fields are not accepted');
+  }
+  const topLevelTask = typeof body.publicationTask === 'string'
+    ? body.publicationTask.trim()
+    : '';
+  const optionTask = typeof body.options?.publicationTask === 'string'
+    ? body.options.publicationTask.trim()
+    : '';
+  if (topLevelTask && optionTask && topLevelTask !== optionTask) {
+    throw new ValidationError('conflicting publication tasks are not accepted');
+  }
+  const publicationTask = topLevelTask || optionTask;
+  if (!STRUCTURED_LLM_TASKS.has(publicationTask)) {
+    throw new ValidationError('a recognized structured LLM publication task is required');
+  }
+  const parsed = parsePublicationTaskInput(publicationTask, body.taskInput, {
+    routePath: '/llm/invoke',
+  });
+  if (!parsed.ok) {
+    throw new ValidationError(parsed.reason || 'invalid structured publication task');
+  }
+  return { publicationTask, taskInput: parsed.value };
+}
+
+function structuredInvocation(body, resolvedReferences = {}) {
+  const { publicationTask } = structuredTaskRequest(body);
+  const composed = composePublicationPrompt(publicationTask, body.taskInput, {
+    routePath: '/llm/invoke',
+    ...resolvedReferences,
+  });
+  if (!composed.ok) {
+    throw new ValidationError(composed.reason || 'invalid structured publication task');
+  }
+  validatePrompt(composed.prompt);
+  return {
+    publicationTask,
+    taskInput: composed.value,
+    prompt: composed.prompt,
+  };
+}
+
+export function prepareStructuredInvocation(dependencies = {}) {
+  return async function preparePublicationInvocation(request) {
+    const preliminary = structuredTaskRequest(request.body);
+    const resolvedReferences = await resolvePublicationTaskReferences(
+      preliminary.publicationTask,
+      preliminary.taskInput,
+      dependencies,
+    );
+    request.publicationInvocation = structuredInvocation(request.body, resolvedReferences);
+  };
 }
 
 function clampTokens(requested, isPremium) {
@@ -110,11 +180,19 @@ export default async function llmRoutes(fastify) {
 
   // Every /llm/* route requires authentication, an active entitlement
   // (free or premium), and consumes the per-user daily usage budget.
-  const guarded = [authenticate, checkEducationEntitlement, enforceUsageLimit];
+  // External identifiers are server-resolved in preHandler. The route handler
+  // (and therefore the model provider) is never entered for forged/mismatched
+  // gene IDs or nonexistent/obsolete HPO IDs.
+  const guarded = [
+    authenticate,
+    checkEducationEntitlement,
+    enforceUsageLimit,
+    prepareStructuredInvocation(),
+  ];
 
   fastify.post('/invoke', { preHandler: guarded }, async (request) => {
-    const { prompt, options = {} } = request.body || {};
-    validatePrompt(prompt);
+    const { options = {} } = request.body || {};
+    const { publicationTask, taskInput, prompt } = request.publicationInvocation;
     const agent = resolveAgent(request.body);
     const allowGenomic = await assertNoRawGenomicLLM(prisma, request.user.userId, prompt);
 
@@ -156,140 +234,35 @@ export default async function llmRoutes(fastify) {
     await recordUsage(prisma, request.user.userId, 'explanation', {
       maxTokens,
       provider: options.provider || null,
+      publicationTask,
     });
 
     await createAuditLog(prisma, {
       userId: request.user.userId,
       action: 'llm_invoke',
       entityType: 'llm',
-      metadata: { promptLength: prompt.length, maxTokens, provider: options.provider || null, agent },
+      metadata: {
+        publicationTask,
+        taskInputVersion: taskInput.version,
+        maxTokens,
+        provider: options.provider || null,
+        agent,
+      },
     });
 
     return { result, disclaimer: 'For educational purposes only. Not medical advice.' };
   });
 
   fastify.post('/chat', { preHandler: guarded }, async (request) => {
-    const { messages, options = {} } = request.body || {};
-    const agent = resolveAgent(request.body);
-    if (!Array.isArray(messages) || messages.length === 0) {
-      throw new ValidationError('messages (non-empty array) is required');
-    }
-    if (messages.length > MAX_CHAT_MESSAGES) {
-      throw new ValidationError(`messages must contain ${MAX_CHAT_MESSAGES} turns or fewer`);
-    }
-    // Message content MUST be a plain string. Array/object content (e.g.
-    // [{type:'text',text:'<VCF>'}]) is not a supported input here and, if
-    // forwarded, would let a caller slip raw genomic text past a string-only
-    // check while the provider still reads every part. Reject it outright.
-    if (messages.some((m) => typeof m?.content !== 'string')) {
-      throw new ValidationError('each message content must be a string');
-    }
-    if (messages.some((m) => m.content.length > MAX_MESSAGE_CHARS)) {
-      throw new ValidationError(`each message must be ${MAX_MESSAGE_CHARS} characters or fewer`);
-    }
-    // Reject client-supplied tool/function fields. The model reads
-    // tool_calls[].function.arguments and function_call.arguments as input, so
-    // allowing them here would be a channel to smuggle raw genomic text past a
-    // content-only check. This is a plain text proxy — tool calling is not a
-    // supported input.
-    if (messages.some((m) => m && (m.tool_calls != null || m.function_call != null || m.tool_call_id != null))) {
-      throw new ValidationError('tool_calls/function_call are not allowed on this endpoint');
-    }
-
-    // Strip any client-supplied system messages, and whitelist each surviving
-    // turn to exactly { role, content } so no other client-supplied field can
-    // ride along to the provider. Allowing role:'system' would let the SPA
-    // bypass the safety prompts in /education/chat.
-    const sanitized = messages
-      .filter((m) => m && (m.role === 'user' || m.role === 'assistant'))
-      .map((m) => ({ role: m.role, content: m.content }));
-    if (sanitized.length === 0) {
-      throw new ValidationError('messages must contain at least one user/assistant turn');
-    }
-    const allowGenomic = await assertNoRawGenomicLLM(
-      prisma,
-      request.user.userId,
-      sanitized.map((message) => message.content).join('\n')
+    throw new ValidationError(
+      'arbitrary chat is not available; use a structured publication task or the guided genetics tutor'
     );
-
-    const isPremium = Boolean(request.entitlements?.isPremium);
-    const maxTokens = clampTokens(options.maxTokens, isPremium);
-    const temperature = clampTemperature(options.temperature);
-
-    // The generic proxy has no persona of its own; the honesty guard rails are
-    // ALWAYS the leading system message. A server-composed peer note (only when
-    // a registered agent is named, and only when the mesh has something to say)
-    // may follow it as a second system message — never before it, never
-    // replacing it. Client-supplied system messages remain stripped above.
-    // (recordUsage below still counts `sanitized.length` so the server's own
-    // system messages are not billed to the user.)
-    const peerNote = await peerNoteFor(request, prisma, agent);
-    const systemMessages = [honestySystemMessage()];
-    if (peerNote) systemMessages.push({ role: 'system', content: peerNote });
-
-    let result;
-    try {
-      result = await generateChatResponse([...systemMessages, ...sanitized], {
-        provider: options.provider,
-        model: options.provider ? undefined : INVOKE_TEXT_MODEL,
-        maxTokens,
-        temperature,
-        timeoutMs: LLM_TIMEOUT_MS,
-        allowGenomic,
-      });
-    } catch (error) {
-      fireAndForgetMeshWork(
-        request,
-        recordProviderFailureLesson(prisma, {
-          agent,
-          model: effectiveModel(options),
-          error,
-          userId: request.user.userId,
-        })
-      );
-      throw error;
-    }
-
-    await recordUsage(prisma, request.user.userId, 'chat', {
-      messageCount: sanitized.length,
-      maxTokens,
-      provider: options.provider || null,
-    });
-
-    await createAuditLog(prisma, {
-      userId: request.user.userId,
-      action: 'llm_chat',
-      entityType: 'llm',
-      metadata: { messageCount: sanitized.length, maxTokens, provider: options.provider || null, agent },
-    });
-
-    return { result, disclaimer: 'For educational purposes only. Not medical advice.' };
   });
 
   fastify.post('/image', { preHandler: guarded }, async (request) => {
-    const { prompt, options = {} } = request.body || {};
-    validatePrompt(prompt);
-    const allowGenomic = await assertNoRawGenomicLLM(prisma, request.user.userId, prompt);
-
-    const result = await generateImage(prompt, {
-      size: options.size || '1024x1024',
-      quality: options.quality || 'standard',
-      timeoutMs: LLM_TIMEOUT_MS,
-      allowGenomic,
-    });
-
-    await recordUsage(prisma, request.user.userId, 'image', {
-      size: options.size || '1024x1024',
-    });
-
-    await createAuditLog(prisma, {
-      userId: request.user.userId,
-      action: 'llm_image',
-      entityType: 'llm',
-      metadata: { promptLength: prompt.length, size: options.size || '1024x1024' },
-    });
-
-    return { result, disclaimer: 'For educational purposes only. Not medical advice.' };
+    throw new ValidationError(
+      'arbitrary image generation is not available; use the bounded genetics education image route'
+    );
   });
 }
 
@@ -298,6 +271,8 @@ export const __test = {
   clampTemperature,
   validatePrompt,
   resolveAgent,
+  structuredInvocation,
+  structuredTaskRequest,
   effectiveModel,
   /** Await every detached mesh task so assertions never race the side channel. */
   flushMeshWork: () => Promise.all(backgroundMeshWork.splice(0)),
@@ -305,6 +280,4 @@ export const __test = {
   DEFAULT_MAX_TOKENS,
   PREMIUM_MAX_TOKENS,
   MAX_PROMPT_CHARS,
-  MAX_CHAT_MESSAGES,
-  MAX_MESSAGE_CHARS,
 };

@@ -8,7 +8,7 @@ import MelissaBanner from "./components/MelissaBanner";
 import PlatformCompatibility from "./components/PlatformCompatibility";
 import UniversalLinkHandler from "./components/UniversalLinkHandler";
 import { getBrowserEnvironment } from "./components/shared/safeNavigate";
-import { Search, User, Crown, History, FileText, Heart, Shield, BarChart3, Microscope, LayoutDashboard, MessageSquare, Building2, ShieldOff, Mail, Crown as CrownIcon, Users, Sparkles, Server, Code2, BookOpen, GraduationCap, HelpCircle, Route } from "lucide-react";
+import { Search, User, Crown, History, BarChart3, Microscope, LayoutDashboard, MessageSquare, Building2, ShieldOff, Mail, Crown as CrownIcon, Users, Sparkles, Server, BookOpen, GraduationCap, HelpCircle } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -49,23 +49,16 @@ const learnNav = [
 // own nav item under Research; two links to one page was just confusing.)
 const discoverNav = [
   { title: "Gene Search", url: createPageUrl("Search"), icon: Search },
-  { title: "AI Assistants", url: createPageUrl("AIAssistants"), icon: MessageSquare },
-  { title: "Study Tutor", url: createPageUrl("Anastasia"), icon: Heart },
 ];
 
 // "I want to analyze data / run research workflows."
 const researchNav = [
   { title: "Dashboard", url: createPageUrl("Dashboard"), icon: LayoutDashboard },
-  { title: "GSEA", url: createPageUrl("GSEA"), icon: Sparkles },
-  { title: "VCF Analysis", url: createPageUrl("VCFAnalysis"), icon: FileText },
-  { title: "Visualization Hub", url: createPageUrl("VisualizationHub"), icon: BarChart3 },
   { title: "Research Mode", url: createPageUrl("ResearchMode"), icon: Microscope },
-  { title: "Clinical Support", url: createPageUrl("RobertClinical"), icon: Shield },
 ];
 
 // "Where is my saved / sensitive data?"
 const myDataNav = [
-  { title: "Medical Data", url: createPageUrl("MedicalData"), icon: Heart },
   { title: "Search History", url: createPageUrl("History"), icon: History },
 ];
 
@@ -91,10 +84,9 @@ const adminNav = [
   { title: "User Messages", url: createPageUrl("AdminMessages"), icon: MessageSquare },
   { title: "Banned Users", url: createPageUrl("BannedUsers"), icon: ShieldOff },
   { title: "Newsletter Subs", url: createPageUrl("AxiomNewsletter"), icon: Mail },
-  // Developer diagnostics that enumerate the API surface + privilege/access
-  // management — super_admin only (matches superAdminPages routing in App.jsx).
+  // Bounded server-owned diagnostics + privilege/access management —
+  // super_admin only (matches superAdminPages routing in App.jsx).
   { title: "Function Tester", url: createPageUrl("AdminFunctionTester"), icon: Server, superAdminOnly: true },
-  { title: "Function Reviewer", url: createPageUrl("FunctionReviewer"), icon: Code2, superAdminOnly: true },
   { title: "Access Grants", url: createPageUrl("SuperAdminSetup"), icon: Crown, superAdminOnly: true },
 ];
 

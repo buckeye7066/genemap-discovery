@@ -3,6 +3,7 @@ import { log } from "../shared/logger";
 import { getErrorMessage } from "../shared/errorUtils";
 import { GENE_ENRICHMENT_CONCURRENCY } from "../shared/constants";
 import { parseLLMJson } from "../shared/llmJson";
+import { resolvePublicationSearchReference } from "@/lib/publicationConceptCatalog";
 
 export class PhenotypeSearchService {
   static async getUserContext() {
@@ -12,7 +13,6 @@ export class PhenotypeSearchService {
       const user = await apiClient.getMe();
       isAdmin = user?.role === "admin" || user?.role === "super_admin" || user?.entitlements?.isAdmin === true;
       userPreferences = {
-        age: user?.age,
         education_level: user?.education_level,
         field_of_study: user?.field_of_study,
       };
@@ -30,8 +30,16 @@ export class PhenotypeSearchService {
    * with nothing rendered). Per-gene detail is filled in later by
    * enrichCandidates(). Each returned gene carries `detailsPending: true`.
    */
-  static async findCandidates(phenotypeQuery, isPremium = false) {
+  static async findCandidates(phenotypeQuery, isPremium = false, searchMode = 'free_text', selectedReference = null) {
     try {
+      const queryReference = resolvePublicationSearchReference(
+        phenotypeQuery,
+        searchMode,
+        selectedReference,
+      );
+      if (!queryReference) {
+        throw new Error('Choose a reviewed disease/phenotype example or enter an exact HPO identifier. Free-text labels are not sent to the model.');
+      }
       // Two independent round-trips run CONCURRENTLY:
       //  - getUserContext() (a /auth/me call) — needed only for the premium flag
       //    and the LATER per-gene enrichment, NOT for candidate discovery.
@@ -41,7 +49,7 @@ export class PhenotypeSearchService {
       // to wait for getMe() before starting the (slow) LLM call — overlap them.
       const [{ isAdmin, userPreferences }, fused] = await Promise.all([
         this.getUserContext(),
-        this.analyzeAndFindCandidates(phenotypeQuery),
+        this.analyzeAndFindCandidates(queryReference),
       ]);
       const effectivePremium = isPremium || isAdmin;
 
@@ -51,9 +59,19 @@ export class PhenotypeSearchService {
       // or unparseable JSON), fall back to the original two-step path so the
       // speedup never costs us a result.
       if (!candidateGenes.length) {
-        analysis = await this.analyzePhenotype(phenotypeQuery);
-        candidateGenes = await this.findCandidateGenes(analysis, effectivePremium, phenotypeQuery);
+        analysis = await this.analyzePhenotype(queryReference);
+        candidateGenes = await this.findCandidateGenes(analysis, effectivePremium, queryReference);
       }
+
+      // LLM output is untrusted: enforce the promised lead limits before any
+      // authoritative or per-gene enrichment can fan out into external calls.
+      const usesDiseaseCandidateLimit = this.usesDiseaseCandidatePrompt(analysis, queryReference);
+      const maxCandidateLeads = analysis.isDisease
+        || analysis.queryType === 'disease'
+        || usesDiseaseCandidateLimit
+        ? 15
+        : 8;
+      candidateGenes = candidateGenes.slice(0, maxCandidateLeads);
 
       const symbols = candidateGenes.map((g) => g.symbol).filter(Boolean);
       const { genes: authGenes } = await this.safeEnrich(symbols, []);
@@ -97,43 +115,17 @@ export class PhenotypeSearchService {
    * candidateGenes } shape the two-step path produced, so callers (and the
    * fallback) are unchanged. parseLLMJson tolerates fences/prose; a sparse reply
    * yields an empty gene list, which findCandidates() handles by falling back.
-   */
-  static async analyzeAndFindCandidates(query) {
-    const prompt = `
-You are a genomics assistant. For the query below, do BOTH steps in ONE response.
-
-Query: "${query}"
-
-STEP 1 — Classify the query:
-- Is it a disease name (e.g. "Rheumatoid Arthritis", "Trisomy 21", "Cystic Fibrosis")?
-- Is it a phenotype description (e.g. "polydactyly", "intellectual disability")?
-- Is it an HPO term (starts with "HP:")?
-- Identify its main phenotypic features, related HPO terms, synonyms, and — if it is a
-  Mendelian disorder — the inheritance pattern.
-
-STEP 2 — Find candidate genes for that query:
-- If it is a DISEASE: identify ALL associated genes — primary causative (monogenic),
-  risk factors (polygenic / GWAS susceptibility loci), modifier genes, and key pathway
-  genes. Return 5-15 genes ranked by evidence strength and clinical significance.
-- If it is a PHENOTYPE or HPO term: find candidate genes associated with these features.
-  Return 3-8 genes ranked by evidence strength.
-- For EACH gene provide: symbol, full name, Entrez ID and Ensembl ID (if known),
-  chromosomal location (chromosome + approximate start/end), a confidence score (0-1),
-  the association type (causative, risk factor, GWAS, pathway), and a brief explanation.
-
-Ground everything in OMIM, ClinVar, GWAS Catalog, DisGeNET, UniProt, HPO, and the
-literature. Anchor the gene list on the ORIGINAL query "${query}" — do NOT fall back to
-generic famous genes (BRCA1 / TP53 / APOE) unless they are genuinely relevant.
-`;
-
-    const response = await apiClient.invokeLLM(
-      prompt +
-        '\n\nReturn ONLY a JSON object with keys: queryType (string), isDisease (boolean), ' +
-        'diseaseName (string|null), isHPOTerm (boolean), mainFeatures (array of strings), ' +
-        'hpoTerms (array of strings), synonyms (array of strings), inheritancePattern ' +
-        '(string|null), and candidateGenes (array of objects with: symbol, name, entrezId, ' +
-        'ensemblId, chromosome, start, end, score, associationType, explanation).',
-      { add_context_from_internet: true, maxTokens: 4096 }
+  */
+  static async analyzeAndFindCandidates(queryReference) {
+    const response = await apiClient.invokePublicationTask(
+      'candidate_gene_research',
+      {
+        version: 1,
+        operation: 'classify_and_suggest',
+        query: queryReference,
+        audience: 'researcher',
+      },
+      { maxTokens: 4096 },
     );
 
     const parsed = parseLLMJson(response, {});
@@ -146,7 +138,9 @@ generic famous genes (BRCA1 / TP53 / APOE) unless they are genuinely relevant.
       diseaseName: parsed.diseaseName || null,
       isHPOTerm: Boolean(parsed.isHPOTerm),
       mainFeatures: Array.isArray(parsed.mainFeatures) ? parsed.mainFeatures : [],
-      hpoTerms: Array.isArray(parsed.hpoTerms) ? parsed.hpoTerms : [],
+      // Model-supplied HPO identifiers are not source records. Leave this
+      // empty until exact HPO ids are resolved by the authoritative adapter.
+      hpoTerms: [],
       synonyms: Array.isArray(parsed.synonyms) ? parsed.synonyms : [],
       inheritancePattern: parsed.inheritancePattern || null,
     };
@@ -177,8 +171,8 @@ generic famous genes (BRCA1 / TP53 / APOE) unless they are genuinely relevant.
   }
 
   // Backward-compatible one-shot: candidates then enrichment in one await.
-  static async searchGenes(phenotypeQuery, isPremium = false) {
-    const base = await this.findCandidates(phenotypeQuery, isPremium);
+  static async searchGenes(phenotypeQuery, isPremium = false, searchMode = 'free_text', selectedReference = null) {
+    const base = await this.findCandidates(phenotypeQuery, isPremium, searchMode, selectedReference);
     return this.enrichCandidates(base);
   }
 
@@ -196,7 +190,7 @@ generic famous genes (BRCA1 / TP53 / APOE) unless they are genuinely relevant.
           if (!p || typeof p.name !== 'string') return p;
           const v = authHpo[p.name.trim().toLowerCase()];
           if (v && v.verified) return { ...p, hpoId: v.hpoId, hpoVerified: true };
-          return { ...p, hpoId: hpoChecked ? null : p.hpoId, hpoVerified: false };
+          return { ...p, hpoId: null, hpoVerified: false };
         });
       }
       return merged;
@@ -233,8 +227,10 @@ generic famous genes (BRCA1 / TP53 / APOE) unless they are genuinely relevant.
     return verified ? ['Ensembl/NCBI (verified)', 'AI-suggested'] : ['AI-suggested'];
   }
 
-  // Overlay authoritative gene records + validated HPO ids onto the AI results,
-  // tagging provenance so the UI can show what's verified vs AI-estimated.
+  // Overlay authoritative gene records + validated HPO ids onto the AI results.
+  // Model-generated coordinates/identifiers are never retained: when the
+  // authoritative adapter cannot verify a record, those fields fail closed to
+  // null instead of being presented as scientific metadata.
   static applyAuthoritativeData(genes, authGenes = {}, authHpo = {}) {
     const hpoChecked = Object.keys(authHpo).length > 0;
     return (genes || []).map((g) => {
@@ -247,14 +243,36 @@ generic famous genes (BRCA1 / TP53 / APOE) unless they are genuinely relevant.
         sources: this.honestSources(verified),
       };
       if (verified) {
-        merged.chromosome = rec.chromosome ?? merged.chromosome;
-        merged.start = rec.start ?? merged.start;
-        merged.end = rec.end ?? merged.end;
-        merged.ensemblId = rec.ensemblId ?? merged.ensemblId;
-        merged.entrezId = rec.entrezId ?? merged.entrezId;
+        merged.chromosome = rec.chromosome ?? null;
+        merged.start = rec.start ?? null;
+        merged.end = rec.end ?? null;
+        merged.ensemblId = rec.ensemblId ?? null;
+        merged.entrezId = rec.entrezId ?? null;
         merged.name = rec.name || merged.name;
-        merged.genomeBuild = rec.genomeBuild || merged.genomeBuild;
-        merged.mapLocation = rec.mapLocation || merged.mapLocation;
+        merged.genomeBuild = rec.genomeBuild || null;
+        // /genomics/enrich is a server-owned, human-only MyGene lookup
+        // (species=human) and stamps GRCh38. Older API records predate the
+        // explicit taxon fields, so that exact server provenance is the only
+        // permitted compatibility path; arbitrary browser objects cannot set
+        // coordinatesVerified in the real flow.
+        const isHumanReference = (
+          rec.species === 'Homo sapiens' && rec.taxId === 9606
+        ) || (
+          rec.source === 'MyGene.info' && rec.genomeBuild === 'GRCh38'
+        );
+        merged.species = isHumanReference ? 'Homo sapiens' : null;
+        merged.taxId = merged.species ? 9606 : null;
+        merged.mapLocation = rec.mapLocation || null;
+      } else {
+        merged.chromosome = null;
+        merged.start = null;
+        merged.end = null;
+        merged.ensemblId = null;
+        merged.entrezId = null;
+        merged.genomeBuild = null;
+        merged.species = null;
+        merged.taxId = null;
+        merged.mapLocation = null;
       }
       if (Array.isArray(merged.phenotypes)) {
         merged.hpoChecked = hpoChecked;
@@ -262,10 +280,9 @@ generic famous genes (BRCA1 / TP53 / APOE) unless they are genuinely relevant.
           if (!p || typeof p.name !== 'string') return p;
           const v = authHpo[p.name.trim().toLowerCase()];
           if (v && v.verified) return { ...p, hpoId: v.hpoId, hpoVerified: true };
-          // Validation ran but found no match → drop the unverified AI id rather
-          // than present a possibly-fabricated one. If validation didn't run at
-          // all (endpoint unavailable), keep the AI id as-is (still labeled).
-          return { ...p, hpoId: hpoChecked ? null : p.hpoId, hpoVerified: false };
+          // Never expose an LLM-supplied ontology id as a source record. If
+          // validation is unavailable, fail closed to a null identifier.
+          return { ...p, hpoId: null, hpoVerified: false };
         });
       }
       return merged;
@@ -282,18 +299,12 @@ generic famous genes (BRCA1 / TP53 / APOE) unless they are genuinely relevant.
       undergraduate: "undergraduate student with moderate scientific detail and basic genetics terminology",
       graduate: "graduate student with technical language, advanced concepts, and detailed mechanisms",
       phd: "PhD-level researcher with sophisticated terminology, molecular details, and latest research findings",
-      medical_professional: "medical professional with clinical focus, disease mechanisms, and treatment implications",
+      medical_professional: "medical professional using the tool for academic review; focus on mechanisms, evidence limitations, and source verification without clinical recommendations",
       researcher: "scientific researcher with comprehensive technical details, experimental evidence, and cutting-edge findings"
     };
 
     let style = styles[userPreferences.education_level] || styles.undergraduate;
     
-    if (userPreferences.age) {
-      if (userPreferences.age < 18) {
-        style = "young student with simple, engaging explanations using relatable examples";
-      }
-    }
-
     if (userPreferences.field_of_study) {
       style += `. Consider their background in ${userPreferences.field_of_study}`;
     }
@@ -301,106 +312,58 @@ generic famous genes (BRCA1 / TP53 / APOE) unless they are genuinely relevant.
     return style;
   }
 
-  static async analyzePhenotype(query) {
-    const prompt = `
-Analyze this query and determine if it's a disease name, phenotype, or HPO term:
-Query: "${query}"
+  static getAudience(userPreferences) {
+    const level = userPreferences?.education_level;
+    if (level === 'medical_professional') return 'medical_researcher';
+    if (level === 'researcher' || level === 'phd') return 'researcher';
+    if (level === 'graduate' || level === 'postgraduate') return 'graduate';
+    if (level === 'high_school') return 'general';
+    return 'undergraduate';
+  }
 
-**Analysis Required:**
-1. Is this a disease name (e.g., "Rheumatoid Arthritis", "Trisomy 21", "Cystic Fibrosis")?
-2. Is this a phenotype description (e.g., "polydactyly", "intellectual disability")?
-3. Is this an HPO term (starts with HP:)?
-4. What are the main phenotypic features or disease characteristics?
-5. What related HPO terms might be relevant?
-6. What are alternative names/synonyms?
-
-If it's a disease:
-- Identify all genes known to be associated with this disease
-- Include both causative genes and risk factors
-- Consider different genetic forms (if applicable)
-- Include genes from GWAS studies if relevant
-
-Provide a comprehensive analysis for gene discovery.
-`;
-
-    const response = await apiClient.invokeLLM(prompt + '\n\nReturn your response as JSON with keys: queryType, isDisease, diseaseName, isHPOTerm, mainFeatures (array), hpoTerms (array), synonyms (array), category, inheritancePattern.', {
-      add_context_from_internet: true
-    });
+  static async analyzePhenotype(queryReference) {
+    const response = await apiClient.invokePublicationTask(
+      'candidate_gene_research',
+      {
+        version: 1,
+        operation: 'classify',
+        query: queryReference,
+        audience: 'researcher',
+      },
+    );
 
     return parseLLMJson(response, {});
   }
 
-  static async findCandidateGenes(phenotypeAnalysis, isPremium, originalQuery = "") {
-    const searchTerms = [
-      phenotypeAnalysis.mainFeatures,
-      phenotypeAnalysis.synonyms
-    ].flat().filter(Boolean).join(", ");
-
-    // If analyzePhenotype returned sparse/unparseable JSON, searchTerms and
-    // diseaseName can be empty — which previously produced an EMPTY prompt
-    // ("Based on the phenotype features: ") and made the model fall back to
-    // generic "famous" genes (BRCA1/TP53/APOE) unrelated to the query. Always
-    // anchor on the user's original query so e.g. "Cystic Fibrosis" still
-    // searches for cystic fibrosis genes (CFTR) even when analysis is thin.
-    const diseaseTarget = phenotypeAnalysis.diseaseName || originalQuery || searchTerms;
-    const phenotypeTarget = searchTerms || originalQuery;
-
-    let prompt = "";
-
-    if (phenotypeAnalysis.isDisease || (!searchTerms && originalQuery)) {
-      prompt = `
-Find ALL genes associated with the disease/condition: ${diseaseTarget}
-
-**Comprehensive Gene Discovery Required:**
-1. Primary causative genes (monogenic forms)
-2. Risk factor genes (polygenic/complex forms)
-3. GWAS-identified susceptibility loci
-4. Modifier genes
-5. Genes in relevant pathways
-6. Genes from animal models (if highly relevant)
-
-For each gene, provide:
-- Gene symbol and full name
-- Entrez ID and Ensembl ID (if known)
-- Chromosomal location (chromosome, approximate start/end coordinates)
-- Association type (causative, risk factor, GWAS, pathway)
-- Confidence score (0-1) for the association
-- Brief explanation of the gene's role in the disease
-
-Use comprehensive sources: OMIM, ClinVar, GWAS Catalog, DisGeNET, UniProt, HPO, literature.
-
-Return 5-15 most relevant genes ranked by evidence strength and clinical significance.
-${phenotypeAnalysis.inheritancePattern ? `\nNote: Inheritance pattern is ${phenotypeAnalysis.inheritancePattern}` : ''}
-`;
-    } else {
-      prompt = `
-Based on the phenotype features: ${phenotypeTarget}
-
-Find candidate genes that could be associated with these phenotypes.
-Use your knowledge of genetics and genomics databases like OMIM, ClinVar, HPO, UniProt, HPA (Human Protein Atlas), and GTEx (Genotype-Tissue Expression).
-
-For each gene, provide:
-- Gene symbol and full name
-- Entrez ID and Ensembl ID (if known)
-- Chromosomal location (chromosome, approximate start/end coordinates)
-- Confidence score (0-1) for the association
-- Brief explanation of the gene-phenotype relationship
-
-Return 3-8 most relevant candidate genes ranked by evidence strength.
-`;
-    }
-
-    // Request the full token budget: a 5-15 gene list with per-gene metadata and
-    // explanations easily exceeds the default cap, and a truncated reply yields
-    // invalid JSON → an empty list → the "Found 0 candidate genes" the user saw.
-    const response = await apiClient.invokeLLM(prompt + '\n\nReturn your response as JSON with key "candidateGenes" containing an array of objects with: symbol, name, entrezId, ensemblId, chromosome, start, end, score, associationType, explanation.', {
-      add_context_from_internet: true,
-      maxTokens: 4096
-    });
+  static async findCandidateGenes(phenotypeAnalysis, isPremium, queryReference) {
+    // The second model call reuses the exact immutable selection. Model output
+    // (diseaseName/features/synonyms) is never promoted into executable input.
+    const response = await apiClient.invokePublicationTask(
+      'candidate_gene_research',
+      {
+        version: 1,
+        operation: 'suggest_candidates',
+        query: queryReference,
+        audience: 'researcher',
+      },
+      { maxTokens: 4096 },
+    );
 
     const parsed = parseLLMJson(response, { candidateGenes: [] });
     const geneResults = Array.isArray(parsed) ? { candidateGenes: parsed } : parsed;
     return (geneResults?.candidateGenes || []).filter((g) => g && g.symbol);
+  }
+
+  static usesDiseaseCandidatePrompt(phenotypeAnalysis, queryReference) {
+    const searchTerms = [
+      phenotypeAnalysis?.mainFeatures,
+      phenotypeAnalysis?.synonyms,
+    ].flat().filter(Boolean).join(", ");
+    return Boolean(
+      phenotypeAnalysis?.isDisease
+      || queryReference?.conceptKind === 'disease'
+      || (!searchTerms && queryReference),
+    );
   }
 
   static async enrichGeneData(candidateGenes, isPremium, userPreferences) {
@@ -461,20 +424,29 @@ Return 3-8 most relevant candidate genes ranked by evidence strength.
   // five separate calls produced, with per-field fallbacks so a partial or
   // malformed response degrades gracefully instead of failing the whole gene.
   static async enrichGeneCombined(gene, userPreferences) {
-    const explanationStyle = this.getEducationContext(userPreferences);
-    const prompt = `For the human gene ${gene.symbol} (${gene.name || ''}), provide a structured profile.
-Gene context: ${gene.explanation || ''}
-
-Tailor all prose for ${explanationStyle}. Ground facts in OMIM, ClinVar, UniProt, HPO, HPA, and GTEx. Do not include preamble or meta-commentary.
-
-Return ONLY a JSON object with these keys:
-- "summary": string, a 2-3 sentence factual summary (function, key disease associations, mechanism)
-- "keyTakeaways": array of 3-4 one-sentence strings
-- "phenotypes": array of { "name": string, "hpoId": string|null } for the main associated phenotypes/diseases
-- "expressionData": array of { "tissue": string, "expression": number } for the top 8 tissues by GTEx TPM
-- "furtherReading": { "resources": array of { "name": string, "url": string }, "pubmedSearchTerms": array of strings }`;
-
-    const response = await apiClient.invokeLLM(prompt, { add_context_from_internet: true, maxTokens: 2048 });
+    const verifiedIdentifier = gene.ensemblId || gene.entrezId;
+    if (!gene.coordinatesVerified || !verifiedIdentifier) {
+      return {
+        phenotypes: [],
+        aiSummary: `${gene.symbol} is an AI-suggested candidate lead. Authoritative gene-identifier verification was unavailable, so no additional model profile was generated.`,
+        keyTakeaways: [],
+        expressionData: [],
+        furtherReading: this.deterministicFurtherReading(gene.symbol),
+      };
+    }
+    const response = await apiClient.invokePublicationTask(
+      'candidate_gene_research',
+      {
+        version: 1,
+        operation: 'gene_profile',
+        // The server re-resolves this symbol through MyGene.info and composes
+        // only its authoritative record. Browser-held identifiers are display
+        // data, not an authorization credential.
+        gene: { symbol: gene.symbol },
+        audience: this.getAudience(userPreferences),
+      },
+      { maxTokens: 2048 },
+    );
     const parsed = parseLLMJson(response, {});
 
     return {
@@ -483,173 +455,48 @@ Return ONLY a JSON object with these keys:
         ? parsed.summary
         : `${gene.symbol} is associated with the searched phenotype. ${gene.explanation || ''}`,
       keyTakeaways: Array.isArray(parsed.keyTakeaways) ? parsed.keyTakeaways : [],
-      expressionData: Array.isArray(parsed.expressionData) ? parsed.expressionData : [],
-      furtherReading: parsed.furtherReading && typeof parsed.furtherReading === 'object'
-        ? {
-            resources: parsed.furtherReading.resources || [],
-            pubmedSearchTerms: parsed.furtherReading.pubmedSearchTerms || [],
-          }
-        : null,
+      // Numeric tissue-expression values and URLs generated by an LLM looked
+      // authoritative but were not source records. Keep those fields empty and
+      // provide deterministic search destinations instead.
+      expressionData: [],
+      furtherReading: this.deterministicFurtherReading(gene.symbol),
     };
   }
 
-  static async getGenePhenotypes(geneSymbol) {
-    const prompt = `
-For the gene ${geneSymbol}, list the main phenotypes and diseases it's associated with.
-Include HPO terms where applicable.
-Focus on well-established gene-phenotype associations from OMIM, ClinVar, UniProt, and medical literature.
-`;
-
-    const response = await apiClient.invokeLLM(prompt + '\n\nReturn as JSON with key "phenotypes" containing array of {name, hpoId}.', {
-      add_context_from_internet: true
-    });
-
-    return parseLLMJson(response, { phenotypes: [] }).phenotypes || [];
-  }
-
-  static async generateGeneSummary(gene, phenotypes, userPreferences) {
-    const phenotypeList = phenotypes.map(p => p.name).join(", ");
-    const explanationStyle = this.getEducationContext(userPreferences);
-    
-    const prompt = `
-Generate a concise, scientific summary for the gene ${gene.symbol} (${gene.name}).
-
-Context:
-- Associated phenotypes: ${phenotypeList}
-- Gene explanation: ${gene.explanation || ''}
-
-IMPORTANT: Tailor this explanation for ${explanationStyle}.
-
-Provide a 2-3 sentence summary covering:
-1. Gene function/role
-2. Key disease associations
-3. Molecular mechanism (adjust depth based on audience)
-
-Keep it factual and source-aware. Reference data from UniProt, HPA, or GTEx if relevant.
-Match the complexity and terminology to the reader's background.
-`;
-
-    const response = await apiClient.invokeLLM(prompt, {
-      add_context_from_internet: true
-    });
-    return response?.result || response || `${gene.symbol} is associated with the searched phenotype.`;
-  }
-
-  static async generateKeyTakeaways(gene, phenotypes, userPreferences) {
-    const phenotypeList = phenotypes.map(p => p.name).join(", ");
-    const explanationStyle = this.getEducationContext(userPreferences);
-    
-    const prompt = `
-For the gene ${gene.symbol} (${gene.name}), generate 3-4 key takeaways as bullet points.
-
-Context:
-- Associated phenotypes: ${phenotypeList}
-- Gene explanation: ${gene.explanation || ''}
-
-IMPORTANT: Tailor these takeaways for ${explanationStyle}.
-
-Each takeaway should be:
-- One concise sentence
-- Highlight the most important information
-- Actionable or informative
-- Appropriate complexity for the audience
-
-Return ONLY an array of strings, no additional formatting.
-`;
-
-    const response = await apiClient.invokeLLM(prompt + '\n\nReturn as JSON with key "takeaways" containing array of strings.', {
-      add_context_from_internet: true
-    });
-
-    const parsed = parseLLMJson(response, { takeaways: [] });
-    if (Array.isArray(parsed)) return parsed;
-    return parsed.takeaways || [];
-  }
-
-  static async generateFurtherReading(gene, userPreferences) {
-    const explanationStyle = this.getEducationContext(userPreferences);
-    
-    const prompt = `
-For gene ${gene.symbol}, generate personalized further reading recommendations.
-
-IMPORTANT: Tailor recommendations for ${explanationStyle}.
-
-Provide:
-1. 2-4 authoritative resources (OMIM, GeneReviews, UniProt, GTEx, etc.) with full URLs
-2. 2-3 PubMed search terms optimized for the reader's level
-
-Format resources as:
-- OMIM for ${gene.symbol}: https://omim.org/search?search=${gene.symbol}
-- GeneReviews: https://www.ncbi.nlm.nih.gov/books/NBK1116/ (if applicable)
-- UniProt: https://www.uniprot.org/uniprotkb?query=${gene.symbol}
-- GTEx Portal: https://gtexportal.org/home/gene/${gene.symbol}
-
-Adjust complexity of search terms based on user background.
-`;
-
-    const response = await apiClient.invokeLLM(prompt + '\n\nReturn as JSON with keys: "resources" (array of {name, url}) and "pubmedSearchTerms" (array of strings).', {
-      add_context_from_internet: false
-    });
-
-    const parsed = parseLLMJson(response, {});
+  static deterministicFurtherReading(geneSymbol) {
+    const symbol = String(geneSymbol || '').trim().toUpperCase();
+    const encoded = encodeURIComponent(symbol);
+    if (!symbol) return { resources: [], pubmedSearchTerms: [] };
     return {
-      resources: parsed.resources || [],
-      pubmedSearchTerms: parsed.pubmedSearchTerms || []
+      resources: [
+        { name: `NCBI Gene search: ${symbol}`, url: `https://www.ncbi.nlm.nih.gov/gene/?term=${encoded}` },
+        { name: `ClinVar search: ${symbol}`, url: `https://www.ncbi.nlm.nih.gov/clinvar/?term=${encoded}` },
+        { name: `UniProt search: ${symbol}`, url: `https://www.uniprot.org/uniprotkb?query=${encoded}` },
+        { name: `PubMed search: ${symbol}`, url: `https://pubmed.ncbi.nlm.nih.gov/?term=${encoded}` },
+      ],
+      pubmedSearchTerms: [symbol, `${symbol} gene phenotype`, `${symbol} functional evidence`],
     };
   }
 
-  static async getGeneExpressionData(geneSymbol) {
-    const prompt = `
-For the gene ${geneSymbol}, provide tissue expression data from GTEx (Genotype-Tissue Expression project).
-
-Return expression levels (in TPM - Transcripts Per Million) for major human tissues.
-Focus on the top 8-10 tissues where this gene is most highly expressed.
-
-Format as an array of objects with tissue name and expression level.
-Use tissue names like: brain, heart, liver, kidney, muscle, lung, etc.
-`;
-
-    try {
-      const response = await apiClient.invokeLLM(prompt + '\n\nReturn as JSON with key "expression" containing array of {tissue, expression}.', {
-        add_context_from_internet: true
-      });
-
-      return parseLLMJson(response, { expression: [] }).expression || [];
-    } catch (error) {
-      log.error(`Error fetching expression data for ${geneSymbol}:`, error);
-      return [];
-    }
+  static async generateFurtherReading(gene) {
+    return this.deterministicFurtherReading(gene?.symbol);
   }
 
-  static async getPremiumGeneData(geneSymbol, userPreferences) {
-    const explanationStyle = this.getEducationContext(userPreferences);
-    
-    const prompt = `
-For gene ${geneSymbol}, provide premium research data:
+  static async getGeneExpressionData() {
+    // A future implementation should query a versioned GTEx/HPA endpoint.
+    // LLM-generated TPM values are not data and must not be rendered as such.
+    return [];
+  }
 
-1. Population/prevalence data for associated diseases
-2. Gene evolutionary history and family information  
-3. Known pathogenic mutations and their clinical significance
-4. Current treatments and therapies for associated diseases
-5. Recent research developments
-
-Use reliable sources like OMIM, ClinVar, PubMed, FDA databases, UniProt (protein function), HPA (Human Protein Atlas for expression), and GTEx (tissue expression).
-
-IMPORTANT: Tailor all explanations for ${explanationStyle}.
-Adjust technical depth, terminology, and focus based on the reader's background.
-`;
-
-    const response = await apiClient.invokeLLM(prompt + '\n\nReturn as JSON with keys: prevalence ({estimate, population, source}), geneHistory ({family, evolution, discovery}), mutations (array of {type, significance, disease}), treatments (array of {name, type, status}).', {
-      add_context_from_internet: true
-    });
-
-    const premiumData = parseLLMJson(response, { prevalence: {}, geneHistory: {}, mutations: [], treatments: [] });
-
+  static async getPremiumGeneData() {
+    // Population prevalence, pathogenicity, and treatment data must come from
+    // exact versioned records. Until those adapters exist, fail closed rather
+    // than selling model-generated values as premium evidence.
     return {
-      prevalenceData: premiumData.prevalence,
-      historyData: premiumData.geneHistory, 
-      mutationData: premiumData.mutations || [],
-      treatmentData: premiumData.treatments || []
+      prevalenceData: null,
+      historyData: null,
+      mutationData: [],
+      treatmentData: [],
     };
   }
 
@@ -661,59 +508,16 @@ Adjust technical depth, terminology, and focus based on the reader's background.
     const uniqueToUser = userGenes.filter(g => !phenotypeGenesSet.has(g.toUpperCase()));
     const uniqueToPhenotype = phenotypeGenes.filter(g => !userGenesSet.has(g.toUpperCase()));
 
-    // Get user preferences
-    let userPreferences = null;
-    try {
-      const user = await apiClient.getMe();
-      userPreferences = {
-        age: user?.age,
-        education_level: user?.education_level,
-        field_of_study: user?.field_of_study
-      };
-    } catch (err) {
-      // Not logged in
-    }
-
-    const educationContext = this.getEducationContext(userPreferences);
-
-    // Generate comprehensive analysis
-    const prompt = `
-You are Robert, an AI gene analysis assistant. Analyze this gene set comparison:
-
-**User's Input Genes (${userGenes.length}):** ${userGenes.join(', ')}
-
-**Phenotype-Associated Genes (${phenotypeGenes.length}):** ${phenotypeGenes.join(', ')}
-${phenotype ? `**Phenotype Context:** ${phenotype}` : ''}
-
-**Comparison Results:**
-- Overlapping: ${overlapping.length} genes (${overlapping.join(', ') || 'None'})
-- Unique to user: ${uniqueToUser.length} genes (${uniqueToUser.join(', ') || 'None'})
-- Unique to phenotype: ${uniqueToPhenotype.length} genes (${uniqueToPhenotype.join(', ') || 'None'})
-
-**Your Task:**
-Provide a comprehensive analysis tailored for ${educationContext}.
-
-**Analysis should include:**
-1. **Overview**: What do these results tell us about the relationship between the user's genes and the phenotype?
-2. **Overlapping Genes**: Significance of genes that appear in both sets
-3. **Unique User Genes**: What the user's unique genes might indicate
-4. **Unique Phenotype Genes**: Important genes from the phenotype that the user didn't include
-5. **Functional Connections**: Potential biological pathways or functional relationships
-6. **Recommendations**: Suggest next steps or areas for further investigation
-
-Use clear, engaging language appropriate for the user's background. Format with markdown for readability.
-`;
-
-    const analysisResponse = await apiClient.invokeLLM(prompt, {
-      add_context_from_internet: true
-    });
-    const analysis = analysisResponse?.result || analysisResponse || "Analysis of gene set comparison";
-
-    // Get functional relationships for overlapping genes
-    let functionalRelationships = [];
-    if (overlapping.length > 0 && overlapping.length <= 10) {
-      functionalRelationships = await this.getFunctionalRelationships(overlapping);
-    }
+    // Set overlap is deterministic. Do not ask an LLM what a user's unique
+    // genes "might indicate"; that converted a research-list comparison into
+    // unsupported personal interpretation.
+    const context = phenotype ? ` for the exploratory query “${phenotype}”` : '';
+    const analysis = [
+      `This comparison checks list overlap${context}; it does not evaluate a person's genome.`,
+      `${overlapping.length} gene(s) appear in both lists, ${uniqueToUser.length} only in the input list, and ${uniqueToPhenotype.length} only in the AI-generated candidate list.`,
+      'Overlap is a research-organizing signal, not evidence of causation, diagnosis, or personal risk. Verify each association in primary sources.',
+    ].join(' ');
+    const functionalRelationships = [];
 
     return {
       userGenes,
@@ -728,30 +532,9 @@ Use clear, engaging language appropriate for the user's background. Format with 
     };
   }
 
-  static async getFunctionalRelationships(genes) {
-    if (genes.length === 0) return [];
-
-    const prompt = `
-For the following genes: ${genes.join(', ')}
-
-Identify key functional relationships between these genes, such as:
-- Pathway interactions
-- Protein-protein interactions
-- Regulatory relationships
-- Shared biological processes
-
-Return up to 5 most significant relationships.
-`;
-
-    try {
-      const response = await apiClient.invokeLLM(prompt + '\n\nReturn as JSON with key "relationships" containing array of {gene1, gene2, relationship, evidence}.', {
-        add_context_from_internet: true
-      });
-
-      return parseLLMJson(response, { relationships: [] }).relationships || [];
-    } catch (error) {
-      log.error("Error getting functional relationships:", error);
-      return [];
-    }
+  static async getFunctionalRelationships() {
+    // Do not fabricate relationship evidence. A future implementation should
+    // return exact STRING/BioGRID record identifiers and database versions.
+    return [];
   }
 }

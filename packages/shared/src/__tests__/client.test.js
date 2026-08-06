@@ -114,96 +114,6 @@ describe('Entity methods', () => {
     expect(fetchCalls[0].method).toBe('DELETE');
   });
 
-  it('getMedicalData() should GET /entities/medical-data', async () => {
-    await client.getMedicalData();
-    expect(fetchCalls[0].url).toBe('http://localhost:3000/entities/medical-data');
-  });
-
-  it('getMedicalData(type) should include dataType query param', async () => {
-    await client.getMedicalData('lab_result');
-    expect(fetchCalls[0].url).toBe('http://localhost:3000/entities/medical-data?dataType=lab_result');
-  });
-
-  it('saveMedicalData() should POST /entities/medical-data', async () => {
-    await client.saveMedicalData({ dataType: 'lab', content: 'data' });
-    expect(fetchCalls[0].method).toBe('POST');
-  });
-
-  it('deleteMedicalData(id) should DELETE /entities/medical-data/:id', async () => {
-    await client.deleteMedicalData('xyz');
-    expect(fetchCalls[0].url).toBe('http://localhost:3000/entities/medical-data/xyz');
-    expect(fetchCalls[0].method).toBe('DELETE');
-  });
-
-  // ── Base44 → backend contract adapter (regression: "dataType and content
-  //    are required" upload failure) ──────────────────────────────────────
-  it('saveMedicalData() maps the UI shape (file_type + flat fields) into {dataType, content}', async () => {
-    await client.saveMedicalData({
-      file_type: 'genetic_test',
-      summary: 'A summary',
-      relevant_genes: ['BRCA1'],
-      phenotypes_identified: ['cancer'],
-      notes: 'hi',
-      file_name: 'report.txt',
-      extracted_data: { key_findings: ['f1'] },
-    });
-    expect(fetchCalls[0].method).toBe('POST');
-    const sent = JSON.parse(fetchCalls[0].body);
-    expect(sent.dataType).toBe('genetic_test'); // derived from file_type
-    expect(sent.content.summary).toBe('A summary');
-    expect(sent.content.relevant_genes).toEqual(['BRCA1']);
-    expect(sent.content.phenotypes_identified).toEqual(['cancer']);
-    expect(sent.content.extracted_data).toEqual({ key_findings: ['f1'] });
-    expect(sent.content.file_name).toBe('report.txt');
-  });
-
-  it('saveMedicalData({id}) routes to PUT for a partial update', async () => {
-    await client.saveMedicalData({ id: 'md-1', vcf_variants: [{ gene: 'TP53' }] });
-    expect(fetchCalls[0].method).toBe('PUT');
-    expect(fetchCalls[0].url).toBe('http://localhost:3000/entities/medical-data/md-1');
-    const sent = JSON.parse(fetchCalls[0].body);
-    expect(sent.content.vcf_variants).toEqual([{ gene: 'TP53' }]);
-  });
-
-  it('saveMedicalData({id, _delete}) routes to DELETE', async () => {
-    await client.saveMedicalData({ id: 'md-1', _delete: true });
-    expect(fetchCalls[0].method).toBe('DELETE');
-    expect(fetchCalls[0].url).toBe('http://localhost:3000/entities/medical-data/md-1');
-  });
-
-  it('saveMedicalData({_shareAction}) throws (no backend sharing model)', async () => {
-    await expect(client.saveMedicalData({ _shareAction: true, record_id: 'x' })).rejects.toThrow(/sharing/i);
-    expect(fetchCalls).toHaveLength(0);
-  });
-
-  it('getMedicalData() flattens content back into UI fields', async () => {
-    global.fetch = vi.fn(async (url, config) => {
-      fetchCalls.push({ url, ...config });
-      return {
-        ok: true,
-        json: async () => ({
-          records: [
-            {
-              id: 'md-1',
-              dataType: 'genetic_test',
-              title: 'Genetic Test Report',
-              createdAt: '2026-07-11T00:00:00.000Z',
-              content: { summary: 'S', relevant_genes: ['BRCA1'], phenotypes_identified: ['x'] },
-            },
-          ],
-        }),
-      };
-    });
-    const records = await client.getMedicalData();
-    expect(records).toHaveLength(1);
-    const r = records[0];
-    expect(r.file_type).toBe('genetic_test'); // UI reads file_type
-    expect(r.summary).toBe('S');
-    expect(r.relevant_genes).toEqual(['BRCA1']);
-    expect(r.phenotypes_identified).toEqual(['x']);
-    expect(r.created_date).toBe('2026-07-11T00:00:00.000Z'); // UI reads created_date
-  });
-
   it('getGeneSets() should GET /entities/gene-sets', async () => {
     await client.getGeneSets();
     expect(fetchCalls[0].url).toBe('http://localhost:3000/entities/gene-sets');
@@ -224,27 +134,6 @@ describe('Entity methods', () => {
     await client.deleteGeneSet('gs-1');
     expect(fetchCalls[0].url).toBe('http://localhost:3000/entities/gene-sets/gs-1');
     expect(fetchCalls[0].method).toBe('DELETE');
-  });
-
-  it('getConversations() should GET /entities/conversations', async () => {
-    await client.getConversations();
-    expect(fetchCalls[0].url).toBe('http://localhost:3000/entities/conversations');
-  });
-
-  it('getConversations(type) should include assistantType query', async () => {
-    await client.getConversations('genetic_counselor');
-    expect(fetchCalls[0].url).toBe('http://localhost:3000/entities/conversations?assistantType=genetic_counselor');
-  });
-
-  it('saveConversation() should POST /entities/conversations', async () => {
-    await client.saveConversation({ assistantType: 'general', messages: [] });
-    expect(fetchCalls[0].method).toBe('POST');
-  });
-
-  it('updateConversation(id, data) should PUT /entities/conversations/:id', async () => {
-    await client.updateConversation('c-1', { title: 'New' });
-    expect(fetchCalls[0].url).toBe('http://localhost:3000/entities/conversations/c-1');
-    expect(fetchCalls[0].method).toBe('PUT');
   });
 
   it('getProjects() should GET /entities/projects', async () => {
@@ -367,88 +256,68 @@ describe('Admin methods', () => {
   });
 });
 
-// ── Genomics endpoints ───────────────────────────────────────────────────────
+// ── Published genomics endpoints ────────────────────────────────────────────
 
-describe('Genomics methods', () => {
-  it('lookupVariant() should GET /genomics/variant/:id', async () => {
-    await client.lookupVariant('rs123');
-    expect(fetchCalls[0].url).toBe('http://localhost:3000/genomics/variant/rs123');
-  });
-
-  it('lookupGene() should GET /genomics/gene/:symbol', async () => {
+describe('Published genomics methods', () => {
+  it('lookupGene() GETs the public gene-reference endpoint', async () => {
     await client.lookupGene('BRCA1');
     expect(fetchCalls[0].url).toBe('http://localhost:3000/genomics/gene/BRCA1');
+    expect(fetchCalls[0].method).toBeUndefined();
   });
 
-  it('searchClinVar() should GET /genomics/clinvar/search with query', async () => {
-    await client.searchClinVar('pathogenic');
-    expect(fetchCalls[0].url).toBe('http://localhost:3000/genomics/clinvar/search?q=pathogenic');
-  });
-
-  it('parseVcf() should POST /genomics/vcf/parse', async () => {
-    await client.parseVcf('#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO', 25);
-    expect(fetchCalls[0].url).toBe('http://localhost:3000/genomics/vcf/parse');
+  it('enrichGenomicData() POSTs only symbols and phenotype terms', async () => {
+    await client.enrichGenomicData(['BRCA1'], ['breast cancer']);
+    expect(fetchCalls[0].url).toBe('http://localhost:3000/genomics/enrich');
     expect(fetchCalls[0].method).toBe('POST');
     expect(JSON.parse(fetchCalls[0].body)).toEqual({
-      text: '#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO',
-      maxVariants: 25,
+      symbols: ['BRCA1'],
+      phenotypes: ['breast cancer'],
     });
   });
 
-  it('enrichVcfVariants() should POST /genomics/vcf/enrich', async () => {
-    await client.enrichVcfVariants([{
-      chromosome: 'chr1',
-      position: 10,
-      referenceAllele: 'A',
-      alternateAllele: 'G',
-      ref: 'A',
-      alt: 'G',
-      variantType: 'SNV',
-      variant_type: 'SNV',
-      stableVariantKey: 'chr1:10:A>G',
-    }]);
-    expect(fetchCalls[0].url).toBe('http://localhost:3000/genomics/vcf/enrich');
-    expect(fetchCalls[0].method).toBe('POST');
+  it('searchPublicationConcepts() requests deterministic resolver suggestions', async () => {
+    await client.searchPublicationConcepts('retinitis', 'phenotype');
+    expect(fetchCalls[0].url).toBe(
+      'http://localhost:3000/genomics/publication-concepts/search?q=retinitis&kind=phenotype',
+    );
+    expect(fetchCalls[0].method).toBeUndefined();
   });
 });
 
-// ── Clinical Trials ──────────────────────────────────────────────────────────
+// ── Publication boundary ─────────────────────────────────────────────────────
 
-describe('Clinical Trials methods', () => {
-  it('searchClinicalTrials() should GET /clinical-trials/search', async () => {
-    global.fetch = vi.fn(async (url, config) => {
-      fetchCalls.push({ url, ...config });
-      return {
-        ok: true,
-        json: async () => ({ totalCount: 1, studies: [{ nctId: 'NCT001', title: 'Trial' }] }),
-      };
-    });
-    const result = await client.searchClinicalTrials({ condition: 'cancer', gene: 'BRCA1' });
-    expect(fetchCalls[0].url).toContain('/clinical-trials/search?');
-    expect(fetchCalls[0].url).toContain('condition=cancer');
-    expect(fetchCalls[0].url).toContain('gene=BRCA1');
-    expect(result).toEqual({ totalCount: 1, studies: [{ nctId: 'NCT001', title: 'Trial' }] });
-  });
+describe('Publication boundary', () => {
+  const retiredMethods = [
+    'invokeLLM',
+    'getMedicalData',
+    'saveMedicalData',
+    'deleteMedicalData',
+    'getConversations',
+    'saveConversation',
+    'updateConversation',
+    'lookupVariant',
+    'searchVariants',
+    'searchPhenotypes',
+    'searchClinVar',
+    'parseVcf',
+    'enrichVcfVariants',
+    'enrichVcfCohort',
+    'searchClinicalTrials',
+    'getClinicalTrial',
+  ];
 
-  it('getClinicalTrial(nctId) should GET /clinical-trials/:nctId', async () => {
-    global.fetch = vi.fn(async (url, config) => {
-      fetchCalls.push({ url, ...config });
-      return {
-        ok: true,
-        json: async () => ({ study: { nctId: 'NCT001', title: 'Trial' } }),
-      };
+  for (const method of retiredMethods) {
+    it(`does not expose ${method}() on the published client`, () => {
+      expect(client).not.toHaveProperty(method);
     });
-    const result = await client.getClinicalTrial('NCT001');
-    expect(fetchCalls[0].url).toBe('http://localhost:3000/clinical-trials/NCT001');
-    expect(result).toEqual({ study: { nctId: 'NCT001', title: 'Trial' } });
-  });
+  }
 });
 
-// ── Consent / HIPAA ──────────────────────────────────────────────────────────
+// ── Consent and deletion requests ────────────────────────────────────────────────────────────
 
 describe('Consent and data deletion methods', () => {
   it('recordConsent() should POST /entities/consent', async () => {
-    await client.recordConsent({ consentType: 'hipaa', version: '1.0', granted: true });
+    await client.recordConsent({ consentType: 'privacy_policy', version: '1.0', granted: true });
     expect(fetchCalls[0].url).toBe('http://localhost:3000/entities/consent');
     expect(fetchCalls[0].method).toBe('POST');
   });
@@ -459,7 +328,7 @@ describe('Consent and data deletion methods', () => {
   });
 
   it('requestDataDeletion() should POST /entities/data-deletion-request', async () => {
-    await client.requestDataDeletion({ deletedTypes: ['medical_data'] });
+    await client.requestDataDeletion({ deletedTypes: ['search_history'] });
     expect(fetchCalls[0].url).toBe('http://localhost:3000/entities/data-deletion-request');
     expect(fetchCalls[0].method).toBe('POST');
   });

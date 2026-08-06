@@ -20,6 +20,7 @@ import { format } from "date-fns";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { normalizeSearchHistoryEntry } from "../lib/searchHistory";
+import { publicationHistoryReplay } from "../lib/publicationConceptCatalog";
 
 export default function HistoryPage() {
   const { user } = useAuth();
@@ -213,6 +214,7 @@ export default function HistoryPage() {
           <div className="space-y-4">
             {searchHistory.map((raw) => {
               const search = normalizeEntry(raw);
+              const replay = publicationHistoryReplay(search);
               return (
               <Card key={search.id} className="hover:shadow-md transition-shadow duration-200">
                 <CardContent className="py-4">
@@ -224,6 +226,9 @@ export default function HistoryPage() {
                           "{search.query}"
                         </h3>
                         {getSearchTypeBadge(search.queryType)}
+                        <Badge variant="outline" className="text-xs">
+                          {replay?.autoRun ? 'Structured replay' : 'Prefill only'}
+                        </Badge>
                       </div>
 
                       <div className="flex items-center gap-4 text-sm text-slate-600">
@@ -273,8 +278,13 @@ export default function HistoryPage() {
                         size="sm"
                         asChild
                       >
-                        <Link to={createPageUrl(`Search?query=${encodeURIComponent(search.query)}`)}>
-                          Search Again
+                        <Link
+                          to={`${createPageUrl("Search")}?query=${encodeURIComponent(replay?.query || search.query)}`}
+                          title={replay?.autoRun
+                            ? 'Replay from the stored structured reference; external IDs are revalidated by the server.'
+                            : 'Open this legacy query for review. It will not run automatically.'}
+                        >
+                          {replay?.autoRun ? 'Search Again' : 'Review Query'}
                         </Link>
                       </Button>
 

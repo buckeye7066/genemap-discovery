@@ -7,16 +7,14 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './'),
-      // During local development the @genemap/shared package main entry
-      // points at ./dist (production-safe). To avoid having to rebuild
-      // the shared package on every edit, alias the package directly to
-      // its TypeScript source so Vite can transform it on the fly. The
-      // production build (Vercel/Docker) uses the compiled dist via the
-      // package.json `exports` field — this alias only affects local dev.
+      // The browser gets the bounded HTTP client, never the shared package
+      // barrel. The barrel also exports the retired Robert/Anastasia agent
+      // registry; importing it made those clinical persona charters part of
+      // the public bundle even though their routes were removed.
       '@genemap/shared/client': path.resolve(__dirname, '../../packages/shared/src/client.ts'),
       '@genemap/shared/schemas': path.resolve(__dirname, '../../packages/shared/src/schemas.ts'),
       '@genemap/shared/types': path.resolve(__dirname, '../../packages/shared/src/types.ts'),
-      '@genemap/shared': path.resolve(__dirname, '../../packages/shared/src/index.ts'),
+      '@genemap/shared': path.resolve(__dirname, '../../packages/shared/src/client.ts'),
     },
   },
   build: {
