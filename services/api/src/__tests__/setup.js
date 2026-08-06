@@ -70,14 +70,34 @@ export function createPrismaMock() {
     return next;
   };
 
+  const applyOrderBy = (records, orderBy) => {
+    const clauses = Array.isArray(orderBy) ? orderBy : orderBy ? [orderBy] : [];
+    if (!clauses.length) return records;
+    return [...records].sort((left, right) => {
+      for (const clause of clauses) {
+        for (const [field, direction] of Object.entries(clause)) {
+          const a = left[field];
+          const b = right[field];
+          if (a === b) continue;
+          if (a === null || a === undefined) return direction === 'desc' ? 1 : -1;
+          if (b === null || b === undefined) return direction === 'desc' ? -1 : 1;
+          if (a < b) return direction === 'desc' ? 1 : -1;
+          if (a > b) return direction === 'desc' ? -1 : 1;
+        }
+      }
+      return 0;
+    });
+  };
+
   const createModel = (name) => ({
     findMany: vi.fn(async (args = {}) => {
       let records = [...getStore(name)];
-      const { where, take, skip } = args;
+      const { where, take, skip, orderBy } = args;
 
       if (where) {
         records = records.filter((r) => matchWhere(r, where));
       }
+      records = applyOrderBy(records, orderBy);
       if (skip) records = records.slice(skip);
       if (take) records = records.slice(0, take);
       return records;
@@ -95,10 +115,11 @@ export function createPrismaMock() {
 
     findFirst: vi.fn(async (args = {}) => {
       let records = [...getStore(name)];
-      const { where } = args;
+      const { where, orderBy } = args;
       if (where) {
         records = records.filter((r) => matchWhere(r, where));
       }
+      records = applyOrderBy(records, orderBy);
       return records[0] || null;
     }),
 
