@@ -340,6 +340,7 @@ describe('publishable route decision', () => {
     '/genomics/vcf/parse',
     '/entities/medical-data/record-1',
     '/entities/conversations/conversation-1',
+    '/admin/self-test',
   ])('hides high-risk path %s', (url) => {
     expect(publicationBoundaryDecision({ url, body: {} })).toMatchObject({
       statusCode: 404,
