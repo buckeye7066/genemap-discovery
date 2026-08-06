@@ -325,6 +325,7 @@ describe('production launch verification', () => {
     ['JSONP media type', 'application/jsonp', 'no-store'],
     ['lookalike cache directive', 'application/json', 'public, x-no-store=1'],
     ['parameterized no-store directive', 'application/json', 'public, no-store=0'],
+    ['quoted comma decoy', 'application/json', 'public, foo="x,no-store,y"'],
   ])('rejects a deceptive release asset %s', async (_label, contentType, cacheControl) => {
     const approvedSha = 'a'.repeat(40);
     const fetchImpl = async (url) => {
