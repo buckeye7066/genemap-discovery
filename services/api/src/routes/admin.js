@@ -160,63 +160,6 @@ export default async function adminRoutes(fastify) {
   // are gated to super_admin only via per-route preHandler.
   const requireSuperAdmin = requireRole('super_admin');
 
-  /**
-   * Real backend self-test. Replaces the old "ask an LLM to pretend it ran
-   * tests" health check that reported "ALL TESTS PASSED" with zero checks.
-   * Each check actually exercises a dependency (DB reachability, core tables,
-   * required config) and contributes to honest pass/fail counts.
-   */
-  fastify.get('/self-test', async () => {
-    const startedAt = Date.now();
-    const checks = [];
-    const record = async (name, fn) => {
-      try {
-        const detail = await fn();
-        checks.push({ name, ok: true, detail: detail ?? 'ok' });
-      } catch (err) {
-        checks.push({ name, ok: false, detail: err?.message || String(err) });
-      }
-    };
-
-    await record('database.connectivity', async () => {
-      await prisma.$queryRaw`SELECT 1`;
-      return 'reachable';
-    });
-    await record('database.users', async () => `${await prisma.user.count()} rows`);
-    await record('database.learningSessions', async () => `${await prisma.learningSession.count()} rows`);
-    await record('database.subscriptions', async () => `${await prisma.subscription.count()} rows`);
-    await record('database.userActivity', async () => `${await prisma.userActivity.count()} rows`);
-
-    const env = fastify.env;
-    await record('config.llmProvider', async () => {
-      if (!env.OPENAI_API_KEY && !env.ANTHROPIC_API_KEY) {
-        throw new Error('Neither OPENAI_API_KEY nor ANTHROPIC_API_KEY is configured');
-      }
-      return env.OPENAI_API_KEY ? 'openai key present' : 'anthropic key present';
-    });
-    await record('config.stripe', async () => {
-      if (!env.STRIPE_SECRET_KEY) throw new Error('STRIPE_SECRET_KEY not configured');
-      return 'configured';
-    });
-    await record('config.medicalEncryption', async () => {
-      if (!env.hasMedicalEncryption()) throw new Error('MEDICAL_DATA_ENCRYPTION_KEY missing or invalid');
-      return 'valid 32-byte key';
-    });
-
-    const checked = checks.length;
-    const failed = checks.filter((c) => !c.ok).length;
-    const passed = checked - failed;
-    const errorReport = checks
-      .map((c) => `[${c.ok ? 'PASS' : 'FAIL'}] ${c.name}: ${c.detail}`)
-      .join('\n');
-
-    return {
-      ok: checked > 0 && failed === 0,
-      data: { checked, passed, failed, skipped: 0, errorReport, checks },
-      run_duration_ms: Date.now() - startedAt,
-    };
-  });
-
   fastify.get('/users', async (request) => {
     const { search, page = 1, limit = 50 } = request.query;
     const skip = (page - 1) * limit;
