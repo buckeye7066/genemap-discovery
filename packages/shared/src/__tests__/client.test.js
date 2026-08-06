@@ -299,6 +299,7 @@ describe('Publication boundary', () => {
     'enrichVcfCohort',
     'searchClinicalTrials',
     'getClinicalTrial',
+    'runFunctionTests',
   ];
 
   for (const method of retiredMethods) {
