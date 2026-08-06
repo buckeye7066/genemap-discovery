@@ -1,121 +1,81 @@
 # Production Launch Verification
 
-Use this runbook after CI is green and before real users are admitted. The goal
-is to make the remaining launch caveats explicit, evidenced, and repeatable:
-production secrets, backups, monitoring, Stripe live webhooks, data retention,
-and legal/compliance review.
+This runbook is a no-go checklist, not proof that production is ready. Use it
+only after the publication-remediation and privacy-lifecycle changes are merged
+and the exact release SHA has passed every required gate.
 
-## 1. Configure Production Secrets
+`scripts/verify-production-launch.mjs` validates the shape and freshness of a
+human-supplied evidence file plus selected live HTTP responses. It does not
+query provider consoles, schedulers, backup stores, legal records, or deployment
+history. A passing result cannot make an unsupported statement true.
 
-Store real secrets only in the deployment providers or a secret manager. Do not
-commit them to the repository.
+## Current boundary
 
-Required API runtime values are documented in `services/api/.env.example` and
-are enforced by `services/api/src/config/env.js`. In production, the API refuses
-to start unless required secrets are present and strong enough.
+The repository contains code for:
 
-Minimum launch expectations:
+- production environment validation and live health/readiness probes;
+- publication-boundary unit, integration, browser, and built-artifact checks;
+- fail-closed encrypted manual backup creation;
+- one-shot local privacy maintenance for finite deletion retries and expired
+  sessions.
 
-- `NODE_ENV=production`
-- `DATABASE_URL` points to production PostgreSQL.
-- `JWT_SECRET`, `JWT_REFRESH_SECRET`, and `COOKIE_SECRET` are newly generated
-  random values with at least 32 characters.
-- `MEDICAL_DATA_ENCRYPTION_KEY` is a 64-character hex AES-256-GCM key.
-- `CORS_ORIGINS` contains only production HTTPS origins.
-- `STRIPE_SECRET_KEY` is live-mode and starts with `sk_live_`.
-- `STRIPE_WEBHOOK_SECRET` is copied from the live Stripe webhook endpoint.
-- At least one LLM provider key is configured, unless LLM features are
-  intentionally disabled with `SKIP_LLM_KEY_CHECK=1`.
+Those controls are not yet operational proof. In particular, the repository
+does not prove:
 
-## 2. Configure Backups
+- an automatic backup schedule, retention/expiry, key custody, deletion
+  propagation, or a current successful restore drill;
+- a production schedule, alert, owner, or run history for
+  `pnpm privacy:maintenance`;
+- processor deletion propagation or an external restore-tombstone journal;
+- approved TTLs for search, activity, support, audit, or other retained data;
+- content-scrubbed error tracking, log aggregation, alert routing, or on-call
+  escalation;
+- provider regions, contracts, retention, subprocessors, or completed
+  legal/compliance review;
+- coordinated web/API release metadata and a boundary-preserving rollback.
 
-Before launch:
+Raw browser error forwarding, owner error emails, and Sentry ingestion are
+disabled in the publication remediation. Do not describe them as active or
+enable their old configuration without a new data-minimization review and
+regression tests.
 
-- Enable Railway PostgreSQL automatic backups.
-- Set retention to at least 7 days, preferably 30 days.
-- Create one manual backup before cutover.
-- Restore a recent backup into a non-production database and verify table
-  counts and login-critical records.
-- Record the backup and restore evidence in `ops/production-launch-evidence.json`.
+## Evidence required before launch
 
-See `docs/BACKUP.md` for backup and restore procedures.
+Record evidence tied to the exact approved release SHA for all of the following:
 
-## 3. Configure Monitoring and Alerting
+1. Production secrets are stored in the intended secret managers and were
+   generated or rotated for this release. Do not record secret values.
+2. Backups are scheduled, encrypted, retained and expired under an approved
+   policy; key custody is documented; and a recent restore drill succeeded.
+3. `pnpm privacy:maintenance` runs from an externally evidenced scheduler,
+   failures alert an accountable owner, and its run history is retained.
+4. Monitoring, logs, alerts, and escalation are configured with reviewed
+   content-scrubbing rules.
+5. Stripe live prices and the signed webhook endpoint are configured and a
+   recent test event succeeded.
+6. The data-retention policy, processor register, deletion scope, backup
+   behavior, and unresolved external propagation limits have owner approval.
+7. Legal/compliance review is recorded. Do not infer HIPAA, BAA, or clinical
+   readiness from application code.
+8. The web and API report the approved release identity, all negative
+   publication-boundary journeys pass, and a boundary-preserving rollback
+   artifact has been exercised.
 
-Error tracking is **wired and ready** — it just needs a DSN to activate:
+## Create the evidence record
 
-- **API:** set `SENTRY_DSN` in Railway (`@sentry/node` is initialized in
-  `services/api/src/config/sentry.js` and captures every 5xx via the error
-  handler). No DSN = no-op, so the app is unaffected until you opt in.
-- **Web:** set `VITE_SENTRY_DSN` in the Vercel project (`@sentry/react` is
-  initialized in `apps/web/lib/sentry.js`; the ErrorBoundary also reports React
-  render errors). Rebuild/redeploy so Vercel bakes the value in.
-- Errors are **also** emailed to the owner via the existing client-error ingest
-  + `reportErrorToOwner` pipeline, independent of Sentry.
-
-Still configure: log aggregation (Railway API + Vercel web logs); alerts for API
-5xx spikes, `/readyz` failures, DB connection failures, Stripe webhook failures,
-high auth error rates, and unusual LLM error/cost spikes; a dashboard URL and an
-on-call escalation path. Record the dashboard URL and escalation path in the
-launch evidence file.
-
-Monitoring coverage in this repo:
-
-- `.github/workflows/production-smoke.yml` — scheduled + manual live checks for
-  the web shell, API `/healthz` and `/readyz` (incl. `medicalEncryption=true`),
-  production CORS, **API and web security headers**, and a **Chromium e2e** of
-  the public/auth surface (login, legal pages, redirects).
-- Per-PR gates in `.github/workflows/ci.yml` (lint, typecheck, unit + Postgres
-  integration tests, migration diff, Docker build, dependency audit).
-
-These are strong signals but do not replace dedicated error tracking (Sentry,
-above), log aggregation, alert routing, or backup/restore evidence.
-
-## 4. Configure Stripe Live Webhooks
-
-In the live Stripe dashboard:
-
-1. Create products and prices for all individual and institutional plans.
-2. Configure the webhook endpoint:
-   `https://<production-api-host>/billing/webhook`
-3. Enable these events:
-   - `checkout.session.completed`
-   - `customer.subscription.created`
-   - `customer.subscription.updated`
-   - `customer.subscription.deleted`
-   - `invoice.payment_succeeded`
-   - `invoice.payment_failed`
-4. Copy the live webhook signing secret to `STRIPE_WEBHOOK_SECRET`.
-5. Run a live-mode or Stripe-approved production validation flow and record the
-   timestamp in the launch evidence file.
-
-## 5. Approve Retention and Compliance
-
-Review `docs/DATA_RETENTION.md` before launch. The launch evidence must record:
-
-- Data retention policy approval.
-- Deletion request SLA.
-- Backup retention period.
-- Legal and compliance review completion or formal waiver.
-- Medical/genomics disclaimer approval.
-- BAA status as `signed` or `not_required`.
-
-## 6. Create Launch Evidence
-
-Copy the example evidence file and fill it with production facts. The filled
-file is ignored by git because it can contain internal operational details.
+Copy either example and replace every placeholder only with a verified fact:
 
 ```bash
-mkdir -p ops
 cp docs/production-launch-evidence.example.json ops/production-launch-evidence.json
 ```
 
-Do not include secrets in the evidence file. It should contain proof that the
-secrets exist in the right systems, not the secret values themselves.
+The filled file is intentionally git-ignored. Keep links or identifiers for the
+underlying provider, scheduler, restore, legal, processor, and deployment
+records. Never copy an example value as proof.
 
-## 7. Run the Launch Verifier
+## Run the verifier
 
-Load production environment variables into the shell, then run:
+After loading the real production environment:
 
 ```bash
 pnpm launch:verify -- \
@@ -124,26 +84,24 @@ pnpm launch:verify -- \
   --evidence=ops/production-launch-evidence.json
 ```
 
-The verifier checks:
+`--skip-http` is an evidence-only diagnostic and intentionally cannot approve
+launch. CI's `--self-test` proves only that the verifier executes and fails
+closed against synthetic fixtures.
 
-- API production env validation through the same `loadEnv()` used at startup.
-- Production-only CORS and live Stripe key shape.
-- The launch evidence file for backups, monitoring, Stripe events, retention,
-  and legal/compliance sign-off.
-- `/healthz` and `/readyz`, including `medicalEncryption=true`.
-- The deployed web app returns HTML over HTTPS.
+## Go / no-go
 
-For an evidence-only dry run, use `--skip-http`. That mode exits non-zero and
-cannot be used as launch approval because it does not prove the live API or web
-deployment.
+Launch is no-go unless:
 
-## 8. Go / No-Go Rule
+- the exact approved merge SHA, not a synthetic merge or older head, has green
+  CI, web tests, browser journeys, artifact scanning, migrations, and security
+  checks;
+- the full verifier passes against the exact deployed web and API release;
+- every evidence item above has an inspectable current record;
+- publication-boundary, privacy, scientific, and rollback acceptance is
+  independently reviewed; and
+- no unresolved high-risk review finding remains.
 
-Go only when all of these are true:
-
-- Latest `main` CI is green.
-- `pnpm audit --audit-level=low` reports no known vulnerabilities.
-- `pnpm launch:verify` exits 0 against production URLs and evidence.
-- The backup restore test is complete.
-- Legal/compliance ownership has signed or formally waived the applicable
-  healthcare/privacy requirements.
+The present privacy lifecycle covers only three legacy local data categories
+(`medicalData`, `aiConversations`, and `searchHistory`) plus expired
+sessions. It is material progress, not completion of the privacy, retention,
+processor, backup, or restore obligations.
