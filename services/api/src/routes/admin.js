@@ -2,6 +2,7 @@ import { authenticate, requireRole } from '../middleware/auth.js';
 import { createAuditLog } from '../utils/audit.js';
 import { ValidationError, NotFoundError } from '../utils/errors.js';
 import { FREE_PERIOD_DAYS, computeFreePeriodEnd, grantOrExtendFreePeriod } from '../utils/freePeriod.js';
+import { SELF_SERVICE_PURGE_TYPES } from '../services/privacyMaintenance.js';
 
 const SAFE_ACTIVITY_TYPES = Object.freeze(['page_view', 'gene_view']);
 const SAFE_SEARCH_TYPES = Object.freeze(['free', 'premium', 'general']);
@@ -710,13 +711,10 @@ export default async function adminRoutes(fastify) {
     return { success: true };
   });
 
-  // Hard-delete a user and (via onDelete: Cascade on every user-owned
-  // relation in schema.prisma) all their data. Reserved to super_admin; the
-  // UI's confirm dialog promises permanent deletion, so this must actually
-  // remove the row — the old soft-ban here left "deleted" users in the list.
-  // The param accepts a user id OR an email: the deployed web app has sent
-  // both across versions, and an unknown identifier must be a 404, not a
-  // Prisma P2025 500.
+  // Delete the local account and cascade-owned database rows. This does not
+  // claim processor, backup, or legal-record deletion. Consent and deletion
+  // lifecycle evidence is retained under a pseudonymous subject reference.
+  // The param accepts a user id OR an email for deployed-client compatibility.
   fastify.delete('/users/:idOrEmail', { preHandler: requireSuperAdmin }, async (request) => {
     const { idOrEmail } = request.params;
 
@@ -732,23 +730,52 @@ export default async function adminRoutes(fastify) {
       throw new ValidationError('Cannot delete a super admin account');
     }
 
-    // Write the audit entry BEFORE the delete: AuditLog.userId references the
-    // acting admin (not the target), so it survives the cascade, but ordering
-    // it first guarantees a trace exists even if the delete itself fails.
-    await createAuditLog(
-      prisma,
-      {
-        userId: request.user.userId,
-        action: 'delete_user',
-        entityType: 'user',
-        entityId: user.id,
-        metadata: { email: user.email },
-      },
-      { required: true }
-    );
+    const now = new Date();
+    await prisma.$transaction(async (tx) => {
+      // Retained consent evidence must not keep network identifiers or
+      // caller-supplied free-form metadata after account deletion.
+      await tx.consentRecord.updateMany({
+        where: { userId: user.id },
+        data: { ipAddress: null, metadata: null },
+      });
 
-    await prisma.user.delete({ where: { id: user.id } });
+      // Deleting the account cascades all three rows covered by the finite
+      // self-service scope, so any open request can be truthfully finalized.
+      await tx.dataDeletionRequest.updateMany({
+        where: {
+          userId: user.id,
+          status: { in: ['pending', 'processing', 'retry_scheduled', 'operator_review'] },
+        },
+        data: {
+          status: 'completed',
+          completedAt: now,
+          deletedTypes: [...SELF_SERVICE_PURGE_TYPES],
+          nextAttemptAt: null,
+          leaseExpiresAt: null,
+          failureCode: null,
+        },
+      });
 
-    return { success: true };
+      await tx.user.delete({ where: { id: user.id } });
+
+      // The transaction prevents a success-looking audit record if deletion
+      // fails. No target email or other direct profile field is retained.
+      await createAuditLog(
+        tx,
+        {
+          userId: request.user.userId,
+          action: 'local_account_deleted',
+          entityType: 'user',
+          entityId: user.id,
+          metadata: {
+            scope: 'local_database_account',
+            retainedPrivacyEvidence: true,
+          },
+        },
+        { required: true }
+      );
+    });
+
+    return { success: true, scope: 'local_database_account' };
   });
 }
