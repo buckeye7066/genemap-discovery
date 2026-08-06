@@ -428,17 +428,17 @@ export async function checkHttpEndpoints(opts) {
     );
     const contentType = response.headers?.get?.('content-type') || '';
     const mediaType = contentType.split(';', 1)[0].trim().toLowerCase();
-    const cacheDirectives = (response.headers?.get?.('cache-control') || '')
-      .split(',')
-      .map((directive) => directive.trim().toLowerCase())
-      .filter(Boolean);
+    const cacheControl = (response.headers?.get?.('cache-control') || '')
+      .trim()
+      .toLowerCase()
+      .replace(/\s*,\s*/gu, ', ');
     const keys = body && typeof body === 'object' && !Array.isArray(body)
       ? Object.keys(body)
       : [];
     checks.push(
       response.status === 200
       && mediaType === 'application/json'
-      && cacheDirectives.includes('no-store')
+      && cacheControl === 'no-store, max-age=0'
       && keys.length === 1
       && keys[0] === 'releaseSha'
       && body.releaseSha === approvedSha
