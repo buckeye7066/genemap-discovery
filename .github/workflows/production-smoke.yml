@@ -59,6 +59,8 @@ jobs:
           const probes = [
             { method: 'GET', path: '/clinical-trials/search?gene=BRCA1' },
             { method: 'POST', path: '/genomics/vcf/parse', body: {} },
+            { method: 'GET', path: '/genomics/variant/search?q=rs123' },
+            { method: 'GET', path: '/genomics/clinvar/search?q=BRCA1' },
             { method: 'GET', path: '/entities/medical-data' },
             { method: 'GET', path: '/entities/conversations' },
           ];
