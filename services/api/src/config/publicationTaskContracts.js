@@ -123,6 +123,13 @@ const OBJECTIVE_LABELS = Object.freeze({
   cohort_summary: 'summarize cohort-level research patterns and limitations',
 });
 
+function hasForbiddenControlCharacter(value) {
+  return Array.from(value).some((character) => {
+    const codePoint = character.codePointAt(0);
+    return codePoint <= 0x1f || codePoint === 0x7f;
+  });
+}
+
 function isPlainObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
     && (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null);
@@ -306,7 +313,7 @@ function normalizeResolvedHpo(value, expectedIdentifier) {
     || !HPO_ID.test(identifier)
     || !canonicalLabel
     || canonicalLabel.length > 256
-    || /[\u0000-\u001f\u007f]/u.test(canonicalLabel)
+    || hasForbiddenControlCharacter(canonicalLabel)
     || value.source !== HPO_RESOLVER_SOURCE
     || value.apiVersion !== HPO_API_VERSION
     || value.obsolete !== false
@@ -330,7 +337,7 @@ function normalizeResolvedMondo(value, expectedIdentifier) {
     || !MONDO_ID.test(identifier)
     || !canonicalLabel
     || canonicalLabel.length > 256
-    || /[\u0000-\u001f\u007f]/u.test(canonicalLabel)
+    || hasForbiddenControlCharacter(canonicalLabel)
     || value.source !== MONDO_RESOLVER_SOURCE
     || value.apiVersion !== MONDO_API_VERSION
   ) return null;
