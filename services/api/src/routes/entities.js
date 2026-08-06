@@ -777,7 +777,7 @@ export default async function entityRoutes(fastify) {
       const created = await tx.consentRecord.create({
         data: {
           userId: request.user.userId,
-          subjectRef: request.user.userId,
+          subjectRef: request.user.privacySubjectRef,
           consentType,
           version,
           granted,
@@ -818,7 +818,7 @@ export default async function entityRoutes(fastify) {
       const created = await tx.dataDeletionRequest.create({
         data: {
           userId: request.user.userId,
-          subjectRef: request.user.userId,
+          subjectRef: request.user.privacySubjectRef,
           scope: PRIVACY_DELETION_SCOPE,
           status: 'pending',
           requestedAt: now,
