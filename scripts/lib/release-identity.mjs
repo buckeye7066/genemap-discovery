@@ -156,6 +156,18 @@ export function extractWebReleaseSha(html) {
     // No element may appear outside the one explicit html root.
     if (stack.length === 0) return null;
 
+    // The source-controlled Vite shell uses an explicit head immediately under
+    // html. Seeing body or any other element first moves a browser beyond the
+    // document-head phase, so a later head-shaped tag cannot be evidence.
+    if (
+      headCount === 0
+      && stack.length === 1
+      && stack[0] === 'html'
+      && tag.name !== 'head'
+    ) {
+      return null;
+    }
+
     if (tag.name === 'head') {
       // The generated shell must have one explicit head directly under html.
       // A head-shaped string in body/script or a browser-invalid body/head
