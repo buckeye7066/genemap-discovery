@@ -190,4 +190,22 @@ describe('clinical publishing boundary', () => {
     expect(searchService).toContain('query: queryReference');
     expect(searchService).not.toContain('query: { kind: this.queryKind');
   });
+
+  it('keeps surviving UI state aligned with bounded publication contracts', () => {
+    const hypothesis = read('../../components/research/HypothesisGenerator.jsx');
+    expect(hypothesis).toContain("setFocusConceptId(parsed.focus?.conceptId || '')");
+    expect(hypothesis).toContain('<option value="" disabled>Choose a reviewed concept</option>');
+
+    const searchService = read('../../components/search/PhenotypeSearchService.jsx');
+    const search = read('../../pages/Search.jsx');
+    const dashboard = read('../../pages/Dashboard.jsx');
+    expect(searchService).toContain('publicationReference: queryReference');
+    expect(search).toContain('publicationReference: enriched.publicationReference || null');
+    expect(dashboard).toContain('.map(publicationReferenceFromSearchHistoryEntry)');
+
+    const geneCard = read('../../components/search/GeneCard.jsx');
+    expect(geneCard).not.toContain('You are Robert, an AI genetic variant interpretation specialist');
+    expect(geneCard).toContain('Personal variant interpretation is not available');
+  });
+
 });
