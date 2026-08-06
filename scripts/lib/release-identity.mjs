@@ -138,29 +138,32 @@ export function extractWebReleaseSha(html) {
     if (tag.kind === 'declaration') continue;
     if (tag.kind !== 'tag') return null;
 
-    if (!inHead) {
-      if (!tag.closing && tag.name === 'head') {
-        headCount += 1;
-        if (headCount !== 1 || tag.selfClosing) return null;
-        inHead = true;
-      }
-      continue;
-    }
-
-    if (tag.closing && tag.name === 'head') {
-      if (stack.length !== 0) return null;
-      inHead = false;
-      continue;
-    }
-    if (!tag.closing && tag.name === 'head') return null;
-
     if (tag.closing) {
       if (stack.length === 0 || stack.at(-1) !== tag.name) return null;
       stack.pop();
+      if (tag.name === 'head') inHead = false;
       continue;
     }
 
-    if (tag.name === 'meta' && stack.length === 0) {
+    if (tag.name === 'head') {
+      // The generated shell must have one explicit head directly under html.
+      // A head-shaped string in body/script or a browser-invalid body/head
+      // sequence is never accepted as release evidence.
+      if (
+        headCount !== 0
+        || tag.selfClosing
+        || stack.length !== 1
+        || stack[0] !== 'html'
+      ) {
+        return null;
+      }
+      headCount = 1;
+      inHead = true;
+      stack.push('head');
+      continue;
+    }
+
+    if (tag.name === 'meta' && inHead && stack.at(-1) === 'head') {
       if (!tag.validAttributes) return null;
       if ((tag.attributes.get('name') || '').toLowerCase() === 'genemap-release-sha') {
         candidates.push(tag.attributes.get('content') || '');
