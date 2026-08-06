@@ -1,50 +1,53 @@
 {
-  "reviewedBy": "REPLACE — name of the person signing off on launch",
-  "reviewedAt": "REPLACE — ISO date of sign-off, e.g. 2026-07-01T00:00:00Z",
+  "reviewedBy": "REPLACE_WITH_REVIEWER",
+  "reviewedAt": "REPLACE_WITH_CURRENT_ISO_TIMESTAMP",
   "productionSecrets": {
-    "storedInSecretManager": true,
-    "rotatedForLaunch": true,
-    "manager": "Railway (API) + Vercel (web) environment variables"
+    "storedInSecretManager": false,
+    "rotatedForLaunch": false,
+    "manager": "REPLACE_WITH_SECRET_MANAGER_EVIDENCE"
   },
   "backups": {
-    "automaticBackupsEnabled": true,
-    "retentionDays": 7,
-    "lastSuccessfulBackupAt": "REPLACE — ISO date of most recent automated backup",
-    "restoreTestedAt": "2026-06-30T00:00:00Z",
+    "automaticBackupsEnabled": false,
+    "retentionDays": 0,
+    "lastSuccessfulBackupAt": "REPLACE_WITH_CURRENT_ISO_TIMESTAMP",
+    "restoreTestedAt": "REPLACE_WITH_CURRENT_ISO_TIMESTAMP",
     "restoreRunbook": "docs/BACKUP.md"
   },
   "monitoring": {
-    "errorTrackingConfigured": true,
-    "logAggregationConfigured": true,
-    "alertingConfigured": true,
-    "dashboardUrl": "https://railway.app/project/REPLACE",
-    "pagerEscalation": "Owner error-report emails to dr.johnwhite@axiombiolabs.org (see services/api errorReporter); optional Sentry via SENTRY_DSN"
+    "errorTrackingConfigured": false,
+    "logAggregationConfigured": false,
+    "alertingConfigured": false,
+    "dashboardUrl": "REPLACE_WITH_HTTPS_DASHBOARD_URL",
+    "pagerEscalation": "REPLACE_WITH_ESCALATION_EVIDENCE"
   },
   "stripe": {
-    "liveMode": true,
-    "webhookEndpoint": "https://genemap-api-production.up.railway.app/billing/webhook",
-    "webhookEvents": [
-      "checkout.session.completed",
-      "customer.subscription.created",
-      "customer.subscription.updated",
-      "customer.subscription.deleted",
-      "invoice.payment_succeeded",
-      "invoice.payment_failed"
-    ],
-    "lastWebhookTestAt": "REPLACE — ISO date you last sent a test event from the Stripe dashboard"
+    "liveMode": false,
+    "webhookEndpoint": "REPLACE_WITH_HTTPS_API_URL/billing/webhook",
+    "webhookEvents": [],
+    "lastWebhookTestAt": "REPLACE_WITH_CURRENT_ISO_TIMESTAMP"
   },
   "dataRetention": {
-    "policyApproved": true,
+    "policyApproved": false,
     "policyDocument": "docs/DATA_RETENTION.md",
-    "deletionRequestSlaDays": 30,
-    "backupRetentionDays": 7
+    "deletionRequestSlaDays": 0,
+    "backupRetentionDays": 0,
+    "privacyMaintenanceScheduled": false,
+    "privacyMaintenanceEvidence": "REPLACE_WITH_SCHEDULER_AND_RUN_HISTORY",
+    "externalDeletionReconciliation": false
   },
   "legalCompliance": {
-    "legalReviewCompleted": true,
-    "complianceReviewCompleted": true,
-    "reviewer": "REPLACE — reviewing attorney / compliance owner",
-    "reviewedAt": "REPLACE — ISO date of legal/compliance review",
-    "medicalDisclaimerApproved": true,
-    "baaStatus": "not_required"
+    "legalReviewCompleted": false,
+    "complianceReviewCompleted": false,
+    "reviewer": "REPLACE_WITH_COUNSEL_OR_COMPLIANCE_OWNER",
+    "reviewedAt": "REPLACE_WITH_CURRENT_ISO_TIMESTAMP",
+    "medicalDisclaimerApproved": false,
+    "baaStatus": "REPLACE_WITH_SIGNED_OR_NOT_REQUIRED"
+  },
+  "release": {
+    "approvedSha": "REPLACE_WITH_IMMUTABLE_RELEASE_SHA",
+    "webSha": "REPLACE_WITH_DEPLOYED_WEB_SHA",
+    "apiSha": "REPLACE_WITH_DEPLOYED_API_SHA",
+    "boundaryPreservingRollbackTested": false,
+    "rollbackEvidence": "REPLACE_WITH_ROLLBACK_EVIDENCE"
   }
 }
