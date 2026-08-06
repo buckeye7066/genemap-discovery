@@ -328,6 +328,16 @@ describe('production launch verification', () => {
     ]));
   });
 
+  it('keeps production smoke on the tested head parser and rejects redirects', () => {
+    const workflow = readFileSync(
+      new URL('../../../../.github/workflows/production-smoke.yml', import.meta.url),
+      'utf8'
+    );
+    expect(workflow).toContain("extractWebReleaseSha");
+    expect(workflow).toContain("--proto '=https'");
+    expect(workflow).not.toContain('--location');
+  });
+
   it('self-test executes env, evidence, and live release checks end-to-end', async () => {
     // This is what the release gate runs instead of `node --check`: it imports
     // env.js and exercises env, evidence, HTTP publication-mode, and deployed
