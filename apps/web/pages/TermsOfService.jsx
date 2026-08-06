@@ -6,7 +6,7 @@ import { FileText, ArrowLeft } from "lucide-react";
  * Terms for the public education/research product. These terms mirror the
  * publication boundary enforced in both the web app and API.
  */
-const UPDATED = "August 5, 2026";
+const UPDATED = "August 6, 2026";
 const CONTACT = "support@axiombiolabs.org";
 
 function Section({ title, children }) {
@@ -60,10 +60,12 @@ export default function TermsOfService() {
 
           <Section title="Publication boundary">
             <p>
-              The published service does not accept personal medical records or genomic files for analysis and
-              does not provide diagnosis, individualized risk interpretation, clinical decision support,
-              pharmacogenomic recommendations, medication selection, or dosing. Do not try to use or bypass
-              GeneMap for those purposes.
+              The public route graph does not provide personal medical-record upload, personal VCF analysis,
+              diagnosis, individualized risk interpretation, clinical decision support, pharmacogenomic
+              recommendations, medication selection, or dosing. Profile, project, annotation, and support
+              fields can still accept free text. You must not submit personal medical records, personal genomic
+              files, protected health information, or patient-identifying information in any field, or try to
+              use or bypass GeneMap for clinical purposes.
             </p>
           </Section>
 
@@ -86,9 +88,11 @@ export default function TermsOfService() {
           <Section title="Your content">
             <p>
               You retain ownership of research prompts, notes, and other content you submit. You grant us a
-              limited license to process it solely to provide the service, including sending relevant prompts
-              to AI providers acting as our processors. You must have the right to submit that content, and you
-              must not submit personal medical, genomic, or patient-identifying information. See our{" "}
+              limited license to process it solely to provide the service, including sending bounded task
+              inputs to the configured AI provider and identifiers or search terms to the scientific lookup
+              services described in the Privacy Policy. You must have the right to submit that content, and
+              you must not submit personal medical, genomic, protected-health, or patient-identifying
+              information. See our{" "}
               <Link to="/privacypolicy" className="text-blue-600 hover:underline">Privacy Policy</Link>.
             </p>
           </Section>
