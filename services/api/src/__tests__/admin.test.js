@@ -335,6 +335,7 @@ describe('GET /admin/analytics', () => {
     });
 
     expect(res.statusCode).toBe(200);
+    expect(res.headers['cache-control']).toBe('private, no-store');
     const body = JSON.parse(res.body);
     expect(Object.keys(body).sort()).toEqual([
       'activityTypeBreakdown',
