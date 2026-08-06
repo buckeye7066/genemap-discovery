@@ -302,6 +302,13 @@ jobs:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/genemap_privacy_upgrade
     steps:
       - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: 'pnpm'
+      - name: Install (frozen lockfile)
+        run: pnpm install --frozen-lockfile
       - name: Populated privacy migration upgrade
         run: bash scripts/__tests__/privacy-migration-upgrade.sh
 
