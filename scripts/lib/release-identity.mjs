@@ -115,6 +115,7 @@ export function extractWebReleaseSha(html) {
   if (typeof html !== 'string') return null;
 
   let index = 0;
+  let htmlCount = 0;
   let headCount = 0;
   let inHead = false;
   const stack = [];
@@ -144,6 +145,16 @@ export function extractWebReleaseSha(html) {
       if (tag.name === 'head') inHead = false;
       continue;
     }
+
+    if (tag.name === 'html') {
+      if (htmlCount !== 0 || tag.selfClosing || stack.length !== 0) return null;
+      htmlCount = 1;
+      stack.push('html');
+      continue;
+    }
+
+    // No element may appear outside the one explicit html root.
+    if (stack.length === 0) return null;
 
     if (tag.name === 'head') {
       // The generated shell must have one explicit head directly under html.
@@ -175,7 +186,7 @@ export function extractWebReleaseSha(html) {
     }
   }
 
-  if (headCount !== 1 || inHead || stack.length !== 0) return null;
+  if (htmlCount !== 1 || headCount !== 1 || inHead || stack.length !== 0) return null;
   if (candidates.length !== 1) return null;
   return RELEASE_SHA_PATTERN.test(candidates[0]) ? candidates[0] : null;
 }
