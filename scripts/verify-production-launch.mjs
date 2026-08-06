@@ -426,12 +426,22 @@ export async function checkHttpEndpoints(opts) {
       `${webBase}/release-identity.json`,
       timeoutMs
     );
+    const contentType = response.headers?.get?.('content-type') || '';
+    const cacheControl = response.headers?.get?.('cache-control') || '';
+    const keys = body && typeof body === 'object' && !Array.isArray(body)
+      ? Object.keys(body)
+      : [];
     checks.push(
-      response.status === 200 && body?.releaseSha === approvedSha
-        ? pass('http.webReleaseSha', 'live web asset reports the approved release SHA')
+      response.status === 200
+      && contentType.includes('application/json')
+      && cacheControl.includes('no-store')
+      && keys.length === 1
+      && keys[0] === 'releaseSha'
+      && body.releaseSha === approvedSha
+        ? pass('http.webReleaseSha', 'live no-store JSON asset reports the approved release SHA')
         : fail(
           'http.webReleaseSha',
-          `live web release SHA does not match approved SHA (reported ${body?.releaseSha || 'missing'})`
+          `live web release asset is not exact no-store JSON for the approved SHA (status ${response.status})`
         )
     );
   } catch (err) {
@@ -606,8 +616,14 @@ export async function runSelfTest(now = new Date()) {
       status: 200,
       headers: {
         get(name) {
-          if (name.toLowerCase() !== 'content-type') return '';
-          return isWebShell ? 'text/html; charset=utf-8' : 'application/json';
+          const normalized = name.toLowerCase();
+          if (normalized === 'content-type') {
+            return isWebShell ? 'text/html; charset=utf-8' : 'application/json';
+          }
+          if (normalized === 'cache-control' && isReleaseAsset) {
+            return 'no-store, max-age=0';
+          }
+          return '';
         },
       },
       async text() {
