@@ -7,7 +7,7 @@ import { ShieldCheck, ArrowLeft } from "lucide-react";
  * published data flows and the fail-closed boundary around personal clinical
  * and genomic information. Have counsel review before commercial reliance.
  */
-const UPDATED = "August 5, 2026";
+const UPDATED = "August 6, 2026";
 const CONTACT = "dr.johnwhite@axiombiolabs.org";
 
 function Section({ title, children }) {
@@ -38,63 +38,166 @@ export default function PrivacyPolicy() {
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 md:p-8">
           <Section title="Who we are">
             <p>
-              GeneMap is an educational and research tool for understanding genetics, operated by Axiom
-              Biolabs. It is <strong>not a medical device</strong> and does not provide medical diagnosis or
-              treatment. AI-generated content may be inaccurate and must not be relied on for clinical
-              decisions.
+              GeneMap is operated by Axiom Biolabs for genetics education and exploratory early research.
+              It does not provide medical advice, diagnosis, treatment, individualized health-risk
+              interpretation, medication selection, or dosing. AI-generated content may be incomplete or
+              wrong and must not be used for clinical decisions.
+            </p>
+            <p>
+              The public service is not designed for clinical use and is not represented as HIPAA-compliant
+              or authorized to process protected health information. Do not submit personal medical records,
+              personal genomic files, protected health information, or information that identifies a patient.
             </p>
           </Section>
 
           <Section title="Information we collect">
             <ul className="list-disc ml-5 space-y-1">
-              <li><strong>Account data:</strong> email, and any name/phone/profile details you choose to add.</li>
-              <li><strong>Usage data:</strong> searches, topics viewed, quizzes, and AI conversations, used to power your dashboard, learning progress, and product analytics.</li>
-              <li><strong>Research content:</strong> learning prompts, gene or phenotype search terms, saved gene sets, and research-project notes you choose to provide. Do not include personal medical records, personal genomic files, or information that identifies a patient.</li>
-              <li><strong>Billing data:</strong> handled by Stripe; we never see or store full card numbers.</li>
+              <li>
+                <strong>Account and profile data:</strong> email, password hash, session records, education
+                level, and any name, phone number, age, study or research profile, profile image, and mailing
+                preference you choose to add.
+              </li>
+              <li>
+                <strong>Learning and usage data:</strong> topics viewed, quiz responses and scores, learning
+                progress, activity records, searches, and selected gene, HPO, or MONDO identifiers. New
+                phenotype and disease history uses normalized structured references; legacy search records
+                may remain.
+              </li>
+              <li>
+                <strong>Research and user content:</strong> bounded education or aggregate-research task
+                inputs and generated outputs, saved gene sets, research-project titles and descriptions,
+                project versions, annotations, and support messages.
+              </li>
+              <li>
+                <strong>Technical and security data:</strong> request IP and device metadata, requested
+                routes or assets, consent and audit records, exceptions, performance information, and
+                operational logs.
+              </li>
+              <li>
+                <strong>Billing data:</strong> customer and subscription identifiers, subscription status,
+                contact fields supplied to checkout, and webhook identifiers. Stripe-hosted payment surfaces
+                handle full card details.
+              </li>
+              <li>
+                <strong>Legacy data:</strong> earlier releases may have stored medical-record or
+                AI-conversation records. Encrypted legacy columns may remain in the hosted database, but the
+                public generation routes do not use them. You may request their export or deletion.
+              </li>
             </ul>
+          </Section>
+
+          <Section title="How we use information">
+            <p>
+              We use information to authenticate accounts, provide searches and structured education or
+              early-research features, record learning progress, maintain saved projects, process
+              subscriptions, respond to support and deletion requests, protect the service, and produce
+              aggregate operational analytics. We do not sell personal data or use it for third-party
+              advertising.
+            </p>
           </Section>
 
           <Section title="Publication-mode data boundary">
             <p>
-              The public version of GeneMap does not offer personal medical-record upload, VCF analysis,
-              diagnosis, individualized risk interpretation, pharmacogenomic recommendations, or medication
-              dosing. Those paths are blocked in both the interface and API. If an earlier version of GeneMap
-              stored information in your account, the public version does not use it for AI generation; contact
-              us to request export or deletion.
+              The public build does not provide routes for personal medical-record upload, personal VCF
+              analysis, diagnosis, individualized risk interpretation, pharmacogenomic recommendations,
+              medication selection, or dosing. Public model-execution routes accept only finite, versioned,
+              structured education and exploratory-research tasks. Free-text profile, project, annotation,
+              and support fields still exist, so do not place personal medical, genomic, or
+              patient-identifying information in any field.
             </p>
           </Section>
 
-          <Section title="How your data is protected">
+          <Section title="How your data is protected and accessed">
             <p>
               Authentication uses signed, HTTP-only cookies with CSRF protection, and production traffic is
-              served over HTTPS. Access to account data is scoped to the signed-in user. No online service can
-              guarantee absolute security, so avoid submitting sensitive personal information.
+              served over HTTPS. Account APIs apply authentication and role checks. Account data is not
+              accessible only to the account holder: authorized Axiom Biolabs operators may access account
+              and service records when needed for support, security, deletion, billing, or legal obligations.
+              Operator access must be role-restricted, logged, purpose-limited, and reviewed before release.
+              The administrator analytics endpoint is separately limited to totals and allowlisted aggregate
+              categories rather than raw searches, identities, medical or conversation records, or activity
+              metadata.
+            </p>
+            <p>
+              No online service can guarantee absolute security. Avoid submitting sensitive personal
+              information that GeneMap does not require.
             </p>
           </Section>
 
-          <Section title="AI processing & third parties">
+          <Section title="Service providers and scientific lookups">
+            <ul className="list-disc ml-5 space-y-1">
+              <li>
+                <strong>Vercel:</strong> active web host and CDN. It receives request IP and device metadata,
+                requested pages or static assets, and deployment logs. Application API content is served
+                from the separate API origin and is not intentionally submitted to Vercel as content.
+              </li>
+              <li>
+                <strong>Railway:</strong> active API and PostgreSQL host. It stores or processes account,
+                authentication and session data, research content, search history, projects, billing
+                identifiers, operational logs, and encrypted legacy medical or conversation columns.
+              </li>
+              <li>
+                <strong>OpenAI API and Anthropic API:</strong> OpenAI is the default text-generation provider
+                unless deployment configuration selects Anthropic as the alternate. The selected provider
+                receives versioned structured education or aggregate early-research inputs, resolved
+                gene or ontology identifiers, and generated output. Error-triage code may also send a
+                sanitized error name, message, and stack.
+              </li>
+              <li>
+                <strong>Stripe:</strong> processes web subscription checkout, customer and subscription
+                identifiers, supplied contact fields, subscription status, and webhook event identifiers.
+              </li>
+              <li>
+                <strong>Resend:</strong> if configured, processes recipient and sender addresses, subject
+                lines, and email content for service messages. Current code can send first-login identity
+                and error-report messages to an operator.
+              </li>
+              <li>
+                <strong>Sentry:</strong> if configured, receives exceptions, stack or application context,
+                routes, and performance telemetry. Disabling default PII collection does not guarantee that
+                application-supplied error context contains no personal data.
+              </li>
+              <li>
+                <strong>Redis rate-limit operator:</strong> if configured, receives rate-limit keys and
+                counters plus connection or health metadata. The production vendor, region, key fields, and
+                retention settings have not yet been documented.
+              </li>
+              <li>
+                <strong>NLM Clinical Tables, Monarch Initiative, and MyGene.info:</strong> active scientific
+                lookup services receive phenotype search text or exact HPO identifiers, disease search text
+                or exact MONDO identifiers, or human-gene symbols and fixed requested fields. These requests
+                originate from the API but may remain user-linked within GeneMap. These services are lookup
+                and follow-up sources, not automatic verification of an AI-generated claim and are not
+                represented here as contracted processors.
+              </li>
+            </ul>
             <p>
-              Learning prompts and exploratory research queries may be sent to third-party large-language-model
-              providers acting as our processors so GeneMap can return explanations, summaries, quizzes, and
-              candidate research leads. Do not include personal health or genomic information in prompts.
-              Payments are processed by Stripe. We do not sell personal data.
+              Exact production regions, provider retention and deletion settings, executed agreements,
+              subprocessor reviews, and deletion propagation have not yet been fully documented. No BAA or
+              clinical authorization is evidenced for the current production configuration. GeneMap does
+              not claim that its processor review, HIPAA readiness, or clinical readiness is complete.
             </p>
           </Section>
 
           <Section title="Your choices & rights">
             <ul className="list-disc ml-5 space-y-1">
-              <li>View and edit your profile at any time.</li>
-              <li>Request export or deletion of your account and associated data by contacting us.</li>
-              <li>Ask us to remove legacy records retained from an earlier version of the service.</li>
+              <li>View and edit the profile fields available in your account.</li>
+              <li>Request an export or deletion of your account and associated application data.</li>
+              <li>Ask us to identify and remove legacy records retained from an earlier release.</li>
               <li>Opt out of the mailing list from your profile settings.</li>
+              <li>Contact us for the scope and status of an export or deletion request.</li>
             </ul>
           </Section>
 
           <Section title="Data retention">
             <p>
-              We keep your data while your account is active. When you delete a record it is removed from
-              the application; when you request account deletion we remove or anonymize your personal data,
-              except where retention is legally required (e.g. billing records).
+              We retain account and application data while needed to operate the service and for support,
+              security, billing, or legal purposes. Fixed retention schedules for hosting logs, backups,
+              model-provider records, email, error telemetry, and rate-limit data have not yet been fully
+              documented. A deletion request may be subject to billing or legal-retention exceptions, and
+              deletion propagation to provider logs and backups has not yet been verified. We therefore do
+              not promise that deleting an application record immediately removes every provider or backup
+              copy.
             </p>
           </Section>
 
