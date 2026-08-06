@@ -30,7 +30,6 @@ const HIDDEN_PATH_PREFIXES = Object.freeze([
   '/entities/medical-data',
   '/entities/conversations',
 ]);
-const HIGH_RISK_AGENT_IDS = new Set(['robert', 'anastasia']);
 const MAX_PATH_DECODE_PASSES = 2;
 
 const ROUTE_OWNED_TASKS = new Map([
@@ -176,9 +175,11 @@ export function publicationBoundaryDecision({ url, routeUrl, body } = {}) {
     && (hasPathPrefix(path, '/llm') || hasPathPrefix(path, '/education'));
   if (!routeOwnedTask && !allowedClientTasks && !isUnknownGenerationRoute) return null;
 
-  const agent = typeof body?.agent === 'string' ? body.agent.trim().toLowerCase() : '';
-  if (HIGH_RISK_AGENT_IDS.has(agent)) {
-    return block('Personalized clinical AI is not available in this published build.');
+  const hasOwn = (value, key) => Boolean(
+    value && typeof value === 'object' && Object.prototype.hasOwnProperty.call(value, key)
+  );
+  if (hasOwn(body, 'agent') || hasOwn(body?.options, 'agent')) {
+    return block('Persona-routed generation is not available in this published build.');
   }
 
   const suppliedTask = requestedTask(body);
@@ -245,5 +246,4 @@ export const __test = {
   requestedTask,
   safeDecodePath,
   HIDDEN_PATH_PREFIXES,
-  HIGH_RISK_AGENT_IDS,
 };
