@@ -38,7 +38,7 @@ function checkEvidenceReference(id, value) {
 }
 
 function checkGitSha(id, value) {
-  return typeof value === 'string' && /^[a-f0-9]{40}$/iu.test(value)
+  return typeof value === 'string' && /^[a-f0-9]{40}$/u.test(value)
     ? pass(id, 'immutable 40-character release SHA recorded')
     : fail(id, 'immutable 40-character release SHA is required');
 }
@@ -197,8 +197,8 @@ export function validateEvidence(evidence, opts = {}) {
   const now = opts.now || new Date();
   const checks = [];
 
-  checks.push(isBlank(evidence?.reviewedBy)
-    ? fail('evidence.reviewedBy', 'reviewedBy is required')
+  checks.push(isPlaceholder(evidence?.reviewedBy)
+    ? fail('evidence.reviewedBy', 'current non-placeholder reviewedBy is required')
     : pass('evidence.reviewedBy', `reviewed by ${evidence.reviewedBy}`));
   checks.push(checkRecentDate('evidence.reviewedAt', evidence?.reviewedAt, 30, now));
 
@@ -209,8 +209,8 @@ export function validateEvidence(evidence, opts = {}) {
   checks.push(secrets.rotatedForLaunch === true
     ? pass('secrets.rotatedForLaunch', 'launch secrets were rotated/generated for launch')
     : fail('secrets.rotatedForLaunch', 'launch secrets must be newly generated or explicitly rotated'));
-  checks.push(isBlank(secrets.manager)
-    ? fail('secrets.manager', 'secret manager name is required')
+  checks.push(isPlaceholder(secrets.manager)
+    ? fail('secrets.manager', 'current non-placeholder secret manager evidence is required')
     : pass('secrets.manager', `secret manager recorded: ${secrets.manager}`));
 
   const backups = evidence?.backups || {};
@@ -237,8 +237,8 @@ export function validateEvidence(evidence, opts = {}) {
     ? pass('monitoring.alertingConfigured', 'alerting configured')
     : fail('monitoring.alertingConfigured', 'alerting rules must be configured'));
   checks.push(checkUrl('monitoring.dashboardUrl', monitoring.dashboardUrl, { requireHttps: true }));
-  checks.push(isBlank(monitoring.pagerEscalation)
-    ? fail('monitoring.pagerEscalation', 'pager/on-call escalation path is required')
+  checks.push(isPlaceholder(monitoring.pagerEscalation)
+    ? fail('monitoring.pagerEscalation', 'current non-placeholder escalation evidence is required')
     : pass('monitoring.pagerEscalation', 'pager/on-call escalation path recorded'));
 
   const stripe = evidence?.stripe || {};
@@ -293,7 +293,7 @@ export function validateEvidence(evidence, opts = {}) {
     checks.push(checkGitSha(`release.${field}`, release[field]));
   }
   if (
-    releaseShaFields.every((field) => /^[a-f0-9]{40}$/iu.test(String(release[field] || '')))
+    releaseShaFields.every((field) => /^[a-f0-9]{40}$/u.test(String(release[field] || '')))
     && release.webSha === release.approvedSha
     && release.apiSha === release.approvedSha
   ) {
@@ -313,8 +313,8 @@ export function validateEvidence(evidence, opts = {}) {
   checks.push(legal.complianceReviewCompleted === true
     ? pass('legal.complianceReviewCompleted', 'compliance review completed')
     : fail('legal.complianceReviewCompleted', 'compliance review must be completed or formally waived'));
-  checks.push(isBlank(legal.reviewer)
-    ? fail('legal.reviewer', 'legal/compliance reviewer is required')
+  checks.push(isPlaceholder(legal.reviewer)
+    ? fail('legal.reviewer', 'current non-placeholder legal/compliance reviewer is required')
     : pass('legal.reviewer', `legal/compliance reviewer recorded: ${legal.reviewer}`));
   checks.push(checkRecentDate('legal.reviewedAt', legal.reviewedAt, 365, now));
   checks.push(legal.medicalDisclaimerApproved === true
