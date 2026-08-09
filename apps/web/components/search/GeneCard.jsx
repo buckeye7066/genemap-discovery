@@ -57,10 +57,12 @@ function provenanceRoleLabel(claim) {
 }
 
 function groundedEvidenceSummary(partition = {}) {
+  const associationCount = (list) =>
+    (list || []).filter((c) => claimProvenanceRole(c) === 'association_evidence').length;
   const entries = [
-    ['human', partition.human?.length || 0],
-    ['model-organism', partition.animal?.length || 0],
-    ['computed', partition.computational?.length || 0],
+    ['human', associationCount(partition.human)],
+    ['model-organism', associationCount(partition.animal)],
+    ['computed', associationCount(partition.computational)],
   ].filter(([, count]) => count > 0);
   if (entries.length === 0) return null;
   return entries

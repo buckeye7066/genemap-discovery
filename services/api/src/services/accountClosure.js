@@ -154,10 +154,22 @@ export async function closeUserAccount({
     }
   }
 
-  const stripeResult = await cancelStripeResources(stripeClient, subscriptions);
   const receiptId = crypto.randomUUID();
   const scrubbedEmail = anonymizedEmail(normalizedEmail);
   const actorToken = deletedActorToken(user.id);
+
+  // Plan Stripe teardown but do not execute until after a successful DB commit.
+  const plannedSubscriptionIds = [...new Set(
+    subscriptions
+      .filter((subscription) => (
+        subscription.stripeSubscriptionId
+        && !CLOSED_SUBSCRIPTION_STATUSES.has(String(subscription.status || '').toLowerCase())
+      ))
+      .map((subscription) => subscription.stripeSubscriptionId),
+  )];
+  const plannedCustomerIds = [...new Set(
+    subscriptions.map((s) => s.stripeCustomerId).filter(Boolean),
+  )];
 
   const assignmentCounts = new Map();
   for (const assignment of seatAssignments) {
@@ -236,8 +248,9 @@ export async function closeUserAccount({
           receiptId,
           targetEmailHash: identityDigest(normalizedEmail, 32),
           actorMode,
-          stripeSubscriptionsCancelled: stripeResult.cancelledSubscriptions.length,
-          stripeCustomersDeleted: stripeResult.deletedCustomers.length,
+          // Record intended Stripe teardown counts; actual API calls occur post-commit.
+          stripeSubscriptionsCancelled: plannedSubscriptionIds.length,
+          stripeCustomersDeleted: plannedCustomerIds.length,
           institutionalSeatsRemoved: seatAssignments.length,
         },
       },
@@ -246,6 +259,15 @@ export async function closeUserAccount({
 
     await tx.user.delete({ where: { id: user.id } });
   });
+
+  // After the database changes are durably committed, perform Stripe teardown.
+  let stripeResult = { cancelledSubscriptions: [], deletedCustomers: [] };
+  try {
+    stripeResult = await cancelStripeResources(stripeClient, subscriptions);
+  } catch (err) {
+    // Do not throw after commit; log for follow-up and return zeroed counts.
+    console.warn('[accountClosure] Stripe teardown failed post-commit:', err?.message || err);
+  }
 
   return {
     success: true,

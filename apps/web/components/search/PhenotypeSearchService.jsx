@@ -118,6 +118,7 @@ export class PhenotypeSearchService {
         isPremium: effectivePremium,
         hpoTerms: [],
         queryType: analysis.queryType || 'phenotype',
+        publicationReference: queryReference,
         userPreferences,
         enriched: false,
       };

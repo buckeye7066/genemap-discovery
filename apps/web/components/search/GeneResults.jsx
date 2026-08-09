@@ -18,6 +18,7 @@ import {
   deriveRankingBasisFromClaims,
   partitionClaimsBySpecies,
   rankGenesByProvenance,
+  claimSortKey,
 } from "../../../../packages/shared/src/associationClaim.ts";
 
 function queryReferenceForResults(query, queryType) {
@@ -80,16 +81,17 @@ function summarizeEvidence(genes) {
   };
   for (const gene of genes || []) {
     const partition = gene.evidencePartition || partitionClaimsBySpecies(gene.associationClaims || []);
-    if (partition.human?.length) counts.human += 1;
-    if (partition.animal?.length) counts.animal += 1;
-    if (partition.computational?.length) counts.computational += 1;
+    // Count only genuine association evidence (exclude identity/ontology/follow-up and AI leads)
+    if ((partition.human || []).some((c) => claimSortKey(c) > 0)) counts.human += 1;
+    if ((partition.animal || []).some((c) => claimSortKey(c) > 0)) counts.animal += 1;
+    if ((partition.computational || []).some((c) => claimSortKey(c) > 0)) counts.computational += 1;
     if (partition.aiLeads?.length) counts.aiLead += 1;
   }
   return counts;
 }
 
 export default function GeneResults({ results, selectedGenes = [], onGeneSelect }) {
-  const { query, candidateGenes, isPremium, queryType } = results;
+  const { query, candidateGenes, isPremium, queryType, publicationReference } = results;
   const [filters, setFilters] = useState({
     symbol: "",
     name: "",
@@ -119,7 +121,7 @@ export default function GeneResults({ results, selectedGenes = [], onGeneSelect 
 
   useEffect(() => {
     const symbols = candidateSymbolKey ? candidateSymbolKey.split('|') : [];
-    const reference = queryReferenceForResults(query, queryType);
+    const reference = publicationReference || queryReferenceForResults(query, queryType);
     if (!reference || symbols.length === 0) {
       setEvidenceState({ status: 'unavailable', result: null });
       return undefined;
@@ -139,7 +141,7 @@ export default function GeneResults({ results, selectedGenes = [], onGeneSelect 
     return () => {
       active = false;
     };
-  }, [candidateSymbolKey, query, queryType]);
+  }, [candidateSymbolKey, query, queryType, publicationReference]);
 
   const evidenceGenes = useMemo(
     () => mergeAssociationEvidence(candidateGenes, evidenceState.result),
