@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useLocation, useNavigate, Link } from "react-router-dom";
-import { Dna, Loader2, LogIn, UserPlus, Wrench } from "lucide-react";
+import { CheckCircle2, Dna, Loader2, LogIn, UserPlus, Wrench } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -19,6 +19,7 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState(null);
+  const accountDeleted = new URLSearchParams(location.search).get('accountDeleted') === '1';
 
   // Runtime maintenance status. Render the static fallback immediately (no
   // flash of the wrong state), then follow the server's answer — the switch
@@ -126,6 +127,15 @@ export default function Login() {
             </div>
           </CardHeader>
           <CardContent>
+            {accountDeleted && (
+              <Alert className="mb-4 border-emerald-500/70 bg-emerald-950/60 text-emerald-50 [&_*]:text-emerald-50" role="status">
+                <CheckCircle2 className="h-4 w-4" />
+                <AlertDescription>
+                  Your GeneMap account was permanently deleted and the signed-in session was closed.
+                </AlertDescription>
+              </Alert>
+            )}
+
             <div className="mb-5 grid grid-cols-2 rounded-md border border-slate-700 p-1">
               <Button
                 type="button"
