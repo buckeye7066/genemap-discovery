@@ -3,6 +3,7 @@ import { checkEducationEntitlement, enforceUsageLimit, recordUsage } from '../mi
 import { generateExplanation } from '../services/llm.js';
 import { withHonestyPrefix } from '../services/scientificHonesty.js';
 import { assertNoRawGenomicLLM } from '../services/genomicGuard.js';
+import { sanitizePublicationTaskOutput } from '../services/publicationTaskOutput.js';
 import { createAuditLog } from '../utils/audit.js';
 import { ValidationError } from '../utils/errors.js';
 import { MAX_PROMPT_CHARS } from '../config/llmLimits.js';
@@ -153,6 +154,7 @@ export default async function llmRoutes(fastify) {
       timeoutMs: LLM_TIMEOUT_MS,
       allowGenomic,
     });
+    const safeResult = sanitizePublicationTaskOutput(publicationTask, taskInput, result);
 
     await recordUsage(prisma, request.user.userId, 'explanation', {
       maxTokens,
@@ -172,7 +174,7 @@ export default async function llmRoutes(fastify) {
       },
     });
 
-    return { result, disclaimer: 'For educational purposes only. Not medical advice.' };
+    return { result: safeResult, disclaimer: 'For educational purposes only. Not medical advice.' };
   });
 
   fastify.post('/chat', { preHandler: guarded }, async (request) => {
