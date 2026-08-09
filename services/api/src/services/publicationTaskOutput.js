@@ -2,6 +2,10 @@ const GENE_SYMBOL = /^[A-Z0-9][A-Z0-9-]{1,14}$/u;
 const CANDIDATE_TASK = 'candidate_gene_research';
 const ALLOWED_QUERY_TYPES = new Set(['disease', 'phenotype', 'hpo_term']);
 
+/**
+ * Return true only for ordinary object records, excluding arrays, dates, class
+ * instances, and other prototype-bearing values from model output.
+ */
 function isPlainObject(value) {
   return Boolean(value)
     && typeof value === 'object'
@@ -10,6 +14,10 @@ function isPlainObject(value) {
       || Object.getPrototypeOf(value) === null);
 }
 
+/**
+ * Replace C0, DEL, and C1 control characters with spaces before text reaches
+ * logs, JSON responses, React, copied summaries, or printable reports.
+ */
 function replaceControlCharacters(value) {
   return Array.from(value, (character) => {
     const codePoint = character.codePointAt(0) ?? -1;
@@ -19,6 +27,10 @@ function replaceControlCharacters(value) {
   }).join('');
 }
 
+/**
+ * Normalize untrusted text, collapse whitespace, reject empty output, and cap
+ * the returned string to the supplied maximum length.
+ */
 function cleanText(value, maxLength) {
   if (typeof value !== 'string') return null;
   const normalized = replaceControlCharacters(value)
@@ -28,6 +40,10 @@ function cleanText(value, maxLength) {
   return normalized.slice(0, maxLength);
 }
 
+/**
+ * Normalize a bounded, case-insensitively deduplicated list of strings while
+ * discarding non-string, empty, and control-only entries.
+ */
 function cleanStringArray(value, { maxItems, maxLength }) {
   if (!Array.isArray(value)) return [];
   const seen = new Set();
@@ -44,6 +60,11 @@ function cleanStringArray(value, { maxItems, maxLength }) {
   return cleaned;
 }
 
+/**
+ * Parse a model response that may contain JSON directly, inside a Markdown
+ * fence, or surrounded by explanatory prose. Return null when no bounded JSON
+ * object or array can be recovered.
+ */
 function parseJsonCandidate(result) {
   if (isPlainObject(result) || Array.isArray(result)) return result;
   if (typeof result !== 'string') return null;
@@ -81,6 +102,10 @@ function parseJsonCandidate(result) {
   return null;
 }
 
+/**
+ * Convert one untrusted candidate record into the publication-safe gene lead
+ * shape. Only symbol, bounded name, and bounded explanation survive.
+ */
 function normalizeCandidateGene(value) {
   if (!isPlainObject(value)) return null;
   const symbol = typeof value.symbol === 'string'
@@ -97,6 +122,10 @@ function normalizeCandidateGene(value) {
   };
 }
 
+/**
+ * Normalize, deduplicate, and cap candidate-gene leads while preserving model
+ * order only as an uncalibrated research-lead ordering hint.
+ */
 function normalizeCandidateGenes(value, maxItems = 15) {
   const input = Array.isArray(value) ? value : [];
   const seen = new Set();
@@ -111,6 +140,10 @@ function normalizeCandidateGenes(value, maxItems = 15) {
   return genes;
 }
 
+/**
+ * Derive query type from the server-validated HPO, MONDO, or curated concept so
+ * contradictory model self-classification cannot change application behavior.
+ */
 function trustedQueryClassification(taskInput) {
   const query = isPlainObject(taskInput?.query) ? taskInput.query : null;
   if (!query) return null;
@@ -147,6 +180,10 @@ function trustedQueryClassification(taskInput) {
   return null;
 }
 
+/**
+ * Build the bounded classification response. Trusted query metadata controls
+ * type and disease status; model output may contribute only descriptive text.
+ */
 function normalizeClassification(parsed, taskInput = {}) {
   const source = isPlainObject(parsed) ? parsed : {};
   const trusted = trustedQueryClassification(taskInput);
@@ -174,6 +211,10 @@ function normalizeClassification(parsed, taskInput = {}) {
   };
 }
 
+/**
+ * Reduce a model-generated gene profile to bounded educational prose and
+ * phenotype names. Source identifiers and clinical-looking fields are dropped.
+ */
 function normalizeGeneProfile(parsed) {
   const source = isPlainObject(parsed) ? parsed : {};
   const summary = cleanText(source.summary, 4_000);
@@ -196,6 +237,10 @@ function normalizeGeneProfile(parsed) {
   };
 }
 
+/**
+ * Return the stable fail-closed response shape expected by each candidate-gene
+ * operation when model output is missing or malformed.
+ */
 function safeEmptyCandidateOutput(operation, taskInput) {
   if (operation === 'classify') return normalizeClassification({}, taskInput);
   if (operation === 'gene_profile') return normalizeGeneProfile({});
