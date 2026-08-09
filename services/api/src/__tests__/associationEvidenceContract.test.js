@@ -200,7 +200,13 @@ describe('association evidence publication contract', () => {
     });
   });
 
-  it('never returns claims for unrequested or invalid candidate symbols', () => {
+  it('never returns claims for unrequested or policy-invalid candidate symbols', () => {
+    expect(__test.isPublicationGeneSymbol('SCN1A')).toBe(true);
+    expect(__test.isPublicationGeneSymbol('STOP1')).toBe(true);
+    expect(__test.isPublicationGeneSymbol('STOP-DRUG')).toBe(false);
+    expect(__test.isPublicationGeneSymbol('TAKE-5MG')).toBe(false);
+    expect(__test.isPublicationGeneSymbol('not a gene')).toBe(false);
+
     const result = sanitizeAssociationEvidence({
       claimsByGene: {
         SCN1A: [],
@@ -220,7 +226,8 @@ describe('association evidence publication contract', () => {
       sourceStatus: 'available',
     }, ['SCN1A', 'TAKE-5MG']);
 
-    expect(result.claimsByGene).toEqual({ SCN1A: [], 'TAKE-5MG': [] });
+    expect(result.claimsByGene).toEqual({ SCN1A: [] });
+    expect(result.claimsByGene).not.toHaveProperty('TAKE-5MG');
     expect(result.claimsByGene).not.toHaveProperty('EXTRA1');
     expect(result.claimCount).toBe(0);
   });
