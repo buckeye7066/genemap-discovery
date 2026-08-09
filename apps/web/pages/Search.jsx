@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import DnaIcon from "../components/icons/DnaIcon";
-import { Search, AlertCircle, GitCompare, BookmarkPlus, Library, Brain } from "lucide-react";
+import { Search, AlertCircle, GitCompare, Library, Brain } from "lucide-react";
 
 import SearchForm from "../components/search/SearchForm";
 import GeneResults from "../components/search/GeneResults";
@@ -25,6 +25,15 @@ import {
   resolvePublicationUrlReference,
 } from "../lib/publicationConceptCatalog";
 
+const QUICK_STARTS = Object.freeze([
+  { query: 'short stature', searchMode: 'phenotype' },
+  { query: 'Cystic Fibrosis', searchMode: 'disease' },
+  { query: 'intellectual disability', searchMode: 'phenotype' },
+  { query: 'Rheumatoid Arthritis', searchMode: 'disease' },
+  { query: 'polydactyly', searchMode: 'phenotype' },
+  { query: 'HP:0001250', searchMode: 'free_text' },
+]);
+
 export default function SearchPage() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
@@ -33,9 +42,6 @@ export default function SearchPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isEnriching, setIsEnriching] = useState(false);
   const [error, setError] = useState(null);
-  // Monotonic token so an older, slower search can never overwrite the results
-  // of a newer one (the user clicked a second example before the first
-  // finished). Only the latest search applies state.
   const searchTokenRef = useRef(0);
   const [searchType, setSearchType] = useState("free");
   const [selectedGenes, setSelectedGenes] = useState([]);
@@ -51,9 +57,6 @@ export default function SearchPage() {
     if (queryParam) {
       setSearchQuery(queryParam);
       const resolved = resolvePublicationUrlReference(queryParam);
-      // Arbitrary URL text may prefill the guided form, but it cannot silently
-      // invoke generation. Dynamic labels must be selected through the
-      // deterministic resolver; exact HPO/MONDO ids are revalidated server-side.
       if (resolved) {
         handleSearch(queryParam, false, resolved.searchMode, resolved.reference);
       }
@@ -80,22 +83,16 @@ export default function SearchPage() {
     setSearchResults(null);
     setSearchQuery(query);
     setSearchType(isPremium ? "premium" : "free");
-    setSelectedGenes([]); // Clear selection on new search
+    setSelectedGenes([]);
     setShowComparison(false);
-    setGeneSetComparison(null); // Clear gene set comparison on new phenotype search
+    setGeneSetComparison(null);
 
     try {
-      // Normalize every invocation again at the page boundary. A prior
-      // autocomplete identifier is never retained when the user types, pastes,
-      // switches mode, clicks an example, or follows a different URL.
       const publicationReference = resolvePublicationSearchReference(
         query,
         searchMode,
         selectedReference,
       );
-      // FAST: render candidate genes (with authoritative coordinates) as soon as
-      // they're found, then drop the blocking spinner. The slow per-gene LLM
-      // enrichment happens after this, in the background.
       const base = await PhenotypeSearchService.findCandidates(
         query,
         isPremium,
@@ -107,8 +104,6 @@ export default function SearchPage() {
       setIsLoading(false);
       setIsEnriching(true);
 
-      // BACKGROUND: fill in summaries, phenotypes, takeaways. Failure here keeps
-      // the candidates on screen (enrichCandidates returns them unchanged).
       const enriched = await PhenotypeSearchService.enrichCandidates(base);
       if (!isCurrent()) return;
       setSearchResults(enriched);
@@ -126,9 +121,6 @@ export default function SearchPage() {
       }
 
       try {
-        // Backend (POST /entities/search-history) expects { query, queryType,
-        // results }. The extra display fields (HPO term, candidate genes, count)
-        // have no dedicated columns, so they live in the free-form `results` JSON.
         await apiClient.saveSearchHistory({
           query,
           queryType: isPremium ? "premium" : "free",
@@ -142,7 +134,6 @@ export default function SearchPage() {
       } catch (historyError) {
         log.debug("Could not save search history:", historyError);
       }
-
     } catch (err) {
       if (isCurrent()) {
         setError(getErrorMessage(err) || "Search failed. Please try again.");
@@ -156,18 +147,30 @@ export default function SearchPage() {
     }
   };
 
+  const handleQuickStart = (example) => {
+    const reference = resolvePublicationSearchReference(
+      example.query,
+      example.searchMode,
+      null,
+    );
+    if (!reference) {
+      setError('This quick start is unavailable because its reviewed reference could not be resolved.');
+      return;
+    }
+    setSearchQuery(example.query);
+    handleSearch(example.query, false, example.searchMode, reference);
+  };
+
   const handleGeneInput = (genes) => {
     setUserInputGenes(genes);
     setGeneSetComparison(null);
-
-    // If there are existing search results, trigger comparison
     if (searchResults && genes.length > 0) {
       handleCompareWithPhenotype(genes);
     }
   };
 
   const handleCompareWithPhenotype = async (genes) => {
-    if (!searchResults) return; // Only compare if there are phenotype search results
+    if (!searchResults) return;
 
     setIsLoading(true);
     setError(null);
@@ -198,8 +201,6 @@ export default function SearchPage() {
         return;
       }
 
-      // Gene sets use the dedicated research-project contract:
-      // { name, description, genes, metadata }.
       await apiClient.saveGeneSet({
         name,
         description,
@@ -210,9 +211,7 @@ export default function SearchPage() {
         },
       });
 
-      // Invalidate and refetch gene sets cache with user context
       await queryClient.invalidateQueries({ queryKey: ['geneSets', user?.email] });
-      
       setError(null);
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), SAVE_SUCCESS_DELAY_MS);
@@ -225,7 +224,6 @@ export default function SearchPage() {
   const handleLoadGeneSet = (geneSet) => {
     setUserInputGenes(geneSet.genes);
     setShowSavedSets(false);
-
     if (searchResults) {
       handleCompareWithPhenotype(geneSet.genes);
     }
@@ -234,22 +232,14 @@ export default function SearchPage() {
   const handleGeneSelect = (gene) => {
     setSelectedGenes(prev => {
       const isSelected = prev.some(g => g.symbol === gene.symbol);
-      if (isSelected) {
-        return prev.filter(g => g.symbol !== gene.symbol);
-      } else {
-        return [...prev, gene];
-      }
+      return isSelected
+        ? prev.filter(g => g.symbol !== gene.symbol)
+        : [...prev, gene];
     });
   };
 
-  const handleCompareGenes = () => {
-    setShowComparison(true);
-  };
-
-  const handleCloseComparison = () => {
-    setShowComparison(false);
-  };
-
+  const handleCompareGenes = () => setShowComparison(true);
+  const handleCloseComparison = () => setShowComparison(false);
   const handleClearSelection = () => {
     setSelectedGenes([]);
     setShowComparison(false);
@@ -275,7 +265,6 @@ export default function SearchPage() {
         {!showComparison && !showSavedSets && (
           <>
             <div className="grid lg:grid-cols-2 gap-6 mb-6">
-              {/* Phenotype Search */}
               <Card className="shadow-lg border-0 bg-white/80 backdrop-blur-sm">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-lg sm:text-xl">
@@ -292,7 +281,6 @@ export default function SearchPage() {
                 </CardContent>
               </Card>
 
-              {/* Gene Input */}
               <Card className="shadow-lg border-0 bg-white/80 backdrop-blur-sm">
                 <CardHeader>
                   <div className="flex items-center justify-between">
@@ -312,11 +300,13 @@ export default function SearchPage() {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <GeneInputForm
-                    onGenesSubmit={handleGeneInput}
-                    isLoading={isLoading}
-                    initialGenes={userInputGenes}
-                  />
+                  <Suspense fallback={<p className="text-sm text-slate-500">Loading gene tools…</p>}>
+                    <GeneInputForm
+                      onGenesSubmit={handleGeneInput}
+                      isLoading={isLoading}
+                      initialGenes={userInputGenes}
+                    />
+                  </Suspense>
                 </CardContent>
               </Card>
             </div>
@@ -328,14 +318,19 @@ export default function SearchPage() {
               </Alert>
             )}
 
+            {saveSuccess && (
+              <Alert className="mb-6 border-emerald-200 bg-emerald-50">
+                <AlertDescription className="text-emerald-800">Gene set saved.</AlertDescription>
+              </Alert>
+            )}
+
             {isLoading && (
               <AiThinkingIndicator
                 label={`Finding genes for "${searchQuery || 'your query'}"…`}
-                hint="Identifying candidate genes and verifying their coordinates. Results appear in ~15 seconds, then details fill in."
+                hint="Identifying candidate genes and verifying their coordinates. Results appear first, then details fill in."
               />
             )}
 
-            {/* Results are on screen; details are still streaming in. */}
             {isEnriching && !isLoading && (
               <Alert className="mb-4 bg-blue-50 border-blue-200">
                 <Brain className="h-4 w-4 text-blue-600 animate-pulse" />
@@ -345,18 +340,15 @@ export default function SearchPage() {
               </Alert>
             )}
 
-            {/* Gene Set Comparison Results */}
             {geneSetComparison && !isLoading && (
-              <GeneSetComparison
-                comparison={geneSetComparison}
-                onSaveGeneSet={handleSaveGeneSet}
-              />
+              <Suspense fallback={<p className="text-sm text-slate-500">Loading comparison…</p>}>
+                <GeneSetComparison
+                  comparison={geneSetComparison}
+                  onSaveGeneSet={handleSaveGeneSet}
+                />
+              </Suspense>
             )}
 
-            {/* Standard Search Results — isolated in its own ErrorBoundary so a
-                render error in one gene card surfaces a visible, retryable
-                message in the results area instead of silently blanking the
-                panel (the reported "search completes but nothing appears"). */}
             {searchResults && !isLoading && !geneSetComparison && (
               <ErrorBoundary name="Search results">
                 <GeneResults
@@ -364,7 +356,6 @@ export default function SearchPage() {
                   selectedGenes={selectedGenes}
                   onGeneSelect={handleGeneSelect}
                 />
-
               </ErrorBoundary>
             )}
 
@@ -376,34 +367,26 @@ export default function SearchPage() {
                     <h3 className="text-lg sm:text-xl font-semibold text-slate-700 mb-2">
                       Start Your Discovery
                     </h3>
-                    <p className="text-slate-500 mb-1">
-                      Type a trait or symptom above (a &ldquo;phenotype&rdquo;), or enter a gene
-                      name. Not sure where to begin? Try one of these:
+                    <p className="text-slate-500 mb-1 max-w-2xl mx-auto">
+                      Choose a reviewed disease or phenotype suggestion, or enter an exact HPO identifier.
+                      Use the separate Gene Input panel for symbols such as BRCA1. Every quick start below
+                      carries an explicit reviewed reference rather than sending arbitrary free text.
                     </p>
                   </div>
 
-                  {/* Example searches — one click runs a real search. */}
                   <div className="flex flex-wrap justify-center gap-2 mt-4 max-w-2xl mx-auto">
-                    {[
-                      "short stature",
-                      "hearing loss",
-                      "cystic fibrosis",
-                      "intellectual disability",
-                      "BRCA1",
-                      "rheumatoid arthritis",
-                    ].map((example) => (
+                    {QUICK_STARTS.map((example) => (
                       <button
-                        key={example}
+                        key={`${example.searchMode}:${example.query}`}
                         type="button"
-                        onClick={() => { setSearchQuery(example); handleSearch(example, false); }}
+                        onClick={() => handleQuickStart(example)}
                         className="px-3 py-1.5 rounded-full text-sm bg-white border border-slate-200 text-slate-700 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-400"
                       >
-                        {example}
+                        {example.query}
                       </button>
                     ))}
                   </div>
 
-                  {/* Plain-English glossary so beginners aren't blocked by jargon. */}
                   <dl className="grid sm:grid-cols-2 gap-x-6 gap-y-2 mt-8 max-w-2xl mx-auto text-sm">
                     <div className="flex gap-2">
                       <dt className="font-semibold text-slate-700 shrink-0">Phenotype</dt>
@@ -424,9 +407,7 @@ export default function SearchPage() {
                   </dl>
 
                   <p className="text-xs text-center text-slate-400 mt-8 max-w-xl mx-auto">
-                    Educational and research support only. Results are not medical advice or a
-                    diagnosis &mdash; consult a qualified clinician or genetic counselor for
-                    interpretation of any health concern.
+                    Educational and research support only. Results are not medical advice or a diagnosis.
                   </p>
                 </CardContent>
               </Card>
@@ -435,21 +416,24 @@ export default function SearchPage() {
         )}
 
         {showComparison && (
-          <GeneComparison
-            genes={selectedGenes}
-            onClose={handleCloseComparison}
-            isPremium={searchResults?.isPremium}
-          />
+          <Suspense fallback={<p className="text-sm text-slate-500">Loading comparison…</p>}>
+            <GeneComparison
+              genes={selectedGenes}
+              onClose={handleCloseComparison}
+              isPremium={searchResults?.isPremium}
+            />
+          </Suspense>
         )}
 
         {showSavedSets && (
-          <SavedGeneSets
-            onLoad={handleLoadGeneSet}
-            onClose={() => setShowSavedSets(false)}
-          />
+          <Suspense fallback={<p className="text-sm text-slate-500">Loading saved sets…</p>}>
+            <SavedGeneSets
+              onLoad={handleLoadGeneSet}
+              onClose={() => setShowSavedSets(false)}
+            />
+          </Suspense>
         )}
 
-        {/* Floating gene comparison button */}
         {selectedGenes.length > 0 && !showComparison && !showSavedSets && (
           <div className="fixed bottom-4 sm:bottom-6 right-4 sm:right-6 left-4 sm:left-auto z-50">
             <div className="bg-white rounded-2xl shadow-2xl border-2 border-blue-200 p-3 sm:p-4 max-w-sm mx-auto sm:mx-0">
