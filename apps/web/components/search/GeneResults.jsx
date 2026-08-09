@@ -55,8 +55,13 @@ function mergeAssociationEvidence(genes, evidence) {
       seen.add(key);
       return true;
     });
+    const sources = [...new Set([
+      ...(Array.isArray(gene.sources) ? gene.sources : []),
+      ...sourceClaims.map((claim) => claim?.source).filter(Boolean),
+    ])];
     return {
       ...gene,
+      sources,
       associationClaims,
       evidencePartition: partitionClaimsBySpecies(associationClaims),
       rankingBasis: deriveRankingBasisFromClaims(associationClaims),
@@ -121,7 +126,9 @@ export default function GeneResults({ results, selectedGenes = [], onGeneSelect 
     }
 
     let active = true;
-    setEvidenceState((current) => ({ ...current, status: 'loading' }));
+    // Never retain evidence from a previous phenotype while a new source query
+    // is in flight, even when some candidate symbols overlap.
+    setEvidenceState({ status: 'loading', result: null });
     fetchAssociationEvidence(reference, symbols).then((result) => {
       if (!active) return;
       setEvidenceState({
