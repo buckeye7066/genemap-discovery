@@ -109,19 +109,61 @@ function normalizeCandidateGenes(value, maxItems = 15) {
   return genes;
 }
 
-function normalizeClassification(parsed) {
+function trustedQueryClassification(taskInput) {
+  const query = isPlainObject(taskInput?.query) ? taskInput.query : null;
+  if (!query) return null;
+
+  if (query.kind === 'hpo') {
+    return {
+      queryType: 'hpo_term',
+      isDisease: false,
+      isHPOTerm: true,
+      diseaseName: null,
+    };
+  }
+
+  if (query.kind === 'mondo') {
+    return {
+      queryType: 'disease',
+      isDisease: true,
+      isHPOTerm: false,
+      diseaseName: cleanText(query.canonicalLabel, 256),
+    };
+  }
+
+  if (query.kind === 'curated_concept'
+    && (query.conceptKind === 'disease' || query.conceptKind === 'phenotype')) {
+    const isDisease = query.conceptKind === 'disease';
+    return {
+      queryType: query.conceptKind,
+      isDisease,
+      isHPOTerm: false,
+      diseaseName: isDisease ? cleanText(query.canonicalLabel, 256) : null,
+    };
+  }
+
+  return null;
+}
+
+function normalizeClassification(parsed, taskInput = {}) {
   const source = isPlainObject(parsed) ? parsed : {};
-  const isDisease = source.isDisease === true;
-  const queryType = ALLOWED_QUERY_TYPES.has(source.queryType)
+  const trusted = trustedQueryClassification(taskInput);
+  const modelIsDisease = source.isDisease === true;
+  const modelQueryType = ALLOWED_QUERY_TYPES.has(source.queryType)
     ? source.queryType
-    : (isDisease ? 'disease' : 'phenotype');
-  const diseaseName = cleanText(source.diseaseName, 256);
+    : (modelIsDisease ? 'disease' : 'phenotype');
+  const queryType = trusted?.queryType ?? modelQueryType;
+  const isDisease = trusted?.isDisease ?? modelIsDisease;
+  const isHPOTerm = trusted?.isHPOTerm ?? source.isHPOTerm === true;
+  const diseaseName = isDisease
+    ? trusted?.diseaseName ?? cleanText(source.diseaseName, 256)
+    : null;
   const inheritancePattern = cleanText(source.inheritancePattern, 256);
   return {
     queryType,
     isDisease,
     ...(diseaseName ? { diseaseName } : {}),
-    isHPOTerm: source.isHPOTerm === true,
+    isHPOTerm,
     mainFeatures: cleanStringArray(source.mainFeatures, { maxItems: 20, maxLength: 256 }),
     synonyms: cleanStringArray(source.synonyms, { maxItems: 20, maxLength: 256 }),
     ...(inheritancePattern ? { inheritancePattern } : {}),
@@ -152,18 +194,19 @@ function normalizeGeneProfile(parsed) {
   };
 }
 
-function safeEmptyCandidateOutput(operation) {
-  if (operation === 'classify') return normalizeClassification({});
+function safeEmptyCandidateOutput(operation, taskInput) {
+  if (operation === 'classify') return normalizeClassification({}, taskInput);
   if (operation === 'gene_profile') return normalizeGeneProfile({});
   if (operation === 'suggest_candidates') return { candidateGenes: [] };
-  return { ...normalizeClassification({}), candidateGenes: [] };
+  return { ...normalizeClassification({}, taskInput), candidateGenes: [] };
 }
 
 /**
  * Convert untrusted model output into the exact bounded browser contract for a
  * structured publication task. Candidate-gene output fails closed: malformed
  * JSON, invalid symbols, unsupported fields, control characters, duplicates,
- * and oversized collections never reach the client.
+ * and oversized collections never reach the client. Query classification is
+ * derived from the validated server-owned reference rather than model claims.
  */
 export function sanitizePublicationTaskOutput(publicationTask, taskInput, result) {
   if (publicationTask !== CANDIDATE_TASK) {
@@ -172,14 +215,14 @@ export function sanitizePublicationTaskOutput(publicationTask, taskInput, result
 
   const operation = taskInput?.operation;
   const parsed = parseJsonCandidate(result);
-  if (!parsed) return JSON.stringify(safeEmptyCandidateOutput(operation));
+  if (!parsed) return JSON.stringify(safeEmptyCandidateOutput(operation, taskInput));
 
   if (operation === 'gene_profile') {
     return JSON.stringify(normalizeGeneProfile(parsed));
   }
 
   if (operation === 'classify') {
-    return JSON.stringify(normalizeClassification(parsed));
+    return JSON.stringify(normalizeClassification(parsed, taskInput));
   }
 
   const candidateSource = Array.isArray(parsed)
@@ -191,7 +234,7 @@ export function sanitizePublicationTaskOutput(publicationTask, taskInput, result
   }
 
   return JSON.stringify({
-    ...normalizeClassification(parsed),
+    ...normalizeClassification(parsed, taskInput),
     candidateGenes,
   });
 }
@@ -202,6 +245,7 @@ export const __test = {
   parseJsonCandidate,
   normalizeCandidateGene,
   normalizeCandidateGenes,
+  trustedQueryClassification,
   normalizeClassification,
   normalizeGeneProfile,
 };
