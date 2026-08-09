@@ -1,16 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const generateExplanation = vi.fn();
-const generateImage = vi.fn();
-const generateQuiz = vi.fn();
-const generateChatResponse = vi.fn();
-
-vi.mock('../services/llm.js', () => ({
-  generateExplanation,
-  generateImage,
-  generateQuiz,
-  generateChatResponse,
+const provider = vi.hoisted(() => ({
+  generateExplanation: vi.fn(),
+  generateImage: vi.fn(),
+  generateQuiz: vi.fn(),
+  generateChatResponse: vi.fn(),
 }));
+
+vi.mock('../services/llm.js', () => provider);
 
 import { authCookie, buildTestApp, createPrismaMock } from './setup.js';
 
@@ -37,7 +34,7 @@ describe('education route publication boundaries', () => {
   });
 
   it('sanitizes explanation Markdown and provider-created targets', async () => {
-    generateExplanation.mockResolvedValue(
+    provider.generateExplanation.mockResolvedValue(
       'Review [the source](https://untrusted.example) and ![pixel](https://tracker.example/p.png).',
     );
 
@@ -57,7 +54,7 @@ describe('education route publication boundaries', () => {
   });
 
   it('withholds direct medication guidance from the guided tutor', async () => {
-    generateChatResponse.mockResolvedValue('Take aspirin.');
+    provider.generateChatResponse.mockResolvedValue('Take aspirin.');
 
     const response = await app.inject({
       method: 'POST',
@@ -79,7 +76,7 @@ describe('education route publication boundaries', () => {
   });
 
   it('drops an unsafe quiz question without shifting a safe answer index', async () => {
-    generateQuiz.mockResolvedValue([
+    provider.generateQuiz.mockResolvedValue([
       {
         question: 'Which molecule stores hereditary information?',
         options: ['DNA', 'Water', 'Glucose', 'Aspirin'],
@@ -113,7 +110,7 @@ describe('education route publication boundaries', () => {
   });
 
   it('sanitizes the image provider revised prompt while preserving the provider URL', async () => {
-    generateImage.mockResolvedValue({
+    provider.generateImage.mockResolvedValue({
       url: 'https://official-provider.example/generated-image.png',
       revisedPrompt: 'Diagram based on [untrusted](https://tracker.example/pixel).',
     });
