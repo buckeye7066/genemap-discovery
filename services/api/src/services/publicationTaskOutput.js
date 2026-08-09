@@ -77,9 +77,10 @@ function cleanText(value, maxLength) {
 }
 
 /**
- * Remove known non-clinical disclaimer phrases before policy matching. This
- * avoids rejecting text merely because it says that an output is not medical
- * advice, while preserving real instructions such as "do not stop medication".
+ * Remove only complete, known non-clinical disclaimer phrases before policy
+ * matching. The expressions intentionally stop before punctuation so text such
+ * as "Do not use this output for diagnosis; take 5 mg daily" retains and rejects
+ * the medication instruction instead of hiding it inside the disclaimer match.
  */
 function removeAllowedBoundaryDisclaimers(value) {
   return value
@@ -87,7 +88,7 @@ function removeAllowedBoundaryDisclaimers(value) {
     .replace(/\bnot\s+medical\s+advice\b/giu, ' ')
     .replace(/\bnot\s+(?:intended|suitable)\s+for\s+clinical\s+use\b/giu, ' ')
     .replace(/\bdoes\s+not\s+(?:assess|predict|establish)\s+(?:personal\s+)?(?:risk|diagnosis|prognosis)\b/giu, ' ')
-    .replace(/\bdo\s+not\s+use\s+(?:this|the|these|it|output|response|result|results)\b[^.!?\n]{0,160}/giu, ' ');
+    .replace(/\bdo\s+not\s+use\s+(?:this|the|these|it|output|response|result|results)\s+(?:medically|for\s+(?:medical\s+advice|clinical\s+use|clinical\s+decisions?|(?:diagnosis|personal(?:-|\s)risk(?:\s+prediction)?|treatment|dosing|screening)(?:\s*(?:,|and|or)\s*(?:diagnosis|personal(?:-|\s)risk(?:\s+prediction)?|treatment|dosing|screening))*(?:\s*(?:,|and|or)\s+(?:other\s+)?clinical\s+decisions?)?))\b/giu, ' ');
 }
 
 /** Return true when model prose contains clinical or personalized guidance. */
@@ -210,7 +211,7 @@ function normalizeCandidateGene(value) {
     : '';
   if (!GENE_SYMBOL.test(symbol)) return null;
 
-  const name = cleanText(value.name, 256);
+  const name = cleanNonClinicalText(value.name, 256);
   const explanation = cleanNonClinicalText(value.explanation, 2_000);
   return {
     symbol,
@@ -305,7 +306,11 @@ function normalizeClassification(parsed, taskInput = {}) {
       maxLength: 256,
       nonClinical: true,
     }),
-    synonyms: cleanStringArray(source.synonyms, { maxItems: 20, maxLength: 256 }),
+    synonyms: cleanStringArray(source.synonyms, {
+      maxItems: 20,
+      maxLength: 256,
+      nonClinical: true,
+    }),
     ...(inheritancePattern ? { inheritancePattern } : {}),
     // Model-supplied ontology identifiers are never source records.
     hpoTerms: [],
