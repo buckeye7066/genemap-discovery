@@ -23,6 +23,7 @@ import {
   Info
 } from "lucide-react";
 import { exportGeneReport, exportJSON, copyShareableLink } from "../../lib/exportUtils";
+import { claimSortKey } from "../../../../packages/shared/src/associationClaim.ts";
 import { Download, Copy, Printer } from "lucide-react";
 
 // Session-scoped set of gene views already logged, so a (re)mount doesn't
@@ -75,8 +76,14 @@ function GeneCard({ gene, rank, isSelected = false, onSelect = null }) {
     aiLeads: claims.filter((c) => c.evidenceClass === 'ai_lead'),
     external: claims.filter((c) => c.evidenceClass === 'external_followup'),
   };
+  const strongestAssociationClaim = claims.reduce((best, claim) => {
+    if (!best) return claim;
+    return claimSortKey(claim) > claimSortKey(best) ? claim : best;
+  }, null);
   const rankingBasis = gene.rankingBasis
-    || (partition.human?.length ? 'human_verified' : 'ai_lead');
+    || (strongestAssociationClaim && claimSortKey(strongestAssociationClaim) > 0
+      ? strongestAssociationClaim.evidenceClass
+      : 'ai_lead');
   const rankingLabel = rankingBasis === 'human_verified'
     ? 'Human-verified provenance'
     : rankingBasis === 'computational'
