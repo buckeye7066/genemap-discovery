@@ -1,20 +1,4 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
-const stripe = vi.hoisted(() => ({
-  subscriptionsCancel: vi.fn(async () => ({ status: 'canceled' })),
-  customersDelete: vi.fn(async () => ({ deleted: true })),
-}));
-
-vi.mock('stripe', () => ({
-  default: class StripeMock {
-    constructor(secret) {
-      this.secret = secret;
-      this.subscriptions = { cancel: stripe.subscriptionsCancel };
-      this.customers = { del: stripe.customersDelete };
-    }
-  },
-}));
-
 import { authCookie, buildTestApp, createPrismaMock, seedAuthUser } from './setup.js';
 
 const SUPER = {
@@ -41,7 +25,7 @@ describe('DELETE /admin/users/:idOrEmail billing and ownership safety', () => {
   let cookie;
 
   beforeEach(async () => {
-    process.env.STRIPE_SECRET_KEY = 'sk_test_account_deletion_fixture';
+    delete process.env.STRIPE_SECRET_KEY;
     vi.clearAllMocks();
     prisma = createPrismaMock();
     seedAuthUser(prisma, SUPER);
@@ -54,16 +38,8 @@ describe('DELETE /admin/users/:idOrEmail billing and ownership safety', () => {
     await app.close();
   });
 
-  it('cancels Stripe and deletes the customer before closing the target account', async () => {
+  it('closes a non-billable target through the shared account-closure authority', async () => {
     const target = seedTarget(prisma);
-    prisma._store.subscription.push({
-      id: 'admin-delete-sub-row',
-      userId: target.id,
-      stripeSubscriptionId: 'sub_admin_delete',
-      stripeCustomerId: 'cus_admin_delete',
-      status: 'active',
-      planType: 'month',
-    });
 
     const response = await app.inject({
       method: 'DELETE',
@@ -71,35 +47,38 @@ describe('DELETE /admin/users/:idOrEmail billing and ownership safety', () => {
       headers: { cookie },
     });
 
-    expect(response.statusCode).toBe(200);
-    expect(stripe.subscriptionsCancel).toHaveBeenCalledWith('sub_admin_delete');
-    expect(stripe.customersDelete).toHaveBeenCalledWith('cus_admin_delete');
+    expect(response.statusCode, response.payload).toBe(200);
     expect(prisma._store.user.find((user) => user.id === target.id)).toBeUndefined();
-    expect(JSON.parse(response.payload)).toMatchObject({
+    const body = JSON.parse(response.payload);
+    expect(body).toMatchObject({
       success: true,
       receiptId: expect.any(String),
-      billing: { subscriptionsCancelled: 1, customersDeleted: 1 },
+      billing: { subscriptionsCancelled: 0, customersDeleted: 0 },
     });
     expect(prisma._store.auditLog).toEqual([
       expect.objectContaining({
         userId: SUPER.userId,
         action: 'account.deleted_by_admin',
+        entityType: 'user',
         entityId: target.id,
+        metadata: expect.objectContaining({
+          receiptId: body.receiptId,
+          actorMode: 'admin',
+        }),
       }),
     ]);
   });
 
-  it('leaves the account intact when Stripe cancellation fails', async () => {
+  it('leaves a billable account intact when cancellation cannot be verified', async () => {
     const target = seedTarget(prisma);
     prisma._store.subscription.push({
       id: 'admin-delete-sub-row',
       userId: target.id,
-      stripeSubscriptionId: 'sub_admin_delete_failure',
-      stripeCustomerId: 'cus_admin_delete_failure',
+      stripeSubscriptionId: 'sub_requires_provider_confirmation',
+      stripeCustomerId: 'cus_requires_provider_confirmation',
       status: 'active',
       planType: 'month',
     });
-    stripe.subscriptionsCancel.mockRejectedValueOnce(new Error('provider unavailable'));
 
     const response = await app.inject({
       method: 'DELETE',
@@ -109,9 +88,8 @@ describe('DELETE /admin/users/:idOrEmail billing and ownership safety', () => {
 
     expect(response.statusCode).toBe(503);
     expect(JSON.parse(response.payload)).toMatchObject({
-      code: 'ACCOUNT_DELETE_SUBSCRIPTION_CANCEL_FAILED',
+      code: 'ACCOUNT_DELETE_BILLING_UNAVAILABLE',
     });
-    expect(stripe.customersDelete).not.toHaveBeenCalled();
     expect(prisma._store.user.find((user) => user.id === target.id)).toBeDefined();
     expect(prisma._store.auditLog).toHaveLength(0);
   });
@@ -137,7 +115,6 @@ describe('DELETE /admin/users/:idOrEmail billing and ownership safety', () => {
     expect(JSON.parse(response.payload)).toMatchObject({
       code: 'ACCOUNT_DELETE_LICENSE_TRANSFER_REQUIRED',
     });
-    expect(stripe.subscriptionsCancel).not.toHaveBeenCalled();
     expect(prisma._store.user.find((user) => user.id === target.id)).toBeDefined();
   });
 });
