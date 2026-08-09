@@ -1,4 +1,14 @@
 import { apiClient } from "@genemap/shared";
+// Import provenance helpers by source path — the browser alias maps
+// `@genemap/shared` to the HTTP client only (not the package barrel).
+import {
+  aiLeadClaim,
+  externalFollowupClaim,
+  humanGeneIdentityClaim,
+  hpoPhenotypeClaim,
+  rankGenesByProvenance,
+  stripLlmSelfScores,
+} from "../../../../packages/shared/src/associationClaim.ts";
 import { log } from "../shared/logger";
 import { getErrorMessage } from "../shared/errorUtils";
 import { GENE_ENRICHMENT_CONCURRENCY } from "../shared/constants";
@@ -76,16 +86,19 @@ export class PhenotypeSearchService {
       const symbols = candidateGenes.map((g) => g.symbol).filter(Boolean);
       const { genes: authGenes } = await this.safeEnrich(symbols, []);
 
-      const baseGenes = this.applyAuthoritativeData(
-        candidateGenes.map((g) => ({
-          ...g,
-          genomeBuild: 'GRCh38',
-          sources: ['AI-suggested'],
-          phenotypes: [],
-          detailsPending: true,
-        })),
-        authGenes,
-        {}
+      const baseGenes = this.attachProvenance(
+        this.applyAuthoritativeData(
+          candidateGenes.map((g) => ({
+            ...g,
+            genomeBuild: 'GRCh38',
+            sources: ['AI-suggested'],
+            phenotypes: [],
+            detailsPending: true,
+          })),
+          authGenes,
+          {}
+        ),
+        phenotypeQuery,
       );
 
       return {
@@ -158,13 +171,20 @@ export class PhenotypeSearchService {
       const enrichedGenes = await this.enrichGeneData(base.candidateGenes, base.isPremium, base.userPreferences);
       const phenotypeNames = this.collectPhenotypeNames(enrichedGenes);
       const { phenotypes: authHpo } = await this.safeEnrich([], phenotypeNames);
-      const finalGenes = this.finalizeEnriched(enrichedGenes, authHpo).map((g) => ({ ...g, detailsPending: false }));
+      const finalGenes = this.finalizeEnriched(
+        enrichedGenes,
+        authHpo,
+        base.query,
+      ).map((g) => ({ ...g, detailsPending: false }));
       return { ...base, candidateGenes: finalGenes, enriched: true };
     } catch (error) {
       log.error("Search (enrich) error:", error);
       return {
         ...base,
-        candidateGenes: (base.candidateGenes || []).map((g) => ({ ...g, detailsPending: false })),
+        candidateGenes: this.attachProvenance(
+          (base.candidateGenes || []).map((g) => ({ ...g, detailsPending: false })),
+          base.query,
+        ),
         enriched: true,
       };
     }
@@ -180,9 +200,9 @@ export class PhenotypeSearchService {
   // restore honest provenance from the already-applied coordinate verification
   // and validate HPO ids. Coordinates were verified in findCandidates and are
   // preserved through enrichGeneData's spread.
-  static finalizeEnriched(genes, authHpo = {}) {
+  static finalizeEnriched(genes, authHpo = {}, phenotypeQuery = '') {
     const hpoChecked = Object.keys(authHpo).length > 0;
-    return (genes || []).map((g) => {
+    const finalized = (genes || []).map((g) => {
       const merged = { ...g, sources: this.honestSources(Boolean(g.coordinatesVerified)) };
       if (Array.isArray(merged.phenotypes)) {
         merged.hpoChecked = hpoChecked;
@@ -195,6 +215,7 @@ export class PhenotypeSearchService {
       }
       return merged;
     });
+    return this.attachProvenance(finalized, phenotypeQuery);
   }
 
   // Call the authoritative-enrichment endpoint, never throwing: if it's slow or
@@ -225,6 +246,73 @@ export class PhenotypeSearchService {
 
   static honestSources(verified) {
     return verified ? ['Ensembl/NCBI (verified)', 'AI-suggested'] : ['AI-suggested'];
+  }
+
+  /**
+   * Build provenance-first association claims for a candidate gene.
+   * LLM self-scores are never treated as evidence grades.
+   */
+  static buildAssociationClaims(gene, phenotypeQuery = '') {
+    const claims = [];
+    const query = phenotypeQuery || gene?.query || 'phenotype search';
+    claims.push(aiLeadClaim(gene.symbol, query));
+
+    if (gene.coordinatesVerified && (gene.ensemblId || gene.entrezId)) {
+      claims.push(humanGeneIdentityClaim({
+        symbol: gene.symbol,
+        ensemblId: gene.ensemblId,
+        entrezId: gene.entrezId,
+        genomeBuild: gene.genomeBuild || 'GRCh38',
+        source: gene.verifiedSource || 'MyGene.info (Ensembl/NCBI)',
+      }));
+    }
+
+    for (const phenotype of gene.phenotypes || []) {
+      if (phenotype?.hpoVerified && phenotype.hpoId) {
+        claims.push(hpoPhenotypeClaim({
+          geneSymbol: gene.symbol,
+          phenotypeName: phenotype.name,
+          hpoId: phenotype.hpoId,
+        }));
+      }
+    }
+
+    for (const resource of gene.furtherReading?.resources || []) {
+      if (resource?.url && resource?.name) {
+        claims.push(externalFollowupClaim({
+          geneSymbol: gene.symbol,
+          database: resource.name,
+          url: resource.url,
+        }));
+      }
+    }
+
+    return claims;
+  }
+
+  static attachProvenance(genes, phenotypeQuery = '') {
+    const withClaims = (genes || []).map((gene) => {
+      const stripped = stripLlmSelfScores(gene);
+      const associationClaims = this.buildAssociationClaims(stripped, phenotypeQuery);
+      const bestClass = associationClaims.some((c) => c.evidenceClass === 'human_verified')
+        ? 'human_verified'
+        : 'ai_lead';
+      return {
+        ...stripped,
+        associationClaims,
+        evidencePartition: {
+          human: associationClaims.filter((c) => c.evidenceClass === 'human_verified'),
+          animal: associationClaims.filter((c) => c.evidenceClass === 'animal_model'),
+          computational: associationClaims.filter((c) => c.evidenceClass === 'computational'),
+          aiLeads: associationClaims.filter((c) => c.evidenceClass === 'ai_lead'),
+          external: associationClaims.filter((c) => c.evidenceClass === 'external_followup'),
+        },
+        rankingBasis: bestClass,
+        // Preserve ordinal for display only — never as a calibrated score.
+        leadOrderHint: typeof gene.score === 'number' ? gene.score : null,
+      };
+    });
+    return rankGenesByProvenance(withClaims);
   }
 
   // Overlay authoritative gene records + validated HPO ids onto the AI results.

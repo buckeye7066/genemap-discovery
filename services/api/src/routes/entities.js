@@ -235,8 +235,9 @@ export default async function entityRoutes(fastify) {
     assertJsonSize(content, 'content');
     assertJsonSize(metadata, 'metadata');
 
-    // HIPAA / consent enforcement happens BEFORE the write; any storage of
-    // genetic / medical data without an active consent record is a hard
+    // Consent gate runs before write. Legacy medical-data routes remain blocked
+    // in the publication build; this path is not a HIPAA-readiness claim.
+    // Storing genetic / medical data without an active consent record is a hard
     // failure regardless of authentication state.
     await requireConsent(prisma, request.user.userId, 'medical_data_storage', '1.0');
 
@@ -787,7 +788,7 @@ export default async function entityRoutes(fastify) {
     return result;
   });
 
-  // ─── Consent Records (HIPAA Compliance) ────────────────────
+  // ─── Consent Records (legacy; not a HIPAA claim) ───────────
   fastify.post('/consent', async (request) => {
     const { consentType, version, granted } = request.body || {};
     if (!consentType || !version || granted === undefined) {

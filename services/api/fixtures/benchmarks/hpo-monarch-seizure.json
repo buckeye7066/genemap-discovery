@@ -1,0 +1,32 @@
+{
+  "id": "hpo-monarch-seizure-demo",
+  "suite": "HPO/Monarch provenance",
+  "limitations": [
+    "Fixture validates claim-shape and species separation only.",
+    "Does not assert disease causality."
+  ],
+  "referenceBuild": null,
+  "species": "Homo sapiens",
+  "taxon": "9606",
+  "evidenceClass": "human_verified",
+  "phenotype": {
+    "name": "Seizure",
+    "hpoId": "HP:0001250",
+    "mondoId": null
+  },
+  "animalOrthologExample": {
+    "species": "Mus musculus",
+    "taxon": "10090",
+    "evidenceClass": "animal_model",
+    "recordId": "MGI:98246",
+    "note": "Animal evidence must remain separated from human claims."
+  },
+  "sources": [
+    {
+      "source": "Human Phenotype Ontology",
+      "recordId": "HP:0001250",
+      "releaseVersion": "HPO",
+      "directLink": "https://hpo.jax.org/app/browse/term/HP:0001250"
+    }
+  ]
+}

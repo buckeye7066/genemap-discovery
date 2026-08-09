@@ -81,16 +81,41 @@ describe('PhenotypeSearchService.applyAuthoritativeData', () => {
 describe('PhenotypeSearchService.finalizeEnriched', () => {
   it('restores honest sources from coordinatesVerified and validates HPO', () => {
     const enriched = [
-      { symbol: 'A', coordinatesVerified: true, sources: ['AI-suggested'], phenotypes: [{ name: 'Seizure', hpoId: 'HP:FAKE' }] },
+      { symbol: 'A', coordinatesVerified: true, ensemblId: 'ENSG1', sources: ['AI-suggested'], phenotypes: [{ name: 'Seizure', hpoId: 'HP:FAKE' }] },
       { symbol: 'B', coordinatesVerified: false, sources: ['AI-suggested'], phenotypes: [{ name: 'Nope', hpoId: 'HP:FAKE' }] },
     ];
     const authHpo = { seizure: { hpoId: 'HP:0001250', verified: true } , nope: { hpoId: null, verified: false } };
-    const [a, b] = PhenotypeSearchService.finalizeEnriched(enriched, authHpo);
+    const [a, b] = PhenotypeSearchService.finalizeEnriched(enriched, authHpo, 'seizure');
     expect(a.sources).toContain('Ensembl/NCBI (verified)');
     expect(a.phenotypes[0]).toMatchObject({ hpoId: 'HP:0001250', hpoVerified: true });
+    expect(a.associationClaims.some((c) => c.evidenceClass === 'human_verified')).toBe(true);
+    expect(a.associationClaims.some((c) => c.evidenceClass === 'ai_lead')).toBe(true);
+    expect(a.score).toBeUndefined();
     expect(b.sources).toEqual(['AI-suggested']);
     // validation ran (authHpo non-empty) but no match → drop fabricated id
     expect(b.phenotypes[0].hpoId).toBeNull();
+    expect(b.rankingBasis).toBe('ai_lead');
+  });
+});
+
+describe('PhenotypeSearchService.attachProvenance', () => {
+  it('strips LLM self-scores and ranks verified genes above AI-only leads', () => {
+    const ranked = PhenotypeSearchService.attachProvenance([
+      { symbol: 'AI1', score: 0.99, coordinatesVerified: false },
+      {
+        symbol: 'VER1',
+        score: 0.1,
+        coordinatesVerified: true,
+        ensemblId: 'ENSG00000001626',
+        furtherReading: { resources: [{ name: 'OMIM', url: 'https://omim.org/' }] },
+      },
+    ], 'cystic fibrosis');
+
+    expect(ranked.map((g) => g.symbol)).toEqual(['VER1', 'AI1']);
+    expect(ranked[0].score).toBeUndefined();
+    expect(ranked[0].rankingBasis).toBe('human_verified');
+    expect(ranked[0].evidencePartition.external[0].evidenceClass).toBe('external_followup');
+    expect(ranked[1].associationClaims.every((c) => c.retrievalDate)).toBe(true);
   });
 });
 

@@ -1,8 +1,14 @@
 # Processor and external-service register
 
-Last code-flow review: **2026-08-06**  
+Last code-flow review: **2026-08-08** (production-ready/genemap-discovery wave)  
 Scope: public education/early-research build plus legacy data that may still be
 stored from earlier releases.
+
+**Software gate status (bridge 53):** repository inventory, fail-closed publication
+boundary, and public-copy removal of HIPAA/clinical-readiness claims are complete.
+**Owner gate status:** executed DPAs, named owners, regions, retention settings,
+deletion propagation evidence, and counsel/security sign-off remain **incomplete**
+— external release blocker (see checklist below).
 
 This register records what the repository can prove. A vendor policy or DPA URL
 does not prove that Axiom Biolabs has executed the agreement, selected a region,

@@ -19,7 +19,6 @@ import {
   Lightbulb,
   BookOpen,
   CheckCircle,
-  TrendingUp,
   AlertTriangle,
   Info
 } from "lucide-react";
@@ -58,7 +57,7 @@ function GeneCard({ gene, rank, isSelected = false, onSelect = null }) {
         entityId: geneSymbol,
         metadata: {
           gene_symbol: geneSymbol,
-          confidence_score: gene.score,
+          ranking_basis: gene.rankingBasis || null,
           phenotypes: gene.phenotypes?.map(p => p.name) || []
         }
       });
@@ -68,15 +67,31 @@ function GeneCard({ gene, rank, isSelected = false, onSelect = null }) {
     }
   };
 
-  const confidenceColor = gene.score >= 0.9 ? "bg-green-100 text-green-800 border-green-200" :
-                         gene.score >= 0.7 ? "bg-yellow-100 text-yellow-800 border-yellow-200" :
-                         "bg-orange-100 text-orange-800 border-orange-200";
-
-  const confidenceIcon = gene.score >= 0.9 ? TrendingUp : 
-                        gene.score >= 0.7 ? Info : 
-                        AlertTriangle;
-
-  const ConfidenceIcon = confidenceIcon;
+  const claims = Array.isArray(gene.associationClaims) ? gene.associationClaims : [];
+  const partition = gene.evidencePartition || {
+    human: claims.filter((c) => c.evidenceClass === 'human_verified'),
+    animal: claims.filter((c) => c.evidenceClass === 'animal_model'),
+    computational: claims.filter((c) => c.evidenceClass === 'computational'),
+    aiLeads: claims.filter((c) => c.evidenceClass === 'ai_lead'),
+    external: claims.filter((c) => c.evidenceClass === 'external_followup'),
+  };
+  const rankingBasis = gene.rankingBasis
+    || (partition.human?.length ? 'human_verified' : 'ai_lead');
+  const rankingLabel = rankingBasis === 'human_verified'
+    ? 'Human-verified provenance'
+    : rankingBasis === 'computational'
+      ? 'Computational evidence'
+      : rankingBasis === 'animal_model'
+        ? 'Animal-model evidence'
+        : 'AI research lead';
+  const rankingColor = rankingBasis === 'human_verified'
+    ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
+    : rankingBasis === 'computational'
+      ? 'bg-sky-100 text-sky-800 border-sky-200'
+      : 'bg-amber-100 text-amber-800 border-amber-200';
+  const RankingIcon = rankingBasis === 'human_verified' ? CheckCircle
+    : rankingBasis === 'computational' ? Info
+      : AlertTriangle;
 
   return (
     <Card className={`shadow-md hover:shadow-lg transition-all duration-200 ${isSelected ? 'ring-2 ring-blue-500 bg-blue-50/30' : ''}`}>
@@ -103,9 +118,9 @@ function GeneCard({ gene, rank, isSelected = false, onSelect = null }) {
           </div>
           
           <div className="flex items-center gap-2">
-            <Badge className={`${confidenceColor} flex items-center gap-1`}>
-              <ConfidenceIcon className="w-3 h-3" />
-              {Math.round(gene.score * 100)}% AI relevance
+            <Badge className={`${rankingColor} flex items-center gap-1`}>
+              <RankingIcon className="w-3 h-3" />
+              {rankingLabel}
             </Badge>
             <Button
               variant="ghost"
@@ -146,21 +161,16 @@ function GeneCard({ gene, rank, isSelected = false, onSelect = null }) {
         {isExpanded && (
           <div className="mb-4 bg-gradient-to-br from-slate-50 to-blue-50 p-4 rounded-lg border border-slate-200">
             <div className="flex items-start gap-2">
-              <ConfidenceIcon className={`w-5 h-5 mt-0.5 flex-shrink-0 ${
-                gene.score >= 0.9 ? 'text-green-600' : 
-                gene.score >= 0.7 ? 'text-yellow-600' : 
-                'text-orange-600'
-              }`} />
+              <RankingIcon className="w-5 h-5 mt-0.5 flex-shrink-0 text-slate-600" />
               <div className="flex-1">
                 <h4 className="font-medium text-slate-900 mb-2">
-                  About this AI ranking
+                  Provenance ranking basis
                 </h4>
-                
                 <div className="text-sm text-slate-600">
                   <p className="mb-2">
-                    <strong>AI relevance score:</strong> {Math.round(gene.score * 100)}%. This is
-                    a model-generated ordering aid, not a calibrated probability, evidence grade,
-                    diagnosis, or measure of personal risk.
+                    Ranked by evidence class (<strong>{rankingLabel}</strong>), not by LLM self-scores.
+                    AI leads are research suggestions only — not diagnosis, personal risk, treatment,
+                    or calibrated evidence grades. Human and animal evidence are kept separate below.
                   </p>
                   {gene.explanation && (
                     <p className="text-xs text-slate-500 italic">
@@ -170,6 +180,50 @@ function GeneCard({ gene, rank, isSelected = false, onSelect = null }) {
                 </div>
               </div>
             </div>
+          </div>
+        )}
+
+        {claims.length > 0 && (
+          <div className="mb-4 border border-slate-200 rounded-lg p-3 bg-white" data-testid="association-claims">
+            <h4 className="font-medium text-slate-900 mb-2 flex items-center gap-2 text-sm">
+              <BookOpen className="w-4 h-4" />
+              Association claims (source · version · evidence class · species · retrieved)
+            </h4>
+            <ul className="space-y-2">
+              {claims.map((claim, idx) => (
+                <li key={`${claim.source}-${claim.recordId || idx}`} className="text-xs text-slate-700 border-b border-slate-100 pb-2 last:border-0 last:pb-0">
+                  <div className="flex flex-wrap gap-1 mb-1">
+                    <Badge variant="outline" className="text-[10px]">{claim.evidenceClass}</Badge>
+                    <Badge variant="outline" className="text-[10px]">{claim.species || claim.taxon}</Badge>
+                    {claim.isAiLead && <Badge className="text-[10px] bg-amber-100 text-amber-900 border-amber-200">AI lead</Badge>}
+                  </div>
+                  <p className="font-medium text-slate-800">{claim.claim}</p>
+                  <p className="text-slate-600 mt-0.5">
+                    <span className="font-medium">{claim.source}</span>
+                    {claim.recordId ? ` · ${claim.recordId}` : ''}
+                    {claim.releaseVersion ? ` · ${claim.releaseVersion}` : ''}
+                    {claim.retrievalDate ? ` · retrieved ${claim.retrievalDate}` : ''}
+                  </p>
+                  {claim.directLink && (
+                    <a
+                      href={claim.directLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-blue-700 hover:underline mt-0.5"
+                    >
+                      <ExternalLink className="w-3 h-3" />
+                      Open source record
+                    </a>
+                  )}
+                </li>
+              ))}
+            </ul>
+            {(partition.animal?.length > 0 || partition.external?.length > 0) && (
+              <p className="text-[11px] text-slate-500 mt-2">
+                External database links are follow-up sources, not automatic claim-level citations.
+                Animal-model rows are displayed separately from human-verified claims.
+              </p>
+            )}
           </div>
         )}
 
