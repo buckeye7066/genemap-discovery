@@ -64,7 +64,10 @@ const gene = {
 };
 
 describe('GeneCard claim-level provenance', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    apiClient.logActivity.mockReset().mockResolvedValue({});
+  });
 
   it('labels provenance roles and renders stable complete values without promoting identity metadata', async () => {
     render(<GeneCard gene={gene} rank={1} />);
@@ -109,5 +112,34 @@ describe('GeneCard claim-level provenance', () => {
         entityId: 'RUNX1',
       }),
     ));
+  });
+
+  it('retries activity logging after a transient failure while preserving successful de-duplication', async () => {
+    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    apiClient.logActivity
+      .mockRejectedValueOnce(new Error('transient activity service failure'))
+      .mockResolvedValueOnce({});
+    const retryGene = {
+      ...gene,
+      symbol: 'RETRY1',
+      name: 'Retry logging fixture',
+      associationClaims: [],
+      evidencePartition: undefined,
+    };
+
+    const firstRender = render(<GeneCard gene={retryGene} rank={1} />);
+    await waitFor(() => expect(apiClient.logActivity).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(consoleSpy).toHaveBeenCalled());
+    firstRender.unmount();
+
+    const secondRender = render(<GeneCard gene={retryGene} rank={1} />);
+    await waitFor(() => expect(apiClient.logActivity).toHaveBeenCalledTimes(2));
+    secondRender.unmount();
+
+    render(<GeneCard gene={retryGene} rank={1} />);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(apiClient.logActivity).toHaveBeenCalledTimes(2);
+
+    consoleSpy.mockRestore();
   });
 });
