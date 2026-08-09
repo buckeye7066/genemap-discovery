@@ -36,6 +36,17 @@ const enrichSchema = z.object({
   phenotypes: z.array(z.string().trim().min(1).max(256)).max(100).optional(),
 });
 
+function attachAdapterRetrieval(records, retrievedAt) {
+  return Object.fromEntries(
+    Object.entries(records || {}).map(([key, record]) => [
+      key,
+      record && typeof record === 'object'
+        ? { ...record, retrievedAt, retrievalScope: 'genemap_adapter_response' }
+        : record,
+    ]),
+  );
+}
+
 export default async function genomicsRoutes(fastify) {
   fastify.addHook('preHandler', authenticate);
 
@@ -176,6 +187,13 @@ export default async function genomicsRoutes(fastify) {
       symbols.length ? enrichGenes(symbols) : Promise.resolve({}),
       phenotypes.length ? validateHpoTerms(phenotypes) : Promise.resolve({}),
     ]);
-    return { genes, phenotypes: hpo };
+    // This is the exact time the authenticated client retrieved the bounded
+    // adapter response. It is not mislabeled as an upstream database release.
+    const retrievedAt = new Date().toISOString();
+    return {
+      genes: attachAdapterRetrieval(genes, retrievedAt),
+      phenotypes: attachAdapterRetrieval(hpo, retrievedAt),
+      adapterRetrievedAt: retrievedAt,
+    };
   });
 }
