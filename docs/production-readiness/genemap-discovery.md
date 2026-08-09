@@ -1,167 +1,212 @@
-# Axiom GeneMap Discovery - Production Readiness Report
+# Axiom GeneMap Discovery: Production Readiness Record
 
-**Program:** Axiom GeneMap Discovery  
 **Executor:** ChatGPT  
-**Working branch:** `chatgpt/production-ready/genemap-discovery`  
-**Repo:** buckeye7066/genemap-discovery (private; default `main`)  
-**Local path recorded by prior executor:** `C:\Users\firer\genemap-discovery` (not independently accessible from this session)  
-**Deployed app:** https://genemap-discovery.vercel.app  
-**API:** https://genemap-api-production.up.railway.app  
-**Reviewed baseline default-branch SHA:** `4a3fe456b9fceb949ba6bd4132c96f87f501459f`  
-**Purpose-defining software merge SHA before this review:** `f0d3b64b9ae17f70ef2656b173cd51ca4c71215b`  
-**Current release-candidate PR:** #123  
-**Current phase:** `TESTING`  
-**Release status:** `BLOCKED`  
-**Updated:** 2026-08-09  
+**Repository:** `buckeye7066/genemap-discovery`  
+**Verified default branch:** `main`  
+**Reviewed baseline SHA:** `4a3fe456b9fceb949ba6bd4132c96f87f501459f`  
+**Implementation SHA immediately before this evidence-only record:** `89bc2ee2aded0855a85275b57f46ea54fb137fe5`  
+**Release pull request:** `#123`  
+**Web target:** `https://genemap-discovery.vercel.app`  
+**API target:** `https://genemap-api-production.up.railway.app`  
+**Current phase:** `MERGING`  
+**Current release status:** `BLOCKED`  
+**Updated:** 2026-08-09
 
-## Purpose and acceptance contract
+This file records the software and evidence state without predicting its own future merge SHA. The exact final default-branch SHA, CI runs, deployment identity, and post-merge review belong in PR #123's immutable release evidence comment after merge.
 
-GeneMap Discovery is a genetics **education and early-research** platform that must:
+## Purpose Contract
 
-- separate AI-generated candidate leads from verified evidence
-- show source, species, taxon, source release/version, reference assembly, evidence type, evidence strength, AI-lead status, and an adapter retrieval date only when an authoritative lookup actually occurred
-- distinguish genuine gene-query association evidence from gene identity, coordinate, ontology, and follow-up-source metadata
-- let an authenticated learner move from lessons into gene search and a guided aggregate-research workflow
-- keep human, animal, computational, AI-lead, and external-follow-up evidence visibly distinct
-- use deterministic normalization and benchmarks for material scientific assertions
-- treat every model response as untrusted data and enforce task-specific publication boundaries before browser use
-- fail closed during provider incidents or recovery without charging user quota or publishing model output
-- remain impossible to mistake for diagnosis or clinical decision support
+GeneMap Discovery is an approachable genetics education and early-research platform. It must let learners move from lessons into source-checkable gene discovery and structured aggregate research while clearly separating AI-generated candidate leads from verified evidence.
 
-**Not in publishable scope:** personalized clinical AI, Clinical Support, Medical Data UI, diagnosis, personal-risk prediction, PGx, dosing, drug avoidance, screening urgency, treatment recommendation, or trial matching.
+### Intended users
 
-## Ready criteria (Exit 54-57)
+- learners studying genetics at supported education levels
+- educators using guided genetics explanations, quizzes, and examples
+- researchers organizing early, non-clinical candidate leads and aggregate-study hypotheses
 
-| # | Criterion | Status | Evidence |
-|---|-----------|--------|----------|
-| 54 | Full CI/browser journeys; high-risk clinical routes impossible in publishable builds | **PASS (software boundary)** | `clinicalPublishingBoundary.test.js` verifies the publication flags, route graph, navigation graph, shared client, and Research Mode omit high-risk clinical surfaces. `publication-boundary.spec.js` installs a synthetic authenticated education session, attempts every removed route directly, and requires a Page Not Found result. The reviewed production bundle also omitted the named clinical pages. This proves the software route boundary; it does not substitute for the still-missing owner-authorized live learner journey. |
-| 55 | Every displayed evidence or metadata row exposes its provenance without overstating association support | **IN PROGRESS (PR #123)** | PR #123 labels every row as `association_evidence`, `ai_candidate_lead`, or `source_metadata`; uses one shared association-ranking contract across cards, print, and copied text; renders source, record ID, source release/version, reference assembly, evidence class/type/strength, species, taxon, adapter retrieval date, AI-lead status, and validated source link with explicit missing values; and keeps identity/HPO/link metadata from promoting candidate ranking. MyGene and HPO records are stamped only when the adapter actually returns a response, and the timestamp is preserved through cache reuse. This criterion remains pending until exact-head CI, substantive review, merge, deployment, and actual output inspection are complete. |
-| 56 | Known benchmark fixtures reproduce; limitations documented; no silent human/animal mixing | **PASS (software)** | `services/api/fixtures/benchmarks/` and `scientificBenchmarks.test.js` are exercised by CI; claim partitioning keeps human, animal, computational, AI-lead, and external-follow-up evidence distinct. |
-| 57 | Public positioning and generated output remain education/early research only | **IN PROGRESS (PR #123)** | Baseline public metadata, Privacy, Terms, and Search copy prohibit clinical use. PR #123 adds task-specific server output containment for candidate-gene JSON, aggregate research, research hypotheses, and learning summaries; drops or withholds model-generated clinical guidance; rejects clinical instructions disguised as candidate symbols; strips all link-capable Markdown/HTML forms; bounds narrative output; preserves safe complete disclaimers; and exposes a fail-closed recovery switch through the same runtime state used by `/llm/invoke` and `/readyz`. Release evidence is still pending. |
+### Purpose-defining workflows
 
-## Bridge (48-53)
+1. Sign in and use genetics lessons without hidden clinical surfaces.
+2. Move from learning into Gene Search.
+3. Select a reviewed disease/phenotype reference or exact HPO identifier.
+4. Generate bounded candidate-gene leads.
+5. Distinguish AI leads, association evidence, identity/ontology metadata, species, taxon, source version, assembly, retrieval status, and source links.
+6. Print or copy a provenance-preserving gene summary.
+7. Open Research Mode, define a structured aggregate cohort, generate a bounded hypothesis, and download a self-identifying Markdown artifact.
+8. Recover safely from provider or deployment failure without publishing model output or charging quota.
 
-| # | Bridge item | Status |
-|---|-------------|--------|
-| 48 | Remove or hard-disable personalized clinical AI and related paths; add regression tests | **PASS (software boundary)** - static route/client tests plus synthetic-authenticated direct-route Playwright coverage and reviewed live-bundle absence |
-| 49 | Provenance-first association model | **IN PROGRESS (PR #123)** - one shared role/ranking contract, separate source release and reference assembly fields, safe links, complete UI/report/share provenance, real adapter timestamps, and explicit missing values are awaiting clean merge/deploy/output inspection |
-| 50 | Separate human, animal, computational, AI-lead, and external follow-up evidence | **PASS (software)** - partition helpers and row-role labels; HPO term presence is source metadata, not curated association evidence |
-| 51 | Reference build and deterministic variant normalization | **PASS (software)** - `variantNormalize.js` is wired into `vcf.js` with pinned reference/source versions |
-| 52 | Deterministic scientific benchmarks and synthetic demonstrations | **PASS (software)** - ClinGen/ClinVar, HPO/Monarch, and GIAB fixtures |
-| 53 | Privacy, processor, and subprocessor review; no HIPAA claim without evidence | **BLOCKED** - executed DPAs, named owners, regions, retention/deletion evidence, production launch evidence, and counsel/security approval remain incomplete |
+### Forbidden substitutes
 
-## Verification evidence
+GeneMap is not complete if it provides only generic AI prose, guessed identifiers, model self-scores, cosmetic evidence labels, unsafe links, clinical recommendations, a page-load smoke test, a preview deployment, or a self-authored readiness score.
 
-```text
-Previously merged implementation evidence:
-  @genemap/shared vitest                    -> 86 passed
-  API variantNormalize + benchmarks        -> 10 passed
-  Web PhenotypeSearch + clinicalBoundary   -> 34 passed
-  pnpm audit after js-yaml/nanoid bump      -> no known vulnerabilities
+## Release acceptance state
 
-Reviewed baseline SHA:
-  4a3fe456b9fceb949ba6bd4132c96f87f501459f
+| Acceptance requirement | Evidence state |
+|---|---|
+| Lessons-to-research navigation | Implemented and covered by route/bundle and synthetic authenticated browser tests; owner-authorized production journey still required |
+| AI leads separated from verified evidence | Implemented in shared claim-role and ranking contracts |
+| Human, animal, computational, AI, and follow-up evidence separated | Implemented and regression-tested |
+| Source/species/version/assembly/taxon/retrieval provenance | Implemented across GeneCard, print, and copied text; missing values remain explicit |
+| Authoritative retrieval timestamps | MyGene/HPO adapters stamp successful source responses once; route response time is separately recorded as `adapterRetrievedAt` |
+| Model output containment | Implemented for candidate genes, gene profiles, research narratives, learning summaries, explanations, tutor chat, quiz fields, and revised image prompts |
+| Link/image containment | Server strips HTML, inline/reference Markdown targets, absolute URLs, active schemes, and protocol-relative URLs; React renderers make model links/images inert |
+| Clinical boundary | Candidate symbols, names, synonyms, explanations, summaries, quiz content, educational output, and research output fail closed on actionable clinical guidance |
+| Failure and recovery | `DISABLE_MODEL_PUBLICATION=1` returns 503 before quota accounting, prompt composition, or provider access and reports degraded readiness |
+| Search quick starts | Reviewed catalog references or exact HPO identifiers only; misleading gene-symbol and unresolved-label shortcuts removed |
+| Research artifact integrity | Download includes exact focus identity, control-group state, cohort, objective, modalities, generation time, and non-clinical boundary |
+| Full exact-head gates | Required before merge; final run IDs and conclusions recorded on PR #123 |
+| Exact-SHA production deployment | Required after merge |
+| Owner-authorized authenticated production journey | Not yet supplied |
+| Processor/privacy, backup/restore, monitoring, Stripe, and qualified review evidence | Not yet supplied |
 
-Baseline CI workflow run 31287331407         -> success
-  verify-migrations                          -> success
-  security-audit                             -> success
-  lint-and-typecheck                         -> success
-  test                                       -> success
-  api-integration-postgres                   -> success
-  migration-smoke                            -> success
-  build-web                                  -> success
-  docker-build-api                           -> success
-  desktop-build-smoke                        -> success
-  desktop-build-windows-smoke                -> success
+## Implemented release scope
 
-Baseline Web Tests run 31287331405            -> success
-  backup safeguards                          -> success
-  build shared package                       -> success
-  Web tests (Vitest + jsdom)                 -> success
-  Web typecheck                              -> success
-  Build web bundle                           -> success
-  Verify publication bundle excludes clinical code -> success
-  Authenticated publication-boundary browser journeys -> success
+### Scientific and provenance integrity
 
-Baseline Production Smoke run 31298925133    -> success
-  Live health, readiness, CORS, and web shell -> success
-  E2E (public surface, Chromium)             -> success
+- one association-ranking contract shared by cards, printable reports, copied summaries, and candidate ordering
+- identity, coordinates, ontology records, and database links remain visible but cannot promote a candidate as association evidence
+- source release/version and reference assembly are separate fields
+- AI-lead status takes precedence over contradictory verified-looking metadata
+- model self-scores are stripped before ranking or display
+- real adapter retrieval dates are preserved across cache reuse; AI leads and unvisited external links remain unrecorded
+- safe absolute HTTP(S) source links only
 
-Baseline deployment and live identity:
-  GitHub Vercel deployment status            -> success
-  GitHub Railway deployment status           -> success
-  Vercel production deployment               -> READY @ 4a3fe456
-  Live web shell                             -> HTTP 200
-  Production route bundle                    -> Search, Dashboard, and Research Mode are structurally included in the authenticated route configuration
+### Education and research publication boundary
 
-Current PR #123 release-candidate additions:
-  Shared claim contract                     -> safe links; source release separated from reference assembly; shared provenance role and ranking derivation; no invented retrieval date
-  Authoritative adapters                    -> MyGene/HPO retrieval timestamps created only after successful upstream responses and preserved through cache reuse
-  GeneCard                                  -> association evidence, AI lead, and source metadata labeled separately; complete stable values and safe links; bounded mounted retry for activity persistence
-  Printable gene report                     -> same role/ranking contract, complete provenance, candidate-label notices, escaped values
-  Copied gene summary                       -> same ranking fallback and stable role/provenance fields including assembly and AI-lead status
-  Candidate-gene API output                 -> server-owned JSON parsing, field narrowing, symbol normalization, deduplication, caps, clinical-text rejection, control removal, fail-closed structures
-  Research/learning API output              -> bounded task-specific narrative normalization; active markup/link removal; clinical-guidance withholding; deterministic empty states
-  Guided Research Mode                      -> structured aggregate cohort, reviewed concept/exact HPO focus, bounded modalities/objectives, inert generated Markdown, downloadable research artifact
-  Recovery control                          -> DISABLE_MODEL_PUBLICATION=1 returns 503 before quota, resolution, composition, or provider access; /readyz reports the same state as degraded
-  Regression tests                          -> ranking semantics, metadata roles, source release vs assembly, real retrieval dates, complete card/report/share fields, unsafe links, clinical prose and symbols, mounted activity retry, recovery switch, all structured tasks, malformed JSON, null and non-finite values
-  Final CI / review / merge / deployment / output -> pending at the time of this record
-```
+- server-owned structured task contracts and query references
+- candidate symbol normalization, deduplication, limits, and clinical-command rejection
+- explicit gene-profile states: `available`, `withheld`, and `unavailable`
+- bounded education, tutor, research, hypothesis, and learning narratives
+- quiz questions fail closed as complete units so answer indices cannot shift
+- direct medication instructions, including named-drug imperatives, are withheld
+- generated Markdown links/images are inert even if upstream sanitization regresses
 
-## Actual blockers and exact owner action packet
+### Reliability, security, and recovery
 
-GeneMap Discovery remains `BLOCKED`. Code completion, green CI, a successful deployment, or a healthy endpoint do not satisfy the privacy, operations, and real-release acceptance gates.
+- bounded mounted retry for failed gene-view activity writes with cancellation and successful-session de-duplication
+- emergency model-publication circuit breaker before quota/provider work
+- `/readyz` exposes the same recovery state
+- no pre-containment revision is designated safe with provider credentials active
+- VCF parsing and public-reference lookup remain deterministic and authenticated
+- dependency, lint, typecheck, migration, API integration, web, browser, Docker, Linux desktop, and Windows packaging gates remain hard-fail release checks
 
-### A. Complete the processor and subprocessor register
+## Verification matrix
 
-Complete every applicable unchecked item in `docs/PROCESSOR_REGISTER.md`:
+The exact final head must pass all applicable gates below. The implementation SHA `89bc2ee2aded0855a85275b57f46ea54fb137fe5` had passing API/shared tests, lint/typecheck, security audit, migrations, API/Postgres integration, web build, Docker build, Linux desktop smoke, Vercel preview, and browser/publication-boundary coverage when this record was prepared; its Windows packaging smoke was still executing. This evidence-only commit must receive a fresh complete run.
 
-1. Name an accountable Axiom owner for every active or conditional service.
-2. Identify the Redis operator, or remove `REDIS_URL` from production.
-3. Record exact account/project identifiers, selected regions, and data locations.
-4. Execute or verify applicable DPAs and document plan eligibility.
-5. Review each current subprocessor list and subscribe to change notices.
-6. Record retention, deletion, export, logging, training, and support-access settings.
-7. Verify processor deletion propagation with test evidence.
-8. Verify backups, logs, email, error telemetry, and billing exceptions in the deletion manifest.
-9. Obtain counsel and security-owner approval for the public policy and data map.
-10. Keep HIPAA, BAA, medical-device, clinical-readiness, and similar claims out of public copy unless independently evidenced for the exact production configuration.
+| Gate | Required result |
+|---|---|
+| Frozen dependency install | success |
+| Lint | success |
+| Full configured typecheck | success |
+| API Vitest | success |
+| Shared-package Vitest | success |
+| Web Vitest/jsdom | success |
+| Postgres API integration | success |
+| Migration verification and smoke | success |
+| Dependency/security audit | success |
+| Web production build | success |
+| Publication bundle clinical-route exclusion | success |
+| Synthetic authenticated browser journeys | success |
+| API Docker build | success |
+| Linux desktop build smoke | success |
+| Windows NSIS build smoke | success |
+| Vercel preview deployment | READY |
+| Fresh CodeRabbit review | no unresolved release blocker |
+| Fresh Codex review | no unresolved release blocker |
+| Post-merge exact-SHA CI and review | success and clean |
 
-### B. Complete the production-launch evidence file exactly as the verifier requires
+### Adversarial regression coverage added
 
-Create `ops/production-launch-evidence.json` from `ops/production-launch-evidence.example.json`. The verifier in `scripts/verify-production-launch.mjs` requires these exact fields and conditions:
+- `STOP-DRUG`, `TAKE-5MG`, and `TAKE-ASPIRIN` cannot pass as gene symbols
+- `Take aspirin.`, `Aspirin is recommended.`, and scheduled metformin instructions are withheld
+- safe neutral genetics education remains publishable
+- reference-style links/images, HTML, active schemes, and protocol-relative targets become inert
+- unsafe quiz questions are discarded without changing a safe question's answer index
+- education recovery returns 503 before quota counting or provider invocation
+- gene-profile rejection produces a safe withheld/unavailable state, never an invented association sentence
+- route-level retrieval timestamps cannot overwrite immutable source-record timestamps
+- Research Mode downloads preserve controls and exact focus identity
+- Search quick starts execute reviewed references and omit misleading `hearing loss` and `BRCA1` phenotype shortcuts
 
-- `reviewedBy`
-- `reviewedAt` within 30 days
-- `productionSecrets.storedInSecretManager = true`
-- `productionSecrets.rotatedForLaunch = true`
-- `productionSecrets.manager`
-- `backups.automaticBackupsEnabled = true`
-- `backups.retentionDays >= 7`
-- `backups.lastSuccessfulBackupAt` within 2 days
-- `backups.restoreTestedAt` within 90 days
-- `backups.restoreRunbook`
-- `monitoring.errorTrackingConfigured = true`
-- `monitoring.logAggregationConfigured = true`
-- `monitoring.alertingConfigured = true`
-- `monitoring.dashboardUrl` as a production HTTPS URL
-- `monitoring.pagerEscalation`
-- `stripe.liveMode = true`
-- `stripe.webhookEndpoint` as HTTPS ending in `/billing/webhook`
-- `stripe.webhookEvents` containing all six required events: `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.payment_succeeded`, and `invoice.payment_failed`
-- `stripe.lastWebhookTestAt` within 30 days
-- `dataRetention.policyApproved = true`
-- `dataRetention.policyDocument`
-- `dataRetention.deletionRequestSlaDays` between 1 and 30
-- `dataRetention.backupRetentionDays >= 7`
-- `legalCompliance.legalReviewCompleted = true`
-- `legalCompliance.complianceReviewCompleted = true`
-- `legalCompliance.reviewer`
-- `legalCompliance.reviewedAt` within 365 days
-- `legalCompliance.medicalDisclaimerApproved = true`
-- `legalCompliance.baaStatus` equal to `signed` or `not_required`
+## Exact PR #123 file inventory
 
-Run the verifier from an owner-authorized environment containing the real production configuration and secrets:
+1. `apps/web/components/education/AdaptiveExplanation.jsx`
+2. `apps/web/components/education/__tests__/AdaptiveExplanation.safety.test.jsx`
+3. `apps/web/components/research/HypothesisGenerator.jsx`
+4. `apps/web/components/research/__tests__/HypothesisGenerator.download.test.jsx`
+5. `apps/web/components/search/GeneCard.jsx`
+6. `apps/web/components/search/PhenotypeSearchService.jsx`
+7. `apps/web/components/search/__tests__/GeneCard.provenance.test.jsx`
+8. `apps/web/components/search/__tests__/PhenotypeSearchService.test.js`
+9. `apps/web/components/shared/__tests__/safeModelMarkdown.test.jsx`
+10. `apps/web/components/shared/safeModelMarkdown.jsx`
+11. `apps/web/lib/__tests__/exportUtils.test.js`
+12. `apps/web/lib/exportUtils.js`
+13. `apps/web/pages/Dashboard.jsx`
+14. `apps/web/pages/Search.jsx`
+15. `apps/web/pages/TopicExplorer.jsx`
+16. `apps/web/pages/__tests__/Search.quickStarts.test.jsx`
+17. `docs/PRODUCTION_READINESS_REPORT.md`
+18. `docs/production-readiness/genemap-discovery.md`
+19. `packages/shared/src/__tests__/associationClaim.test.ts`
+20. `packages/shared/src/associationClaim.ts`
+21. `services/api/.env.example`
+22. `services/api/src/__tests__/education-model-recovery.test.js`
+23. `services/api/src/__tests__/education-output-boundary.integration.test.js`
+24. `services/api/src/__tests__/genomicEnrich.test.js`
+25. `services/api/src/__tests__/genomicEnrich.timestamp.test.js`
+26. `services/api/src/__tests__/genomicRetrievalProvenance.test.js`
+27. `services/api/src/__tests__/llm-publication-recovery.test.js`
+28. `services/api/src/__tests__/publicationTaskOutput.education-boundary.test.js`
+29. `services/api/src/__tests__/publicationTaskOutput.securityRegression.test.js`
+30. `services/api/src/__tests__/publicationTaskOutput.symbol-boundary.test.js`
+31. `services/api/src/__tests__/publicationTaskOutput.symbolPolicy.test.js`
+32. `services/api/src/__tests__/publicationTaskOutput.test.js`
+33. `services/api/src/index.js`
+34. `services/api/src/routes/education.js`
+35. `services/api/src/routes/genomics.js`
+36. `services/api/src/routes/llm.js`
+37. `services/api/src/services/genomicDatabases.js`
+38. `services/api/src/services/publicationTaskOutput.js`
+
+## Deployment and rollback contract
+
+1. Merge only the exact reviewed head after every required check concludes successfully.
+2. Confirm CI on the exact merge/default-branch SHA.
+3. Confirm Vercel and Railway deploy that exact SHA, not merely a newer or older successful build.
+4. Run public, authenticated, API, write/read, output, and recovery journeys against that release.
+5. During a model-output incident, set `DISABLE_MODEL_PUBLICATION=1` on the contained release.
+6. Verify `/readyz` reports `degraded=true` and `modelPublication.status=disabled_for_safe_recovery`.
+7. Verify authenticated generated-publication requests return 503 with no result, provider request, or quota increment.
+8. Redeploy only a contained release SHA. A forced pre-containment deployment requires removal of provider credentials and remains a degraded emergency state.
+9. Restore model publication only after exact-SHA smoke, boundary, and output verification.
+
+No database schema change is introduced by PR #123. Database rollback and recovery still require separately evidenced backups and restore testing.
+
+## External release blockers
+
+All connector-accessible implementation and verification must be completed before this section is used. These items cannot be inferred from green CI or a deployment badge.
+
+### Processor and privacy evidence
+
+Complete `docs/PROCESSOR_REGISTER.md` with accountable owners, vendors, account/project identifiers, regions, data locations, DPAs, retention, deletion propagation, support access, training use, telemetry, backup exceptions, and counsel/security approval.
+
+### Production launch evidence
+
+Create and validate `ops/production-launch-evidence.json` with:
+
+- named reviewer and review date
+- secrets stored in an approved secret manager and rotated for launch
+- automatic backups, retention, recent successful backup, tested restore, and runbook
+- error tracking, log aggregation, alerting, dashboard, and escalation path
+- Stripe live mode, production webhook endpoint, required event subscriptions, and recent webhook test
+- approved retention/deletion policy and SLA
+- completed legal and compliance review
+- approved medical disclaimer
+- BAA status of `signed` or `not_required`
+
+Run:
 
 ```bash
 node scripts/verify-production-launch.mjs \
@@ -170,72 +215,31 @@ node scripts/verify-production-launch.mjs \
   --evidence=ops/production-launch-evidence.json
 ```
 
-A hand-written readiness statement is not a substitute for a zero-failure verifier result.
+The result must contain zero failures.
 
-### C. Capture the required real authenticated learner journey
+### Owner-authorized authenticated production journey
 
-Using an owner-authorized test account on the exact deployed release:
+On the exact deployed release, retain redacted evidence of:
 
-1. Sign in.
-2. Start, complete, or intentionally leave a lesson and verify progress behavior.
-3. Open Gene Search from the authenticated navigation.
-4. Execute a source-checkable candidate-gene search.
-5. Inspect row roles and the complete provenance values.
-6. Open Research Mode and complete the guided aggregate-research workflow.
-7. Inspect the generated hypothesis for scientific usefulness, non-clinical scope, missingness, uncertainty, and inert link/image behavior.
-8. Download the Markdown research artifact and inspect it.
-9. Print or save a gene report and inspect its ranking and provenance sections.
-10. Copy the gene summary and inspect its role, version, assembly, evidence, species/taxon, adapter retrieval date, and AI-lead fields.
-11. Sign out and verify protected routes reject the unauthenticated session.
-12. Retain redacted screenshots, logs, output artifacts, and the exact release SHA without using personal genomic data.
+1. sign-in and lesson/progress behavior
+2. lesson-to-Gene-Search navigation
+3. a source-checkable reviewed-reference search
+4. complete provenance inspection on GeneCard
+5. print and copy artifact inspection
+6. Research Mode cohort configuration and bounded hypothesis generation
+7. downloaded Markdown inspection, including focus and controls
+8. inert generated-link/image behavior
+9. sign-out and protected-route rejection
+10. fail-closed recovery switch behavior
 
-This journey is a blocking action, not an optional suggestion.
+Do not use personal genomic data for release verification.
 
-## Deployment and rollback contract
+## Release decision
 
-- Reviewed GitHub `main` baseline: `4a3fe456b9fceb949ba6bd4132c96f87f501459f`.
-- Purpose-defining baseline software is contained in ancestor merge `f0d3b64b9ae17f70ef2656b173cd51ca4c71215b`.
-- PR #123 changes user-visible provenance rendering/export/share behavior, association-ranking semantics, source-version/assembly representation, the shared claim-link contract, Research Mode, and every published structured AI output boundary. It must pass full CI, substantive fresh review, merge, exact-SHA deployment verification, and output inspection before its work can be treated as released.
-- Vercel production identified baseline SHA `4a3fe456` and was READY at baseline review time. GitHub reported successful Vercel and Railway deployment contexts for that same SHA.
-- **No pre-containment SHA is a safe model-enabled rollback target.** In particular, `4a3fe456` predates the server-owned output sanitizer and cannot be redeployed with provider keys active.
-- The safe recovery sequence for this release is:
-  1. On the contained release, set `DISABLE_MODEL_PUBLICATION=1`.
-  2. Verify `/readyz` remains probeable but returns `status=degraded`, `degraded=true`, and `modelPublication.status=disabled_for_safe_recovery`.
-  3. Make an authenticated structured `/llm/invoke` request and verify HTTP 503, no `result`, no provider request, and no usage increment.
-  4. Recover or redeploy the exact contained release SHA and restore `DISABLE_MODEL_PUBLICATION=0` only after full smoke and output-boundary verification.
-- If infrastructure forces an emergency deployment of a pre-containment SHA, first remove both `OPENAI_API_KEY` and `ANTHROPIC_API_KEY`, set `SKIP_LLM_KEY_CHECK=1` only to permit startup, and prove every generated publication request fails without a result. This is a degraded emergency state, not a Production Ready release.
-- After PR #123 is merged and deployed, record its exact verified merge SHA as the primary immutable recovery target for subsequent releases. Do not nominate an older pre-containment revision.
-- PR #123 contains no database schema or migration change; recovery retains the compatible current database. Database backup and restore remain separately governed by the launch-evidence packet.
-- The final merged software SHA and post-merge deployment evidence must be recorded after PR #123 merges; this file deliberately does not predict its own future merge SHA.
-- Local launch information above is historical evidence only until independently verified on Dr. White's Windows machine.
+**Current decision: `BLOCKED`.**
 
-## Current PR #123 files
+PR #123 must still pass fresh exact-head CI and review, merge to `main`, pass post-merge CI/review, deploy by exact SHA, and receive live output inspection. After connector-accessible release work is complete, if the only remaining items are the owner-controlled evidence above, the truthful status becomes:
 
-- `packages/shared/src/associationClaim.ts`
-- `packages/shared/src/__tests__/associationClaim.test.ts`
-- `apps/web/components/search/GeneCard.jsx`
-- `apps/web/components/search/__tests__/GeneCard.provenance.test.jsx`
-- `apps/web/components/search/PhenotypeSearchService.jsx`
-- `apps/web/components/search/__tests__/PhenotypeSearchService.test.js`
-- `apps/web/components/research/HypothesisGenerator.jsx`
-- `apps/web/components/research/__tests__/HypothesisGenerator.test.jsx`
-- `apps/web/components/shared/safeModelMarkdown.jsx`
-- `apps/web/components/shared/__tests__/safeModelMarkdown.test.jsx`
-- `apps/web/lib/exportUtils.js`
-- `apps/web/lib/__tests__/exportUtils.test.js`
-- `services/api/src/services/genomicDatabases.js`
-- `services/api/src/services/publicationTaskOutput.js`
-- `services/api/src/__tests__/genomicRetrievalProvenance.test.js`
-- `services/api/src/__tests__/llm-publication-recovery.test.js`
-- `services/api/src/__tests__/publicationTaskOutput.securityRegression.test.js`
-- `services/api/src/__tests__/publicationTaskOutput.test.js`
-- `services/api/src/routes/llm.js`
-- `services/api/src/index.js`
-- `services/api/.env.example`
-- `docs/production-readiness/genemap-discovery.md`
+`SOFTWARE COMPLETE, EXTERNAL RELEASE BLOCKER`
 
-## Production-ready decision
-
-**`BLOCKED`**
-
-The reviewed baseline is deployed and its earlier engineering gates were healthy. PR #123 still requires clean exact-head CI and review, merge, post-merge CI/review, exact-SHA deployment verification, real authenticated output inspection, and the owner-controlled processor/privacy/operations evidence above. No green build, merged pull request, deployment badge, or self-authored readiness report changes that status by itself.
+It becomes `PRODUCTION READY` only after the processor/privacy, operational, payment, qualified-review, and authenticated-production evidence is completed and verified.
