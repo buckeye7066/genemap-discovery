@@ -9,6 +9,7 @@ import {
   enrichGenes,
   validateHpoTerms,
 } from '../services/genomicDatabases.js';
+import { getPublicationAssociationEvidence } from '../services/associationEvidenceContract.js';
 import { parseVcfText, enrichVcfVariants, VCF_LIMITS } from '../services/vcf.js';
 import { ValidationError, NotFoundError } from '../utils/errors.js';
 import { createAuditLog } from '../utils/audit.js';
@@ -35,6 +36,46 @@ const enrichSchema = z.object({
   symbols: z.array(z.string().trim().min(1).max(64)).max(50).optional(),
   phenotypes: z.array(z.string().trim().min(1).max(256)).max(100).optional(),
 });
+
+const hpoReferenceSchema = z.object({
+  kind: z.literal('hpo'),
+  identifier: z.string().trim().regex(/^HP:\d{7}$/iu),
+  canonicalLabel: z.string().trim().min(1).max(256).optional(),
+  source: z.string().trim().min(1).max(256).optional(),
+  apiVersion: z.string().trim().min(1).max(64).optional(),
+  ontologyVersion: z.string().trim().min(1).max(128).nullable().optional(),
+  obsolete: z.boolean().optional(),
+}).strict();
+
+const mondoReferenceSchema = z.object({
+  kind: z.literal('mondo'),
+  identifier: z.string().trim().regex(/^MONDO:\d{7}$/iu),
+  canonicalLabel: z.string().trim().min(1).max(256).optional(),
+  source: z.string().trim().min(1).max(256).optional(),
+  apiVersion: z.string().trim().min(1).max(64).optional(),
+  ontologyVersion: z.string().trim().min(1).max(128).nullable().optional(),
+  obsolete: z.boolean().optional(),
+}).strict();
+
+const curatedReferenceSchema = z.object({
+  kind: z.literal('curated_concept'),
+  conceptId: z.string().trim().min(1).max(128),
+  canonicalLabel: z.string().trim().min(1).max(256),
+  conceptKind: z.enum(['disease', 'phenotype']),
+  source: z.literal('genemap_curated'),
+  version: z.literal(1),
+}).strict();
+
+const associationEvidenceSchema = z.object({
+  query: z.discriminatedUnion('kind', [
+    hpoReferenceSchema,
+    mondoReferenceSchema,
+    curatedReferenceSchema,
+  ]),
+  symbols: z.array(
+    z.string().trim().toUpperCase().regex(/^[A-Z0-9][A-Z0-9-]{1,14}$/u),
+  ).min(1).max(15),
+}).strict();
 
 /**
  * Preserve each authoritative adapter's original source-retrieval timestamp.
@@ -178,6 +219,15 @@ export default async function genomicsRoutes(fastify) {
     if (!q) throw new ValidationError('Query parameter q is required');
     const data = await searchPhenotypes(q);
     return data;
+  });
+
+  // ─── Source-grounded association evidence ─────────────────────
+  // Candidate symbols remain AI-generated research leads until this bounded
+  // adapter returns a complete source-labelled association tuple. Numeric
+  // provider scores are deliberately absent from the browser contract.
+  fastify.post('/association-evidence', async (request) => {
+    const { query, symbols } = associationEvidenceSchema.parse(request.body || {});
+    return getPublicationAssociationEvidence(query, symbols);
   });
 
   // ─── Authoritative enrichment ──────────────────────────────────
