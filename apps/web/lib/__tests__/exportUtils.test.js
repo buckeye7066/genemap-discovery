@@ -11,7 +11,6 @@ const gene = {
   name: 'RUNX family transcription factor 1',
   chromosome: '21',
   location: '21q22.12',
-  rankingBasis: 'human_verified',
   diseases: ['Candidate leukemia label'],
   phenotypes: [{ name: 'Leukemia', hpoId: 'HP:0001909', hpoVerified: true }],
   associationClaims: [
@@ -24,7 +23,8 @@ const gene = {
       evidenceClass: 'human_verified',
       evidenceType: 'gene_identity',
       evidenceStrength: 'supporting',
-      releaseVersion: 'GRCh38 / 2026-08',
+      releaseVersion: null,
+      referenceAssembly: 'GRCh38',
       retrievalDate: '2026-08-09',
       directLink: 'https://example.org/records/RUNX1?source=ClinGen',
       isAiLead: false,
@@ -39,6 +39,7 @@ const gene = {
       evidenceType: 'model_suggestion',
       evidenceStrength: 'lead',
       releaseVersion: 'candidate_gene_research@1',
+      referenceAssembly: null,
       retrievalDate: '2026-08-09',
       directLink: 'javascript:alert(1)',
       isAiLead: true,
@@ -61,25 +62,60 @@ afterEach(() => {
 });
 
 describe('gene report provenance', () => {
-  it('renders every required claim field and escapes untrusted content', () => {
+  it('renders every required provenance field and escapes untrusted content', () => {
     const sections = buildGeneReportSections(gene);
-    const provenance = sections.find(section => section.title === 'Association Claims and Provenance');
+    const provenance = sections.find(section => section.title === 'Evidence and Source Provenance');
 
     expect(provenance).toBeTruthy();
+    expect(provenance.content).toContain('Identity / ontology / follow-up metadata');
+    expect(provenance.content).toContain('AI candidate lead');
     expect(provenance.content).toContain('ClinGen &lt;curated&gt;');
     expect(provenance.content).toContain('RUNX1-001');
-    expect(provenance.content).toContain('GRCh38 / 2026-08');
+    expect(provenance.content).toContain('Source Release / Version</th><td>Not recorded');
+    expect(provenance.content).toContain('Reference Assembly</th><td>GRCh38');
     expect(provenance.content).toContain('human_verified');
     expect(provenance.content).toContain('gene_identity');
     expect(provenance.content).toContain('supporting');
     expect(provenance.content).toContain('Homo sapiens');
     expect(provenance.content).toContain('9606');
     expect(provenance.content).toContain('2026-08-09');
+    expect(provenance.content).toContain('AI Lead</th><td>false');
+    expect(provenance.content).toContain('AI Lead</th><td>true');
     expect(provenance.content).toContain('https://example.org/records/RUNX1?source=ClinGen');
     expect(provenance.content).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
     expect(provenance.content).not.toContain('<script>alert(1)</script>');
     expect(provenance.content).not.toContain('href="javascript:');
     expect(provenance.content).toContain('No validated HTTP(S) link recorded');
+  });
+
+  it('uses the same association-ranking fallback as the gene card', () => {
+    const overview = buildGeneReportSections(gene)
+      .find(section => section.title === 'Gene Overview');
+    const summary = buildGeneShareText(gene);
+
+    expect(overview.content).toContain('AI research lead');
+    expect(summary).toContain('Ranking: AI research lead');
+
+    const associationClaim = {
+      source: 'Reviewed computational fixture',
+      recordId: 'COMP:1',
+      claim: 'RUNX1 computationally supports the bounded query',
+      taxon: '9606',
+      species: 'Homo sapiens',
+      evidenceClass: 'computational',
+      evidenceType: 'gene_phenotype_association_prediction',
+      evidenceStrength: 'supporting',
+      releaseVersion: 'v1',
+      referenceAssembly: null,
+      retrievalDate: '2026-08-09',
+      directLink: 'https://example.org/COMP:1',
+      isAiLead: false,
+    };
+    const associationGene = { ...gene, associationClaims: [associationClaim] };
+    const associationOverview = buildGeneReportSections(associationGene)
+      .find(section => section.title === 'Gene Overview');
+    expect(associationOverview.content).toContain('Computational association evidence');
+    expect(buildGeneShareText(associationGene)).toContain('Ranking: Computational association evidence');
   });
 
   it('labels disease and phenotype lists as candidates rather than verified associations', () => {
@@ -88,7 +124,7 @@ describe('gene report provenance', () => {
     const phenotypeSection = sections.find(section => section.title === 'Candidate Phenotype Terms');
 
     expect(diseaseSection.content).toMatch(/Candidate labels only/);
-    expect(diseaseSection.content).toMatch(/not verified associations/);
+    expect(diseaseSection.content).toMatch(/explicitly labeled association evidence/);
     expect(phenotypeSection.content).toMatch(/Candidate terms only/);
     expect(phenotypeSection.content).toMatch(/not a gene-phenotype association/);
     expect(phenotypeSection.content).toContain('HP:0001909 (HPO-validated term)');
@@ -96,18 +132,22 @@ describe('gene report provenance', () => {
 
   it('fails closed when no claim-level provenance is supplied', () => {
     const sections = buildGeneReportSections({ symbol: 'ZZZ1', diseases: ['Unknown condition'] });
-    const provenance = sections.find(section => section.title === 'Association Claims and Provenance');
+    const provenance = sections.find(section => section.title === 'Evidence and Source Provenance');
 
     expect(provenance.content).toMatch(/No claim-level provenance was supplied/);
     expect(provenance.content).toMatch(/unverified research lead/);
   });
 
-  it('preserves provenance and explicit AI-lead status in the copied plain-text summary', () => {
+  it('preserves provenance roles, assembly, and explicit AI-lead status in copied text', () => {
     const summary = buildGeneShareText(gene);
 
+    expect(summary).toContain('Evidence and source provenance:');
+    expect(summary).toContain('role=source_metadata');
+    expect(summary).toContain('role=ai_candidate_lead');
     expect(summary).toContain('source=ClinGen <curated>');
     expect(summary).toContain('record=RUNX1-001');
-    expect(summary).toContain('version=GRCh38 / 2026-08');
+    expect(summary).toContain('version=Not recorded');
+    expect(summary).toContain('assembly=GRCh38');
     expect(summary).toContain('evidence=human_verified');
     expect(summary).toContain('evidence_type=gene_identity');
     expect(summary).toContain('evidence_strength=supporting');
@@ -134,6 +174,7 @@ describe('gene report provenance', () => {
         evidenceType: 'database_link',
         evidenceStrength: 'none',
         releaseVersion: null,
+        referenceAssembly: null,
         retrievalDate: '2026-08-09',
         directLink: null,
       }],
@@ -149,9 +190,9 @@ describe('gene report provenance', () => {
 
     expect(write).toHaveBeenCalledTimes(1);
     const html = write.mock.calls[0][0];
-    expect(html).toContain('Association Claims and Provenance');
+    expect(html).toContain('Evidence and Source Provenance');
     expect(html).toContain('ClinGen &lt;curated&gt;');
-    expect(html).toContain('GRCh38 / 2026-08');
+    expect(html).toContain('Reference Assembly</th><td>GRCh38');
     expect(html).toContain('gene_identity');
     expect(html).toContain('supporting');
     expect(html).toContain('Education and exploratory research only');
@@ -164,13 +205,13 @@ describe('gene report provenance', () => {
   it('normalizes explicit null input instead of crashing or inventing data', () => {
     const sections = buildGeneReportSections(null);
     const overview = sections.find(section => section.title === 'Gene Overview');
-    const provenance = sections.find(section => section.title === 'Association Claims and Provenance');
+    const provenance = sections.find(section => section.title === 'Evidence and Source Provenance');
     const summary = buildGeneShareText(null);
 
     expect(overview.content).toContain('Not recorded');
     expect(provenance.content).toMatch(/No claim-level provenance was supplied/);
     expect(summary).toContain('GeneMap Discovery - Gene: Unknown gene');
-    expect(summary).toContain('Association claims: none supplied');
+    expect(summary).toContain('Evidence and source provenance: none supplied');
 
     const { write } = installPrintWindow();
     expect(() => exportGeneReport(null)).not.toThrow();
