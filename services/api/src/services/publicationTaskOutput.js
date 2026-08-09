@@ -1,7 +1,6 @@
 const GENE_SYMBOL = /^[A-Z0-9][A-Z0-9-]{1,14}$/u;
 const CANDIDATE_TASK = 'candidate_gene_research';
 const ALLOWED_QUERY_TYPES = new Set(['disease', 'phenotype', 'hpo_term']);
-const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f]/gu;
 
 function isPlainObject(value) {
   return Boolean(value)
@@ -11,10 +10,16 @@ function isPlainObject(value) {
       || Object.getPrototypeOf(value) === null);
 }
 
+function replaceControlCharacters(value) {
+  return Array.from(value, (character) => {
+    const codePoint = character.codePointAt(0) ?? -1;
+    return codePoint <= 0x1f || codePoint === 0x7f ? ' ' : character;
+  }).join('');
+}
+
 function cleanText(value, maxLength) {
   if (typeof value !== 'string') return null;
-  const normalized = value
-    .replace(CONTROL_CHARACTERS, ' ')
+  const normalized = replaceControlCharacters(value)
     .replace(/\s+/gu, ' ')
     .trim();
   if (!normalized) return null;
