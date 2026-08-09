@@ -91,7 +91,7 @@ describe('GeneCard claim-level provenance', () => {
     expect(identityRow).toHaveTextContent('Record ID: RUNX1-001');
     expect(identityRow).toHaveTextContent('Source release/version: Not recorded');
     expect(identityRow).toHaveTextContent('Reference assembly: GRCh38');
-    expect(identityRow).toHaveTextContent('Retrieved: 2026-08-09');
+    expect(identityRow).toHaveTextContent('Adapter retrieval date: 2026-08-09');
     expect(identityRow).toHaveTextContent('AI lead: false');
 
     const sourceLink = identity.getByRole('link', { name: /open source record/i });
@@ -114,8 +114,7 @@ describe('GeneCard claim-level provenance', () => {
     ));
   });
 
-  it('retries activity logging after a transient failure while preserving successful de-duplication', async () => {
-    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+  it('retries activity logging while mounted and preserves successful de-duplication', async () => {
     apiClient.logActivity
       .mockRejectedValueOnce(new Error('transient activity service failure'))
       .mockResolvedValueOnce({});
@@ -129,17 +128,11 @@ describe('GeneCard claim-level provenance', () => {
 
     const firstRender = render(<GeneCard gene={retryGene} rank={1} />);
     await waitFor(() => expect(apiClient.logActivity).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(consoleSpy).toHaveBeenCalled());
+    await waitFor(() => expect(apiClient.logActivity).toHaveBeenCalledTimes(2), { timeout: 2000 });
     firstRender.unmount();
-
-    const secondRender = render(<GeneCard gene={retryGene} rank={1} />);
-    await waitFor(() => expect(apiClient.logActivity).toHaveBeenCalledTimes(2));
-    secondRender.unmount();
 
     render(<GeneCard gene={retryGene} rank={1} />);
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(apiClient.logActivity).toHaveBeenCalledTimes(2);
-
-    consoleSpy.mockRestore();
   });
 });
