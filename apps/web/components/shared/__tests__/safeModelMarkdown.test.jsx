@@ -2,7 +2,6 @@ import React from 'react';
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 import { safeModelMarkdownComponents } from '../safeModelMarkdown';
 
 describe('safeModelMarkdownComponents', () => {
@@ -15,18 +14,15 @@ describe('safeModelMarkdownComponents', () => {
     ].join('\n');
 
     render(
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        components={safeModelMarkdownComponents}
-      >
+      <ReactMarkdown components={safeModelMarkdownComponents}>
         {markdown}
       </ReactMarkdown>,
     );
 
-    expect(screen.queryByRole('link')).not.toBeInTheDocument();
-    expect(screen.queryByRole('img')).not.toBeInTheDocument();
-    expect(screen.getByText(/the source/)).toBeInTheDocument();
-    expect(screen.getByText(/tracking pixel/)).toBeInTheDocument();
+    expect(screen.queryByRole('link')).toBeNull();
+    expect(screen.queryByRole('img')).toBeNull();
+    expect(screen.getByText(/the source/)).toBeTruthy();
+    expect(screen.getByText(/tracking pixel/)).toBeTruthy();
   });
 
   it('renders inline links and images without href or src surfaces', () => {
@@ -36,9 +32,9 @@ describe('safeModelMarkdownComponents', () => {
       </ReactMarkdown>,
     );
 
-    expect(screen.queryByRole('link')).not.toBeInTheDocument();
-    expect(screen.queryByRole('img')).not.toBeInTheDocument();
-    expect(screen.getByText(/source/)).toBeInTheDocument();
-    expect(screen.getByText(/pixel/)).toBeInTheDocument();
+    expect(screen.queryByRole('link')).toBeNull();
+    expect(screen.queryByRole('img')).toBeNull();
+    expect(screen.getByText(/source/)).toBeTruthy();
+    expect(screen.getByText(/pixel/)).toBeTruthy();
   });
 });
