@@ -44,6 +44,25 @@ describe('publication output security regressions', () => {
     ]);
   });
 
+  it('rejects spelled-out doses, dosage forms, and administration frequency', () => {
+    const unsafe = [
+      'Use five milligrams each morning.',
+      'Take two tablets of aspirin daily.',
+      'Apply the medicine at bedtime as needed.',
+    ];
+
+    for (const instruction of unsafe) {
+      expect(__test.containsProhibitedClinicalGuidance(instruction)).toBe(true);
+      expect(sanitizePublicationTaskOutput(RESEARCH_TASK, {}, instruction))
+        .toBe(__test.PUBLICATION_BOUNDARY_MESSAGE);
+    }
+
+    const safeResearchText = 'The structured cohort contains five treatment-response variables for aggregate comparison.';
+    expect(__test.containsProhibitedClinicalGuidance(safeResearchText)).toBe(false);
+    expect(sanitizePublicationTaskOutput(RESEARCH_TASK, {}, safeResearchText))
+      .toBe(safeResearchText);
+  });
+
   it('neutralizes reference-style Markdown and protocol-relative targets', () => {
     const raw = 'Review ![tracking pixel][image] and [the source][source].\n\n[image]: //tracker.example/pixel.png\n[source]: //untrusted.example/record';
     const result = sanitizePublicationTaskOutput(RESEARCH_TASK, {}, raw);
