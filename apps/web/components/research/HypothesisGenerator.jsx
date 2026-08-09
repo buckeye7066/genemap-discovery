@@ -58,6 +58,20 @@ function selectedModalities(dataTypes) {
     .map(([type]) => type);
 }
 
+export function describeResearchFocus(focus) {
+  if (!focus) return 'None';
+  if (focus.kind === 'curated_concept') {
+    return `${focus.canonicalLabel} (${focus.conceptKind}; ${focus.conceptId}; ${focus.source}@${focus.version})`;
+  }
+  if (focus.kind === 'hpo') {
+    return `${focus.identifier} (Human Phenotype Ontology identifier; server revalidated)`;
+  }
+  if (focus.kind === 'mondo') {
+    return `${focus.identifier} (MONDO disease identifier; server revalidated)`;
+  }
+  return 'Unrecognized focus withheld';
+}
+
 export default function HypothesisGenerator() {
   const [sampleCount, setSampleCount] = useState(50);
   const [classification, setClassification] = useState('deidentified_aggregate');
@@ -106,8 +120,6 @@ export default function HypothesisGenerator() {
   };
 
   const changeFocusKind = (nextKind) => {
-    // Changing modes is a new explicit choice. Never carry an HPO identifier or
-    // reviewed concept into another mode where it could acquire a new meaning.
     setFocusKind(nextKind);
     setFocusConceptId('');
     setFocusHpoId('');
@@ -156,6 +168,7 @@ export default function HypothesisGenerator() {
       }
       setHypotheses({
         cohort: taskInput.cohort,
+        focus: taskInput.focus || null,
         objective,
         dataTypes: modalities,
         analysis: generated,
@@ -177,6 +190,8 @@ export default function HypothesisGenerator() {
       '',
       `Generated: ${hypotheses.generatedAt}`,
       `Cohort: ${hypotheses.cohort.sampleCount} samples (${hypotheses.cohort.classification})`,
+      `Control group present: ${hypotheses.cohort.hasControls ? 'Yes' : 'No'}`,
+      `Focus: ${describeResearchFocus(hypotheses.focus)}`,
       `Objective: ${hypotheses.objective}`,
       `Modalities: ${hypotheses.dataTypes.join(', ')}`,
       '',
@@ -390,6 +405,12 @@ export default function HypothesisGenerator() {
                   Generated Research Hypotheses
                 </CardTitle>
                 <div className="mt-2 flex flex-wrap gap-2">
+                  <Badge variant="outline" className="text-xs">
+                    Controls: {hypotheses.cohort.hasControls ? 'present' : 'absent'}
+                  </Badge>
+                  <Badge variant="outline" className="text-xs">
+                    Focus: {describeResearchFocus(hypotheses.focus)}
+                  </Badge>
                   {hypotheses.dataTypes.map((type) => (
                     <Badge key={type} variant="outline" className="text-xs">{type}</Badge>
                   ))}
