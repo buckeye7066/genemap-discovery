@@ -54,7 +54,7 @@ describe('GeneCard claim-level provenance', () => {
     expect(within(claims).getByText('human_verified')).toBeInTheDocument();
     expect(within(claims).getByText('Homo sapiens')).toBeInTheDocument();
     expect(within(claims).getByText(claim.claim)).toBeInTheDocument();
-    expect(within(claims).getByText(/ClinGen/)).toBeInTheDocument();
+    expect(within(claims).getByText('ClinGen', { selector: 'span' })).toBeInTheDocument();
     expect(within(claims).getByText(/RUNX1-001/)).toBeInTheDocument();
     expect(within(claims).getByText(/GRCh38 \/ ClinGen 2026-08/)).toBeInTheDocument();
     expect(within(claims).getByText(/retrieved 2026-08-09/)).toBeInTheDocument();
