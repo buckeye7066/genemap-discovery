@@ -25,7 +25,7 @@ describe('enrichGenes', () => {
     const res = await enrichGenes(['BRCA1', 'NOTAREALGENE']);
     expect(res.BRCA1).toMatchObject({
       symbol: 'BRCA1',
-      entrezId: '672',                 // coerced to string
+      entrezId: '672',
       ensemblId: 'ENSG00000012048',
       chromosome: '17',
       start: 43044295,
@@ -34,7 +34,6 @@ describe('enrichGenes', () => {
       verified: true,
       source: 'MyGene.info',
     });
-    // A miss resolves to null so the caller keeps the AI value (clearly labeled).
     expect(res.NOTAREALGENE).toBeNull();
   });
 
@@ -78,7 +77,7 @@ describe('validateHpoTerms', () => {
     }));
 
     const res = await validateHpoTerms(['Seizure', 'Not a phenotype xyz']);
-    expect(res['seizure']).toMatchObject({ hpoId: 'HP:0001250', verified: true });
+    expect(res.seizure).toMatchObject({ hpoId: 'HP:0001250', verified: true });
     expect(res['not a phenotype xyz']).toMatchObject({ hpoId: null, verified: false });
   });
 });
@@ -96,7 +95,7 @@ describe('POST /genomics/enrich', () => {
   afterAll(async () => { await app.close(); });
   afterEach(() => vi.unstubAllGlobals());
 
-  it('resolves genes + validates phenotypes and records the actual adapter response time', async () => {
+  it('preserves source-record timestamps and reports the route response time separately', async () => {
     vi.stubGlobal('fetch', vi.fn(async (url) => {
       if (String(url).includes('mygene.info')) {
         return jsonResponse([{
@@ -122,15 +121,17 @@ describe('POST /genomics/enrich', () => {
     expect(body.genes.TP53).toMatchObject({
       verified: true,
       chromosome: '17',
-      retrievedAt: body.adapterRetrievedAt,
-      retrievalScope: 'genemap_adapter_response',
     });
+    expect(body.genes.TP53.retrievedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    expect(body.genes.TP53).not.toHaveProperty('retrievalScope');
     expect(body.phenotypes.neoplasm).toMatchObject({
       hpoId: 'HP:0002664',
       verified: true,
-      retrievedAt: body.adapterRetrievedAt,
-      retrievalScope: 'genemap_adapter_response',
     });
+    expect(body.phenotypes.neoplasm.retrievedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    expect(body.phenotypes.neoplasm).not.toHaveProperty('retrievalScope');
+    expect(Date.parse(body.genes.TP53.retrievedAt)).toBeLessThanOrEqual(Date.parse(body.adapterRetrievedAt));
+    expect(Date.parse(body.phenotypes.neoplasm.retrievedAt)).toBeLessThanOrEqual(Date.parse(body.adapterRetrievedAt));
   });
 
   it('does not invent a retrieval record for unresolved genes', async () => {
