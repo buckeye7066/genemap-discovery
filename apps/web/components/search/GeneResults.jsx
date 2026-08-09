@@ -1,14 +1,87 @@
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useEffect, useState, useMemo, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import DnaIcon from "../icons/DnaIcon";
 import {
-  Star,
-  TrendingUp,
-  CheckSquare
+  CheckSquare,
+  Database,
+  Loader2,
+  Microscope,
+  MousePointer2,
+  ShieldQuestion,
 } from "lucide-react";
 import GeneCard from "./GeneCard";
 import GeneFilters from "./GeneFilters";
+import { fetchAssociationEvidence } from "@/lib/associationEvidenceClient";
+import { resolvePublicationSearchReference } from "@/lib/publicationConceptCatalog";
+import {
+  deriveRankingBasisFromClaims,
+  partitionClaimsBySpecies,
+  rankGenesByProvenance,
+} from "../../../../packages/shared/src/associationClaim.ts";
+
+function queryReferenceForResults(query, queryType) {
+  const mode = queryType === 'disease'
+    ? 'disease'
+    : queryType === 'phenotype'
+      ? 'phenotype'
+      : 'free_text';
+  return resolvePublicationSearchReference(query, mode, null);
+}
+
+function claimKey(claim = {}) {
+  return [
+    claim.source,
+    claim.recordId,
+    claim.evidenceType,
+    claim.taxon,
+    claim.claim,
+  ].map((value) => String(value || '')).join('|');
+}
+
+function mergeAssociationEvidence(genes, evidence) {
+  const claimsByGene = evidence?.claimsByGene && typeof evidence.claimsByGene === 'object'
+    ? evidence.claimsByGene
+    : {};
+  const merged = (genes || []).map((gene) => {
+    const existing = Array.isArray(gene.associationClaims) ? gene.associationClaims : [];
+    const sourceClaims = Array.isArray(claimsByGene[gene.symbol])
+      ? claimsByGene[gene.symbol]
+      : [];
+    const seen = new Set();
+    const associationClaims = [...sourceClaims, ...existing].filter((claim) => {
+      const key = claimKey(claim);
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    return {
+      ...gene,
+      associationClaims,
+      evidencePartition: partitionClaimsBySpecies(associationClaims),
+      rankingBasis: deriveRankingBasisFromClaims(associationClaims),
+      associationEvidenceStatus: evidence?.sourceStatus || 'unavailable',
+    };
+  });
+  return rankGenesByProvenance(merged);
+}
+
+function summarizeEvidence(genes) {
+  const counts = {
+    human: 0,
+    animal: 0,
+    computational: 0,
+    aiLead: 0,
+  };
+  for (const gene of genes || []) {
+    const partition = gene.evidencePartition || partitionClaimsBySpecies(gene.associationClaims || []);
+    if (partition.human?.length) counts.human += 1;
+    if (partition.animal?.length) counts.animal += 1;
+    if (partition.computational?.length) counts.computational += 1;
+    if (partition.aiLeads?.length) counts.aiLead += 1;
+  }
+  return counts;
+}
 
 export default function GeneResults({ results, selectedGenes = [], onGeneSelect }) {
   const { query, candidateGenes, isPremium, queryType } = results;
@@ -18,6 +91,10 @@ export default function GeneResults({ results, selectedGenes = [], onGeneSelect 
     chromosome: "All",
     phenotype: "",
     minScore: 0
+  });
+  const [evidenceState, setEvidenceState] = useState({
+    status: 'idle',
+    result: null,
   });
 
   const selectedSymbolSet = useMemo(
@@ -30,9 +107,45 @@ export default function GeneResults({ results, selectedGenes = [], onGeneSelect 
     [onGeneSelect]
   );
 
+  const candidateSymbolKey = useMemo(
+    () => (candidateGenes || []).map((gene) => gene.symbol).filter(Boolean).join('|'),
+    [candidateGenes],
+  );
+
+  useEffect(() => {
+    const symbols = candidateSymbolKey ? candidateSymbolKey.split('|') : [];
+    const reference = queryReferenceForResults(query, queryType);
+    if (!reference || symbols.length === 0) {
+      setEvidenceState({ status: 'unavailable', result: null });
+      return undefined;
+    }
+
+    let active = true;
+    setEvidenceState((current) => ({ ...current, status: 'loading' }));
+    fetchAssociationEvidence(reference, symbols).then((result) => {
+      if (!active) return;
+      setEvidenceState({
+        status: result.sourceStatus || 'unavailable',
+        result,
+      });
+    });
+    return () => {
+      active = false;
+    };
+  }, [candidateSymbolKey, query, queryType]);
+
+  const evidenceGenes = useMemo(
+    () => mergeAssociationEvidence(candidateGenes, evidenceState.result),
+    [candidateGenes, evidenceState.result],
+  );
+  const evidenceSummary = useMemo(
+    () => summarizeEvidence(evidenceGenes),
+    [evidenceGenes],
+  );
+
   // Apply filters to gene results
   const filteredGenes = useMemo(() => {
-    return (candidateGenes || []).filter((gene) => {
+    return evidenceGenes.filter((gene) => {
       // Symbol filter
       if (filters.symbol && !gene.symbol?.toLowerCase().includes(filters.symbol.toLowerCase())) {
         return false;
@@ -74,7 +187,7 @@ export default function GeneResults({ results, selectedGenes = [], onGeneSelect 
 
       return true;
     });
-  }, [candidateGenes, filters]);
+  }, [evidenceGenes, filters]);
 
   const handleClearFilters = () => {
     setFilters({
@@ -88,12 +201,12 @@ export default function GeneResults({ results, selectedGenes = [], onGeneSelect 
 
   const getQueryTypeLabel = () => {
     if (queryType === 'disease') {
-      return '🩺 Disease-Associated Genes';
+      return '🩺 Disease Candidate Evidence';
     }
     if (queryType === 'hpo_term') {
-      return '🧬 HPO Term Results';
+      return '🧬 HPO Candidate Evidence';
     }
-    return '🔬 Phenotype Search Results';
+    return '🔬 Phenotype Candidate Evidence';
   };
 
   return (
@@ -101,28 +214,35 @@ export default function GeneResults({ results, selectedGenes = [], onGeneSelect 
       {/* Results Header */}
       <Card className="bg-white/90 backdrop-blur-sm shadow-lg">
         <CardHeader>
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-4">
             <div>
               <CardTitle className="text-2xl text-slate-900 flex items-center gap-2">
                 <DnaIcon className="w-6 h-6 text-blue-600" />
                 {getQueryTypeLabel()}
               </CardTitle>
               <p className="text-slate-600 mt-1">
-                Generated {(candidateGenes || []).length} candidate genes to review for "{query}"
+                Generated {(candidateGenes || []).length} AI candidate leads to verify for "{query}"
               </p>
             </div>
-
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
           <div className="flex flex-wrap gap-2">
-            <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
-              <TrendingUp className="w-3 h-3 mr-1" />
-              AI-prioritized leads
+            <Badge variant="outline" className="bg-amber-50 text-amber-800 border-amber-200">
+              <ShieldQuestion className="w-3 h-3 mr-1" />
+              {evidenceSummary.aiLead} AI lead{evidenceSummary.aiLead === 1 ? '' : 's'}
             </Badge>
-            <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
-              <Star className="w-3 h-3 mr-1" />
-              Verify in primary sources
+            <Badge variant="outline" className="bg-emerald-50 text-emerald-800 border-emerald-200">
+              <Database className="w-3 h-3 mr-1" />
+              {evidenceSummary.human} with human association evidence
+            </Badge>
+            <Badge variant="outline" className="bg-violet-50 text-violet-800 border-violet-200">
+              <MousePointer2 className="w-3 h-3 mr-1" />
+              {evidenceSummary.animal} with model-organism evidence
+            </Badge>
+            <Badge variant="outline" className="bg-blue-50 text-blue-800 border-blue-200">
+              <Microscope className="w-3 h-3 mr-1" />
+              {evidenceSummary.computational} with computed evidence
             </Badge>
             {onGeneSelect && (
               <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">
@@ -130,12 +250,29 @@ export default function GeneResults({ results, selectedGenes = [], onGeneSelect 
                 Select to Compare
               </Badge>
             )}
-            {queryType === 'disease' && (
-              <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">
-                Candidate disease-gene leads
-              </Badge>
-            )}
           </div>
+
+          {evidenceState.status === 'loading' && (
+            <div className="flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900" role="status">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Checking source-grounded human, model-organism, and computational associations…
+            </div>
+          )}
+          {evidenceState.status === 'available' && (
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900" role="status">
+              {evidenceState.result?.claimCount || 0} source-grounded association claim{evidenceState.result?.claimCount === 1 ? '' : 's'} retrieved. Each card shows source, record, species, evidence type, release status, retrieval date, and limitations.
+            </div>
+          )}
+          {evidenceState.status === 'no_matching_associations' && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900" role="status">
+              The checked sources returned no matching association record for these candidate symbols. They remain unverified AI research leads.
+            </div>
+          )}
+          {(evidenceState.status === 'unavailable' || evidenceState.status === 'unresolved_query') && (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700" role="status">
+              Association sources are unavailable or the reviewed reference could not be revalidated. No candidate was promoted; all remain AI research leads.
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -173,16 +310,24 @@ export default function GeneResults({ results, selectedGenes = [], onGeneSelect 
       {/* Search Tips */}
       <Card className="bg-slate-50 border-slate-200">
         <CardContent className="pt-6">
-          <h4 className="font-medium text-slate-900 mb-3">Search Tips</h4>
+          <h4 className="font-medium text-slate-900 mb-3">How to interpret these results</h4>
           <ul className="text-sm text-slate-600 space-y-1">
-            <li>• Search by disease name (e.g., "Rheumatoid Arthritis", "Trisomy 21") to generate candidate genes for follow-up</li>
-            <li>• Use phenotype terms (e.g., "polydactyly") for specific features</li>
-            <li>• Try HPO terms (HP:0001234) for more precise results</li>
-            <li>• Database links are follow-up destinations; they are not claim-level citations for the AI ranking</li>
-            {onGeneSelect && <li>• Select multiple genes to compare them side-by-side</li>}
+            <li>• The candidate list begins as bounded AI research leads, not findings or diagnoses.</li>
+            <li>• Human, model-organism, and computed claims are shown separately and may disagree.</li>
+            <li>• Identity records and HPO term validation do not prove a gene-query association.</li>
+            <li>• Missing source version, record, date, or link remains visibly “Not recorded.”</li>
+            <li>• Open each source record and review study design, context, contradictions, and limitations.</li>
+            {onGeneSelect && <li>• Select multiple genes to compare their evidence side by side.</li>}
           </ul>
         </CardContent>
       </Card>
     </div>
   );
 }
+
+export const __test = {
+  claimKey,
+  mergeAssociationEvidence,
+  queryReferenceForResults,
+  summarizeEvidence,
+};
