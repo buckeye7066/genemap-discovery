@@ -18,7 +18,7 @@
 GeneMap Discovery is a genetics **education and early-research** platform that must:
 
 - separate AI-generated candidate leads from verified evidence
-- show source, species, version, retrieval date, and evidence provenance for material claims
+- show source, record, version, evidence class, evidence type, evidence strength, species/taxon, retrieval date, and source links for material claims
 - let an authenticated learner move from lessons into gene search and research workflows
 - keep human, animal, computational, and external-follow-up evidence visibly distinct
 - use deterministic normalization and benchmarks for material scientific assertions
@@ -32,7 +32,7 @@ GeneMap Discovery is a genetics **education and early-research** platform that m
 | # | Criterion | Status | Evidence |
 |---|-----------|--------|----------|
 | 54 | Full CI/browser journeys; high-risk clinical routes impossible in publishable builds | **PASS (software boundary)** | `clinicalPublishingBoundary.test.js` verifies the publication flags, route graph, navigation graph, shared client, and Research Mode omit high-risk clinical surfaces. `publication-boundary.spec.js` installs a synthetic authenticated education session, attempts every removed route directly, and requires a Page Not Found result. The reviewed production bundle also omitted the named clinical pages. This proves the software boundary; it does not substitute for the still-missing owner-authorized live learner journey. |
-| 55 | Each ranked association or variant assertion exposes source, version, evidence class, species, and retrieval date | **IN PROGRESS (PR #123)** | Existing association-claim contracts and search tests create and rank source/species/version/retrieval-bearing claims. PR #123 adds a representative rendered `GeneCard` test; makes printable reports and copied summaries preserve the full claim-level provenance tuple; fails closed when claims are absent; escapes untrusted content; sanitizes all claim links at the shared contract boundary; and normalizes candidate-gene model output at the API boundary before it reaches the browser. The VCF/variant-analysis route remains excluded from the publishable build, so no ranked variant assertion is released as part of this scope. This criterion must not be marked passed on the release until PR #123 is green, independently reviewed, merged, deployed, and its actual output is inspected. |
+| 55 | Each ranked association or variant assertion exposes source, version, evidence class, species, and retrieval date | **IN PROGRESS (PR #123)** | Existing association-claim contracts and search tests create and rank provenance-bearing claims. PR #123 renders and tests source, record ID, release/version, evidence class, evidence type, evidence strength, species/taxon, retrieval date, AI-lead status, and safe source link in `GeneCard`; preserves the same tuple in printable reports and copied summaries; fails closed when claims are absent; escapes untrusted content; and sanitizes claim links at the shared contract boundary. The VCF/variant-analysis route remains excluded from the publishable build, so no ranked variant assertion is released as part of this scope. This criterion must not be marked passed on the release until PR #123 is green, independently reviewed, merged, deployed, and its actual output is inspected. |
 | 56 | Known benchmark fixtures reproduce; limitations documented; no silent human/animal mixing | **PASS (software)** | `services/api/fixtures/benchmarks/` and `scientificBenchmarks.test.js` are exercised by CI; claim partitioning keeps human, animal, computational, AI-lead, and external-follow-up evidence distinct. |
 | 57 | Public positioning is education and early research only, with no diagnostic, treatment, or personalized-medicine promise | **PASS (baseline public surfaces; PR #123 strengthens exports and output boundaries)** | The reviewed live metadata, Privacy, Terms, and Search copy describe education and exploratory research and prohibit clinical use. PR #123 makes the printable report footer equally explicit and strips unsupported clinical-style fields from candidate-gene model output; those candidate improvements are not attributed to the baseline release. |
 
@@ -41,7 +41,7 @@ GeneMap Discovery is a genetics **education and early-research** platform that m
 | # | Bridge item | Status |
 |---|-------------|--------|
 | 48 | Remove or hard-disable personalized clinical AI and related paths; add regression tests | **PASS (software boundary)** - static route/client tests plus synthetic-authenticated direct-route Playwright coverage and reviewed live-bundle absence |
-| 49 | Provenance-first association model | **IN PROGRESS (PR #123)** - data contract and search path exist; shared-link sanitization, API-owned model-output normalization, and rendered/exported provenance completion are awaiting clean merge/deploy/output inspection |
+| 49 | Provenance-first association model | **IN PROGRESS (PR #123)** - data contract and search path exist; shared-link sanitization, server-owned model-output normalization, and UI/report/share provenance completion are awaiting clean merge, deployment, and output inspection |
 | 50 | Separate human, animal, computational, and external follow-up evidence | **PASS (software)** - partition helpers; HPO term presence is `external_followup`, not curated association evidence |
 | 51 | Reference build and deterministic variant normalization | **PASS (software)** - `variantNormalize.js` is wired into `vcf.js` with pinned reference/source versions |
 | 52 | Deterministic scientific benchmarks and synthetic demonstrations | **PASS (software)** - ClinGen/ClinVar, HPO/Monarch, and GIAB fixtures |
@@ -92,15 +92,15 @@ Baseline deployment and live identity:
   Production route bundle                    -> Search, Dashboard, and Research Mode are structurally included in the authenticated route configuration
 
 Current PR #123 release-candidate additions:
-  Shared claim contract                     -> only absolute HTTP(S) provenance links survive; unsafe/relative/malformed links become null
-  Printable gene report                     -> full claim provenance, candidate-label notices, escaped values, safe source links
-  Copied gene summary                       -> full claim provenance and fail-closed candidate labeling
-  GeneCard representative render test       -> source, record, release/version, evidence class, species, retrieval date, source link
-  Export regression tests                   -> complete tuple, no-claim state, script escaping, javascript-link rejection, null input, non-finite numbers, print output
-  Shared contract regression tests          -> safe URL canonicalization and unsafe-scheme rejection
-  Candidate-gene API output sanitizer       -> server-owned JSON parsing, field narrowing, symbol normalization, deduplication, caps, control-character removal, stable fail-closed structures
-  Candidate-gene output regression tests    -> fenced/prose JSON, malformed JSON, invalid and duplicate symbols, oversized collections, unsupported fields, model-supplied HPO/link/clinical-style data, bounded profiles
-  Final CI / review / merge / deployment / output -> pending at the time of this record
+  Shared claim contract                     -> only absolute HTTP(S) provenance links survive; unsafe, relative, or malformed links become null
+  GeneCard                                  -> complete claim tuple includes class, type, strength, species, record/version/date, and safe source link
+  Printable gene report                     -> complete claim provenance, candidate-label notices, escaped values, safe source links
+  Copied gene summary                       -> stable evidence, evidence_type, and evidence_strength fields plus the complete provenance tuple
+  Export/UI regression tests                -> complete tuple, no-claim state, script escaping, javascript-link rejection, null input, non-finite numbers, print output
+  Candidate-gene API output sanitizer       -> server-owned JSON parsing, field narrowing, symbol normalization, deduplication, caps, C0/DEL/C1 control removal, stable fail-closed structures
+  Trusted query classification              -> disease, phenotype, or HPO behavior comes from the validated server-owned reference, not model self-classification
+  Candidate-gene output regression tests    -> fenced/prose JSON, malformed JSON, contradictory classification, invalid/duplicate symbols, oversized collections, unsupported fields, ontology/link/clinical-style data, bounded profiles
+  Final exact-head CI, review, merge, deployment, and output inspection -> pending at the time of this record
 ```
 
 ## Actual blockers and exact owner action packet
@@ -175,10 +175,10 @@ Using an owner-authorized test account on the exact deployed release:
 2. Start, complete, or intentionally leave a lesson and verify progress behavior.
 3. Open Gene Search from the authenticated navigation.
 4. Execute a source-checkable candidate-gene search.
-5. Inspect the rendered claim-level provenance.
+5. Inspect the rendered claim-level provenance, including evidence class, type, and strength.
 6. Open Research Mode and verify the intended research workflow.
 7. Print or save a gene report and inspect the provenance section.
-8. Copy the gene summary and inspect the provenance fields.
+8. Copy the gene summary and inspect the stable provenance fields.
 9. Sign out and verify protected routes reject the unauthenticated session.
 10. Retain redacted screenshots, logs, and the exact release SHA without using personal genomic data.
 
@@ -188,7 +188,7 @@ This journey is a blocking action, not an optional suggestion.
 
 - Reviewed GitHub `main` baseline: `4a3fe456b9fceb949ba6bd4132c96f87f501459f`.
 - Purpose-defining baseline software is contained in ancestor merge `f0d3b64b9ae17f70ef2656b173cd51ca4c71215b`.
-- PR #123 changes user-visible export/share behavior, the shared claim-link contract, and the candidate-gene API output contract. It must pass full CI, substantive fresh review, merge, exact-SHA deployment verification, and output inspection before its work can be treated as released.
+- PR #123 changes user-visible provenance rendering/export/share behavior, the shared claim-link contract, and the candidate-gene API output contract. It must pass full CI, substantive fresh review, merge, exact-SHA deployment verification, and output inspection before its work can be treated as released.
 - Vercel production identified the exact reviewed baseline SHA `4a3fe456` and was READY at baseline review time. GitHub reported successful Vercel and Railway deployment contexts for that same SHA.
 - **Immutable rollback target for PR #123:** `4a3fe456b9fceb949ba6bd4132c96f87f501459f`.
 - PR #123 contains no database schema or migration change. If the release must be rolled back, redeploy the web and API artifacts built from the immutable rollback SHA, retain the current compatible database, then verify `/healthz`, `/readyz`, the public web shell, and the publication-boundary browser journey against that exact SHA.
@@ -200,9 +200,10 @@ This journey is a blocking action, not an optional suggestion.
 
 - `packages/shared/src/associationClaim.ts`
 - `packages/shared/src/__tests__/associationClaim.test.ts`
+- `apps/web/components/search/GeneCard.jsx`
+- `apps/web/components/search/__tests__/GeneCard.provenance.test.jsx`
 - `apps/web/lib/exportUtils.js`
 - `apps/web/lib/__tests__/exportUtils.test.js`
-- `apps/web/components/search/__tests__/GeneCard.provenance.test.jsx`
 - `services/api/src/services/publicationTaskOutput.js`
 - `services/api/src/__tests__/publicationTaskOutput.test.js`
 - `services/api/src/routes/llm.js`
