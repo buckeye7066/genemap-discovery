@@ -102,7 +102,7 @@ describe('gene report provenance', () => {
     expect(provenance.content).toMatch(/unverified research lead/);
   });
 
-  it('preserves provenance in the copied plain-text summary', () => {
+  it('preserves provenance and explicit AI-lead status in the copied plain-text summary', () => {
     const summary = buildGeneShareText(gene);
 
     expect(summary).toContain('source=ClinGen <curated>');
@@ -114,9 +114,32 @@ describe('gene report provenance', () => {
     expect(summary).toContain('species=Homo sapiens');
     expect(summary).toContain('taxon=9606');
     expect(summary).toContain('retrieved=2026-08-09');
+    expect(summary).toContain('ai_lead=false');
+    expect(summary).toContain('ai_lead=true');
     expect(summary).toContain('link=https://example.org/records/RUNX1?source=ClinGen');
     expect(summary).toContain('Candidate disease labels, unverified unless supported above');
     expect(summary).not.toContain('link=javascript:alert(1)');
+  });
+
+  it('records missing AI-lead status instead of silently omitting it', () => {
+    const summary = buildGeneShareText({
+      symbol: 'ZZZ1',
+      associationClaims: [{
+        source: 'Legacy source',
+        recordId: 'LEGACY:1',
+        claim: 'Legacy claim',
+        taxon: 'unspecified',
+        species: 'Unspecified',
+        evidenceClass: 'external_followup',
+        evidenceType: 'database_link',
+        evidenceStrength: 'none',
+        releaseVersion: null,
+        retrievalDate: '2026-08-09',
+        directLink: null,
+      }],
+    });
+
+    expect(summary).toContain('ai_lead=not_recorded');
   });
 
   it('writes the same provenance-complete sections into the printable report', () => {
