@@ -277,23 +277,36 @@ export function stripLlmSelfScores<T extends Record<string, unknown>>(gene: T): 
   return next;
 }
 
-/** Partition claims so human, animal, computational, AI, and follow-up evidence never mix silently. */
+/**
+ * Partition only genuine association evidence into species/computational buckets.
+ * Identity, ontology, and follow-up rows remain source metadata even when their
+ * evidenceClass or taxon looks human. `external` is retained as a compatibility
+ * subset of metadata so existing UI notes can identify follow-up links without
+ * ever counting them as human or other association evidence.
+ */
 export function partitionClaimsBySpecies(claims: AssociationClaim[]) {
   const human: AssociationClaim[] = [];
   const animal: AssociationClaim[] = [];
   const computational: AssociationClaim[] = [];
   const aiLeads: AssociationClaim[] = [];
   const external: AssociationClaim[] = [];
+  const metadata: AssociationClaim[] = [];
 
   for (const claim of claims || []) {
-    // AI-lead state is authoritative and takes precedence over contradictory
-    // evidenceClass/taxon fields so an untrusted lead cannot enter a verified partition.
-    if (claim.isAiLead || claim.evidenceClass === 'ai_lead') aiLeads.push(claim);
-    else if (claim.evidenceClass === 'animal_model' || claim.taxon === '10090') animal.push(claim);
+    const role = claimProvenanceRole(claim);
+    if (role === 'ai_candidate_lead') {
+      aiLeads.push(claim);
+      continue;
+    }
+    if (role === 'source_metadata') {
+      metadata.push(claim);
+      if (claim.evidenceClass === 'external_followup') external.push(claim);
+      continue;
+    }
+    if (claim.evidenceClass === 'animal_model' || claim.taxon === '10090') animal.push(claim);
     else if (claim.evidenceClass === 'computational') computational.push(claim);
-    else if (claim.evidenceClass === 'external_followup') external.push(claim);
     else human.push(claim);
   }
 
-  return { human, animal, computational, aiLeads, external };
+  return { human, animal, computational, aiLeads, external, metadata };
 }
