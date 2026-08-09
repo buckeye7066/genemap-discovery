@@ -90,16 +90,18 @@ describe('PhenotypeSearchService.finalizeEnriched', () => {
     expect(a.phenotypes[0]).toMatchObject({ hpoId: 'HP:0001250', hpoVerified: true });
     expect(a.associationClaims.some((c) => c.evidenceClass === 'human_verified')).toBe(true);
     expect(a.associationClaims.some((c) => c.evidenceClass === 'ai_lead')).toBe(true);
+    // Verified identity/coordinates are provenance, not verified query-association evidence.
+    expect(a.rankingBasis).toBe('ai_lead');
     expect(a.score).toBeUndefined();
     expect(b.sources).toEqual(['AI-suggested']);
-    // validation ran (authHpo non-empty) but no match → drop fabricated id
+    // validation ran (authHpo non-empty) but no match: drop fabricated id.
     expect(b.phenotypes[0].hpoId).toBeNull();
     expect(b.rankingBasis).toBe('ai_lead');
   });
 });
 
 describe('PhenotypeSearchService.attachProvenance', () => {
-  it('strips LLM self-scores and ranks verified genes above AI-only leads', () => {
+  it('strips LLM self-scores while preserving model lead order for metadata-only evidence', () => {
     const ranked = PhenotypeSearchService.attachProvenance([
       { symbol: 'AI1', score: 0.99, coordinatesVerified: false },
       {
@@ -111,11 +113,19 @@ describe('PhenotypeSearchService.attachProvenance', () => {
       },
     ], 'cystic fibrosis');
 
-    expect(ranked.map((g) => g.symbol)).toEqual(['VER1', 'AI1']);
+    // Identity verification and follow-up links cannot masquerade as evidence
+    // for the candidate gene's relationship to the bounded query.
+    expect(ranked.map((g) => g.symbol)).toEqual(['AI1', 'VER1']);
     expect(ranked[0].score).toBeUndefined();
-    expect(ranked[0].rankingBasis).toBe('human_verified');
-    expect(ranked[0].evidencePartition.external[0].evidenceClass).toBe('external_followup');
-    expect(ranked[1].associationClaims.every((c) => c.retrievalDate)).toBe(true);
+    expect(ranked[1].score).toBeUndefined();
+    expect(ranked[0].rankingBasis).toBe('ai_lead');
+    expect(ranked[1].rankingBasis).toBe('ai_lead');
+    expect(ranked[1].evidencePartition.human[0]).toMatchObject({
+      evidenceClass: 'human_verified',
+      evidenceType: 'gene_identity',
+    });
+    expect(ranked[1].evidencePartition.external[0].evidenceClass).toBe('external_followup');
+    expect(ranked[0].associationClaims.every((c) => c.retrievalDate)).toBe(true);
   });
 });
 
@@ -177,7 +187,7 @@ describe('PhenotypeSearchService.findCandidates (fused analyze+find)', () => {
   it('falls back to the two-step path when the fused call returns no genes', async () => {
     const invoke = vi
       .spyOn(apiClient, 'invokePublicationTask')
-      .mockResolvedValueOnce(json({ queryType: 'phenotype', candidateGenes: [] })) // fused → empty
+      .mockResolvedValueOnce(json({ queryType: 'phenotype', candidateGenes: [] })) // fused -> empty
       .mockResolvedValueOnce(json({ isDisease: false, mainFeatures: ['tall stature'] })) // analyzePhenotype
       .mockResolvedValueOnce(json({ candidateGenes: [{ symbol: 'FBN1' }] })); // findCandidateGenes
     vi.spyOn(apiClient, 'getMe').mockResolvedValue({});
