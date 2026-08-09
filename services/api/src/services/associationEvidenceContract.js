@@ -3,6 +3,7 @@ import { getAssociationEvidence } from './associationEvidence.js';
 const CACHE_TTL_MS = 10 * 60 * 1000;
 const CACHE_MAX = 128;
 const GENE_SYMBOL = /^[A-Z0-9][A-Z0-9-]{1,14}$/u;
+const CLINICAL_COMMAND = /^(?:TAKE|START|STOP|AVOID|USE|ADMINISTER|INJECT|SWALLOW|APPLY|PRESCRIBE|SWITCH)\b/u;
 const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/u;
 const ISO_DATE_TIME = /^\d{4}-\d{2}-\d{2}T/u;
 const EVIDENCE_CLASSES = new Set([
@@ -82,9 +83,29 @@ function safeReleaseVersion(value) {
   return release && validDateOnly(release) ? release : null;
 }
 
-function cleanSymbol(value) {
+function syntacticSymbol(value) {
   const symbol = cleanText(value, 15)?.toUpperCase() || null;
   return symbol && GENE_SYMBOL.test(symbol) ? symbol : null;
+}
+
+/**
+ * Apply the same clinical-command policy used at the model publication boundary
+ * before a symbol can be sent to a public evidence adapter. Hyphens are treated
+ * as token boundaries, so `STOP-DRUG` and `TAKE-5MG` cannot re-enter through a
+ * second API even though they satisfy the broad HGNC-style syntax regex.
+ */
+export function isPublicationGeneSymbol(value) {
+  const symbol = syntacticSymbol(value);
+  if (!symbol) return false;
+  const policyText = symbol
+    .replace(/-/gu, ' ')
+    .replace(/(\d)(MG|MCG|UG|ML|UNITS?)\b/gu, '$1 $2');
+  return !CLINICAL_COMMAND.test(policyText);
+}
+
+function cleanSymbol(value) {
+  const symbol = syntacticSymbol(value);
+  return symbol && isPublicationGeneSymbol(symbol) ? symbol : null;
 }
 
 function safeTaxon(value) {
@@ -266,6 +287,7 @@ export async function getPublicationAssociationEvidence(reference, symbols, depe
 
 export const __test = {
   cleanText,
+  isPublicationGeneSymbol,
   safeDate,
   safeDateTime,
   safeEvidenceStrength,
