@@ -96,7 +96,7 @@ describe('POST /genomics/enrich', () => {
   afterAll(async () => { await app.close(); });
   afterEach(() => vi.unstubAllGlobals());
 
-  it('resolves genes + validates phenotypes in one call', async () => {
+  it('resolves genes + validates phenotypes and records the actual adapter response time', async () => {
     vi.stubGlobal('fetch', vi.fn(async (url) => {
       if (String(url).includes('mygene.info')) {
         return jsonResponse([{
@@ -118,9 +118,40 @@ describe('POST /genomics/enrich', () => {
 
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body);
-    expect(body.genes.TP53.verified).toBe(true);
-    expect(body.genes.TP53.chromosome).toBe('17');
-    expect(body.phenotypes.neoplasm).toMatchObject({ hpoId: 'HP:0002664', verified: true });
+    expect(body.adapterRetrievedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    expect(body.genes.TP53).toMatchObject({
+      verified: true,
+      chromosome: '17',
+      retrievedAt: body.adapterRetrievedAt,
+      retrievalScope: 'genemap_adapter_response',
+    });
+    expect(body.phenotypes.neoplasm).toMatchObject({
+      hpoId: 'HP:0002664',
+      verified: true,
+      retrievedAt: body.adapterRetrievedAt,
+      retrievalScope: 'genemap_adapter_response',
+    });
+  });
+
+  it('does not invent a retrieval record for unresolved genes', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url) => {
+      if (String(url).includes('mygene.info')) {
+        return jsonResponse([{ query: 'NOTAREALGENE', notfound: true }]);
+      }
+      return jsonResponse({ terms: [] });
+    }));
+
+    const cookie = authCookie({ userId: 'u1', email: 'u@e.com', role: 'user' }, prisma);
+    const res = await app.inject({
+      method: 'POST',
+      url: '/genomics/enrich',
+      headers: { cookie },
+      payload: { symbols: ['NOTAREALGENE'] },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.genes.NOTAREALGENE).toBeNull();
   });
 
   it('requires authentication', async () => {
