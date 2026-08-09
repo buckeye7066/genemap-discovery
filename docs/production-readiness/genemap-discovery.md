@@ -1,86 +1,118 @@
-# Axiom GeneMap Discovery — Production Readiness Report
+# Axiom GeneMap Discovery - Production Readiness Report
 
 **Program:** Axiom GeneMap Discovery  
-**Agent:** production-agent-genemap-discovery  
-**Branch:** `production-ready/genemap-discovery`  
+**Executor:** ChatGPT  
+**Working branch:** `chatgpt/production-ready/genemap-discovery`  
 **Repo:** buckeye7066/genemap-discovery (private; default `main`)  
-**Local:** `C:\Users\firer\genemap-discovery`  
+**Local path recorded by prior executor:** `C:\Users\firer\genemap-discovery` (not independently accessible from this session)  
 **Deployed app:** https://genemap-discovery.vercel.app  
 **API:** https://genemap-api-production.up.railway.app  
-**Main SHA (merged):** `f0d3b64b9ae17f70ef2656b173cd51ca4c71215b`  
-**PR:** https://github.com/buckeye7066/genemap-discovery/pull/121 (**MERGED** 2026-08-09T00:51:04Z)  
-**Board status:** SOFTWARE COMPLETE, EXTERNAL RELEASE BLOCKER (processor/DPA owner gate)  
+**Current default-branch SHA:** `4a3fe456b9fceb949ba6bd4132c96f87f501459f`  
+**Purpose-defining software merge SHA:** `f0d3b64b9ae17f70ef2656b173cd51ca4c71215b`  
+**Implementation PR:** https://github.com/buckeye7066/genemap-discovery/pull/121 (merged 2026-08-09T00:51:04Z)  
+**Evidence PR:** https://github.com/buckeye7066/genemap-discovery/pull/122 (merged 2026-08-09T00:59:23Z)  
+**Status:** `BLOCKED`  
 **Updated:** 2026-08-09  
 
-## Purpose (from Master Prompt — not inferred from name)
+## Purpose and acceptance contract
 
-Genetics **education and early-research** platform that:
+GeneMap Discovery is a genetics **education and early-research** platform that must:
 
-- separates AI-generated candidate leads from verified evidence
-- shows source / species / version / retrieval provenance for material claims
-- cannot be mistaken for diagnostic or clinical decision-support software
+- separate AI-generated candidate leads from verified evidence
+- show source, species, version, retrieval date, and evidence provenance for material claims
+- let an authenticated learner move from lessons into gene search and research workflows
+- keep human, animal, computational, and external-follow-up evidence visibly distinct
+- use deterministic normalization and benchmarks for material scientific assertions
+- remain impossible to mistake for diagnosis or clinical decision support
 
-**Not in publishable scope:** personalized clinical AI, Clinical Support, Medical Data UI, diagnosis, personal-risk, PGx, dosing, drug-avoidance, screening urgency, or trial-matching paths.
+**Not in publishable scope:** personalized clinical AI, Clinical Support, Medical Data UI, diagnosis, personal-risk prediction, PGx, dosing, drug avoidance, screening urgency, or trial matching.
 
-## Ready criteria (Exit 54–57)
+## Ready criteria (Exit 54-57)
 
 | # | Criterion | Status | Evidence |
 |---|-----------|--------|----------|
-| 54 | Full CI/browser journeys; high-risk clinical routes impossible in publishable builds | **PASS (software)** | PR #121 CI: lint/typecheck, test, web-tests, security-audit, api-integration, docker-build, migration-smoke, desktop smokes — all green. Live main bundle `index-BttzNX1u.js`: `MedicalData`/`RobertClinical`/`VCFAnalysis`/`AIAssistants`/`Anastasia`/`ClinicalTrial` = **absent**. `LearnGenetics` present. |
-| 55 | Each ranked association / variant assertion exposes source, version, evidence class, species, retrieval date | **PASS (software)** | Live Search chunk `Search-BDj6Phyh.js` contains `associationClaims`, `association-claims`, `human_verified`, `ai_lead`, `AI research lead`, `retrieved`, `evidenceClass`. Variant normalization pins GRCh38 + gnomAD/ClinVar versions in API. |
-| 56 | Known benchmark fixtures reproduce; documented limitations; no silent human/animal mixing | **PASS (software)** | `services/api/fixtures/benchmarks/` + `scientificBenchmarks.test.js` (CI `test` job). |
-| 57 | Public positioning = education / early research only; no diagnostic / treatment / personalized-med promise | **PASS (software)** | Live meta description: “education and exploratory research workspace…”. Privacy/Terms/Search copy forbid diagnosis/treatment/PGx/dosing. |
+| 54 | Full CI/browser journeys; high-risk clinical routes impossible in publishable builds | **PASS (software)** | PR #121 CI: lint/typecheck, test, web-tests, security-audit, api-integration, docker-build, migration-smoke, desktop smokes all green. Live main bundle `index-BttzNX1u.js`: `MedicalData`, `RobertClinical`, `VCFAnalysis`, `AIAssistants`, `Anastasia`, and `ClinicalTrial` are absent. `LearnGenetics`, `Search`, and `ResearchMode` are present. |
+| 55 | Each ranked association or variant assertion exposes source, version, evidence class, species, and retrieval date | **PASS (software)** | Live Search chunk `Search-BDj6Phyh.js` contains `associationClaims`, `association-claims`, `human_verified`, `ai_lead`, `AI research lead`, `retrieved`, and `evidenceClass`. Variant normalization pins GRCh38 and named gnomAD/ClinVar versions in the API. |
+| 56 | Known benchmark fixtures reproduce; limitations documented; no silent human/animal mixing | **PASS (software)** | `services/api/fixtures/benchmarks/` and `scientificBenchmarks.test.js` are exercised by CI. |
+| 57 | Public positioning is education and early research only, with no diagnostic, treatment, or personalized-medicine promise | **PASS (software)** | Live metadata describes an education and exploratory-research workspace. Privacy, Terms, and Search copy prohibit diagnosis, treatment, PGx, and dosing use. |
 
-## Bridge (48–53)
+## Bridge (48-53)
 
-| # | Bridge item | Done |
-|---|-------------|------|
-| 48 | Remove/hard-disable personalized clinical AI and related paths; regression tests | **Yes** — route map + `clinicalPublishingBoundary.test.js` + live bundle probe |
-| 49 | Provenance-first association model | **Yes** — `associationClaim.ts` + UI + live Search chunk |
-| 50 | Separate human vs animal vs computational; external DB links = follow-up only | **Yes** — partition helpers; HPO term presence classed as `external_followup` (not curated association) |
-| 51 | Reference build + deterministic variant normalization | **Yes** — `variantNormalize.js` wired into `vcf.js` |
-| 52 | Deterministic scientific benchmarks + synthetic demos | **Yes** — ClinGen/ClinVar, HPO/Monarch, GIAB fixtures |
-| 53 | Privacy/processor-subprocessor review; no HIPAA claim without evidence | **Software yes / owner no** — `docs/PROCESSOR_REGISTER.md`; executed DPAs/regions/retention/deletion/counsel incomplete |
+| # | Bridge item | Status |
+|---|-------------|--------|
+| 48 | Remove or hard-disable personalized clinical AI and related paths; add regression tests | **PASS (software)** - route map, `clinicalPublishingBoundary.test.js`, and live-bundle probe |
+| 49 | Provenance-first association model | **PASS (software)** - `associationClaim.ts`, UI, exports, and live Search chunk |
+| 50 | Separate human, animal, computational, and external follow-up evidence | **PASS (software)** - partition helpers; HPO term presence classified as `external_followup`, not curated association |
+| 51 | Reference build and deterministic variant normalization | **PASS (software)** - `variantNormalize.js` wired into `vcf.js` |
+| 52 | Deterministic scientific benchmarks and synthetic demonstrations | **PASS (software)** - ClinGen/ClinVar, HPO/Monarch, and GIAB fixtures |
+| 53 | Privacy, processor, and subprocessor review; no HIPAA claim without evidence | **BLOCKED** - repository inventory is complete, but executed DPAs, named owners, regions, retention/deletion evidence, and counsel/security approval remain incomplete |
 
-## Verification runs (this session)
+## Verification evidence
 
 ```text
-Local:
-  @genemap/shared vitest                 → 86 passed
-  API variantNormalize + benchmarks        → 10 passed
-  Web PhenotypeSearch + clinicalBoundary → 34 passed
-  pnpm audit (after js-yaml/nanoid bump) → No known vulnerabilities
+Implementation verification:
+  @genemap/shared vitest                    -> 86 passed
+  API variantNormalize + benchmarks        -> 10 passed
+  Web PhenotypeSearch + clinicalBoundary   -> 34 passed
+  pnpm audit after js-yaml/nanoid bump      -> no known vulnerabilities
 
-CI (PR #121 @ 99e127d → merge f0d3b64):
+CI for implementation PR #121:
   security-audit, lint-and-typecheck, test, web-tests,
   api-integration-postgres, docker-build-api, migration-smoke,
-  build-web, desktop-build-smoke, desktop-build-windows-smoke → pass
+  build-web, desktop-build-smoke, desktop-build-windows-smoke -> pass
 
-Deploy:
-  GitHub Production deployment 5814217540 sha=f0d3b64 state=success (Vercel)
-  Railway deployment 5814215986 sha=f0d3b64 state=success
-  Railway Deploy Monitor run 31287050501 → success
-  GET https://genemap-discovery.vercel.app → 200; education meta
-  GET https://genemap-api-production.up.railway.app/healthz → 200 {"status":"ok"}
-  Live Search-BDj6Phyh.js provenance strings present; clinical page ids absent
+Independent connected-tool re-verification on 2026-08-09:
+  GitHub default branch                     -> main @ 4a3fe456
+  Open pull requests                        -> 0
+  GitHub deployment status on exact SHA     -> Vercel success; Railway success
+  Exact-SHA checks                          -> no failed check run found
+  Live health/readiness/CORS/web-shell job  -> success
+  Public Chromium E2E                       -> success
+  Vercel production deployment              -> READY @ 4a3fe456
+  Live web shell                            -> HTTP 200
+  Live route bundle                         -> Gene Search, Dashboard, and Research Mode available to authenticated users
 ```
 
-## Blockers — SOFTWARE COMPLETE, EXTERNAL RELEASE BLOCKER
+## Actual blocker and exact owner action packet
 
-1. **Processor / privacy owner gate (Bridge 53)** — complete checklist in `docs/PROCESSOR_REGISTER.md` (named owners, DPAs, regions, retention/deletion evidence, counsel/security approval).
-2. Optional: authenticated learner E2E on the exact live SHA after owner unlock (login-gated Search enrichment journey).
+GeneMap Discovery remains `BLOCKED`. Code completion, green CI, a successful deployment, or a healthy endpoint do not satisfy the privacy and operational acceptance gate.
 
-## Launch / deploy contract
+Complete every applicable unchecked item in `docs/PROCESSOR_REGISTER.md`:
 
-- GitHub `main` @ `f0d3b64` → Vercel web + Railway API (auto on merge; both reported success for this SHA).
-- Local: `C:\Users\firer\genemap-discovery` → `corepack pnpm install` → `corepack pnpm test` / `dev`.
+1. Name an accountable Axiom owner for every active or conditional service.
+2. Identify the Redis operator, or remove `REDIS_URL` from production.
+3. Record exact account/project identifiers, selected regions, and data locations.
+4. Execute or verify applicable DPAs and document plan eligibility.
+5. Review each current subprocessor list and subscribe to change notices.
+6. Record retention, deletion, export, logging, training, and support-access settings.
+7. Verify processor deletion propagation with test evidence.
+8. Verify backups, logs, email, error telemetry, and billing exceptions in the deletion manifest.
+9. Obtain counsel and security-owner approval for the public policy and data map.
+10. Keep HIPAA, BAA, medical-device, clinical-readiness, and similar claims out of public copy unless independently evidenced for the exact production configuration.
 
-## Files changed this wave
+An authenticated learner journey on the exact live release should also be captured after owner-authorized test-account access: sign in, finish or leave a lesson, open Gene Search, execute a source-checkable search, open Research Mode, inspect provenance, sign out, and retain screenshots/log evidence without personal genomic data.
 
-- `packages/shared/src/associationClaim.ts` (+ tests, package export)
-- `apps/web/components/search/PhenotypeSearchService.jsx`, `GeneCard.jsx`, `lib/exportUtils.js`
-- `services/api/src/services/variantNormalize.js` (+ tests), `vcf.js`
-- `services/api/fixtures/benchmarks/*` + `scientificBenchmarks.test.js`
+## Deployment and rollback contract
+
+- Current GitHub `main`: `4a3fe456b9fceb949ba6bd4132c96f87f501459f`.
+- Purpose-defining software is contained in ancestor merge `f0d3b64b9ae17f70ef2656b173cd51ca4c71215b`; the later commits are readiness-documentation updates.
+- Vercel production identifies exact current `main` SHA `4a3fe456` and is READY.
+- GitHub reports successful Vercel and Railway deployment contexts for exact current `main`.
+- Rollback target for the software wave is the last known-good pre-wave default-branch SHA, selected and recorded before rollback; database rollback must use forward-compatible migrations or a verified restore, never an unreviewed schema downgrade.
+- Local launch information above is historical evidence only until independently verified on Dr. White's Windows machine.
+
+## Files changed in the purpose-defining software wave
+
+- `packages/shared/src/associationClaim.ts` plus tests and package export
+- `apps/web/components/search/PhenotypeSearchService.jsx`, `GeneCard.jsx`, and `lib/exportUtils.js`
+- `services/api/src/services/variantNormalize.js` plus tests and `vcf.js`
+- `services/api/fixtures/benchmarks/*` and `scientificBenchmarks.test.js`
 - `services/api/src/config/publicationTaskContracts.js`
-- `package.json` / `pnpm-lock.yaml` — js-yaml ≥4.3.1, nanoid ≥3.3.17 overrides
-- `docs/PROCESSOR_REGISTER.md`, `docs/production-readiness/genemap-discovery.md`
+- `package.json` and `pnpm-lock.yaml` overrides for js-yaml >=4.3.1 and nanoid >=3.3.17
+- `docs/PROCESSOR_REGISTER.md`
+
+## Production-ready decision
+
+**`BLOCKED`**
+
+The software release candidate is deployed and its accessible engineering gates are green. Production readiness is withheld because the processor/privacy operational gate and owner-authorized authenticated release evidence are not complete. No weaker phrase such as "software complete," "ready except for," or "external release blocker" substitutes for the required status.
