@@ -42,6 +42,11 @@ const INVOKE_TEXT_MODEL = process.env.LLM_INVOKE_TEXT_MODEL
   || process.env.LLM_EDU_TEXT_MODEL
   || (INVOKE_TEXT_PROVIDER === 'openai' || INVOKE_TEXT_PROVIDER === 'gpt' ? 'gpt-4o-mini' : undefined);
 
+/** Return the exact state used by both /readyz and provider-facing routes. */
+export function isModelPublicationEnabled(source = process.env) {
+  return source.DISABLE_MODEL_PUBLICATION !== '1';
+}
+
 /**
  * Emergency fail-closed switch for every generated publication surface.
  *
@@ -52,12 +57,17 @@ const INVOKE_TEXT_MODEL = process.env.LLM_INVOKE_TEXT_MODEL
  * user's allowance.
  */
 export function assertModelPublicationEnabled(source = process.env) {
-  if (source.DISABLE_MODEL_PUBLICATION === '1') {
+  if (!isModelPublicationEnabled(source)) {
     throw new AppError(
       'Generated research and learning content is temporarily unavailable during safe recovery.',
       503,
     );
   }
+}
+
+/** Fastify prehandler wrapper; do not let request become the helper's source. */
+function requireModelPublicationEnabled() {
+  assertModelPublicationEnabled(process.env);
 }
 
 function validatePrompt(prompt) {
@@ -151,7 +161,7 @@ export default async function llmRoutes(fastify) {
   const guarded = [
     authenticate,
     checkEducationEntitlement,
-    assertModelPublicationEnabled,
+    requireModelPublicationEnabled,
     enforceUsageLimit,
     prepareStructuredInvocation(),
   ];
@@ -210,6 +220,7 @@ export default async function llmRoutes(fastify) {
 }
 
 export const __test = {
+  isModelPublicationEnabled,
   assertModelPublicationEnabled,
   clampTokens,
   clampTemperature,
