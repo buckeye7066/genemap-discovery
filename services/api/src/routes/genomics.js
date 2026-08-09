@@ -36,12 +36,17 @@ const enrichSchema = z.object({
   phenotypes: z.array(z.string().trim().min(1).max(256)).max(100).optional(),
 });
 
-function attachAdapterRetrieval(records, retrievedAt) {
+/**
+ * Preserve each authoritative adapter's original source-retrieval timestamp.
+ * The route-level response time is reported separately as `adapterRetrievedAt`;
+ * it must never overwrite a cached record's immutable `retrievedAt` evidence.
+ */
+function preserveSourceRetrieval(records) {
   return Object.fromEntries(
     Object.entries(records || {}).map(([key, record]) => [
       key,
       record && typeof record === 'object'
-        ? { ...record, retrievedAt, retrievalScope: 'genemap_adapter_response' }
+        ? { ...record, retrievedAt: record.retrievedAt || null }
         : record,
     ]),
   );
@@ -187,13 +192,11 @@ export default async function genomicsRoutes(fastify) {
       symbols.length ? enrichGenes(symbols) : Promise.resolve({}),
       phenotypes.length ? validateHpoTerms(phenotypes) : Promise.resolve({}),
     ]);
-    // This is the exact time the authenticated client retrieved the bounded
-    // adapter response. It is not mislabeled as an upstream database release.
-    const retrievedAt = new Date().toISOString();
+    const adapterRetrievedAt = new Date().toISOString();
     return {
-      genes: attachAdapterRetrieval(genes, retrievedAt),
-      phenotypes: attachAdapterRetrieval(hpo, retrievedAt),
-      adapterRetrievedAt: retrievedAt,
+      genes: preserveSourceRetrieval(genes),
+      phenotypes: preserveSourceRetrieval(hpo),
+      adapterRetrievedAt,
     };
   });
 }
