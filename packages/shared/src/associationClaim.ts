@@ -17,6 +17,11 @@ export type EvidenceStrength = 'none' | 'lead' | 'supporting' | 'strong' | 'unkn
 
 export type TaxonCode = '9606' | '10090' | 'other' | 'unspecified';
 
+export type ClaimProvenanceRole =
+  | 'association_evidence'
+  | 'ai_candidate_lead'
+  | 'source_metadata';
+
 export interface AssociationClaim {
   source: string;
   recordId: string | null;
@@ -27,6 +32,7 @@ export interface AssociationClaim {
   evidenceType: string;
   evidenceStrength: EvidenceStrength;
   releaseVersion: string | null;
+  referenceAssembly: string | null;
   retrievalDate: string;
   directLink: string | null;
   isAiLead: boolean;
@@ -76,10 +82,11 @@ export function safeExternalHttpUrl(value: string | null | undefined): string | 
 
 /** Create a normalized claim with stable species, date, link, and AI-lead fields. */
 export function createAssociationClaim(
-  partial: Omit<AssociationClaim, 'species' | 'isAiLead' | 'retrievalDate'> & {
+  partial: Omit<AssociationClaim, 'species' | 'isAiLead' | 'retrievalDate' | 'referenceAssembly'> & {
     species?: string;
     isAiLead?: boolean;
     retrievalDate?: string;
+    referenceAssembly?: string | null;
   },
 ): AssociationClaim {
   const evidenceClass = partial.evidenceClass;
@@ -93,6 +100,7 @@ export function createAssociationClaim(
     evidenceType: partial.evidenceType,
     evidenceStrength: partial.evidenceStrength,
     releaseVersion: partial.releaseVersion ?? null,
+    referenceAssembly: partial.referenceAssembly ?? null,
     retrievalDate: partial.retrievalDate || isoRetrievalDate(),
     directLink: safeExternalHttpUrl(partial.directLink),
     isAiLead: partial.isAiLead ?? evidenceClass === 'ai_lead',
@@ -123,6 +131,7 @@ export function humanGeneIdentityClaim(input: {
   entrezId?: string | null;
   genomeBuild?: string | null;
   source?: string | null;
+  sourceVersion?: string | null;
   retrievalDate?: string;
 }): AssociationClaim {
   const recordId = input.ensemblId || (input.entrezId ? `ENTREZ:${input.entrezId}` : null);
@@ -139,7 +148,11 @@ export function humanGeneIdentityClaim(input: {
     evidenceClass: 'human_verified',
     evidenceType: 'gene_identity',
     evidenceStrength: 'supporting',
-    releaseVersion: input.genomeBuild || 'GRCh38',
+    // A genome assembly is not a database release. Record the assembly in its
+    // own field and leave source release/version unknown unless the adapter
+    // supplies an actual dataset or service release identifier.
+    releaseVersion: input.sourceVersion ?? null,
+    referenceAssembly: input.genomeBuild ?? null,
     retrievalDate: input.retrievalDate,
     directLink: link,
     isAiLead: false,
@@ -164,7 +177,7 @@ export function hpoPhenotypeClaim(input: {
     evidenceClass: 'external_followup',
     evidenceType: 'phenotype_ontology',
     evidenceStrength: 'supporting',
-    releaseVersion: 'HPO',
+    releaseVersion: null,
     retrievalDate: input.retrievalDate,
     directLink: `https://hpo.jax.org/app/browse/term/${input.hpoId}`,
     isAiLead: false,
@@ -207,6 +220,31 @@ export function claimSortKey(claim: AssociationClaim): number {
     || NON_ASSOCIATION_EVIDENCE_TYPES.has(claim.evidenceType)
   ) return 0;
   return EVIDENCE_CLASS_RANK[claim.evidenceClass] ?? 0;
+}
+
+/** Classify a provenance row without presenting identity metadata as an association. */
+export function claimProvenanceRole(claim: AssociationClaim): ClaimProvenanceRole {
+  if (claim.isAiLead || claim.evidenceClass === 'ai_lead') return 'ai_candidate_lead';
+  return claimSortKey(claim) > 0 ? 'association_evidence' : 'source_metadata';
+}
+
+/**
+ * Resolve the ranking basis used by cards, printable reports, and copied text.
+ * Metadata-only claims never upgrade an AI candidate to verified association.
+ */
+export function deriveRankingBasisFromClaims(
+  claims: AssociationClaim[] | null | undefined,
+): EvidenceClass {
+  let bestClass: EvidenceClass = 'ai_lead';
+  let bestScore = 0;
+  for (const claim of claims || []) {
+    const score = claimSortKey(claim);
+    if (score > bestScore) {
+      bestScore = score;
+      bestClass = claim.evidenceClass;
+    }
+  }
+  return bestClass;
 }
 
 /**
