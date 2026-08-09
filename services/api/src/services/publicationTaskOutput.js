@@ -13,6 +13,8 @@ const ALLOWED_QUERY_TYPES = new Set(['disease', 'phenotype', 'hpo_term']);
 const PUBLICATION_BOUNDARY_MESSAGE = 'The AI response was withheld because it crossed GeneMap Discovery\'s education and non-clinical publication boundary. No model-generated clinical guidance was shown.';
 const EMPTY_RESEARCH_MESSAGE = 'No bounded research narrative was returned. Review the structured cohort fields and try again.';
 const EMPTY_LEARNING_MESSAGE = 'No bounded learning observation was returned. Refresh after additional verified learning activity.';
+const WITHHELD_PROFILE_SUMMARY = 'Generated profile withheld because the response crossed GeneMap Discovery\'s non-clinical publication boundary. No clinical guidance was shown.';
+const UNAVAILABLE_PROFILE_SUMMARY = 'Generated profile unavailable. This gene remains an unverified AI-suggested candidate lead; verify relevance in cited authoritative sources.';
 
 const CLINICAL_GUIDANCE_PATTERNS = [
   /\b(?:recommend(?:ed|ation)?|advise(?:d)?|should|must|need(?:s)? to|ought to|prescribe(?:d)?|start|stop|increase|decrease|take|avoid|undergo|administer|switch)\b[^.!?\n]{0,120}\b(?:treatment|therapy|medication|medicine|drug|screening|test|dose|dosing|dosage|surgery|procedure|clinical care|medical care)\b/iu,
@@ -50,16 +52,25 @@ function replaceControlCharacters(value) {
 }
 
 /**
- * Remove HTML, active schemes, Markdown link targets, and bare URLs from model
- * text. Provider-generated prose is never allowed to create a source link.
+ * Remove every link-capable Markdown/HTML form from model text. Inline links,
+ * reference-style links and images, reference definitions, active schemes,
+ * absolute URLs, protocol-relative URLs, and raw HTML are reduced to inert text.
  */
 function stripUntrustedMarkupAndLinks(value) {
   return value
+    // Reference-style image/link uses must be neutralized before their
+    // definitions are removed, preserving visible alt/link text only.
+    .replace(/!\[([^\]]*)\]\s*\[[^\]]*\]/gu, '$1')
+    .replace(/\[([^\]]+)\]\s*\[[^\]]*\]/gu, '$1')
+    // A definition can make a distant reference-style image trigger a request.
+    // Remove the full definition regardless of URL scheme or title syntax.
+    .replace(/^\s*\[[^\]\n]{1,128}\]:\s*.*$/gmu, ' ')
     .replace(/<[^>]*>/gu, ' ')
     .replace(/!\[([^\]]*)\]\((?:\\.|[^)])*\)/gu, '$1')
     .replace(/\[([^\]]+)\]\((?:\\.|[^)])*\)/gu, '$1')
     .replace(/\b(?:javascript|data):[^\s]+/giu, ' ')
     .replace(/\bhttps?:\/\/[^\s<>()]+/giu, '[external link removed]')
+    .replace(/(^|[\s(])\/\/[A-Za-z0-9.-]+(?:\/[^\s<>()]*)?/gmu, '$1[external link removed]')
     .replace(/\bwww\.[^\s<>()]+/giu, '[external link removed]');
 }
 
@@ -318,12 +329,23 @@ function normalizeClassification(parsed, taskInput = {}) {
 }
 
 /**
- * Reduce a model-generated gene profile to bounded educational prose and
- * phenotype names. Source identifiers and clinical-looking fields are dropped.
+ * Reduce a model-generated gene profile to a deterministic, bounded browser
+ * contract. Missing or clinical summaries become explicit safe statuses instead
+ * of allowing the client to invent an unsupported association statement.
  */
 function normalizeGeneProfile(parsed) {
   const source = isPlainObject(parsed) ? parsed : {};
-  const summary = cleanNonClinicalText(source.summary, 4_000);
+  const candidateSummary = cleanText(source.summary, 4_000);
+  const summaryStatus = !candidateSummary
+    ? 'unavailable'
+    : containsProhibitedClinicalGuidance(candidateSummary)
+      ? 'withheld'
+      : 'available';
+  const summary = summaryStatus === 'available'
+    ? candidateSummary
+    : summaryStatus === 'withheld'
+      ? WITHHELD_PROFILE_SUMMARY
+      : UNAVAILABLE_PROFILE_SUMMARY;
   const keyTakeaways = cleanStringArray(source.keyTakeaways, {
     maxItems: 12,
     maxLength: 500,
@@ -336,7 +358,8 @@ function normalizeGeneProfile(parsed) {
     { maxItems: 20, maxLength: 256, nonClinical: true },
   );
   return {
-    ...(summary ? { summary } : {}),
+    summary,
+    summaryStatus,
     keyTakeaways,
     // Only a bounded name survives. HPO ids and association metadata must be
     // resolved separately through an authoritative server-owned adapter.
@@ -424,4 +447,6 @@ export const __test = {
   PUBLICATION_BOUNDARY_MESSAGE,
   EMPTY_RESEARCH_MESSAGE,
   EMPTY_LEARNING_MESSAGE,
+  WITHHELD_PROFILE_SUMMARY,
+  UNAVAILABLE_PROFILE_SUMMARY,
 };
