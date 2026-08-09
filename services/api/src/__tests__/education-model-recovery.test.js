@@ -1,16 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const generateExplanation = vi.fn();
-const generateImage = vi.fn();
-const generateQuiz = vi.fn();
-const generateChatResponse = vi.fn();
-
-vi.mock('../services/llm.js', () => ({
-  generateExplanation,
-  generateImage,
-  generateQuiz,
-  generateChatResponse,
+const provider = vi.hoisted(() => ({
+  generateExplanation: vi.fn(),
+  generateImage: vi.fn(),
+  generateQuiz: vi.fn(),
+  generateChatResponse: vi.fn(),
 }));
+
+vi.mock('../services/llm.js', () => provider);
 
 import { authCookie, buildTestApp, createPrismaMock } from './setup.js';
 
@@ -61,9 +58,9 @@ describe('education model-publication recovery switch', () => {
     expect(response.statusCode).toBe(503);
     expect(JSON.parse(response.payload).error).toMatch(/temporarily unavailable during safe recovery/i);
     expect(prisma.learningSession.count).not.toHaveBeenCalled();
-    expect(generateExplanation).not.toHaveBeenCalled();
-    expect(generateImage).not.toHaveBeenCalled();
-    expect(generateQuiz).not.toHaveBeenCalled();
-    expect(generateChatResponse).not.toHaveBeenCalled();
+    expect(provider.generateExplanation).not.toHaveBeenCalled();
+    expect(provider.generateImage).not.toHaveBeenCalled();
+    expect(provider.generateQuiz).not.toHaveBeenCalled();
+    expect(provider.generateChatResponse).not.toHaveBeenCalled();
   });
 });
