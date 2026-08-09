@@ -23,13 +23,35 @@ import {
   Info
 } from "lucide-react";
 import { exportGeneReport, exportJSON, copyShareableLink } from "../../lib/exportUtils";
-import { claimSortKey } from "../../../../packages/shared/src/associationClaim.ts";
+import {
+  claimProvenanceRole,
+  deriveRankingBasisFromClaims,
+  safeExternalHttpUrl,
+} from "../../../../packages/shared/src/associationClaim.ts";
 import { Download, Copy, Printer } from "lucide-react";
 
 // Session-scoped set of gene views already logged, so a (re)mount doesn't
 // re-POST the same gene_view activity. Module-level on purpose: shared across
 // every GeneCard instance.
 const loggedGeneViews = new Set();
+
+function displayClaimValue(value, fallback = 'Not recorded') {
+  if (value === null || value === undefined || String(value).trim() === '') return fallback;
+  return String(value);
+}
+
+function aiLeadStatus(claim) {
+  if (claim?.isAiLead === true) return 'true';
+  if (claim?.isAiLead === false) return 'false';
+  return 'not recorded';
+}
+
+function provenanceRoleLabel(claim) {
+  const role = claimProvenanceRole(claim);
+  if (role === 'association_evidence') return 'Association evidence';
+  if (role === 'ai_candidate_lead') return 'AI candidate lead';
+  return 'Identity / ontology / follow-up metadata';
+}
 
 function GeneCard({ gene, rank, isSelected = false, onSelect = null }) {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -76,33 +98,24 @@ function GeneCard({ gene, rank, isSelected = false, onSelect = null }) {
     aiLeads: claims.filter((c) => c.evidenceClass === 'ai_lead'),
     external: claims.filter((c) => c.evidenceClass === 'external_followup'),
   };
-  const strongestAssociationClaim = claims.reduce((best, claim) => {
-    if (!best) return claim;
-    return claimSortKey(claim) > claimSortKey(best) ? claim : best;
-  }, null);
-  const rankingBasis = gene.rankingBasis
-    || (strongestAssociationClaim && claimSortKey(strongestAssociationClaim) > 0
-      ? strongestAssociationClaim.evidenceClass
-      : 'ai_lead');
+  const rankingBasis = gene.rankingBasis || deriveRankingBasisFromClaims(claims);
   const rankingLabel = rankingBasis === 'human_verified'
-    ? 'Human-verified provenance'
+    ? 'Human-verified association evidence'
     : rankingBasis === 'computational'
-      ? 'Computational evidence'
+      ? 'Computational association evidence'
       : rankingBasis === 'animal_model'
-        ? 'Animal-model evidence'
-        : rankingBasis === 'external_followup'
-          ? 'External follow-up source'
-          : 'AI research lead';
+        ? 'Animal-model association evidence'
+        : 'AI research lead';
   const rankingColor = rankingBasis === 'human_verified'
     ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
     : rankingBasis === 'computational'
       ? 'bg-sky-100 text-sky-800 border-sky-200'
-      : rankingBasis === 'external_followup'
-        ? 'bg-violet-100 text-violet-800 border-violet-200'
+      : rankingBasis === 'animal_model'
+        ? 'bg-orange-100 text-orange-800 border-orange-200'
         : 'bg-amber-100 text-amber-800 border-amber-200';
   const RankingIcon = rankingBasis === 'human_verified' ? CheckCircle
     : rankingBasis === 'computational' ? Info
-      : rankingBasis === 'external_followup' ? Info
+      : rankingBasis === 'animal_model' ? Info
         : AlertTriangle;
 
   return (
@@ -176,13 +189,14 @@ function GeneCard({ gene, rank, isSelected = false, onSelect = null }) {
               <RankingIcon className="w-5 h-5 mt-0.5 flex-shrink-0 text-slate-600" />
               <div className="flex-1">
                 <h4 className="font-medium text-slate-900 mb-2">
-                  Provenance ranking basis
+                  Association-ranking basis
                 </h4>
                 <div className="text-sm text-slate-600">
                   <p className="mb-2">
-                    Ranked by evidence class (<strong>{rankingLabel}</strong>), not by LLM self-scores.
-                    AI leads are research suggestions only — not diagnosis, personal risk, treatment,
-                    or calibrated evidence grades. Human and animal evidence are kept separate below.
+                    Ranked by genuine gene-query association evidence (<strong>{rankingLabel}</strong>),
+                    not by LLM self-scores, verified gene identity, coordinates, ontology records, or
+                    database links. AI leads are research suggestions only, not diagnosis, personal risk,
+                    treatment, or calibrated evidence grades.
                   </p>
                   {gene.explanation && (
                     <p className="text-xs text-slate-500 italic">
@@ -199,52 +213,72 @@ function GeneCard({ gene, rank, isSelected = false, onSelect = null }) {
           <div className="mb-4 border border-slate-200 rounded-lg p-3 bg-white" data-testid="association-claims">
             <h4 className="font-medium text-slate-900 mb-2 flex items-center gap-2 text-sm">
               <BookOpen className="w-4 h-4" />
-              Association claims (source · version · evidence class/type/strength · species/taxon · retrieved)
+              Evidence and source provenance
             </h4>
-            <ul className="space-y-2">
-              {claims.map((claim, idx) => (
-                <li key={`${claim.source}-${claim.recordId || idx}`} className="text-xs text-slate-700 border-b border-slate-100 pb-2 last:border-0 last:pb-0">
-                  <div className="flex flex-wrap gap-1 mb-1">
-                    <Badge variant="outline" className="text-[10px]">{claim.evidenceClass}</Badge>
-                    <Badge variant="outline" className="text-[10px]" title="Evidence type">
-                      {claim.evidenceType || 'type not recorded'}
-                    </Badge>
-                    <Badge variant="outline" className="text-[10px]" title="Evidence strength">
-                      {claim.evidenceStrength || 'strength not recorded'}
-                    </Badge>
-                    <Badge variant="outline" className="text-[10px]" title="Species">
-                      {claim.species || 'species not recorded'}
-                    </Badge>
-                    <Badge variant="outline" className="text-[10px]" title="Taxon">
-                      taxon {claim.taxon || 'not recorded'}
-                    </Badge>
-                    {claim.isAiLead && <Badge className="text-[10px] bg-amber-100 text-amber-900 border-amber-200">AI lead</Badge>}
-                  </div>
-                  <p className="font-medium text-slate-800">{claim.claim}</p>
-                  <p className="text-slate-600 mt-0.5">
-                    <span className="font-medium">{claim.source}</span>
-                    {claim.recordId ? ` · ${claim.recordId}` : ''}
-                    {claim.releaseVersion ? ` · ${claim.releaseVersion}` : ''}
-                    {claim.retrievalDate ? ` · retrieved ${claim.retrievalDate}` : ''}
-                  </p>
-                  {claim.directLink && (
-                    <a
-                      href={claim.directLink}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-blue-700 hover:underline mt-0.5"
-                    >
-                      <ExternalLink className="w-3 h-3" />
-                      Open source record
-                    </a>
-                  )}
-                </li>
-              ))}
+            <p className="text-[11px] text-slate-500 mb-3">
+              Each row states whether it is association evidence, an AI candidate lead, or source metadata.
+              Identity, coordinate, ontology, and follow-up records do not verify a gene-query association.
+            </p>
+            <ul className="space-y-3">
+              {claims.map((claim, idx) => {
+                const safeLink = safeExternalHttpUrl(claim?.directLink);
+                const role = claimProvenanceRole(claim);
+                return (
+                  <li key={`${claim.source}-${claim.recordId || idx}`} className="text-xs text-slate-700 border-b border-slate-100 pb-3 last:border-0 last:pb-0">
+                    <div className="flex flex-wrap gap-1 mb-2">
+                      <Badge
+                        className={role === 'association_evidence'
+                          ? 'text-[10px] bg-emerald-100 text-emerald-900 border-emerald-200'
+                          : role === 'ai_candidate_lead'
+                            ? 'text-[10px] bg-amber-100 text-amber-900 border-amber-200'
+                            : 'text-[10px] bg-slate-100 text-slate-800 border-slate-200'}
+                      >
+                        {provenanceRoleLabel(claim)}
+                      </Badge>
+                      <Badge variant="outline" className="text-[10px]">{displayClaimValue(claim.evidenceClass)}</Badge>
+                      <Badge variant="outline" className="text-[10px]" title="Evidence type">
+                        {displayClaimValue(claim.evidenceType)}
+                      </Badge>
+                      <Badge variant="outline" className="text-[10px]" title="Evidence strength">
+                        {displayClaimValue(claim.evidenceStrength)}
+                      </Badge>
+                      <Badge variant="outline" className="text-[10px]" title="Species">
+                        {displayClaimValue(claim.species)}
+                      </Badge>
+                      <Badge variant="outline" className="text-[10px]" title="Taxon">
+                        taxon {displayClaimValue(claim.taxon)}
+                      </Badge>
+                    </div>
+                    <p className="font-medium text-slate-800">{displayClaimValue(claim.claim, 'Claim text not recorded')}</p>
+                    <dl className="grid sm:grid-cols-2 gap-x-4 gap-y-1 mt-2 text-slate-600">
+                      <div><dt className="inline font-medium">Source: </dt><dd className="inline">{displayClaimValue(claim.source)}</dd></div>
+                      <div><dt className="inline font-medium">Record ID: </dt><dd className="inline">{displayClaimValue(claim.recordId)}</dd></div>
+                      <div><dt className="inline font-medium">Source release/version: </dt><dd className="inline">{displayClaimValue(claim.releaseVersion)}</dd></div>
+                      <div><dt className="inline font-medium">Reference assembly: </dt><dd className="inline">{displayClaimValue(claim.referenceAssembly)}</dd></div>
+                      <div><dt className="inline font-medium">Retrieved: </dt><dd className="inline">{displayClaimValue(claim.retrievalDate)}</dd></div>
+                      <div><dt className="inline font-medium">AI lead: </dt><dd className="inline">{aiLeadStatus(claim)}</dd></div>
+                    </dl>
+                    {safeLink ? (
+                      <a
+                        href={safeLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-blue-700 hover:underline mt-1"
+                      >
+                        <ExternalLink className="w-3 h-3" />
+                        Open source record
+                      </a>
+                    ) : (
+                      <span className="inline-block text-slate-500 mt-1">No validated HTTP(S) source link recorded</span>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
             {(partition.animal?.length > 0 || partition.external?.length > 0) && (
               <p className="text-[11px] text-slate-500 mt-2">
                 External database links are follow-up sources, not automatic claim-level citations.
-                Animal-model rows are displayed separately from human-verified claims.
+                Animal-model rows are displayed separately from human evidence.
               </p>
             )}
           </div>
@@ -308,7 +342,7 @@ function GeneCard({ gene, rank, isSelected = false, onSelect = null }) {
             <Info className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
             <span>
               <strong>Coordinates &amp; IDs verified</strong> against MyGene.info (Ensembl/NCBI).
-              Gene–phenotype associations and the summary are AI-suggested
+              Gene-phenotype associations and the summary are AI-suggested
               {gene.hpoChecked ? "; HP: ids shown are HPO-validated" : ""}. Verify each association
               in the cited primary database record before research use; do not use this output medically.
             </span>
@@ -394,18 +428,21 @@ function GeneCard({ gene, rank, isSelected = false, onSelect = null }) {
                     <div>
                       <p className="text-xs text-slate-600 mb-1">Recommended Resources:</p>
                       <div className="flex flex-wrap gap-2">
-                        {gene.furtherReading.resources.map((resource, idx) => (
-                          <a
-                            key={idx}
-                            href={resource.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-xs bg-white border border-slate-300 hover:border-blue-400 hover:bg-blue-50 px-2 py-1 rounded flex items-center gap-1 transition-colors"
-                          >
-                            <ExternalLink className="w-3 h-3" />
-                            {resource.name}
-                          </a>
-                        ))}
+                        {gene.furtherReading.resources.map((resource, idx) => {
+                          const safeUrl = safeExternalHttpUrl(resource?.url);
+                          return safeUrl ? (
+                            <a
+                              key={idx}
+                              href={safeUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs bg-white border border-slate-300 hover:border-blue-400 hover:bg-blue-50 px-2 py-1 rounded flex items-center gap-1 transition-colors"
+                            >
+                              <ExternalLink className="w-3 h-3" />
+                              {resource.name}
+                            </a>
+                          ) : null;
+                        })}
                       </div>
                     </div>
                   )}
