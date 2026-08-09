@@ -52,6 +52,8 @@ describe('GeneCard claim-level provenance', () => {
 
     const claims = screen.getByTestId('association-claims');
     expect(within(claims).getByText('human_verified')).toBeInTheDocument();
+    expect(within(claims).getByText('gene_identity')).toBeInTheDocument();
+    expect(within(claims).getByText('supporting')).toBeInTheDocument();
     expect(within(claims).getByText('Homo sapiens')).toBeInTheDocument();
     expect(within(claims).getByText(claim.claim)).toBeInTheDocument();
     expect(within(claims).getByText('ClinGen', { selector: 'span' })).toBeInTheDocument();
