@@ -21,7 +21,7 @@ import { requireCsrf } from './middleware/csrf.js';
 import authRoutes from './routes/auth.js';
 import billingRoutes from './routes/billing.js';
 import educationRoutes from './routes/education.js';
-import llmRoutes from './routes/llm.js';
+import llmRoutes, { isModelPublicationEnabled } from './routes/llm.js';
 import adminRoutes from './routes/admin.js';
 import entityRoutes from './routes/entities.js';
 import genomicsRoutes from './routes/genomics.js';
@@ -186,8 +186,9 @@ fastify.get(
 
 // Readiness: the process is up and can reach its hard dependencies. Redis is
 // deliberately not a hard dependency because emergency local limiting remains
-// active during an outage. The structured field makes that degraded protection
-// state visible to operators and monitoring, so this route must never be 429'd.
+// active during an outage. Model publication uses the exact same runtime switch
+// as /llm/invoke; a recovery-disabled API stays probeable but reports degraded
+// so release gates cannot mistake it for the full product.
 fastify.get('/readyz', { config: { rateLimit: false } }, async (request, reply) => {
   try {
     await prisma.$queryRaw`SELECT 1`;
@@ -197,10 +198,16 @@ fastify.get('/readyz', { config: { rateLimit: false } }, async (request, reply) 
   }
 
   const rateLimitProtection = rateLimitProtectionStatus(rateLimitRedis);
+  const modelPublicationEnabled = isModelPublicationEnabled(process.env);
+  const degraded = rateLimitProtection.emergency || !modelPublicationEnabled;
   return {
-    status: 'ready',
-    degraded: rateLimitProtection.emergency,
+    status: degraded ? 'degraded' : 'ready',
+    degraded,
     publicationMode: PUBLICATION_MODE,
+    modelPublication: {
+      enabled: modelPublicationEnabled,
+      status: modelPublicationEnabled ? 'enabled' : 'disabled_for_safe_recovery',
+    },
     medicalEncryption: env.hasMedicalEncryption(),
     rateLimitStore: rateLimitStoreStatus(rateLimitRedis),
     rateLimitProtection,

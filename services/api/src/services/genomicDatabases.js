@@ -267,24 +267,31 @@ export async function getClinVarVariant(uid) {
 // ─── HPO (Human Phenotype Ontology) ─────────────────────────────────────────
 
 /**
- * Search HPO terms by query string.
+ * Search HPO terms by query string. The adapter stamps successful upstream
+ * responses once, before caching, so every downstream provenance row carries
+ * the actual adapter-retrieval time rather than its own construction time.
  */
 export async function searchPhenotypes(query) {
   const q = normalizeQuery(query);
-  if (!q) return { terms: [] };
+  if (!q) return { terms: [], retrievedAt: null };
   const cacheKey = `hpo:${q}`;
   const cached = cache.get(cacheKey);
   if (cached) return cached;
 
   try {
-    const data = await fetchJSON(
+    const upstream = await fetchJSON(
       `https://ontology.jax.org/api/hp/search?q=${encodeURIComponent(q)}`
     );
+    const data = {
+      ...(upstream && typeof upstream === 'object' && !Array.isArray(upstream) ? upstream : {}),
+      terms: Array.isArray(upstream?.terms) ? upstream.terms : [],
+      retrievedAt: new Date().toISOString(),
+    };
     cache.set(cacheKey, data);
     return data;
   } catch (err) {
     console.error(`[genomicDatabases] searchPhenotypes(${query}) failed:`, err.message);
-    return { terms: [] };
+    return { terms: [], retrievedAt: null };
   }
 }
 
@@ -304,7 +311,7 @@ function firstOf(value) {
   return Array.isArray(value) ? value[0] : value;
 }
 
-function toGeneRecord(querySymbol, hit) {
+function toGeneRecord(querySymbol, hit, retrievedAt) {
   const pos = firstOf(hit.genomic_pos) || {};
   const ensembl = firstOf(hit.ensembl) || {};
   const chromosome = pos.chr != null && pos.chr !== '' ? String(pos.chr) : null;
@@ -322,6 +329,7 @@ function toGeneRecord(querySymbol, hit) {
     mapLocation: typeof hit.map_location === 'string' ? hit.map_location : null,
     summary: typeof hit.summary === 'string' ? hit.summary : null,
     source: 'MyGene.info',
+    retrievedAt,
     // "verified" means we actually resolved authoritative coordinates.
     verified: chromosome != null && start != null && end != null,
   };
@@ -331,7 +339,7 @@ function toGeneRecord(querySymbol, hit) {
  * Resolve authoritative gene records for a list of symbols. Returns a map of
  * the ORIGINAL symbol → record (or null if unresolved). One batched MyGene.info
  * request for all uncached symbols; per-symbol results (including misses) are
- * cached so repeat searches are instant.
+ * cached so repeat searches preserve the original adapter-retrieval timestamp.
  */
 export async function enrichGenes(symbols) {
   const clean = [
@@ -377,9 +385,10 @@ export async function enrichGenes(symbols) {
         if (key && !h.notfound && !byQuery.has(key)) byQuery.set(key, h);
       }
 
+      const retrievedAt = new Date().toISOString();
       for (const sym of toFetch) {
         const hit = byQuery.get(sym.toLowerCase());
-        const record = hit ? toGeneRecord(sym, hit) : null;
+        const record = hit ? toGeneRecord(sym, hit, retrievedAt) : null;
         cache.set(`generec:${sym.toLowerCase()}`, record);
         result[sym] = record;
       }
@@ -398,10 +407,10 @@ const HPO_CONCURRENCY = 5;
 
 /**
  * Validate phenotype names against the Human Phenotype Ontology, returning a map
- * of normalized name → { hpoId, name, verified }. Uses the cached HPO search;
- * bounded concurrency keeps us well under the public API's rate limits. An
- * unmatched or failed term yields `verified: false` (the UI then omits the
- * unverified AI HPO id rather than presenting a fabricated one).
+ * of normalized name → { hpoId, name, verified, retrievedAt }. Uses the cached
+ * HPO search; bounded concurrency keeps us well under the public API's rate
+ * limits. An unmatched or failed term yields `verified: false` and does not
+ * create a source claim in the browser.
  */
 export async function validateHpoTerms(names) {
   const clean = [
@@ -416,11 +425,21 @@ export async function validateHpoTerms(names) {
         const cacheKey = `hpoterm:${name}`;
         const cached = cache.get(cacheKey);
         if (cached !== undefined) return [name, cached];
-        const data = await searchPhenotypes(name); // cached + fails soft to { terms: [] }
+        const data = await searchPhenotypes(name);
         const top = (data?.terms || [])[0];
         const rec = top && typeof top.id === 'string'
-          ? { hpoId: top.id, name: top.name || name, verified: true }
-          : { hpoId: null, name, verified: false };
+          ? {
+              hpoId: top.id,
+              name: top.name || name,
+              verified: true,
+              retrievedAt: data.retrievedAt || null,
+            }
+          : {
+              hpoId: null,
+              name,
+              verified: false,
+              retrievedAt: data?.retrievedAt || null,
+            };
         cache.set(cacheKey, rec);
         return [name, rec];
       })

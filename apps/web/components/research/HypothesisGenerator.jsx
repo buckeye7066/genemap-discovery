@@ -1,14 +1,14 @@
-import React, { useState } from "react";
-import { apiClient } from "@genemap/shared";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Lightbulb, Loader2, Sparkles, Info } from "lucide-react";
+import React, { useState } from 'react';
+import { apiClient } from '@genemap/shared';
 import ReactMarkdown from 'react-markdown';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Download, Info, Lightbulb, Loader2, Sparkles } from 'lucide-react';
 import {
   MANDATED_RESEARCH_EXAMPLES,
   isValidAggregateSampleCount,
@@ -20,8 +20,9 @@ import {
   publicationConceptById,
   publicationHpoReference,
 } from '@/lib/publicationConceptCatalog';
+import { safeModelMarkdownComponents } from '../shared/safeModelMarkdown';
 
-const dataTypeOptions = [
+const dataTypeOptions = Object.freeze([
   { key: 'wes', label: 'Whole-exome sequencing (WES)', icon: '🧬' },
   { key: 'wgs', label: 'Whole-genome sequencing (WGS)', icon: '🧬' },
   { key: 'rna_seq', label: 'RNA sequencing', icon: '📊' },
@@ -30,9 +31,46 @@ const dataTypeOptions = [
   { key: 'treatment_response', label: 'Aggregate treatment-response variables', icon: '📈' },
   { key: 'cnv', label: 'Copy-number variants (CNVs)', icon: '🔬' },
   { key: 'proteomics', label: 'Proteomics', icon: '🔬' },
-  { key: 'metabolomics', label: 'Metabolomics (metabolite profiles)', icon: '⚗️' },
-  { key: 'epigenomics', label: 'Epigenomics', icon: '🎯' }
-];
+  { key: 'metabolomics', label: 'Metabolomics', icon: '⚗️' },
+  { key: 'epigenomics', label: 'Epigenomics', icon: '🎯' },
+]);
+
+const generatedMarkdownComponents = Object.freeze({
+  h1: ({ children }) => <h1 className="mt-6 mb-3 text-2xl font-bold text-amber-900">{children}</h1>,
+  h2: ({ children }) => <h2 className="mt-5 mb-2 text-xl font-semibold text-amber-900">{children}</h2>,
+  h3: ({ children }) => <h3 className="mt-4 mb-2 text-lg font-semibold text-slate-900">{children}</h3>,
+  p: ({ children }) => <p className="mb-3 leading-relaxed text-slate-700">{children}</p>,
+  ul: ({ children }) => <ul className="ml-5 mb-3 list-disc space-y-2">{children}</ul>,
+  ol: ({ children }) => <ol className="ml-5 mb-3 list-decimal space-y-2">{children}</ol>,
+  li: ({ children }) => <li className="text-slate-700">{children}</li>,
+  blockquote: ({ children }) => (
+    <blockquote className="my-4 rounded-r border-l-4 border-amber-500 bg-amber-50 py-3 pl-4">
+      {children}
+    </blockquote>
+  ),
+  strong: ({ children }) => <strong className="font-semibold text-amber-900">{children}</strong>,
+  ...safeModelMarkdownComponents,
+});
+
+function selectedModalities(dataTypes) {
+  return Object.entries(dataTypes)
+    .filter(([, selected]) => Boolean(selected))
+    .map(([type]) => type);
+}
+
+export function describeResearchFocus(focus) {
+  if (!focus) return 'None';
+  if (focus.kind === 'curated_concept') {
+    return `${focus.canonicalLabel} (${focus.conceptKind}; ${focus.conceptId}; ${focus.source}@${focus.version})`;
+  }
+  if (focus.kind === 'hpo') {
+    return `${focus.identifier} (Human Phenotype Ontology identifier; server revalidated)`;
+  }
+  if (focus.kind === 'mondo') {
+    return `${focus.identifier} (MONDO disease identifier; server revalidated)`;
+  }
+  return 'Unrecognized focus withheld';
+}
 
 export default function HypothesisGenerator() {
   const [sampleCount, setSampleCount] = useState(50);
@@ -52,20 +90,24 @@ export default function HypothesisGenerator() {
     cnv: false,
     proteomics: false,
     metabolomics: false,
-    epigenomics: false
+    epigenomics: false,
   });
   const [isGenerating, setIsGenerating] = useState(false);
   const [hypotheses, setHypotheses] = useState(null);
   const [error, setError] = useState('');
+
   const sampleCountIsValid = isValidAggregateSampleCount(sampleCount);
+  const modalities = selectedModalities(dataTypes);
 
   const loadExample = (example) => {
     const parsed = parseAggregateResearchExample(example);
     if (!parsed) return;
+
     setSampleCount(parsed.cohort.sampleCount);
     setClassification(parsed.cohort.classification);
     setHasControls(parsed.cohort.hasControls);
     setObjective(parsed.objective);
+
     const nextFocus = researchFocusControls(parsed.focus);
     setFocusKind(nextFocus.focusKind);
     setFocusConceptId(nextFocus.focusConceptId);
@@ -74,65 +116,97 @@ export default function HypothesisGenerator() {
       key,
       parsed.modalities.includes(key),
     ])));
+    setError('');
   };
 
   const changeFocusKind = (nextKind) => {
-    // A type change is a new explicit selection. Never carry an HPO id or
-    // reviewed concept across modes where it could be paired with a new label.
     setFocusKind(nextKind);
     setFocusConceptId('');
     setFocusHpoId('');
+    setError('');
   };
 
   const handleGenerate = async () => {
     setError('');
+    if (!sampleCountIsValid || modalities.length === 0) {
+      setError('Enter an integer from 2 to 1,000,000 and select at least one aggregate data type.');
+      return;
+    }
+
+    const focus = focusKind === 'curated'
+      ? publicationConceptById(focusConceptId)
+      : focusKind === 'hpo'
+        ? publicationHpoReference(focusHpoId)
+        : null;
+
+    if (focusKind !== 'none' && !focus) {
+      setError('Choose a reviewed concept or enter an exact HPO identifier such as HP:0001250.');
+      return;
+    }
+
+    const taskInput = {
+      version: 1,
+      cohort: {
+        sampleCount: Number(sampleCount),
+        classification,
+        hasControls,
+      },
+      modalities,
+      objective,
+      ...(focus ? { focus } : {}),
+    };
+
     setIsGenerating(true);
     try {
-      const selectedDataTypes = Object.entries(dataTypes)
-        .filter(([_, selected]) => selected)
-        .map(([type]) => type);
-      if (!sampleCountIsValid || selectedDataTypes.length === 0) {
-        setError('Enter an integer from 2 to 1,000,000 and select at least one aggregate data type.');
-        return;
-      }
-      const focus = focusKind === 'curated'
-        ? publicationConceptById(focusConceptId)
-        : focusKind === 'hpo'
-          ? publicationHpoReference(focusHpoId)
-          : null;
-      if (focusKind !== 'none' && !focus) {
-        setError('Choose a reviewed concept or enter an exact HPO identifier such as HP:0001250.');
-        return;
-      }
-      const taskInput = {
-        version: 1,
-        cohort: {
-          sampleCount: Number(sampleCount),
-          classification,
-          hasControls,
-        },
-        modalities: selectedDataTypes,
-        objective,
-        ...(focus ? { focus } : {}),
-      };
-      const { result: response } = await apiClient.invokePublicationTask(
+      const response = await apiClient.invokePublicationTask(
         'research_hypothesis',
         taskInput,
       );
-
+      const generated = typeof response?.result === 'string' ? response.result.trim() : '';
+      if (!generated) {
+        throw new Error('The research service returned no bounded narrative.');
+      }
       setHypotheses({
         cohort: taskInput.cohort,
+        focus: taskInput.focus || null,
         objective,
-        data_types: selectedDataTypes,
-        analysis: response
+        dataTypes: modalities,
+        analysis: generated,
+        generatedAt: new Date().toISOString(),
       });
-
     } catch (err) {
-      console.error("Error generating hypotheses:", err);
-      setError(err?.message || 'The structured research request could not be generated.');
+      console.error('Error generating hypotheses:', err);
+      setHypotheses(null);
+      setError(err?.message || 'The structured research request could not be generated. Please try again.');
     } finally {
       setIsGenerating(false);
     }
+  };
+
+  const handleDownload = () => {
+    if (!hypotheses) return;
+    const header = [
+      '# GeneMap Discovery Research Hypothesis',
+      '',
+      `Generated: ${hypotheses.generatedAt}`,
+      `Cohort: ${hypotheses.cohort.sampleCount} samples (${hypotheses.cohort.classification})`,
+      `Control group present: ${hypotheses.cohort.hasControls ? 'Yes' : 'No'}`,
+      `Focus: ${describeResearchFocus(hypotheses.focus)}`,
+      `Objective: ${hypotheses.objective}`,
+      `Modalities: ${hypotheses.dataTypes.join(', ')}`,
+      '',
+      'Education and exploratory research only. Verify every material claim in authoritative sources.',
+      '',
+    ].join('\n');
+    const blob = new Blob([header, hypotheses.analysis], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `genemap-hypothesis-${Date.now()}.md`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -140,15 +214,15 @@ export default function HypothesisGenerator() {
       <Card className="shadow-lg">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Lightbulb className="w-5 h-5 text-amber-600" />
-            AI-Powered Hypothesis Generation
+            <Lightbulb className="h-5 w-5 text-amber-600" />
+            Guided Research Hypothesis Generator
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">
-          <Alert className="bg-amber-50 border-amber-200">
+          <Alert className="border-amber-200 bg-amber-50">
             <Info className="h-4 w-4 text-amber-600" />
-            <AlertDescription className="text-amber-900 text-sm">
-              <strong>Exploratory research only:</strong> Define a deidentified aggregate, synthetic, or public cohort using the guided fields. GeneMap sends only this structured specification and does not accept patient-level data or free-form clinical requests here.
+            <AlertDescription className="text-sm text-amber-900">
+              <strong>Exploratory research only:</strong> define a deidentified aggregate, synthetic, or public cohort using the guided fields. GeneMap sends only this structured specification. Do not enter patient-level data.
             </AlertDescription>
           </Alert>
 
@@ -156,21 +230,44 @@ export default function HypothesisGenerator() {
             <Label>Load a structured example</Label>
             <div className="grid gap-2">
               {MANDATED_RESEARCH_EXAMPLES.map((example, index) => (
-                <Button key={example} type="button" variant="outline" className="h-auto whitespace-normal text-left justify-start" onClick={() => loadExample(example)}>
+                <Button
+                  key={example}
+                  type="button"
+                  variant="outline"
+                  className="h-auto justify-start whitespace-normal text-left"
+                  onClick={() => loadExample(example)}
+                  disabled={isGenerating}
+                >
                   Example {index + 1}: {example}
                 </Button>
               ))}
             </div>
           </div>
 
-          <div className="grid md:grid-cols-2 gap-4">
+          <div className="grid gap-4 md:grid-cols-2">
             <div>
               <Label htmlFor="sample-count">Aggregate sample count</Label>
-              <Input id="sample-count" type="number" min="2" max="1000000" step="1" value={sampleCount} onChange={(event) => setSampleCount(Number(event.target.value))} disabled={isGenerating} aria-invalid={!sampleCountIsValid} />
+              <Input
+                id="sample-count"
+                type="number"
+                min="2"
+                max="1000000"
+                step="1"
+                value={sampleCount}
+                onChange={(event) => setSampleCount(Number(event.target.value))}
+                disabled={isGenerating}
+                aria-invalid={!sampleCountIsValid}
+              />
             </div>
             <div>
               <Label htmlFor="classification">Data classification</Label>
-              <select id="classification" className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3" value={classification} onChange={(event) => setClassification(event.target.value)} disabled={isGenerating}>
+              <select
+                id="classification"
+                className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3"
+                value={classification}
+                onChange={(event) => setClassification(event.target.value)}
+                disabled={isGenerating}
+              >
                 <option value="deidentified_aggregate">Deidentified aggregate cohort</option>
                 <option value="synthetic">Synthetic cohort</option>
                 <option value="public_dataset">Public dataset</option>
@@ -178,7 +275,13 @@ export default function HypothesisGenerator() {
             </div>
             <div>
               <Label htmlFor="objective">Research objective</Label>
-              <select id="objective" className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3" value={objective} onChange={(event) => setObjective(event.target.value)} disabled={isGenerating}>
+              <select
+                id="objective"
+                className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3"
+                value={objective}
+                onChange={(event) => setObjective(event.target.value)}
+                disabled={isGenerating}
+              >
                 <option value="identify_variants">Identify cohort-level variants</option>
                 <option value="association_analysis">Association-analysis design</option>
                 <option value="compare_cohorts">Compare cohorts</option>
@@ -187,13 +290,24 @@ export default function HypothesisGenerator() {
                 <option value="cohort_summary">Cohort summary</option>
               </select>
             </div>
-            <div className="flex items-end pb-2 gap-2">
-              <Checkbox id="has-controls" checked={hasControls} onCheckedChange={(checked) => setHasControls(Boolean(checked))} />
+            <div className="flex items-end gap-2 pb-2">
+              <Checkbox
+                id="has-controls"
+                checked={hasControls}
+                onCheckedChange={(checked) => setHasControls(Boolean(checked))}
+                disabled={isGenerating}
+              />
               <Label htmlFor="has-controls">A control group is present</Label>
             </div>
             <div>
               <Label htmlFor="focus-kind">Optional focus type</Label>
-              <select id="focus-kind" className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3" value={focusKind} onChange={(event) => changeFocusKind(event.target.value)} disabled={isGenerating}>
+              <select
+                id="focus-kind"
+                className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3"
+                value={focusKind}
+                onChange={(event) => changeFocusKind(event.target.value)}
+                disabled={isGenerating}
+              >
                 <option value="none">No specific concept</option>
                 <option value="curated">Reviewed disease or phenotype</option>
                 <option value="hpo">Exact HPO identifier (server verified)</option>
@@ -203,17 +317,32 @@ export default function HypothesisGenerator() {
               {focusKind === 'curated' ? (
                 <>
                   <Label htmlFor="focus-concept">Reviewed concept</Label>
-                  <select id="focus-concept" className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3" value={focusConceptId} onChange={(event) => setFocusConceptId(event.target.value)} disabled={isGenerating}>
+                  <select
+                    id="focus-concept"
+                    className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3"
+                    value={focusConceptId}
+                    onChange={(event) => setFocusConceptId(event.target.value)}
+                    disabled={isGenerating}
+                  >
                     <option value="" disabled>Choose a reviewed concept</option>
                     {CURATED_PUBLICATION_CONCEPTS.map((concept) => (
-                      <option key={concept.conceptId} value={concept.conceptId}>{concept.canonicalLabel}</option>
+                      <option key={concept.conceptId} value={concept.conceptId}>
+                        {concept.canonicalLabel}
+                      </option>
                     ))}
                   </select>
                 </>
               ) : focusKind === 'hpo' ? (
                 <>
                   <Label htmlFor="focus-hpo">Exact HPO identifier</Label>
-                  <Input id="focus-hpo" maxLength={10} placeholder="HP:0001250" value={focusHpoId} onChange={(event) => setFocusHpoId(event.target.value)} disabled={isGenerating} />
+                  <Input
+                    id="focus-hpo"
+                    maxLength={10}
+                    placeholder="HP:0001250"
+                    value={focusHpoId}
+                    onChange={(event) => setFocusHpoId(event.target.value)}
+                    disabled={isGenerating}
+                  />
                 </>
               ) : (
                 <p className="pt-7 text-sm text-slate-600">No concept label will be sent.</p>
@@ -222,18 +351,22 @@ export default function HypothesisGenerator() {
           </div>
 
           <div>
-            <Label className="mb-3 block">Available Data Types</Label>
-            <div className="grid md:grid-cols-2 gap-3">
+            <Label className="mb-3 block">Aggregate data types</Label>
+            <div className="grid gap-3 md:grid-cols-2">
               {dataTypeOptions.map((dataType) => (
                 <div key={dataType.key} className="flex items-center space-x-2">
                   <Checkbox
                     id={dataType.key}
-                    checked={dataTypes[dataType.key]}
-                    onCheckedChange={(checked) => setDataTypes({ ...dataTypes, [dataType.key]: checked })}
+                    checked={Boolean(dataTypes[dataType.key])}
+                    onCheckedChange={(checked) => setDataTypes((current) => ({
+                      ...current,
+                      [dataType.key]: Boolean(checked),
+                    }))}
+                    disabled={isGenerating}
                   />
-                  <label htmlFor={dataType.key} className="text-sm cursor-pointer">
+                  <Label htmlFor={dataType.key} className="cursor-pointer font-normal">
                     {dataType.icon} {dataType.label}
-                  </label>
+                  </Label>
                 </div>
               ))}
             </div>
@@ -242,18 +375,19 @@ export default function HypothesisGenerator() {
           {error && <p className="text-sm text-red-700" role="alert">{error}</p>}
 
           <Button
+            type="button"
             onClick={handleGenerate}
-            disabled={isGenerating || !sampleCountIsValid || !Object.values(dataTypes).some(Boolean)}
+            disabled={isGenerating || !sampleCountIsValid || modalities.length === 0}
             className="w-full bg-amber-600 hover:bg-amber-700"
           >
             {isGenerating ? (
               <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Generating Hypotheses...
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Generating bounded hypotheses…
               </>
             ) : (
               <>
-                <Sparkles className="w-4 h-4 mr-2" />
+                <Sparkles className="mr-2 h-4 w-4" />
                 Generate Research Hypotheses
               </>
             )}
@@ -262,49 +396,41 @@ export default function HypothesisGenerator() {
       </Card>
 
       {hypotheses && (
-        <Card className="shadow-lg border-2 border-amber-300">
+        <Card className="border-2 border-amber-300 shadow-lg">
           <CardHeader className="bg-gradient-to-r from-amber-50 to-orange-50">
-            <div className="flex items-center gap-2">
-              <Lightbulb className="w-6 h-6 text-amber-600" />
+            <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <CardTitle>Generated Research Hypotheses</CardTitle>
-                <div className="flex gap-2 mt-2">
-                  {hypotheses.data_types.map((type) => (
-                    <Badge key={type} variant="outline" className="text-xs">
-                      {type}
-                    </Badge>
+                <CardTitle className="flex items-center gap-2">
+                  <Lightbulb className="h-6 w-6 text-amber-600" />
+                  Generated Research Hypotheses
+                </CardTitle>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <Badge variant="outline" className="text-xs">
+                    Controls: {hypotheses.cohort.hasControls ? 'present' : 'absent'}
+                  </Badge>
+                  <Badge variant="outline" className="text-xs">
+                    Focus: {describeResearchFocus(hypotheses.focus)}
+                  </Badge>
+                  {hypotheses.dataTypes.map((type) => (
+                    <Badge key={type} variant="outline" className="text-xs">{type}</Badge>
                   ))}
                 </div>
               </div>
+              <Button type="button" variant="outline" onClick={handleDownload}>
+                <Download className="mr-2 h-4 w-4" />
+                Download Markdown
+              </Button>
             </div>
           </CardHeader>
           <CardContent className="pt-6">
             <div className="prose prose-sm max-w-none">
-              <ReactMarkdown
-                components={{
-                  h1: ({ children }) => (
-                    <h1 className="text-2xl font-bold text-amber-900 mt-6 mb-3 flex items-center gap-2">
-                      <Sparkles className="w-5 h-5" />
-                      {children}
-                    </h1>
-                  ),
-                  h2: ({ children }) => <h2 className="text-xl font-semibold text-amber-900 mt-5 mb-2">{children}</h2>,
-                  h3: ({ children }) => <h3 className="text-lg font-semibold text-slate-900 mt-4 mb-2">{children}</h3>,
-                  p: ({ children }) => <p className="text-slate-700 mb-3 leading-relaxed">{children}</p>,
-                  ul: ({ children }) => <ul className="ml-4 mb-3 space-y-2 list-disc">{children}</ul>,
-                  ol: ({ children }) => <ol className="ml-4 mb-3 space-y-2 list-decimal">{children}</ol>,
-                  li: ({ children }) => <li className="text-slate-700">{children}</li>,
-                  blockquote: ({ children }) => (
-                    <blockquote className="border-l-4 border-amber-500 pl-4 my-4 bg-amber-50 py-3 rounded-r">
-                      {children}
-                    </blockquote>
-                  ),
-                  strong: ({ children }) => <strong className="font-semibold text-amber-900">{children}</strong>,
-                }}
-              >
+              <ReactMarkdown components={generatedMarkdownComponents}>
                 {hypotheses.analysis}
               </ReactMarkdown>
             </div>
+            <p className="mt-5 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+              AI-generated research lead. Verify study design, assumptions, methods, and every scientific claim in authoritative sources before use.
+            </p>
           </CardContent>
         </Card>
       )}

@@ -1,0 +1,138 @@
+import React from 'react';
+import { render, screen, waitFor, within } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { apiClient } from '@genemap/shared';
+import GeneCard from '../GeneCard';
+
+vi.mock('@genemap/shared', () => ({
+  apiClient: { logActivity: vi.fn().mockResolvedValue({}) },
+}));
+
+vi.mock('../../../lib/AuthContext', () => ({
+  useAuth: () => ({ user: { email: 'provenance-test@example.invalid' } }),
+}));
+
+const aiClaim = {
+  source: 'GeneMap AI candidate generator',
+  recordId: null,
+  claim: 'RUNX1 is an AI-suggested candidate lead for the bounded query',
+  taxon: '9606',
+  species: 'Homo sapiens',
+  evidenceClass: 'ai_lead',
+  evidenceType: 'model_suggestion',
+  evidenceStrength: 'lead',
+  releaseVersion: 'publication-task/candidate_gene_research@1',
+  referenceAssembly: null,
+  retrievalDate: '2026-08-09',
+  directLink: null,
+  isAiLead: true,
+};
+
+const identityClaim = {
+  source: 'ClinGen',
+  recordId: 'RUNX1-001',
+  claim: 'RUNX1 gene identity verified in Homo sapiens',
+  taxon: '9606',
+  species: 'Homo sapiens',
+  evidenceClass: 'human_verified',
+  evidenceType: 'gene_identity',
+  evidenceStrength: 'supporting',
+  // The source snapshot is unknown; the reference assembly is recorded separately.
+  releaseVersion: null,
+  referenceAssembly: 'GRCh38',
+  retrievalDate: '2026-08-09',
+  directLink: 'https://example.org/records/RUNX1-001',
+  isAiLead: false,
+};
+
+const gene = {
+  symbol: 'RUNX1',
+  name: 'RUNX family transcription factor 1',
+  // rankingBasis is intentionally absent: identity verification must not make
+  // the fallback badge look like verified gene-query association evidence.
+  associationClaims: [aiClaim, identityClaim],
+  evidencePartition: {
+    human: [identityClaim],
+    animal: [],
+    computational: [],
+    aiLeads: [aiClaim],
+    external: [],
+  },
+  sources: ['ClinGen'],
+  phenotypes: [],
+  coordinatesVerified: false,
+};
+
+describe('GeneCard claim-level provenance', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    apiClient.logActivity.mockReset().mockResolvedValue({});
+  });
+
+  it('labels provenance roles and renders stable complete values without promoting identity metadata', async () => {
+    render(<GeneCard gene={gene} rank={1} />);
+
+    expect(screen.getByText('AI research lead')).toBeInTheDocument();
+    const claims = screen.getByTestId('association-claims');
+    expect(within(claims).getByText('Evidence and source provenance')).toBeInTheDocument();
+
+    const identityText = within(claims).getByText(identityClaim.claim);
+    const identityRow = identityText.closest('li');
+    expect(identityRow).toBeTruthy();
+
+    const identity = within(identityRow);
+    expect(identity.getByText('Identity / ontology / follow-up metadata')).toBeInTheDocument();
+    expect(identity.getByText('human_verified')).toBeInTheDocument();
+    expect(identity.getByText('gene_identity')).toBeInTheDocument();
+    expect(identity.getByText('supporting')).toBeInTheDocument();
+    expect(identity.getByText('Homo sapiens')).toBeInTheDocument();
+    expect(identity.getByText('taxon 9606')).toBeInTheDocument();
+    expect(identityRow).toHaveTextContent('Source: ClinGen');
+    expect(identityRow).toHaveTextContent('Record ID: RUNX1-001');
+    expect(identityRow).toHaveTextContent('Source release/version: Not recorded');
+    expect(identityRow).toHaveTextContent('Reference assembly: GRCh38');
+    expect(identityRow).toHaveTextContent('Adapter retrieval date: 2026-08-09');
+    expect(identityRow).toHaveTextContent('AI lead: false');
+
+    const sourceLink = identity.getByRole('link', { name: /open source record/i });
+    expect(sourceLink).toHaveAttribute('href', identityClaim.directLink);
+    expect(sourceLink).toHaveAttribute('rel', 'noopener noreferrer');
+
+    const aiText = within(claims).getByText(aiClaim.claim);
+    const aiRow = aiText.closest('li');
+    const ai = within(aiRow);
+    expect(ai.getByText('AI candidate lead')).toBeInTheDocument();
+    expect(aiRow).toHaveTextContent('AI lead: true');
+    expect(aiRow).toHaveTextContent('No validated HTTP(S) source link recorded');
+
+    await waitFor(() => expect(apiClient.logActivity).toHaveBeenCalledWith(
+      expect.objectContaining({
+        activityType: 'gene_view',
+        entityType: 'gene',
+        entityId: 'RUNX1',
+      }),
+    ));
+  });
+
+  it('retries activity logging while mounted and preserves successful de-duplication', async () => {
+    apiClient.logActivity
+      .mockRejectedValueOnce(new Error('transient activity service failure'))
+      .mockResolvedValueOnce({});
+    const retryGene = {
+      ...gene,
+      symbol: 'RETRY1',
+      name: 'Retry logging fixture',
+      associationClaims: [],
+      evidencePartition: undefined,
+    };
+
+    const firstRender = render(<GeneCard gene={retryGene} rank={1} />);
+    await waitFor(() => expect(apiClient.logActivity).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(apiClient.logActivity).toHaveBeenCalledTimes(2), { timeout: 2000 });
+    firstRender.unmount();
+
+    render(<GeneCard gene={retryGene} rank={1} />);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(apiClient.logActivity).toHaveBeenCalledTimes(2);
+  });
+});

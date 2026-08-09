@@ -3,7 +3,8 @@
  *
  * AI candidate leads are never treated as calibrated evidence grades.
  * Every material claim must carry source, record id, taxon/species,
- * evidence class, release/version, retrieval date, and a direct link when known.
+ * evidence class, release/version, and a direct link when known. Retrieval dates
+ * are recorded only when an authoritative adapter actually returned a record.
  */
 
 export type EvidenceClass =
@@ -17,6 +18,11 @@ export type EvidenceStrength = 'none' | 'lead' | 'supporting' | 'strong' | 'unkn
 
 export type TaxonCode = '9606' | '10090' | 'other' | 'unspecified';
 
+export type ClaimProvenanceRole =
+  | 'association_evidence'
+  | 'ai_candidate_lead'
+  | 'source_metadata';
+
 export interface AssociationClaim {
   source: string;
   recordId: string | null;
@@ -27,7 +33,9 @@ export interface AssociationClaim {
   evidenceType: string;
   evidenceStrength: EvidenceStrength;
   releaseVersion: string | null;
-  retrievalDate: string;
+  referenceAssembly: string | null;
+  /** Date the cited authoritative record was actually retrieved; null when no lookup occurred. */
+  retrievalDate: string | null;
   directLink: string | null;
   isAiLead: boolean;
 }
@@ -47,15 +55,35 @@ export const SPECIES_LABEL: Record<TaxonCode, string> = {
   unspecified: 'Unspecified',
 };
 
-export function isoRetrievalDate(date = new Date()): string {
-  return date.toISOString().slice(0, 10);
+const NON_ASSOCIATION_EVIDENCE_TYPES = new Set([
+  'gene_identity',
+  'phenotype_ontology',
+  'database_link',
+]);
+
+/**
+ * Association links are rendered by both React and printable HTML surfaces.
+ * Keep only absolute HTTP(S) URLs at the shared contract boundary so every
+ * downstream consumer receives the same safe, canonical value.
+ */
+export function safeExternalHttpUrl(value: string | null | undefined): string | null {
+  if (typeof value !== 'string' || !value.trim()) return null;
+  try {
+    const url = new URL(value.trim());
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') return null;
+    return url.href;
+  } catch {
+    return null;
+  }
 }
 
+/** Create a normalized claim with stable species, link, and AI-lead fields. */
 export function createAssociationClaim(
-  partial: Omit<AssociationClaim, 'species' | 'isAiLead' | 'retrievalDate'> & {
+  partial: Omit<AssociationClaim, 'species' | 'isAiLead' | 'retrievalDate' | 'referenceAssembly'> & {
     species?: string;
     isAiLead?: boolean;
-    retrievalDate?: string;
+    retrievalDate?: string | null;
+    referenceAssembly?: string | null;
   },
 ): AssociationClaim {
   const evidenceClass = partial.evidenceClass;
@@ -69,14 +97,16 @@ export function createAssociationClaim(
     evidenceType: partial.evidenceType,
     evidenceStrength: partial.evidenceStrength,
     releaseVersion: partial.releaseVersion ?? null,
-    retrievalDate: partial.retrievalDate || isoRetrievalDate(),
-    directLink: partial.directLink ?? null,
+    referenceAssembly: partial.referenceAssembly ?? null,
+    // Never substitute the claim-construction date for an upstream retrieval.
+    retrievalDate: partial.retrievalDate ?? null,
+    directLink: safeExternalHttpUrl(partial.directLink),
     isAiLead: partial.isAiLead ?? evidenceClass === 'ai_lead',
   };
 }
 
 /** Build the AI-lead claim that must accompany every untrusted model suggestion. */
-export function aiLeadClaim(symbol: string, phenotypeQuery: string, retrievalDate?: string): AssociationClaim {
+export function aiLeadClaim(symbol: string, phenotypeQuery: string): AssociationClaim {
   return createAssociationClaim({
     source: 'GeneMap AI candidate generator',
     recordId: null,
@@ -86,7 +116,7 @@ export function aiLeadClaim(symbol: string, phenotypeQuery: string, retrievalDat
     evidenceType: 'model_suggestion',
     evidenceStrength: 'lead',
     releaseVersion: 'publication-task/candidate_gene_research@1',
-    retrievalDate,
+    retrievalDate: null,
     directLink: null,
     isAiLead: true,
   });
@@ -99,7 +129,8 @@ export function humanGeneIdentityClaim(input: {
   entrezId?: string | null;
   genomeBuild?: string | null;
   source?: string | null;
-  retrievalDate?: string;
+  sourceVersion?: string | null;
+  retrievalDate?: string | null;
 }): AssociationClaim {
   const recordId = input.ensemblId || (input.entrezId ? `ENTREZ:${input.entrezId}` : null);
   const link = input.ensemblId
@@ -115,33 +146,37 @@ export function humanGeneIdentityClaim(input: {
     evidenceClass: 'human_verified',
     evidenceType: 'gene_identity',
     evidenceStrength: 'supporting',
-    releaseVersion: input.genomeBuild || 'GRCh38',
-    retrievalDate: input.retrievalDate,
+    // A genome assembly is not a database release. Record the assembly in its
+    // own field and leave source release/version unknown unless the adapter
+    // supplies an actual dataset or service release identifier.
+    releaseVersion: input.sourceVersion ?? null,
+    referenceAssembly: input.genomeBuild ?? null,
+    retrievalDate: input.retrievalDate ?? null,
     directLink: link,
     isAiLead: false,
   });
 }
 
-/** HPO phenotype term claim — human ontology only. */
+/** HPO phenotype term claim, limited to ontology-term verification. */
 export function hpoPhenotypeClaim(input: {
   geneSymbol: string;
   phenotypeName: string;
   hpoId: string;
-  retrievalDate?: string;
+  retrievalDate?: string | null;
 }): AssociationClaim {
   return createAssociationClaim({
     source: 'Human Phenotype Ontology',
     recordId: input.hpoId,
     // This verifies the phenotype term itself (ontology record), not a curated
-    // gene–phenotype association. Keep wording neutral and non-associative.
+    // gene-phenotype association. Keep wording neutral and non-associative.
     claim: `Phenotype term validated in HPO: ${input.phenotypeName}`,
     taxon: '9606',
     // Presence of an HPO term is a follow-up pointer, not curated association evidence.
     evidenceClass: 'external_followup',
     evidenceType: 'phenotype_ontology',
     evidenceStrength: 'supporting',
-    releaseVersion: 'HPO',
-    retrievalDate: input.retrievalDate,
+    releaseVersion: null,
+    retrievalDate: input.retrievalDate ?? null,
     directLink: `https://hpo.jax.org/app/browse/term/${input.hpoId}`,
     isAiLead: false,
   });
@@ -153,7 +188,7 @@ export function externalFollowupClaim(input: {
   database: string;
   url: string;
   recordId?: string | null;
-  retrievalDate?: string;
+  retrievalDate?: string | null;
 }): AssociationClaim {
   return createAssociationClaim({
     source: input.database,
@@ -164,30 +199,71 @@ export function externalFollowupClaim(input: {
     evidenceType: 'database_link',
     evidenceStrength: 'none',
     releaseVersion: null,
-    retrievalDate: input.retrievalDate,
+    retrievalDate: input.retrievalDate ?? null,
     directLink: input.url,
     isAiLead: false,
   });
 }
 
+/**
+ * Return an association-ranking score only for evidence that actually supports
+ * a gene-query association. Gene identity, ontology-term verification, and
+ * database links remain visible provenance but cannot promote a candidate.
+ */
 export function claimSortKey(claim: AssociationClaim): number {
+  if (
+    claim.isAiLead
+    || claim.evidenceClass === 'external_followup'
+    || claim.evidenceStrength === 'none'
+    || NON_ASSOCIATION_EVIDENCE_TYPES.has(claim.evidenceType)
+  ) return 0;
   return EVIDENCE_CLASS_RANK[claim.evidenceClass] ?? 0;
 }
 
+/** Classify a provenance row without presenting identity metadata as an association. */
+export function claimProvenanceRole(claim: AssociationClaim): ClaimProvenanceRole {
+  if (claim.isAiLead || claim.evidenceClass === 'ai_lead') return 'ai_candidate_lead';
+  return claimSortKey(claim) > 0 ? 'association_evidence' : 'source_metadata';
+}
+
+/**
+ * Resolve the ranking basis used by cards, printable reports, and copied text.
+ * Metadata-only claims never upgrade an AI candidate to verified association.
+ */
+export function deriveRankingBasisFromClaims(
+  claims: AssociationClaim[] | null | undefined,
+): EvidenceClass {
+  let bestClass: EvidenceClass = 'ai_lead';
+  let bestScore = 0;
+  for (const claim of claims || []) {
+    const score = claimSortKey(claim);
+    if (score > bestScore) {
+      bestScore = score;
+      bestClass = claim.evidenceClass;
+    }
+  }
+  return bestClass;
+}
+
+/**
+ * Rank only by genuine association evidence. Candidates tied at the same
+ * evidence level retain their original model-lead order; coordinate or identity
+ * verification never substitutes for relevance evidence.
+ */
 export function rankGenesByProvenance<T extends {
   associationClaims?: AssociationClaim[];
-  coordinatesVerified?: boolean;
-  symbol?: string;
 }>(genes: T[]): T[] {
-  return [...genes].sort((a, b) => {
-    const aBest = Math.max(0, ...(a.associationClaims || []).map(claimSortKey));
-    const bBest = Math.max(0, ...(b.associationClaims || []).map(claimSortKey));
-    if (bBest !== aBest) return bBest - aBest;
-    const aVerified = a.coordinatesVerified ? 1 : 0;
-    const bVerified = b.coordinatesVerified ? 1 : 0;
-    if (bVerified !== aVerified) return bVerified - aVerified;
-    return String(a.symbol || '').localeCompare(String(b.symbol || ''));
-  });
+  return genes
+    .map((gene, originalIndex) => ({
+      gene,
+      originalIndex,
+      bestAssociationScore: Math.max(0, ...(gene.associationClaims || []).map(claimSortKey)),
+    }))
+    .sort((a, b) => (
+      b.bestAssociationScore - a.bestAssociationScore
+      || a.originalIndex - b.originalIndex
+    ))
+    .map(({ gene }) => gene);
 }
 
 /** Strip LLM self-scores so they cannot be treated as evidence. */
@@ -201,6 +277,7 @@ export function stripLlmSelfScores<T extends Record<string, unknown>>(gene: T): 
   return next;
 }
 
+/** Partition claims so human, animal, computational, AI, and follow-up evidence never mix silently. */
 export function partitionClaimsBySpecies(claims: AssociationClaim[]) {
   const human: AssociationClaim[] = [];
   const animal: AssociationClaim[] = [];
@@ -209,7 +286,9 @@ export function partitionClaimsBySpecies(claims: AssociationClaim[]) {
   const external: AssociationClaim[] = [];
 
   for (const claim of claims || []) {
-    if (claim.evidenceClass === 'ai_lead') aiLeads.push(claim);
+    // AI-lead state is authoritative and takes precedence over contradictory
+    // evidenceClass/taxon fields so an untrusted lead cannot enter a verified partition.
+    if (claim.isAiLead || claim.evidenceClass === 'ai_lead') aiLeads.push(claim);
     else if (claim.evidenceClass === 'animal_model' || claim.taxon === '10090') animal.push(claim);
     else if (claim.evidenceClass === 'computational') computational.push(claim);
     else if (claim.evidenceClass === 'external_followup') external.push(claim);

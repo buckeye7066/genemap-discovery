@@ -1,234 +1,266 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { apiClient } from '@genemap/shared';
 import { PhenotypeSearchService } from '../PhenotypeSearchService';
 
-// applyAuthoritativeData() is the merge that overlays real (MyGene.info/HPO)
-// data onto the LLM's candidate genes and tags provenance. These lock in the
-// exact behavior the UI relies on for the verified vs AI-estimated distinction.
-describe('PhenotypeSearchService.applyAuthoritativeData', () => {
-  it('overlays a verified gene record and validated HPO id, tagging provenance', () => {
+afterEach(() => vi.restoreAllMocks());
+
+describe('PhenotypeSearchService authoritative overlays', () => {
+  it('replaces model-controlled metadata and carries real adapter timestamps', () => {
     const genes = [{
       symbol: 'RUNX1',
-      // The hallucinated, suspiciously-round values the LLM produced.
-      chromosome: '21', start: 36160001, end: 36610000,
-      ensemblId: 'AI-GUESS', entrezId: 'AI-GUESS', name: 'runt related tx factor',
+      chromosome: '21',
+      start: 1,
+      end: 2,
+      ensemblId: 'AI-GUESS',
+      entrezId: 'AI-GUESS',
+      name: 'model name',
       phenotypes: [{ name: 'Leukemia', hpoId: 'HP:FABRICATED' }],
     }];
     const authGenes = {
       RUNX1: {
-        verified: true, chromosome: '21', start: 34787801, end: 36004667,
-        ensemblId: 'ENSG00000159216', entrezId: '861', name: 'RUNX1 (authoritative)',
-        genomeBuild: 'GRCh38', mapLocation: '21q22.12', source: 'MyGene.info',
+        verified: true,
+        chromosome: '21',
+        start: 34787801,
+        end: 36004667,
+        ensemblId: 'ENSG00000159216',
+        entrezId: '861',
+        name: 'RUNX1 (authoritative)',
+        genomeBuild: 'GRCh38',
+        mapLocation: '21q22.12',
+        source: 'MyGene.info',
+        retrievedAt: '2026-08-09T14:00:00.000Z',
       },
     };
-    const authHpo = { leukemia: { hpoId: 'HP:0001909', name: 'Leukemia', verified: true } };
+    const authHpo = {
+      leukemia: {
+        hpoId: 'HP:0001909',
+        name: 'Leukemia',
+        verified: true,
+        retrievedAt: '2026-08-09T14:01:00.000Z',
+      },
+    };
 
-    const [g] = PhenotypeSearchService.applyAuthoritativeData(genes, authGenes, authHpo);
-
-    expect(g.coordinatesVerified).toBe(true);
-    // Authoritative values replace the AI guesses.
-    expect(g.start).toBe(34787801);
-    expect(g.end).toBe(36004667);
-    expect(g.ensemblId).toBe('ENSG00000159216');
-    expect(g.entrezId).toBe('861');
-    expect(g.name).toBe('RUNX1 (authoritative)');
-    expect(g.sources).toContain('Ensembl/NCBI (verified)');
-    // HPO id is replaced with the validated one and flagged.
-    expect(g.phenotypes[0]).toMatchObject({ hpoId: 'HP:0001909', hpoVerified: true });
-    expect(g.hpoChecked).toBe(true);
+    const [gene] = PhenotypeSearchService.applyAuthoritativeData(genes, authGenes, authHpo);
+    expect(gene).toMatchObject({
+      coordinatesVerified: true,
+      start: 34787801,
+      end: 36004667,
+      ensemblId: 'ENSG00000159216',
+      entrezId: '861',
+      name: 'RUNX1 (authoritative)',
+      authoritativeRetrievedAt: '2026-08-09T14:00:00.000Z',
+    });
+    expect(gene.sources[0]).toMatch(/MyGene\.info/i);
+    expect(gene.phenotypes[0]).toMatchObject({
+      hpoId: 'HP:0001909',
+      hpoVerified: true,
+      retrievedAt: '2026-08-09T14:01:00.000Z',
+    });
   });
 
-  it('keeps AI data clearly labeled when no authoritative record exists', () => {
-    const genes = [{
-      symbol: 'ZZZ1', chromosome: '1', start: 1, end: 2,
-      phenotypes: [{ name: 'Some phenotype', hpoId: 'HP:FABRICATED' }],
-    }];
-    // Gene unresolved; HPO validation ran but found no match for the phenotype.
-    const [g] = PhenotypeSearchService.applyAuthoritativeData(
-      genes, {}, { 'some phenotype': { hpoId: null, verified: false } }
+  it('fails closed when authoritative gene or HPO records are unavailable', () => {
+    const [gene] = PhenotypeSearchService.applyAuthoritativeData(
+      [{
+        symbol: 'ZZZ1',
+        chromosome: '1',
+        start: 1,
+        end: 2,
+        ensemblId: 'AI-GUESS',
+        phenotypes: [{ name: 'Some phenotype', hpoId: 'HP:FABRICATED' }],
+      }],
+      {},
+      { 'some phenotype': { hpoId: null, verified: false, retrievedAt: null } },
     );
 
-    expect(g.coordinatesVerified).toBe(false);
-    expect(g.sources).toEqual(['AI-suggested']);
-    expect(g.chromosome).toBeNull();
-    expect(g.start).toBeNull();
-    expect(g.end).toBeNull();
-    expect(g.ensemblId).toBeNull();
-    expect(g.entrezId).toBeNull();
-    // A validated-but-unmatched phenotype drops its fabricated id rather than show it.
-    expect(g.phenotypes[0].hpoId).toBeNull();
-    expect(g.phenotypes[0].hpoVerified).toBe(false);
-  });
-
-  it('drops the AI hpoId when validation did not run (fail-closed provenance)', () => {
-    const genes = [{ symbol: 'ZZZ1', phenotypes: [{ name: 'X', hpoId: 'HP:1234567' }] }];
-    // Empty authHpo means validation was skipped/unavailable; the model id is
-    // still not an authoritative record and must remain unavailable.
-    const [g] = PhenotypeSearchService.applyAuthoritativeData(genes, {}, {});
-    expect(g.phenotypes[0].hpoId).toBeNull();
-    expect(g.hpoChecked).toBe(false);
-  });
-
-  it('does not mark a gene verified when the record lacks coordinates', () => {
-    const genes = [{ symbol: 'ABC1', chromosome: '5', start: 10, end: 20 }];
-    const authGenes = { ABC1: { verified: false, chromosome: null, start: null, end: null } };
-    const [g] = PhenotypeSearchService.applyAuthoritativeData(genes, authGenes, {});
-    expect(g.coordinatesVerified).toBe(false);
-    expect(g.sources).toEqual(['AI-suggested']);
+    expect(gene.coordinatesVerified).toBe(false);
+    expect(gene.chromosome).toBeNull();
+    expect(gene.start).toBeNull();
+    expect(gene.end).toBeNull();
+    expect(gene.ensemblId).toBeNull();
+    expect(gene.entrezId).toBeNull();
+    expect(gene.authoritativeRetrievedAt).toBeNull();
+    expect(gene.phenotypes[0]).toMatchObject({
+      hpoId: null,
+      hpoVerified: false,
+      retrievedAt: null,
+    });
   });
 });
 
-describe('PhenotypeSearchService.finalizeEnriched', () => {
-  it('restores honest sources from coordinatesVerified and validates HPO', () => {
-    const enriched = [
-      { symbol: 'A', coordinatesVerified: true, ensemblId: 'ENSG1', sources: ['AI-suggested'], phenotypes: [{ name: 'Seizure', hpoId: 'HP:FAKE' }] },
-      { symbol: 'B', coordinatesVerified: false, sources: ['AI-suggested'], phenotypes: [{ name: 'Nope', hpoId: 'HP:FAKE' }] },
-    ];
-    const authHpo = { seizure: { hpoId: 'HP:0001250', verified: true } , nope: { hpoId: null, verified: false } };
-    const [a, b] = PhenotypeSearchService.finalizeEnriched(enriched, authHpo, 'seizure');
-    expect(a.sources).toContain('Ensembl/NCBI (verified)');
-    expect(a.phenotypes[0]).toMatchObject({ hpoId: 'HP:0001250', hpoVerified: true });
-    expect(a.associationClaims.some((c) => c.evidenceClass === 'human_verified')).toBe(true);
-    expect(a.associationClaims.some((c) => c.evidenceClass === 'ai_lead')).toBe(true);
-    expect(a.score).toBeUndefined();
-    expect(b.sources).toEqual(['AI-suggested']);
-    // validation ran (authHpo non-empty) but no match → drop fabricated id
-    expect(b.phenotypes[0].hpoId).toBeNull();
-    expect(b.rankingBasis).toBe('ai_lead');
-  });
-});
+describe('PhenotypeSearchService provenance', () => {
+  it('keeps identity and ontology records outside association ranking', () => {
+    const [gene] = PhenotypeSearchService.finalizeEnriched(
+      [{
+        symbol: 'RUNX1',
+        coordinatesVerified: true,
+        ensemblId: 'ENSG00000159216',
+        genomeBuild: 'GRCh38',
+        verifiedSource: 'MyGene.info',
+        authoritativeRetrievedAt: '2026-08-09T14:00:00.000Z',
+        phenotypes: [{ name: 'Seizure', hpoId: 'HP:FAKE' }],
+        furtherReading: {
+          resources: [{ name: 'PubMed search', url: 'https://pubmed.ncbi.nlm.nih.gov/?term=RUNX1' }],
+        },
+      }],
+      {
+        seizure: {
+          hpoId: 'HP:0001250',
+          verified: true,
+          retrievedAt: '2026-08-09T14:01:00.000Z',
+        },
+      },
+      'seizure',
+    );
 
-describe('PhenotypeSearchService.attachProvenance', () => {
-  it('strips LLM self-scores and ranks verified genes above AI-only leads', () => {
+    expect(gene.rankingBasis).toBe('ai_lead');
+    expect(gene.evidencePartition.aiLeads).toHaveLength(1);
+    expect(gene.evidencePartition.human[0]).toMatchObject({
+      evidenceClass: 'human_verified',
+      evidenceType: 'gene_identity',
+      retrievalDate: '2026-08-09',
+    });
+    const ontology = gene.evidencePartition.external.find(
+      (claim) => claim.evidenceType === 'phenotype_ontology',
+    );
+    expect(ontology).toMatchObject({
+      recordId: 'HP:0001250',
+      retrievalDate: '2026-08-09',
+    });
+    const followup = gene.evidencePartition.external.find(
+      (claim) => claim.evidenceType === 'database_link',
+    );
+    expect(followup.retrievalDate).toBeNull();
+    expect(gene.evidencePartition.aiLeads[0].retrievalDate).toBeNull();
+  });
+
+  it('strips model scores and preserves original lead order for metadata-only ties', () => {
     const ranked = PhenotypeSearchService.attachProvenance([
-      { symbol: 'AI1', score: 0.99, coordinatesVerified: false },
+      { symbol: 'AI1', score: 0.99, confidenceScore: 99, coordinatesVerified: false },
       {
         symbol: 'VER1',
         score: 0.1,
         coordinatesVerified: true,
         ensemblId: 'ENSG00000001626',
-        furtherReading: { resources: [{ name: 'OMIM', url: 'https://omim.org/' }] },
+        genomeBuild: 'GRCh38',
+        authoritativeRetrievedAt: '2026-08-09T14:00:00.000Z',
       },
     ], 'cystic fibrosis');
 
-    expect(ranked.map((g) => g.symbol)).toEqual(['VER1', 'AI1']);
+    expect(ranked.map((gene) => gene.symbol)).toEqual(['AI1', 'VER1']);
     expect(ranked[0].score).toBeUndefined();
-    expect(ranked[0].rankingBasis).toBe('human_verified');
-    expect(ranked[0].evidencePartition.external[0].evidenceClass).toBe('external_followup');
-    expect(ranked[1].associationClaims.every((c) => c.retrievalDate)).toBe(true);
+    expect(ranked[0].confidenceScore).toBeUndefined();
+    expect(ranked[1].rankingBasis).toBe('ai_lead');
   });
 });
 
-// findCandidates() now classifies the query AND finds genes in a SINGLE fused
-// LLM round-trip (down from two sequential calls), with user-context fetched
-// concurrently and a two-step fallback when the fused call yields no genes.
-describe('PhenotypeSearchService.findCandidates (fused analyze+find)', () => {
-  afterEach(() => vi.restoreAllMocks());
-
-  const json = (obj) => ({ result: JSON.stringify(obj) });
+describe('PhenotypeSearchService staged candidate journey', () => {
+  const envelope = (value) => ({ result: JSON.stringify(value), disclaimer: 'educational' });
 
   it.each(['Alice Smith', 'Alice Smith BRCA1 result', 'DNA and bomb making'])(
     'does not invoke generation for unresolved free label %s',
     async (query) => {
       const invoke = vi.spyOn(apiClient, 'invokePublicationTask');
-      await expect(PhenotypeSearchService.findCandidates(query, false, 'free_text'))
-        .rejects.toThrow(/reviewed disease\/phenotype|free-text labels/i);
+      await expect(
+        PhenotypeSearchService.findCandidates(query, false, 'free_text'),
+      ).rejects.toThrow(/reviewed disease\/phenotype|exact HPO/i);
       expect(invoke).not.toHaveBeenCalled();
     },
   );
 
-  it('uses ONE LLM call on the happy path and returns the genes', async () => {
-    const invoke = vi.spyOn(apiClient, 'invokePublicationTask').mockResolvedValue(
-      json({
-        queryType: 'disease',
-        isDisease: true,
-        diseaseName: 'Cystic Fibrosis',
-        hpoTerms: ['HP:0006528'],
-        candidateGenes: [{ symbol: 'CFTR', name: 'CF transmembrane regulator', chromosome: '7' }],
-      })
-    );
+  it('uses one strict fused task, caps before enrichment, and returns cards', async () => {
+    const invoke = vi.spyOn(apiClient, 'invokePublicationTask').mockResolvedValue(envelope({
+      queryType: 'disease',
+      isDisease: true,
+      diseaseName: 'Cystic Fibrosis',
+      candidateGenes: [{ symbol: 'CFTR', name: 'CF transmembrane regulator' }],
+    }));
     vi.spyOn(apiClient, 'getMe').mockResolvedValue({ role: 'user' });
-    vi.spyOn(apiClient, 'enrichGenomicData').mockResolvedValue({ genes: {}, phenotypes: {} });
+    const enrich = vi.spyOn(apiClient, 'enrichGenomicData').mockResolvedValue({
+      genes: {},
+      phenotypes: {},
+    });
 
-    const base = await PhenotypeSearchService.findCandidates('Cystic Fibrosis', false, 'disease');
+    const base = await PhenotypeSearchService.findCandidates(
+      'Cystic Fibrosis',
+      false,
+      'disease',
+    );
 
-    expect(base.candidateGenes.map((g) => g.symbol)).toContain('CFTR');
+    expect(base.candidateGenes.map((gene) => gene.symbol)).toEqual(['CFTR']);
+    expect(base.candidateGenes[0].rankingBasis).toBe('ai_lead');
     expect(base.hpoTerms).toEqual([]);
-    // The fusion: a single /llm/invoke, not the previous analyze + find pair.
     expect(invoke).toHaveBeenCalledTimes(1);
     expect(invoke).toHaveBeenCalledWith(
       'candidate_gene_research',
       expect.objectContaining({
         version: 1,
         operation: 'classify_and_suggest',
-        query: {
+        query: expect.objectContaining({
           kind: 'curated_concept',
           conceptId: 'disease:cystic-fibrosis',
-          canonicalLabel: 'Cystic Fibrosis',
-          conceptKind: 'disease',
-          source: 'genemap_curated',
-          version: 1,
-        },
+        }),
       }),
-      expect.any(Object),
+      { maxTokens: 4096 },
     );
+    expect(enrich).toHaveBeenCalledWith(['CFTR'], []);
   });
 
-  it('falls back to the two-step path when the fused call returns no genes', async () => {
-    const invoke = vi
-      .spyOn(apiClient, 'invokePublicationTask')
-      .mockResolvedValueOnce(json({ queryType: 'phenotype', candidateGenes: [] })) // fused → empty
-      .mockResolvedValueOnce(json({ isDisease: false, mainFeatures: ['tall stature'] })) // analyzePhenotype
-      .mockResolvedValueOnce(json({ candidateGenes: [{ symbol: 'FBN1' }] })); // findCandidateGenes
+  it('falls back through classify and suggest when the fused result is sparse', async () => {
+    const invoke = vi.spyOn(apiClient, 'invokePublicationTask')
+      .mockResolvedValueOnce(envelope({ queryType: 'disease', isDisease: true, candidateGenes: [] }))
+      .mockResolvedValueOnce(envelope({ queryType: 'disease', isDisease: true, mainFeatures: [] }))
+      .mockResolvedValueOnce(envelope({ candidateGenes: [{ symbol: 'CFTR' }] }));
     vi.spyOn(apiClient, 'getMe').mockResolvedValue({});
     vi.spyOn(apiClient, 'enrichGenomicData').mockResolvedValue({ genes: {}, phenotypes: {} });
 
-    const base = await PhenotypeSearchService.findCandidates('short stature', false);
+    const base = await PhenotypeSearchService.findCandidates(
+      'Cystic Fibrosis',
+      false,
+      'disease',
+    );
 
-    expect(base.candidateGenes.map((g) => g.symbol)).toContain('FBN1');
-    expect(invoke).toHaveBeenCalledTimes(3); // fused (empty) + analyze + find
+    expect(base.candidateGenes.map((gene) => gene.symbol)).toEqual(['CFTR']);
+    expect(invoke).toHaveBeenCalledTimes(3);
+    expect(invoke.mock.calls[1][1]).toMatchObject({ version: 1, operation: 'classify' });
+    expect(invoke.mock.calls[2][1]).toMatchObject({ version: 1, operation: 'suggest_candidates' });
   });
 
-  it('submits only the selected Monarch id for a dynamic disease result', async () => {
-    const invoke = vi.spyOn(apiClient, 'invokePublicationTask').mockResolvedValue(json({
+  it('submits only the selected MONDO identifier, not the browser label', async () => {
+    const invoke = vi.spyOn(apiClient, 'invokePublicationTask').mockResolvedValue(envelope({
       queryType: 'disease',
       isDisease: true,
       candidateGenes: [{ symbol: 'FBN1' }],
     }));
     vi.spyOn(apiClient, 'getMe').mockResolvedValue({});
     vi.spyOn(apiClient, 'enrichGenomicData').mockResolvedValue({ genes: {}, phenotypes: {} });
+
     await PhenotypeSearchService.findCandidates(
       'Marfan syndrome',
       false,
       'disease',
-      { kind: 'mondo', identifier: 'MONDO:0007947', canonicalLabel: 'untrusted browser label' },
+      {
+        kind: 'mondo',
+        identifier: 'MONDO:0007947',
+        canonicalLabel: 'untrusted browser label',
+      },
     );
-    expect(invoke).toHaveBeenCalledWith(
-      'candidate_gene_research',
-      expect.objectContaining({ query: { kind: 'mondo', identifier: 'MONDO:0007947' } }),
-      expect.any(Object),
-    );
-    expect(JSON.stringify(invoke.mock.calls[0])).not.toContain('untrusted browser label');
+
+    const taskInput = invoke.mock.calls[0][1];
+    expect(taskInput.query).toEqual({ kind: 'mondo', identifier: 'MONDO:0007947' });
+    expect(JSON.stringify(taskInput)).not.toContain('untrusted browser label');
   });
 });
 
-describe('PhenotypeSearchService.collectPhenotypeNames', () => {
-  it('dedupes, caps per gene, and bounds the total', () => {
-    const genes = [
-      { phenotypes: [{ name: 'A' }, { name: 'A' }, { name: 'B' }] },
-      { phenotypes: [{ name: 'b' }, { name: 'C' }] },
-    ];
-    const names = PhenotypeSearchService.collectPhenotypeNames(genes);
-    expect(names).toContain('A');
-    expect(names).toContain('B');
-    expect(names).toContain('C');
-    // 'b' is a distinct string from 'B' at collection time (validation lowercases later).
+describe('PhenotypeSearchService profile and comparison behavior', () => {
+  it('deduplicates phenotype names case-insensitively and bounds the resolver batch', () => {
+    const names = PhenotypeSearchService.collectPhenotypeNames([
+      { phenotypes: [{ name: 'Seizure' }, { name: 'seizure' }, { name: 'Ataxia' }] },
+    ]);
+    // Display casing is not authoritative until HPO resolution; only normalized
+    // membership and bounded cardinality matter at this collection stage.
+    expect(names.map((name) => name.toLowerCase())).toEqual(['seizure', 'ataxia']);
     expect(names.length).toBeLessThanOrEqual(60);
   });
-});
-
-describe('PhenotypeSearchService verified gene profile contract', () => {
-  afterEach(() => vi.restoreAllMocks());
 
   it('does not invoke a model for an unverified symbol', async () => {
     const invoke = vi.spyOn(apiClient, 'invokePublicationTask');
@@ -237,24 +269,31 @@ describe('PhenotypeSearchService verified gene profile contract', () => {
       null,
     );
     expect(invoke).not.toHaveBeenCalled();
-    expect(result.aiSummary).toMatch(/verification was unavailable/i);
+    expect(result.profileStatus).toBe('unavailable');
+    expect(result.aiSummary).toMatch(/AI-suggested candidate lead/i);
     expect(result.phenotypes).toEqual([]);
   });
 
-  it('sends a verified identifier, never free-form gene context', async () => {
+  it('sends only a verified symbol and honors explicit server profile states', async () => {
     const invoke = vi.spyOn(apiClient, 'invokePublicationTask').mockResolvedValue({
-      result: JSON.stringify({ summary: 'Exploratory summary', keyTakeaways: [], phenotypes: [] }),
+      result: JSON.stringify({
+        summary: 'Generated profile withheld because the response crossed the boundary.',
+        summaryStatus: 'withheld',
+        keyTakeaways: [],
+        phenotypes: [],
+      }),
+      disclaimer: 'educational',
     });
-    await PhenotypeSearchService.enrichGeneCombined(
+    const result = await PhenotypeSearchService.enrichGeneCombined(
       {
         symbol: 'CFTR',
         ensemblId: 'ENSG00000001626',
-        entrezId: '1080',
         coordinatesVerified: true,
         explanation: 'untrusted model prose that must not be forwarded',
       },
       { education_level: 'graduate' },
     );
+
     expect(invoke).toHaveBeenCalledWith(
       'candidate_gene_research',
       {
@@ -266,5 +305,35 @@ describe('PhenotypeSearchService verified gene profile contract', () => {
       { maxTokens: 2048 },
     );
     expect(JSON.stringify(invoke.mock.calls[0])).not.toContain('untrusted model prose');
+    expect(result.profileStatus).toBe('withheld');
+  });
+
+  it('uses a deterministic unavailable state after a profile-call failure', async () => {
+    vi.spyOn(apiClient, 'invokePublicationTask').mockRejectedValue(new Error('provider outage'));
+    const [result] = await PhenotypeSearchService.enrichGeneData([
+      {
+        symbol: 'CFTR',
+        ensemblId: 'ENSG00000001626',
+        coordinatesVerified: true,
+      },
+    ], false, null);
+
+    expect(result.profileStatus).toBe('unavailable');
+    expect(result.aiSummary).toMatch(/Generated profile unavailable/i);
+    expect(result.aiSummary).not.toMatch(/is associated with/i);
+  });
+
+  it('compares lists deterministically without personal interpretation', async () => {
+    const comparison = await PhenotypeSearchService.compareGeneSets(
+      ['CFTR', 'RUNX1'],
+      ['CFTR', 'FBN1'],
+      'cystic fibrosis',
+      false,
+    );
+    expect(comparison.overlapping).toEqual(['CFTR']);
+    expect(comparison.uniqueToUser).toEqual(['RUNX1']);
+    expect(comparison.uniqueToPhenotype).toEqual(['FBN1']);
+    expect(comparison.functionalRelationships).toEqual([]);
+    expect(comparison.analysis).toMatch(/does not evaluate a person's genome/i);
   });
 });

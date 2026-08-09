@@ -36,6 +36,22 @@ const enrichSchema = z.object({
   phenotypes: z.array(z.string().trim().min(1).max(256)).max(100).optional(),
 });
 
+/**
+ * Preserve each authoritative adapter's original source-retrieval timestamp.
+ * The route-level response time is reported separately as `adapterRetrievedAt`;
+ * it must never overwrite a cached record's immutable `retrievedAt` evidence.
+ */
+function preserveSourceRetrieval(records) {
+  return Object.fromEntries(
+    Object.entries(records || {}).map(([key, record]) => [
+      key,
+      record && typeof record === 'object'
+        ? { ...record, retrievedAt: record.retrievedAt || null }
+        : record,
+    ]),
+  );
+}
+
 export default async function genomicsRoutes(fastify) {
   fastify.addHook('preHandler', authenticate);
 
@@ -176,6 +192,11 @@ export default async function genomicsRoutes(fastify) {
       symbols.length ? enrichGenes(symbols) : Promise.resolve({}),
       phenotypes.length ? validateHpoTerms(phenotypes) : Promise.resolve({}),
     ]);
-    return { genes, phenotypes: hpo };
+    const adapterRetrievedAt = new Date().toISOString();
+    return {
+      genes: preserveSourceRetrieval(genes),
+      phenotypes: preserveSourceRetrieval(hpo),
+      adapterRetrievedAt,
+    };
   });
 }
