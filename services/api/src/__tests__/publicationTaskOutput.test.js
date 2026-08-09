@@ -198,12 +198,14 @@ describe('sanitizePublicationTaskOutput', () => {
     expect(sanitizePublicationTaskOutput('aggregate_genomics_research', {}, null)).toBe('');
   });
 
-  it('caps individual text fields without retaining control characters', () => {
-    const cleaned = __test.cleanText(`A\n${'B'.repeat(600)}`, 32);
+  it('caps individual text fields without retaining C0, DEL, or C1 controls', () => {
+    const cleaned = __test.cleanText(`A\n\u0085${'B'.repeat(600)}`, 32);
     expect(cleaned).toHaveLength(32);
     expect(Array.from(cleaned).every((character) => {
       const codePoint = character.codePointAt(0) ?? -1;
-      return codePoint > 0x1f && codePoint !== 0x7f;
+      const isC0OrDel = codePoint <= 0x1f || codePoint === 0x7f;
+      const isC1 = codePoint >= 0x80 && codePoint <= 0x9f;
+      return !isC0OrDel && !isC1;
     })).toBe(true);
   });
 });
