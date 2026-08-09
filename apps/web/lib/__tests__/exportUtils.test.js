@@ -71,6 +71,7 @@ describe('gene report provenance', () => {
     expect(provenance.content).toContain('GRCh38 / 2026-08');
     expect(provenance.content).toContain('human_verified');
     expect(provenance.content).toContain('gene_identity');
+    expect(provenance.content).toContain('supporting');
     expect(provenance.content).toContain('Homo sapiens');
     expect(provenance.content).toContain('9606');
     expect(provenance.content).toContain('2026-08-09');
@@ -108,6 +109,8 @@ describe('gene report provenance', () => {
     expect(summary).toContain('record=RUNX1-001');
     expect(summary).toContain('version=GRCh38 / 2026-08');
     expect(summary).toContain('evidence=human_verified');
+    expect(summary).toContain('type=gene_identity');
+    expect(summary).toContain('strength=supporting');
     expect(summary).toContain('species=Homo sapiens');
     expect(summary).toContain('taxon=9606');
     expect(summary).toContain('retrieved=2026-08-09');
@@ -126,6 +129,8 @@ describe('gene report provenance', () => {
     expect(html).toContain('Association Claims and Provenance');
     expect(html).toContain('ClinGen &lt;curated&gt;');
     expect(html).toContain('GRCh38 / 2026-08');
+    expect(html).toContain('gene_identity');
+    expect(html).toContain('supporting');
     expect(html).toContain('Education and exploratory research only');
     expect(close).toHaveBeenCalledTimes(1);
 
