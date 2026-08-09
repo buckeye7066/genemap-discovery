@@ -1,3 +1,9 @@
+import {
+  claimProvenanceRole,
+  deriveRankingBasisFromClaims,
+  safeExternalHttpUrl,
+} from '../../../packages/shared/src/associationClaim.ts';
+
 /**
  * Export utilities for GeneMap Discovery
  * Provides PDF-like HTML export, JSON export, and shareable summaries.
@@ -89,11 +95,14 @@ export function exportReport({ title, subtitle, sections, generatedAt = new Date
 }
 
 function rankingLabelFor(basis = 'ai_lead') {
-  if (basis === 'human_verified') return 'Human-verified provenance';
-  if (basis === 'computational') return 'Computational evidence';
-  if (basis === 'animal_model') return 'Animal-model evidence';
-  if (basis === 'external_followup') return 'External follow-up source';
+  if (basis === 'human_verified') return 'Human-verified association evidence';
+  if (basis === 'computational') return 'Computational association evidence';
+  if (basis === 'animal_model') return 'Animal-model association evidence';
   return 'AI research lead';
+}
+
+function rankingBasisForGene(gene, claims) {
+  return gene?.rankingBasis || deriveRankingBasisFromClaims(claims);
 }
 
 function displayValue(value, fallback = 'Not recorded') {
@@ -101,46 +110,47 @@ function displayValue(value, fallback = 'Not recorded') {
   return String(value);
 }
 
-function safeExternalUrl(value) {
-  if (!value) return null;
-  try {
-    const url = new URL(String(value));
-    return ['https:', 'http:'].includes(url.protocol) ? url.href : null;
-  } catch {
-    return null;
-  }
+function aiLeadValue(claim) {
+  if (claim?.isAiLead === true) return 'true';
+  if (claim?.isAiLead === false) return 'false';
+  return 'not_recorded';
+}
+
+function provenanceRoleLabel(claim) {
+  const role = claimProvenanceRole(claim);
+  if (role === 'association_evidence') return 'Association evidence';
+  if (role === 'ai_candidate_lead') return 'AI candidate lead';
+  return 'Identity / ontology / follow-up metadata';
 }
 
 function associationClaimContent(claim, index) {
-  const safeLink = safeExternalUrl(claim?.directLink);
+  const safeLink = safeExternalHttpUrl(claim?.directLink);
   const recordId = displayValue(claim?.recordId);
   const releaseVersion = displayValue(claim?.releaseVersion);
+  const referenceAssembly = displayValue(claim?.referenceAssembly);
   const evidenceClass = displayValue(claim?.evidenceClass);
   const evidenceType = displayValue(claim?.evidenceType);
   const evidenceStrength = displayValue(claim?.evidenceStrength);
   const species = displayValue(claim?.species);
   const taxon = displayValue(claim?.taxon);
   const retrievalDate = displayValue(claim?.retrievalDate);
-  const aiLead = claim?.isAiLead === true
-    ? 'Yes'
-    : claim?.isAiLead === false
-      ? 'No'
-      : 'Not recorded';
 
   return `
     <div class="claim">
-      <h3>Claim ${index + 1}: ${escapeHtml(displayValue(claim?.claim, 'Claim text not recorded'))}</h3>
+      <h3>Provenance row ${index + 1}: ${escapeHtml(displayValue(claim?.claim, 'Claim text not recorded'))}</h3>
       <table>
+        <tr><th>Role</th><td>${escapeHtml(provenanceRoleLabel(claim))}</td></tr>
         <tr><th>Source</th><td>${escapeHtml(displayValue(claim?.source))}</td></tr>
         <tr><th>Record ID</th><td>${escapeHtml(recordId)}</td></tr>
-        <tr><th>Release / Version</th><td>${escapeHtml(releaseVersion)}</td></tr>
+        <tr><th>Source Release / Version</th><td>${escapeHtml(releaseVersion)}</td></tr>
+        <tr><th>Reference Assembly</th><td>${escapeHtml(referenceAssembly)}</td></tr>
         <tr><th>Evidence Class</th><td>${escapeHtml(evidenceClass)}</td></tr>
         <tr><th>Evidence Type</th><td>${escapeHtml(evidenceType)}</td></tr>
         <tr><th>Evidence Strength</th><td>${escapeHtml(evidenceStrength)}</td></tr>
         <tr><th>Species</th><td>${escapeHtml(species)}</td></tr>
         <tr><th>Taxon</th><td>${escapeHtml(taxon)}</td></tr>
         <tr><th>Retrieved</th><td>${escapeHtml(retrievalDate)}</td></tr>
-        <tr><th>AI Lead</th><td>${aiLead}</td></tr>
+        <tr><th>AI Lead</th><td>${escapeHtml(aiLeadValue(claim))}</td></tr>
         <tr><th>Source Record</th><td>${safeLink
           ? `<a href="${escapeHtml(safeLink)}" target="_blank" rel="noopener noreferrer">Open source record</a>`
           : 'No validated HTTP(S) link recorded'}</td></tr>
@@ -156,7 +166,7 @@ export function buildGeneReportSections(gene = {}) {
   gene = gene ?? {};
   const sections = [];
   const claims = Array.isArray(gene.associationClaims) ? gene.associationClaims : [];
-  const rankingLabel = rankingLabelFor(gene.rankingBasis);
+  const rankingLabel = rankingLabelFor(rankingBasisForGene(gene, claims));
   const location = [gene.chromosome, gene.location].filter(Boolean).join(' · ');
 
   sections.push({
@@ -166,7 +176,7 @@ export function buildGeneReportSections(gene = {}) {
         <tr><th>Symbol</th><td>${escapeHtml(displayValue(gene.symbol))}</td></tr>
         <tr><th>Full Name</th><td>${escapeHtml(displayValue(gene.name || gene.fullName))}</td></tr>
         <tr><th>Location</th><td>${escapeHtml(displayValue(location))}</td></tr>
-        <tr><th>Ranking Basis</th><td>${escapeHtml(rankingLabel)}</td></tr>
+        <tr><th>Association-Ranking Basis</th><td>${escapeHtml(rankingLabel)}</td></tr>
         ${gene.omimId ? `<tr><th>OMIM</th><td>${escapeHtml(gene.omimId)}</td></tr>` : ''}
       </table>
       ${gene.description ? `<p>${escapeHtml(gene.description)}</p>` : ''}
@@ -174,7 +184,7 @@ export function buildGeneReportSections(gene = {}) {
   });
 
   sections.push({
-    title: 'Association Claims and Provenance',
+    title: 'Evidence and Source Provenance',
     content: claims.length
       ? claims.map(associationClaimContent).join('')
       : '<p class="notice"><strong>No claim-level provenance was supplied.</strong> Treat every candidate label in this report as an unverified research lead.</p>',
@@ -184,7 +194,7 @@ export function buildGeneReportSections(gene = {}) {
     sections.push({
       title: 'Candidate Disease Labels',
       content: `
-        <p class="notice"><strong>Candidate labels only.</strong> These labels are not verified associations unless a claim-level row above cites supporting evidence.</p>
+        <p class="notice"><strong>Candidate labels only.</strong> These labels are not verified associations unless a provenance row above is explicitly labeled association evidence.</p>
         <ul>${gene.diseases.map(d => `<li>${escapeHtml(typeof d === 'string' ? d : d?.name || d?.disease || '')}</li>`).join('')}</ul>`,
     });
   }
@@ -275,40 +285,37 @@ export function exportVCFReport(variants, summary) {
  */
 export function buildGeneShareText(data = {}) {
   data = data ?? {};
+  const claims = Array.isArray(data.associationClaims) ? data.associationClaims : [];
   const lines = [
     `GeneMap Discovery - Gene: ${displayValue(data.symbol, 'Unknown gene')}`,
     `Name: ${displayValue(data.name || data.fullName)}`,
     `Location: ${displayValue([data.chromosome, data.location].filter(Boolean).join(' · '))}`,
-    `Ranking: ${rankingLabelFor(data.rankingBasis)}`,
+    `Ranking: ${rankingLabelFor(rankingBasisForGene(data, claims))}`,
   ];
-  const claims = Array.isArray(data.associationClaims) ? data.associationClaims : [];
 
   if (claims.length) {
-    lines.push('Association claims and provenance:');
+    lines.push('Evidence and source provenance:');
     claims.forEach((claim, index) => {
-      const sourceLink = safeExternalUrl(claim?.directLink);
-      const aiLead = claim?.isAiLead === true
-        ? 'true'
-        : claim?.isAiLead === false
-          ? 'false'
-          : 'not_recorded';
+      const sourceLink = safeExternalHttpUrl(claim?.directLink);
       lines.push([
         `${index + 1}. ${displayValue(claim?.claim, 'Claim text not recorded')}`,
+        `role=${claimProvenanceRole(claim)}`,
         `source=${displayValue(claim?.source)}`,
         `record=${displayValue(claim?.recordId)}`,
         `version=${displayValue(claim?.releaseVersion)}`,
+        `assembly=${displayValue(claim?.referenceAssembly)}`,
         `evidence=${displayValue(claim?.evidenceClass)}`,
         `evidence_type=${displayValue(claim?.evidenceType)}`,
         `evidence_strength=${displayValue(claim?.evidenceStrength)}`,
         `species=${displayValue(claim?.species)}`,
         `taxon=${displayValue(claim?.taxon)}`,
         `retrieved=${displayValue(claim?.retrievalDate)}`,
-        `ai_lead=${aiLead}`,
+        `ai_lead=${aiLeadValue(claim)}`,
         sourceLink ? `link=${sourceLink}` : 'link=not recorded',
       ].join(' | '));
     });
   } else {
-    lines.push('Association claims: none supplied; candidate labels remain unverified research leads.');
+    lines.push('Evidence and source provenance: none supplied; candidate labels remain unverified research leads.');
   }
 
   if (data.diseases?.length) {
