@@ -2,6 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const evidenceService = vi.hoisted(() => ({
   getPublicationAssociationEvidence: vi.fn(),
+  isPublicationGeneSymbol: vi.fn((value) => {
+    const symbol = String(value || '').trim().toUpperCase();
+    if (!/^[A-Z0-9][A-Z0-9-]{1,14}$/u.test(symbol)) return false;
+    const policyText = symbol.replace(/-/gu, ' ');
+    return !/^(?:TAKE|START|STOP|AVOID|USE|ADMINISTER|INJECT|SWALLOW|APPLY|PRESCRIBE|SWITCH)\b/u.test(policyText);
+  }),
 }));
 
 vi.mock('../services/associationEvidenceContract.js', () => evidenceService);
@@ -98,6 +104,8 @@ describe('POST /genomics/association-evidence', () => {
     { query: { kind: 'free_text', text: 'seizure' }, symbols: ['SCN1A'] },
     { query, symbols: [] },
     { query, symbols: ['not a gene'] },
+    { query, symbols: ['TAKE-5MG'] },
+    { query, symbols: ['STOP-DRUG'] },
     { query, symbols: Array.from({ length: 16 }, (_, index) => `G${index + 10}`) },
     { query: { ...query, injected: true }, symbols: ['SCN1A'] },
   ])('rejects invalid or over-broad input: %j', async (payload) => {
