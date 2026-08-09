@@ -12,10 +12,21 @@ const EMPTY_RESULT = Object.freeze({
   claimCount: 0,
 });
 
+const CLINICAL_COMMAND = /^(?:TAKE|START|STOP|AVOID|USE|ADMINISTER|INJECT|SWALLOW|APPLY|PRESCRIBE|SWITCH)\b/u;
+
+function isPublicationGeneSymbol(value) {
+  const symbol = String(value || '').trim().toUpperCase();
+  if (!/^[A-Z0-9][A-Z0-9-]{1,14}$/u.test(symbol)) return false;
+  const policyText = symbol
+    .replace(/-/gu, ' ')
+    .replace(/(\d)(MG|MCG|UG|ML|UNITS?)\b/gu, '$1 $2');
+  return !CLINICAL_COMMAND.test(policyText);
+}
+
 function normalizeSymbols(symbols) {
   return [...new Set((Array.isArray(symbols) ? symbols : [])
     .map((symbol) => String(symbol || '').trim().toUpperCase())
-    .filter((symbol) => /^[A-Z0-9][A-Z0-9-]{1,14}$/u.test(symbol)))]
+    .filter(isPublicationGeneSymbol))]
     .slice(0, 15);
 }
 
@@ -52,4 +63,4 @@ export async function fetchAssociationEvidence(query, symbols) {
   }
 }
 
-export const __test = { normalizeSymbols, EMPTY_RESULT };
+export const __test = { isPublicationGeneSymbol, normalizeSymbols, EMPTY_RESULT };
