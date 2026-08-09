@@ -171,6 +171,7 @@ export async function closeUserAccount({
     subscriptions.map((s) => s.stripeCustomerId).filter(Boolean),
   )];
 
+  /** @type {Map<string, number>} */
   const assignmentCounts = new Map();
   for (const assignment of seatAssignments) {
     if (String(assignment.status || '').toLowerCase() !== 'active') continue;
