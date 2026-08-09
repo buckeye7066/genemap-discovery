@@ -14,8 +14,6 @@ import {
 } from '../config/publicationTaskContracts.js';
 import { resolvePublicationTaskReferences } from '../services/publicationResolvers.js';
 
-// Hard ceiling on tokens per call. Premium users can request up to this
-// limit; free-tier users are additionally bounded by enforceUsageLimit.
 const ABSOLUTE_MAX_TOKENS = 4096;
 const DEFAULT_MAX_TOKENS = 1500;
 const PREMIUM_MAX_TOKENS = 4096;
@@ -26,17 +24,7 @@ const STRUCTURED_LLM_TASKS = new Set([
   'learning_activity_summary',
 ]);
 
-// Input-size ceilings live in ../config/llmLimits.js (env-tunable, single source
-// of truth). Token clamping only limits *output*; these bound the *input* so an
-// unbounded prompt or a huge message array can't reach the provider unchecked.
-
 const LLM_TIMEOUT_MS = Number(process.env.LLM_TIMEOUT_MS || 30_000);
-
-// Match the education routes' model choice. Structured research inputs can be
-// larger than a guided tutor request, so keep a bounded fast default that stays
-// inside LLM_TIMEOUT_MS. Explicit provider selection still uses its own model.
-// Only applied when the caller doesn't pin a specific provider (so an explicit
-// provider still uses its own default model). Override via LLM_INVOKE_TEXT_MODEL.
 const INVOKE_TEXT_PROVIDER = process.env.LLM_TEXT_PROVIDER || 'openai';
 const INVOKE_TEXT_MODEL = process.env.LLM_INVOKE_TEXT_MODEL
   || process.env.LLM_EDU_TEXT_MODEL
@@ -49,12 +37,8 @@ export function isModelPublicationEnabled(source = process.env) {
 
 /**
  * Emergency fail-closed switch for every generated publication surface.
- *
- * Set DISABLE_MODEL_PUBLICATION=1 before a risky recovery, provider incident,
- * or rollback. This check runs after authentication/entitlement but before
- * quota accounting, external-reference resolution, prompt composition, and the
- * provider call, so a disabled request neither publishes output nor consumes a
- * user's allowance.
+ * It precedes quota accounting, reference resolution, prompt composition, and
+ * provider access, so disabled requests publish nothing and consume no quota.
  */
 export function assertModelPublicationEnabled(source = process.env) {
   if (!isModelPublicationEnabled(source)) {
@@ -65,8 +49,11 @@ export function assertModelPublicationEnabled(source = process.env) {
   }
 }
 
-/** Fastify prehandler wrapper; do not let request become the helper's source. */
-function requireModelPublicationEnabled() {
+/**
+ * Fastify hook wrapper. It is deliberately async: a synchronous hook that
+ * neither returns a promise nor calls `done` leaves the request suspended.
+ */
+async function requireModelPublicationEnabled() {
   assertModelPublicationEnabled(process.env);
 }
 
@@ -125,6 +112,11 @@ function structuredInvocation(body, resolvedReferences = {}) {
   };
 }
 
+/**
+ * Resolve only server-owned external references. Optional dependencies make the
+ * boundary deterministic in integration tests without changing production's
+ * default resolvers.
+ */
 export function prepareStructuredInvocation(dependencies = {}) {
   return async function preparePublicationInvocation(request) {
     const preliminary = structuredTaskRequest(request.body);
@@ -138,7 +130,9 @@ export function prepareStructuredInvocation(dependencies = {}) {
 }
 
 function clampTokens(requested, isPremium) {
-  const ceiling = isPremium ? PREMIUM_MAX_TOKENS : Math.min(DEFAULT_MAX_TOKENS, ABSOLUTE_MAX_TOKENS);
+  const ceiling = isPremium
+    ? PREMIUM_MAX_TOKENS
+    : Math.min(DEFAULT_MAX_TOKENS, ABSOLUTE_MAX_TOKENS);
   if (typeof requested !== 'number' || !Number.isFinite(requested) || requested <= 0) {
     return Math.min(DEFAULT_MAX_TOKENS, ceiling);
   }
@@ -150,44 +144,49 @@ function clampTemperature(requested) {
   return Math.max(0, Math.min(2, requested));
 }
 
-export default async function llmRoutes(fastify) {
+export default async function llmRoutes(fastify, options = {}) {
   const prisma = fastify.prisma;
-
-  // Every /llm/* route requires authentication and an active entitlement.
-  // The recovery switch precedes quota accounting and all provider-facing work.
-  // External identifiers are then server-resolved in preHandler. The route
-  // handler is never entered for a disabled publication surface or for
-  // forged/mismatched gene IDs and nonexistent/obsolete HPO IDs.
-  const guarded = [
+  const accessGuards = [
     authenticate,
     checkEducationEntitlement,
     requireModelPublicationEnabled,
+  ];
+  const invokeGuards = [
+    ...accessGuards,
     enforceUsageLimit,
-    prepareStructuredInvocation(),
+    prepareStructuredInvocation(options.publicationResolverDependencies || {}),
   ];
 
-  fastify.post('/invoke', { preHandler: guarded }, async (request) => {
-    const { options = {} } = request.body || {};
+  fastify.post('/invoke', { preHandler: invokeGuards }, async (request) => {
+    const { options: generationOptions = {} } = request.body || {};
     const { publicationTask, taskInput, prompt } = request.publicationInvocation;
-    const allowGenomic = await assertNoRawGenomicLLM(prisma, request.user.userId, prompt);
+    const allowGenomic = await assertNoRawGenomicLLM(
+      prisma,
+      request.user.userId,
+      prompt,
+    );
 
     const isPremium = Boolean(request.entitlements?.isPremium);
-    const maxTokens = clampTokens(options.maxTokens, isPremium);
-    const temperature = clampTemperature(options.temperature);
+    const maxTokens = clampTokens(generationOptions.maxTokens, isPremium);
+    const temperature = clampTemperature(generationOptions.temperature);
 
     const result = await generateExplanation(withHonestyPrefix(prompt), {
-      provider: options.provider,
-      model: options.provider ? undefined : INVOKE_TEXT_MODEL,
+      provider: generationOptions.provider,
+      model: generationOptions.provider ? undefined : INVOKE_TEXT_MODEL,
       maxTokens,
       temperature,
       timeoutMs: LLM_TIMEOUT_MS,
       allowGenomic,
     });
-    const safeResult = sanitizePublicationTaskOutput(publicationTask, taskInput, result);
+    const safeResult = sanitizePublicationTaskOutput(
+      publicationTask,
+      taskInput,
+      result,
+    );
 
     await recordUsage(prisma, request.user.userId, 'explanation', {
       maxTokens,
-      provider: options.provider || null,
+      provider: generationOptions.provider || null,
       publicationTask,
     });
 
@@ -199,22 +198,28 @@ export default async function llmRoutes(fastify) {
         publicationTask,
         taskInputVersion: taskInput.version,
         maxTokens,
-        provider: options.provider || null,
+        provider: generationOptions.provider || null,
       },
     });
 
-    return { result: safeResult, disclaimer: 'For educational purposes only. Not medical advice.' };
+    return {
+      result: safeResult,
+      disclaimer: 'For educational purposes only. Not medical advice.',
+    };
   });
 
-  fastify.post('/chat', { preHandler: guarded }, async () => {
+  // These legacy routes are intentionally retired. They authenticate and honor
+  // the recovery switch, then reject immediately without resolver, quota, raw
+  // genomic inspection, provider, audit, or persistence work.
+  fastify.post('/chat', { preHandler: accessGuards }, async () => {
     throw new ValidationError(
-      'arbitrary chat is not available; use a structured publication task or the guided genetics tutor'
+      'arbitrary chat is not available; use a structured publication task or the guided genetics tutor',
     );
   });
 
-  fastify.post('/image', { preHandler: guarded }, async () => {
+  fastify.post('/image', { preHandler: accessGuards }, async () => {
     throw new ValidationError(
-      'arbitrary image generation is not available; use the bounded genetics education image route'
+      'arbitrary image generation is not available; use the bounded genetics education image route',
     );
   });
 }
