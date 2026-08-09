@@ -498,11 +498,12 @@ function composeCandidatePrompt(input) {
     'Do not claim that OMIM, ClinVar, HPO, UniProt, GTEx, HPA, GWAS Catalog, DisGeNET, or PubMed was queried.',
     'Do not invent citations, record identifiers, evidence grades, prevalence, penetrance, numeric expression values, diagnosis, prognosis, treatment, screening, PGx, or dosing guidance.',
   ];
-  const jsonGeneShape = 'symbol, name, score, explanation';
+  const jsonGeneShape = 'symbol, name, explanation (no numeric confidence or evidence grade)';
   switch (input.operation) {
     case 'classify_and_suggest':
       return [...base,
         `Classify the bounded research term (${query}) as disease, phenotype, or ontology identifier and generate candidate-gene leads.`,
+        'Order candidateGenes by research-lead usefulness only. Do not invent scores, confidence percentages, evidence grades, species mixing, or citations.',
         `Return ONLY JSON with queryType, isDisease, diseaseName, isHPOTerm, mainFeatures, synonyms, inheritancePattern, and candidateGenes (${jsonGeneShape}).`,
       ].join('\n');
     case 'classify':
@@ -513,6 +514,7 @@ function composeCandidatePrompt(input) {
     case 'suggest_candidates':
       return [...base,
         `Generate 3-15 candidate-gene leads for the bounded research term (${query}).`,
+        'Order candidateGenes by research-lead usefulness only. Do not invent scores, confidence percentages, evidence grades, species mixing, or citations.',
         `Return ONLY JSON with candidateGenes (${jsonGeneShape}).`,
       ].join('\n');
     case 'gene_profile':

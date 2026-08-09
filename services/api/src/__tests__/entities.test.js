@@ -200,7 +200,7 @@ describe('Medical Data CRUD', () => {
     }
   });
 
-  it('POST /entities/medical-data — should refuse without consent (HIPAA gate)', async () => {
+  it('POST /entities/medical-data — should refuse without consent (legacy gate)', async () => {
     const res = await app.inject({
       method: 'POST',
       url: '/entities/medical-data',

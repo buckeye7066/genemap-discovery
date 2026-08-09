@@ -1,0 +1,30 @@
+{
+  "id": "clingen-brca1-pathogenic-demo",
+  "suite": "ClinGen/ClinVar known cases",
+  "limitations": [
+    "Synthetic education fixture; not a live ClinVar pull.",
+    "Classification text is frozen for reproducibility, not clinical use."
+  ],
+  "referenceBuild": "GRCh38",
+  "species": "Homo sapiens",
+  "taxon": "9606",
+  "evidenceClass": "human_verified",
+  "variant": {
+    "chromosome": "chr17",
+    "position": 43045712,
+    "referenceAllele": "C",
+    "alternateAllele": "A",
+    "hgvs": "NC_000017.11:g.43045712C>A",
+    "gene": "BRCA1",
+    "clinvarAccession": "VCV000017661",
+    "expectedClassification": "Pathogenic"
+  },
+  "sources": [
+    {
+      "source": "ClinVar",
+      "recordId": "VCV000017661",
+      "releaseVersion": "ClinVar (NCBI esummary; release pinned at retrieval)",
+      "directLink": "https://www.ncbi.nlm.nih.gov/clinvar/variation/17661/"
+    }
+  ]
+}

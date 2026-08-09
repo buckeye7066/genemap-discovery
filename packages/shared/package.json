@@ -24,6 +24,10 @@
     "./types": {
       "types": "./dist/types.d.ts",
       "import": "./dist/types.js"
+    },
+    "./associationClaim": {
+      "types": "./dist/associationClaim.d.ts",
+      "import": "./dist/associationClaim.js"
     }
   },
   "dependencies": {

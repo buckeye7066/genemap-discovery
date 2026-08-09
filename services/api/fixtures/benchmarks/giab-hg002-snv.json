@@ -1,0 +1,38 @@
+{
+  "id": "giab-hg002-snv-demo",
+  "suite": "Genome in a Bottle fixtures",
+  "limitations": [
+    "Tiny synthetic GIAB-shaped example for normalization regression only.",
+    "Not a full GIAB truth set and not suitable for clinical benchmarking."
+  ],
+  "referenceBuild": "GRCh38",
+  "species": "Homo sapiens",
+  "taxon": "9606",
+  "evidenceClass": "computational",
+  "vcfRow": {
+    "chromosome": "chr1",
+    "position": 100,
+    "ref": "TCG",
+    "alt": "TG,T",
+    "expectedNormalized": [
+      {
+        "position": 100,
+        "referenceAllele": "TC",
+        "alternateAllele": "T"
+      },
+      {
+        "position": 100,
+        "referenceAllele": "TCG",
+        "alternateAllele": "T"
+      }
+    ]
+  },
+  "sources": [
+    {
+      "source": "Genome in a Bottle (synthetic demo subset)",
+      "recordId": "GIAB-DEMO-HG002-1",
+      "releaseVersion": "synthetic-education-v1",
+      "directLink": "https://www.nist.gov/programs-projects/genome-bottle"
+    }
+  ]
+}

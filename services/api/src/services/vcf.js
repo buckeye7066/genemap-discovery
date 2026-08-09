@@ -4,6 +4,13 @@ import {
   searchClinVar,
   getClinVarVariant,
 } from './genomicDatabases.js';
+import {
+  DEFAULT_REFERENCE_BUILD,
+  CLINVAR_VERSION,
+  GNOMAD_VERSION,
+  normalizeVcfAlleleRows,
+  parseAnnotationHeader,
+} from './variantNormalize.js';
 import { ValidationError } from '../utils/errors.js';
 
 const DEFAULT_MAX_VARIANTS = 1000;
@@ -104,6 +111,7 @@ export function parseVcfText(text, { maxVariants = DEFAULT_MAX_VARIANTS } = {}) 
 
   const headerColumns = headerLine.replace(/^#/, '').split('\t');
   const sampleNames = headerColumns.slice(9);
+  const annotationHeaders = parseAnnotationHeader(lines.filter((line) => line.startsWith('##')));
   const variants = [];
   let totalVariants = 0;
   const variantTypes = {};
@@ -126,35 +134,50 @@ export function parseVcfText(text, { maxVariants = DEFAULT_MAX_VARIANTS } = {}) 
       fields: parseSample(formatText, sampleColumns[index]),
     }));
     const primarySample = samples.find((sample) => sample.fields?.GT) || samples[0] || null;
-    const gene = extractGene(info);
+    const normalizedRows = normalizeVcfAlleleRows({
+      chromosome: chrom,
+      position,
+      ref,
+      altText,
+      referenceBuild: DEFAULT_REFERENCE_BUILD,
+      info,
+      annotationHeaders,
+    });
 
-    for (const alternateAllele of altText.split(',').filter(Boolean)) {
+    for (const normalized of normalizedRows) {
       if (variants.length >= limit) break;
-      const chromosome = normalizeChromosome(chrom);
-      const variantType = inferVariantType(ref, alternateAllele);
+      const variantType = inferVariantType(normalized.referenceAllele, normalized.alternateAllele);
       variantTypes[variantType] = (variantTypes[variantType] || 0) + 1;
 
       const variant = {
-        chromosome,
-        position,
+        chromosome: normalized.chromosome,
+        position: normalized.position,
         id: id && id !== '.' ? id : null,
         rsid: id?.startsWith('rs') ? id : null,
-        referenceAllele: ref,
-        alternateAllele,
-        ref,
-        alt: alternateAllele,
+        referenceAllele: normalized.referenceAllele,
+        alternateAllele: normalized.alternateAllele,
+        ref: normalized.referenceAllele,
+        alt: normalized.alternateAllele,
         quality: qual === '.' ? null : Number(qual),
         filter,
         info,
-        gene,
+        gene: normalized.gene || extractGene(info),
         variantType,
         variant_type: variantType,
         genotype: primarySample?.fields?.GT || null,
         zygosity: inferZygosity(primarySample?.fields),
         samples,
+        referenceBuild: normalized.referenceBuild,
+        genomeBuild: normalized.genomeBuild,
+        hgvs: normalized.hgvs,
+        annotations: normalized.annotations,
+        provenance: {
+          ...normalized.provenance,
+          gnomadVersion: GNOMAD_VERSION,
+          clinvarVersion: CLINVAR_VERSION,
+        },
       };
       variant.stableVariantKey = stableVariantKey(variant);
-      variant.hgvs = `${chromosome}:g.${position}${ref}>${alternateAllele}`;
       variants.push(variant);
     }
   }
