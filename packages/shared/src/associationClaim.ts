@@ -288,7 +288,9 @@ export function partitionClaimsBySpecies(claims: AssociationClaim[]) {
   const external: AssociationClaim[] = [];
 
   for (const claim of claims || []) {
-    if (claim.evidenceClass === 'ai_lead') aiLeads.push(claim);
+    // AI-lead state is authoritative and takes precedence over contradictory
+    // evidenceClass/taxon fields so an untrusted lead cannot enter a verified partition.
+    if (claim.isAiLead || claim.evidenceClass === 'ai_lead') aiLeads.push(claim);
     else if (claim.evidenceClass === 'animal_model' || claim.taxon === '10090') animal.push(claim);
     else if (claim.evidenceClass === 'computational') computational.push(claim);
     else if (claim.evidenceClass === 'external_followup') external.push(claim);
