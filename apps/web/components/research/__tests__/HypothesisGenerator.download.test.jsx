@@ -8,6 +8,15 @@ vi.mock('@genemap/shared', () => ({
   apiClient: { invokePublicationTask: vi.fn() },
 }));
 
+function readBlobText(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener('load', () => resolve(String(reader.result ?? '')), { once: true });
+    reader.addEventListener('error', () => reject(reader.error || new Error('Unable to read generated artifact')), { once: true });
+    reader.readAsText(blob);
+  });
+}
+
 describe('HypothesisGenerator downloadable artifact', () => {
   let capturedBlob;
   let clickSpy;
@@ -43,7 +52,7 @@ describe('HypothesisGenerator downloadable artifact', () => {
     fireEvent.click(screen.getByRole('button', { name: /download markdown/i }));
 
     expect(capturedBlob).toBeInstanceOf(Blob);
-    const markdown = await capturedBlob.text();
+    const markdown = await readBlobText(capturedBlob);
     expect(markdown).toContain('Control group present: No');
     expect(markdown).toContain('Focus: Early-onset symptoms (phenotype; phenotype:early-onset-symptoms; genemap_curated@1)');
     expect(markdown).toContain('Objective: identify_variants');
