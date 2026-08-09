@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { apiClient, setCsrfToken } from '@genemap/shared';
+import { useNavigate } from 'react-router-dom';
+import { apiClient } from '@genemap/shared';
 import { useAuth } from '@/lib/AuthContext';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -18,7 +19,8 @@ import {
 const DELETE_CONFIRMATION = 'DELETE MY ACCOUNT';
 
 export default function AccountSettings() {
-  const { user, isLoadingAuth } = useAuth();
+  const navigate = useNavigate();
+  const { user, isLoadingAuth, clearSession } = useAuth();
   const [purgeState, setPurgeState] = useState({ loading: false, message: '', error: '' });
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -75,8 +77,8 @@ export default function AccountSettings() {
         }),
         timeoutMs: 60_000,
       });
-      setCsrfToken(null);
-      window.location.assign('/login?accountDeleted=1');
+      clearSession('Account deleted');
+      navigate('/login?accountDeleted=1', { replace: true });
     } catch (error) {
       setDeleteError(error?.message || 'The account could not be deleted. No account data was removed.');
       setIsDeleting(false);
