@@ -4,7 +4,7 @@
 **Repository:** `buckeye7066/genemap-discovery`  
 **Verified default branch:** `main`  
 **Reviewed baseline SHA:** `4a3fe456b9fceb949ba6bd4132c96f87f501459f`  
-**Implementation SHA immediately before this evidence-only record:** `89bc2ee2aded0855a85275b57f46ea54fb137fe5`  
+**Implementation SHA immediately before the final evidence-only commits:** `89bc2ee2aded0855a85275b57f46ea54fb137fe5`  
 **Release pull request:** `#123`  
 **Web target:** `https://genemap-discovery.vercel.app`  
 **API target:** `https://genemap-api-production.up.railway.app`  
@@ -92,7 +92,7 @@ GeneMap is not complete if it provides only generic AI prose, guessed identifier
 
 ## Verification matrix
 
-The exact final head must pass all applicable gates below. The implementation SHA `89bc2ee2aded0855a85275b57f46ea54fb137fe5` had passing API/shared tests, lint/typecheck, security audit, migrations, API/Postgres integration, web build, Docker build, Linux desktop smoke, Vercel preview, and browser/publication-boundary coverage when this record was prepared; its Windows packaging smoke was still executing. This evidence-only commit must receive a fresh complete run.
+The exact final head must pass all applicable gates below. The implementation SHA `89bc2ee2aded0855a85275b57f46ea54fb137fe5` had passing API/shared tests, lint/typecheck, security audit, migrations, API/Postgres integration, web build, Docker build, Linux desktop smoke, Vercel preview, and browser/publication-boundary coverage when this record was prepared; its Windows packaging smoke was still executing. The final evidence-only head must receive a fresh complete run.
 
 | Gate | Required result |
 |---|---|
@@ -131,44 +131,45 @@ The exact final head must pass all applicable gates below. The implementation SH
 
 ## Exact PR #123 file inventory
 
-1. `apps/web/components/education/AdaptiveExplanation.jsx`
-2. `apps/web/components/education/__tests__/AdaptiveExplanation.safety.test.jsx`
-3. `apps/web/components/research/HypothesisGenerator.jsx`
-4. `apps/web/components/research/__tests__/HypothesisGenerator.download.test.jsx`
-5. `apps/web/components/search/GeneCard.jsx`
-6. `apps/web/components/search/PhenotypeSearchService.jsx`
-7. `apps/web/components/search/__tests__/GeneCard.provenance.test.jsx`
-8. `apps/web/components/search/__tests__/PhenotypeSearchService.test.js`
-9. `apps/web/components/shared/__tests__/safeModelMarkdown.test.jsx`
-10. `apps/web/components/shared/safeModelMarkdown.jsx`
-11. `apps/web/lib/__tests__/exportUtils.test.js`
-12. `apps/web/lib/exportUtils.js`
-13. `apps/web/pages/Dashboard.jsx`
-14. `apps/web/pages/Search.jsx`
-15. `apps/web/pages/TopicExplorer.jsx`
-16. `apps/web/pages/__tests__/Search.quickStarts.test.jsx`
-17. `docs/PRODUCTION_READINESS_REPORT.md`
-18. `docs/production-readiness/genemap-discovery.md`
-19. `packages/shared/src/__tests__/associationClaim.test.ts`
-20. `packages/shared/src/associationClaim.ts`
-21. `services/api/.env.example`
-22. `services/api/src/__tests__/education-model-recovery.test.js`
-23. `services/api/src/__tests__/education-output-boundary.integration.test.js`
-24. `services/api/src/__tests__/genomicEnrich.test.js`
-25. `services/api/src/__tests__/genomicEnrich.timestamp.test.js`
-26. `services/api/src/__tests__/genomicRetrievalProvenance.test.js`
-27. `services/api/src/__tests__/llm-publication-recovery.test.js`
-28. `services/api/src/__tests__/publicationTaskOutput.education-boundary.test.js`
-29. `services/api/src/__tests__/publicationTaskOutput.securityRegression.test.js`
-30. `services/api/src/__tests__/publicationTaskOutput.symbol-boundary.test.js`
-31. `services/api/src/__tests__/publicationTaskOutput.symbolPolicy.test.js`
-32. `services/api/src/__tests__/publicationTaskOutput.test.js`
-33. `services/api/src/index.js`
-34. `services/api/src/routes/education.js`
-35. `services/api/src/routes/genomics.js`
-36. `services/api/src/routes/llm.js`
-37. `services/api/src/services/genomicDatabases.js`
-38. `services/api/src/services/publicationTaskOutput.js`
+1. `PORTFOLIO_CHATGPT_PRODUCTION_READINESS.md`
+2. `apps/web/components/education/AdaptiveExplanation.jsx`
+3. `apps/web/components/education/__tests__/AdaptiveExplanation.safety.test.jsx`
+4. `apps/web/components/research/HypothesisGenerator.jsx`
+5. `apps/web/components/research/__tests__/HypothesisGenerator.download.test.jsx`
+6. `apps/web/components/search/GeneCard.jsx`
+7. `apps/web/components/search/PhenotypeSearchService.jsx`
+8. `apps/web/components/search/__tests__/GeneCard.provenance.test.jsx`
+9. `apps/web/components/search/__tests__/PhenotypeSearchService.test.js`
+10. `apps/web/components/shared/__tests__/safeModelMarkdown.test.jsx`
+11. `apps/web/components/shared/safeModelMarkdown.jsx`
+12. `apps/web/lib/__tests__/exportUtils.test.js`
+13. `apps/web/lib/exportUtils.js`
+14. `apps/web/pages/Dashboard.jsx`
+15. `apps/web/pages/Search.jsx`
+16. `apps/web/pages/TopicExplorer.jsx`
+17. `apps/web/pages/__tests__/Search.quickStarts.test.jsx`
+18. `docs/PRODUCTION_READINESS_REPORT.md`
+19. `docs/production-readiness/genemap-discovery.md`
+20. `packages/shared/src/__tests__/associationClaim.test.ts`
+21. `packages/shared/src/associationClaim.ts`
+22. `services/api/.env.example`
+23. `services/api/src/__tests__/education-model-recovery.test.js`
+24. `services/api/src/__tests__/education-output-boundary.integration.test.js`
+25. `services/api/src/__tests__/genomicEnrich.test.js`
+26. `services/api/src/__tests__/genomicEnrich.timestamp.test.js`
+27. `services/api/src/__tests__/genomicRetrievalProvenance.test.js`
+28. `services/api/src/__tests__/llm-publication-recovery.test.js`
+29. `services/api/src/__tests__/publicationTaskOutput.education-boundary.test.js`
+30. `services/api/src/__tests__/publicationTaskOutput.securityRegression.test.js`
+31. `services/api/src/__tests__/publicationTaskOutput.symbol-boundary.test.js`
+32. `services/api/src/__tests__/publicationTaskOutput.symbolPolicy.test.js`
+33. `services/api/src/__tests__/publicationTaskOutput.test.js`
+34. `services/api/src/index.js`
+35. `services/api/src/routes/education.js`
+36. `services/api/src/routes/genomics.js`
+37. `services/api/src/routes/llm.js`
+38. `services/api/src/services/genomicDatabases.js`
+39. `services/api/src/services/publicationTaskOutput.js`
 
 ## Deployment and rollback contract
 
