@@ -1,5 +1,6 @@
 import { authenticate, requireRole } from '../middleware/auth.js';
 import { createAuditLog } from '../utils/audit.js';
+import { closeUserAccount } from '../services/accountClosure.js';
 import { ValidationError, NotFoundError } from '../utils/errors.js';
 import { FREE_PERIOD_DAYS, computeFreePeriodEnd, grantOrExtendFreePeriod } from '../utils/freePeriod.js';
 
@@ -710,13 +711,11 @@ export default async function adminRoutes(fastify) {
     return { success: true };
   });
 
-  // Hard-delete a user and (via onDelete: Cascade on every user-owned
-  // relation in schema.prisma) all their data. Reserved to super_admin; the
-  // UI's confirm dialog promises permanent deletion, so this must actually
-  // remove the row — the old soft-ban here left "deleted" users in the list.
-  // The param accepts a user id OR an email: the deployed web app has sent
-  // both across versions, and an unknown identifier must be a 404, not a
-  // Prisma P2025 500.
+  // Permanent administrator deletion uses the same account-closure authority as
+  // self-service deletion. Stripe subscriptions/customers must be cancelled or
+  // confirmed absent before the User row can disappear, and an account that is
+  // still responsible for an active institutional license fails closed until
+  // ownership is transferred or the license is cancelled.
   fastify.delete('/users/:idOrEmail', { preHandler: requireSuperAdmin }, async (request) => {
     const { idOrEmail } = request.params;
 
@@ -732,23 +731,11 @@ export default async function adminRoutes(fastify) {
       throw new ValidationError('Cannot delete a super admin account');
     }
 
-    // Write the audit entry BEFORE the delete: AuditLog.userId references the
-    // acting admin (not the target), so it survives the cascade, but ordering
-    // it first guarantees a trace exists even if the delete itself fails.
-    await createAuditLog(
+    return closeUserAccount({
       prisma,
-      {
-        userId: request.user.userId,
-        action: 'delete_user',
-        entityType: 'user',
-        entityId: user.id,
-        metadata: { email: user.email },
-      },
-      { required: true }
-    );
-
-    await prisma.user.delete({ where: { id: user.id } });
-
-    return { success: true };
+      user,
+      actorUserId: request.user.userId,
+      actorMode: 'admin',
+    });
   });
 }
