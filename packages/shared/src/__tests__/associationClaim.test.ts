@@ -2,10 +2,12 @@ import { describe, expect, it } from 'vitest';
 import {
   aiLeadClaim,
   createAssociationClaim,
+  externalFollowupClaim,
   humanGeneIdentityClaim,
   hpoPhenotypeClaim,
   partitionClaimsBySpecies,
   rankGenesByProvenance,
+  safeExternalHttpUrl,
   stripLlmSelfScores,
 } from '../associationClaim.js';
 
@@ -45,6 +47,29 @@ describe('associationClaim', () => {
     expect(claim.taxon).toBe('9606');
     expect(claim.recordId).toBe('HP:0001250');
     expect(claim.directLink).toContain('HP:0001250');
+  });
+
+  it('keeps only absolute HTTP(S) provenance links at the shared boundary', () => {
+    expect(safeExternalHttpUrl('https://example.org/record?id=1')).toBe('https://example.org/record?id=1');
+    expect(safeExternalHttpUrl(' http://example.org/source ')).toBe('http://example.org/source');
+    expect(safeExternalHttpUrl('javascript:alert(1)')).toBeNull();
+    expect(safeExternalHttpUrl('data:text/html,<script>alert(1)</script>')).toBeNull();
+    expect(safeExternalHttpUrl('/relative/source')).toBeNull();
+    expect(safeExternalHttpUrl(null)).toBeNull();
+
+    const unsafe = externalFollowupClaim({
+      geneSymbol: 'RUNX1',
+      database: 'Untrusted model output',
+      url: 'javascript:alert(1)',
+    });
+    expect(unsafe.directLink).toBeNull();
+
+    const safe = externalFollowupClaim({
+      geneSymbol: 'RUNX1',
+      database: 'Official database',
+      url: 'https://example.org/RUNX1',
+    });
+    expect(safe.directLink).toBe('https://example.org/RUNX1');
   });
 
   it('separates human, animal, computational, and AI claims', () => {
