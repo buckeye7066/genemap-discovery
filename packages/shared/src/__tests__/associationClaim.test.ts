@@ -103,38 +103,68 @@ describe('associationClaim', () => {
     expect(claimSortKey(safe)).toBe(0);
   });
 
-  it('separates human, animal, computational, and AI claims', () => {
-    const claims = [
+  it('separates genuine human, animal, computational, AI, and metadata claims', () => {
+    const identity = humanGeneIdentityClaim({ symbol: 'X', ensemblId: 'ENSG1' });
+    const hpo = hpoPhenotypeClaim({
+      geneSymbol: 'X',
+      phenotypeName: 'Seizure',
+      hpoId: 'HP:0001250',
+    });
+    const followup = externalFollowupClaim({
+      geneSymbol: 'X',
+      database: 'Official database',
+      url: 'https://example.org/X',
+    });
+    const humanAssociation = createAssociationClaim({
+      source: 'Curated association source',
+      recordId: 'HUMAN:1',
+      claim: 'human association evidence',
+      taxon: '9606',
+      evidenceClass: 'human_verified',
+      evidenceType: 'gene_disease_association',
+      evidenceStrength: 'supporting',
+      releaseVersion: '2026-08-01',
+      directLink: 'https://example.org/HUMAN:1',
+    });
+    const animalAssociation = createAssociationClaim({
+      source: 'MGI',
+      recordId: 'MGI:123',
+      claim: 'mouse ortholog evidence',
+      taxon: '10090',
+      evidenceClass: 'animal_model',
+      evidenceType: 'ortholog_association',
+      evidenceStrength: 'supporting',
+      releaseVersion: 'MGI-2026',
+      directLink: 'https://www.informatics.jax.org/marker/MGI:123',
+    });
+    const computationalAssociation = createAssociationClaim({
+      source: 'In-silico predictor',
+      recordId: null,
+      claim: 'computational association score',
+      taxon: '9606',
+      evidenceClass: 'computational',
+      evidenceType: 'gene_phenotype_association_prediction',
+      evidenceStrength: 'supporting',
+      releaseVersion: 'v1',
+      directLink: null,
+    });
+
+    const parts = partitionClaimsBySpecies([
       aiLeadClaim('X', 'y'),
-      humanGeneIdentityClaim({ symbol: 'X', ensemblId: 'ENSG1' }),
-      createAssociationClaim({
-        source: 'MGI',
-        recordId: 'MGI:123',
-        claim: 'mouse ortholog evidence',
-        taxon: '10090',
-        evidenceClass: 'animal_model',
-        evidenceType: 'ortholog_association',
-        evidenceStrength: 'supporting',
-        releaseVersion: 'MGI-2026',
-        directLink: 'https://www.informatics.jax.org/marker/MGI:123',
-      }),
-      createAssociationClaim({
-        source: 'In-silico predictor',
-        recordId: null,
-        claim: 'computational association score',
-        taxon: '9606',
-        evidenceClass: 'computational',
-        evidenceType: 'gene_phenotype_association_prediction',
-        evidenceStrength: 'supporting',
-        releaseVersion: 'v1',
-        directLink: null,
-      }),
-    ];
-    const parts = partitionClaimsBySpecies(claims);
+      identity,
+      hpo,
+      followup,
+      humanAssociation,
+      animalAssociation,
+      computationalAssociation,
+    ]);
+
     expect(parts.aiLeads).toHaveLength(1);
-    expect(parts.human).toHaveLength(1);
-    expect(parts.animal).toHaveLength(1);
-    expect(parts.computational).toHaveLength(1);
+    expect(parts.human).toEqual([humanAssociation]);
+    expect(parts.animal).toEqual([animalAssociation]);
+    expect(parts.computational).toEqual([computationalAssociation]);
+    expect(parts.metadata).toEqual([identity, hpo, followup]);
+    expect(parts.external).toEqual([hpo, followup]);
   });
 
   it('gives AI-lead state precedence over contradictory verified fields', () => {
@@ -157,6 +187,7 @@ describe('associationClaim', () => {
     expect(parts.animal).toEqual([]);
     expect(parts.computational).toEqual([]);
     expect(parts.external).toEqual([]);
+    expect(parts.metadata).toEqual([]);
     expect(claimProvenanceRole(contradictory)).toBe('ai_candidate_lead');
     expect(claimSortKey(contradictory)).toBe(0);
   });
