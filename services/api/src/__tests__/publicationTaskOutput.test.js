@@ -124,6 +124,26 @@ describe('sanitizePublicationTaskOutput', () => {
     ]);
   });
 
+  it('drops clinical guidance embedded in candidate names and classification synonyms', () => {
+    const result = sanitize('classify_and_suggest', {
+      queryType: 'disease',
+      isDisease: true,
+      synonyms: ['CF', 'Patients should take medication.'],
+      candidateGenes: [
+        {
+          symbol: 'CFTR',
+          name: 'Take 5 mg daily',
+          explanation: 'An exploratory candidate for source verification.',
+        },
+      ],
+    });
+
+    expect(result.synonyms).toEqual(['CF']);
+    expect(result.candidateGenes).toEqual([
+      { symbol: 'CFTR', explanation: 'An exploratory candidate for source verification.' },
+    ]);
+  });
+
   it('derives classification from trusted curated and ontology references', () => {
     const phenotype = sanitize('classify', {
       queryType: 'disease',
@@ -253,7 +273,15 @@ describe('sanitizePublicationTaskOutput', () => {
       .toBe(__test.PUBLICATION_BOUNDARY_MESSAGE);
   });
 
-  it('allows explicit non-clinical boundary disclaimers and caps narrative output', () => {
+  it('does not let a disclaimer consume a following semicolon-separated instruction', () => {
+    const disguisedClinical = 'Do not use this output for diagnosis; take 5 mg daily.';
+
+    expect(__test.containsProhibitedClinicalGuidance(disguisedClinical)).toBe(true);
+    expect(sanitizePublicationTaskOutput(RESEARCH_TASK, {}, disguisedClinical))
+      .toBe(__test.PUBLICATION_BOUNDARY_MESSAGE);
+  });
+
+  it('allows complete known non-clinical boundary disclaimers and caps narrative output', () => {
     const safe = sanitizePublicationTaskOutput(
       LEARNING_TASK,
       {},
@@ -262,6 +290,10 @@ describe('sanitizePublicationTaskOutput', () => {
     expect(safe).not.toBe(__test.PUBLICATION_BOUNDARY_MESSAGE);
     expect(safe).toContain('This is not medical advice.');
     expect(safe.length).toBeLessThanOrEqual(3_000);
+
+    const completeBoundary = 'Do not use this output for diagnosis, personal-risk prediction, treatment, dosing, screening, or other clinical decisions. Compare aggregate patterns only.';
+    expect(sanitizePublicationTaskOutput(RESEARCH_TASK, {}, completeBoundary))
+      .toBe(completeBoundary);
   });
 
   it('returns task-specific empty messages for missing published narratives', () => {
