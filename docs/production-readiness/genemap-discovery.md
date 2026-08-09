@@ -31,7 +31,7 @@ GeneMap Discovery is a genetics **education and early-research** platform that m
 | # | Criterion | Status | Evidence |
 |---|-----------|--------|----------|
 | 54 | Full CI/browser journeys; high-risk clinical routes impossible in publishable builds | **PASS (software boundary)** | `clinicalPublishingBoundary.test.js` verifies the publication flags, route graph, navigation graph, shared client, and Research Mode omit high-risk clinical surfaces. `publication-boundary.spec.js` installs a synthetic authenticated education session, attempts every removed route directly, and requires a Page Not Found result. The reviewed production bundle also omitted the named clinical pages. This proves the software boundary; it does not substitute for the still-missing owner-authorized live learner journey. |
-| 55 | Each ranked association or variant assertion exposes source, version, evidence class, species, and retrieval date | **IN PROGRESS (PR #123)** | Existing association-claim contracts and search tests create and rank source/species/version/retrieval-bearing claims. PR #123 adds a representative rendered `GeneCard` test and makes printable reports and copied summaries preserve the full claim-level provenance tuple, fail closed when claims are absent, escape untrusted content, and reject non-HTTP(S) source links. This criterion must not be marked passed on the release until PR #123 is green, merged, deployed, and its actual output is inspected. |
+| 55 | Each ranked association or variant assertion exposes source, version, evidence class, species, and retrieval date | **IN PROGRESS (PR #123)** | Existing association-claim contracts and search tests create and rank source/species/version/retrieval-bearing claims. PR #123 adds a representative rendered `GeneCard` test and makes printable reports and copied summaries preserve the full claim-level provenance tuple, fail closed when claims are absent, escape untrusted content, reject non-HTTP(S) source links, tolerate null input, and render non-finite numbers as `N/A`. This criterion must not be marked passed on the release until PR #123 is green, merged, deployed, and its actual output is inspected. |
 | 56 | Known benchmark fixtures reproduce; limitations documented; no silent human/animal mixing | **PASS (software)** | `services/api/fixtures/benchmarks/` and `scientificBenchmarks.test.js` are exercised by CI; claim partitioning keeps human, animal, computational, AI-lead, and external-follow-up evidence distinct. |
 | 57 | Public positioning is education and early research only, with no diagnostic, treatment, or personalized-medicine promise | **PASS (reviewed baseline)** | Live metadata describes an education and exploratory-research workspace. Privacy, Terms, Search, and the report footer prohibit diagnosis, personal-risk prediction, treatment, PGx, dosing, screening, and other clinical use. |
 
@@ -55,27 +55,46 @@ Previously merged implementation evidence:
   Web PhenotypeSearch + clinicalBoundary   -> 34 passed
   pnpm audit after js-yaml/nanoid bump      -> no known vulnerabilities
 
-CI for implementation PR #121:
-  security-audit, lint-and-typecheck, test, web-tests,
-  api-integration-postgres, docker-build-api, migration-smoke,
-  build-web, desktop-build-smoke, desktop-build-windows-smoke -> pass
+Reviewed baseline SHA:
+  4a3fe456b9fceb949ba6bd4132c96f87f501459f
 
-Independent connected-tool baseline re-verification on 2026-08-09:
-  GitHub reviewed baseline                  -> main @ 4a3fe456
-  Open pull requests at review start        -> 0
-  GitHub deployment status on baseline SHA  -> Vercel success; Railway success
-  Baseline-SHA checks                       -> no failed check run found
-  Live health/readiness/CORS/web-shell job  -> success
-  Public Chromium E2E                       -> success
-  Vercel production deployment              -> READY @ 4a3fe456
-  Live web shell                            -> HTTP 200
-  Production route bundle                   -> Search, Dashboard, and Research Mode are structurally included in the authenticated route configuration
+Baseline CI workflow run 31287331407         -> success
+  verify-migrations                          -> success
+  security-audit                             -> success
+  lint-and-typecheck                         -> success
+  test                                       -> success
+  api-integration-postgres                   -> success
+  migration-smoke                            -> success
+  build-web                                  -> success
+  docker-build-api                           -> success
+  desktop-build-smoke                        -> success
+  desktop-build-windows-smoke                -> success
+
+Baseline Web Tests run 31287331405            -> success
+  backup safeguards                          -> success
+  build shared package                       -> success
+  Web tests (Vitest + jsdom)                 -> success
+  Web typecheck                              -> success
+  Build web bundle                           -> success
+  Verify publication bundle excludes clinical code -> success
+  Authenticated publication-boundary browser journeys -> success
+
+Baseline Production Smoke run 31298925133    -> success
+  Live health, readiness, CORS, and web shell -> success
+  E2E (public surface, Chromium)             -> success
+
+Baseline deployment and live identity:
+  GitHub Vercel deployment status            -> success
+  GitHub Railway deployment status           -> success
+  Vercel production deployment               -> READY @ 4a3fe456
+  Live web shell                             -> HTTP 200
+  Production route bundle                    -> Search, Dashboard, and Research Mode are structurally included in the authenticated route configuration
 
 Current PR #123 release-candidate additions:
   Printable gene report                     -> full claim provenance, candidate-label notices, escaped values, safe source links
   Copied gene summary                       -> full claim provenance and fail-closed candidate labeling
   GeneCard representative render test       -> source, record, release/version, evidence class, species, retrieval date, source link
-  Export regression tests                   -> complete tuple, no-claim state, script escaping, javascript-link rejection, print output
+  Export regression tests                   -> complete tuple, no-claim state, script escaping, javascript-link rejection, null input, non-finite numbers, print output
   Final CI / merge / deployment / output    -> pending at the time of this record
 ```
 
@@ -143,7 +162,7 @@ node scripts/verify-production-launch.mjs \
 
 A hand-written readiness statement is not a substitute for a zero-failure verifier result.
 
-### C. Capture the real authenticated learner journey
+### C. Capture the required real authenticated learner journey
 
 Using an owner-authorized test account on the exact deployed release:
 
@@ -158,15 +177,18 @@ Using an owner-authorized test account on the exact deployed release:
 9. Sign out and verify protected routes reject the unauthenticated session.
 10. Retain redacted screenshots, logs, and the exact release SHA without using personal genomic data.
 
+This journey is a blocking action, not an optional suggestion.
+
 ## Deployment and rollback contract
 
 - Reviewed GitHub `main` baseline: `4a3fe456b9fceb949ba6bd4132c96f87f501459f`.
 - Purpose-defining baseline software is contained in ancestor merge `f0d3b64b9ae17f70ef2656b173cd51ca4c71215b`.
 - PR #123 changes user-visible export/share behavior and therefore must pass full CI, substantive review, merge, exact-SHA deployment verification, and output inspection before its provenance work can be treated as released.
-- Vercel production identified the exact reviewed baseline SHA `4a3fe456` and was READY at baseline review time.
-- GitHub reported successful Vercel and Railway deployment contexts for that exact reviewed baseline.
+- Vercel production identified the exact reviewed baseline SHA `4a3fe456` and was READY at baseline review time. GitHub reported successful Vercel and Railway deployment contexts for that same SHA.
+- **Immutable rollback target for PR #123:** `4a3fe456b9fceb949ba6bd4132c96f87f501459f`.
+- PR #123 contains no database schema or migration change. If the release must be rolled back, redeploy the web and API artifacts built from the immutable rollback SHA, retain the current compatible database, then verify `/healthz`, `/readyz`, the public web shell, and the publication-boundary browser journey against that exact SHA.
+- Do not choose a rollback target during an incident. A different target requires a separate pre-incident review, deployment identity check, data-compatibility assessment, and recorded recovery test.
 - The final merged software SHA and post-merge deployment evidence must be recorded after PR #123 merges; this file deliberately does not predict its own future merge SHA.
-- Rollback must select the last independently verified default-branch SHA and use forward-compatible database migrations or a verified restore, never an unreviewed schema downgrade.
 - Local launch information above is historical evidence only until independently verified on Dr. White's Windows machine.
 
 ## Current PR #123 files
