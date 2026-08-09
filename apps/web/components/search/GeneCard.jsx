@@ -35,6 +35,8 @@ import { Download, Copy, Printer } from "lucide-react";
 // re-POST the same gene_view activity. Module-level on purpose: shared across
 // every GeneCard instance.
 const loggedGeneViews = new Set();
+const MAX_ACTIVITY_ATTEMPTS = 3;
+const ACTIVITY_RETRY_BASE_MS = 250;
 
 function displayClaimValue(value, fallback = 'Not recorded') {
   if (value === null || value === undefined || String(value).trim() === '') return fallback;
@@ -59,39 +61,48 @@ function GeneCard({ gene, rank, isSelected = false, onSelect = null }) {
   const { user } = useAuth();
 
   React.useEffect(() => {
-    // Track gene view activity
-    if (gene && gene.symbol) {
-      trackGeneView(gene.symbol);
-    }
-  }, [gene?.symbol, user?.email]);
+    const geneSymbol = gene?.symbol;
+    if (!geneSymbol) return undefined;
 
-  const trackGeneView = async (geneSymbol) => {
-    // De-dupe within the session: the same gene_view was being POSTed on every
-    // (re)mount, contributing to the activity flood. Log each gene once.
     const viewKey = `${user?.email || 'anon'}:${geneSymbol}`;
-    if (loggedGeneViews.has(viewKey)) return;
-    loggedGeneViews.add(viewKey);
-    try {
-      await apiClient.logActivity({
-        // Backend contract is camelCase activityType + entityType/entityId; the
-        // old activity_type/gene_symbol shape failed validation ("activityType
-        // is required") so gene views were never recorded.
-        activityType: "gene_view",
-        entityType: "gene",
-        entityId: geneSymbol,
-        metadata: {
-          gene_symbol: geneSymbol,
-          ranking_basis: gene.rankingBasis || null,
-          phenotypes: gene.phenotypes?.map(p => p.name) || []
+    let cancelled = false;
+    let retryTimer = null;
+
+    const logGeneView = async (attempt = 1) => {
+      if (cancelled || loggedGeneViews.has(viewKey)) return;
+      loggedGeneViews.add(viewKey);
+      try {
+        await apiClient.logActivity({
+          activityType: "gene_view",
+          entityType: "gene",
+          entityId: geneSymbol,
+          metadata: {
+            gene_symbol: geneSymbol,
+            ranking_basis: gene.rankingBasis || null,
+            phenotypes: gene.phenotypes?.map(p => p.name) || []
+          }
+        });
+      } catch (err) {
+        // Do not poison session de-duplication after a failed write. Retry while
+        // this card remains mounted, with a strict cap and exponential delay.
+        loggedGeneViews.delete(viewKey);
+        if (!cancelled && attempt < MAX_ACTIVITY_ATTEMPTS) {
+          const delay = ACTIVITY_RETRY_BASE_MS * (2 ** (attempt - 1));
+          retryTimer = setTimeout(() => {
+            void logGeneView(attempt + 1);
+          }, delay);
+        } else if (!cancelled) {
+          console.log("Could not track activity after bounded retries:", err);
         }
-      });
-    } catch (err) {
-      // A failed request must not poison the session de-duplication set. Remove
-      // the key so a later mount can retry without affecting successful de-dupe.
-      loggedGeneViews.delete(viewKey);
-      console.log("Could not track activity:", err);
-    }
-  };
+      }
+    };
+
+    void logGeneView();
+    return () => {
+      cancelled = true;
+      if (retryTimer) clearTimeout(retryTimer);
+    };
+  }, [gene?.symbol, user?.email]);
 
   const claims = Array.isArray(gene.associationClaims) ? gene.associationClaims : [];
   // Use the shared partition contract so isAiLead always takes precedence over
@@ -254,7 +265,7 @@ function GeneCard({ gene, rank, isSelected = false, onSelect = null }) {
                       <div><dt className="inline font-medium">Record ID: </dt><dd className="inline">{displayClaimValue(claim.recordId)}</dd></div>
                       <div><dt className="inline font-medium">Source release/version: </dt><dd className="inline">{displayClaimValue(claim.releaseVersion)}</dd></div>
                       <div><dt className="inline font-medium">Reference assembly: </dt><dd className="inline">{displayClaimValue(claim.referenceAssembly)}</dd></div>
-                      <div><dt className="inline font-medium">Retrieved: </dt><dd className="inline">{displayClaimValue(claim.retrievalDate)}</dd></div>
+                      <div><dt className="inline font-medium">Adapter retrieval date: </dt><dd className="inline">{displayClaimValue(claim.retrievalDate)}</dd></div>
                       <div><dt className="inline font-medium">AI lead: </dt><dd className="inline">{aiLeadStatus(claim)}</dd></div>
                     </dl>
                     {safeLink ? (
