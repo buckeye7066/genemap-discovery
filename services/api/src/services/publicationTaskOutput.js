@@ -1,6 +1,27 @@
 const GENE_SYMBOL = /^[A-Z0-9][A-Z0-9-]{1,14}$/u;
-const CANDIDATE_TASK = 'candidate_gene_research';
+const TASKS = Object.freeze({
+  AGGREGATE_RESEARCH: 'aggregate_genomics_research',
+  CANDIDATE_GENE: 'candidate_gene_research',
+  RESEARCH_HYPOTHESIS: 'research_hypothesis',
+  LEARNING_ACTIVITY: 'learning_activity_summary',
+});
+const RESEARCH_TASKS = new Set([
+  TASKS.AGGREGATE_RESEARCH,
+  TASKS.RESEARCH_HYPOTHESIS,
+]);
 const ALLOWED_QUERY_TYPES = new Set(['disease', 'phenotype', 'hpo_term']);
+const PUBLICATION_BOUNDARY_MESSAGE = 'The AI response was withheld because it crossed GeneMap Discovery\'s education and non-clinical publication boundary. No model-generated clinical guidance was shown.';
+const EMPTY_RESEARCH_MESSAGE = 'No bounded research narrative was returned. Review the structured cohort fields and try again.';
+const EMPTY_LEARNING_MESSAGE = 'No bounded learning observation was returned. Refresh after additional verified learning activity.';
+
+const CLINICAL_GUIDANCE_PATTERNS = [
+  /\b(?:recommend(?:ed|ation)?|advise(?:d)?|should|must|need(?:s)? to|ought to|prescribe(?:d)?|start|stop|increase|decrease|take|avoid|undergo|administer|switch)\b[^.!?\n]{0,120}\b(?:treatment|therapy|medication|medicine|drug|screening|test|dose|dosing|dosage|surgery|procedure|clinical care|medical care)\b/iu,
+  /\b(?:you|your|patient|this patient|individual|family members?)\b[^.!?\n]{0,120}\b(?:personal risk|risk of|diagnos\w*|prognos\w*|treatment|therapy|medication|medicine|drug|screening|dose|dosing|clinical action)\b/iu,
+  /\b(?:consult|contact|see|seek)\b[^.!?\n]{0,60}\b(?:doctor|physician|clinician|genetic counselor|medical professional|emergency department|emergency care)\b/iu,
+  /\b(?:diagnos(?:e|ed|es|ing)|diagnosis|prognosis|prognostic conclusion|clinical recommendation|treatment recommendation|screening recommendation|medication recommendation|drug recommendation)\b/iu,
+  /\b(?:dose|dosing|dosage)\b[^.!?\n]{0,80}\b(?:recommend\w*|should|must|take|administer|adjust|increase|decrease|mg|mcg|ug|units?)\b/iu,
+  /\b\d+(?:\.\d+)?\s*(?:mg|mcg|μg|ug|ml|mL|units?)\b/u,
+];
 
 /**
  * Return true only for ordinary object records, excluding arrays, dates, class
@@ -28,12 +49,26 @@ function replaceControlCharacters(value) {
 }
 
 /**
- * Normalize untrusted text, collapse whitespace, reject empty output, and cap
- * the returned string to the supplied maximum length.
+ * Remove HTML, active schemes, Markdown link targets, and bare URLs from model
+ * text. Provider-generated prose is never allowed to create a source link.
+ */
+function stripUntrustedMarkupAndLinks(value) {
+  return value
+    .replace(/<[^>]*>/gu, ' ')
+    .replace(/!\[([^\]]*)\]\((?:\\.|[^)])*\)/gu, '$1')
+    .replace(/\[([^\]]+)\]\((?:\\.|[^)])*\)/gu, '$1')
+    .replace(/\b(?:javascript|data):[^\s]+/giu, ' ')
+    .replace(/\bhttps?:\/\/[^\s<>()]+/giu, '[external link removed]')
+    .replace(/\bwww\.[^\s<>()]+/giu, '[external link removed]');
+}
+
+/**
+ * Normalize untrusted inline text, collapse whitespace, reject empty output,
+ * and cap the returned string to the supplied maximum length.
  */
 function cleanText(value, maxLength) {
   if (typeof value !== 'string') return null;
-  const normalized = replaceControlCharacters(value)
+  const normalized = stripUntrustedMarkupAndLinks(replaceControlCharacters(value))
     .replace(/\s+/gu, ' ')
     .trim();
   if (!normalized) return null;
@@ -41,15 +76,45 @@ function cleanText(value, maxLength) {
 }
 
 /**
- * Normalize a bounded, case-insensitively deduplicated list of strings while
- * discarding non-string, empty, and control-only entries.
+ * Remove known non-clinical disclaimer phrases before policy matching. This
+ * avoids rejecting text merely because it says that an output is not medical
+ * advice, while preserving real instructions such as "do not stop medication".
  */
-function cleanStringArray(value, { maxItems, maxLength }) {
+function removeAllowedBoundaryDisclaimers(value) {
+  return value
+    .replace(/\bnot\s+(?:a\s+)?diagnosis\b/giu, ' ')
+    .replace(/\bnot\s+medical\s+advice\b/giu, ' ')
+    .replace(/\bnot\s+(?:intended|suitable)\s+for\s+clinical\s+use\b/giu, ' ')
+    .replace(/\bdoes\s+not\s+(?:assess|predict|establish)\s+(?:personal\s+)?(?:risk|diagnosis|prognosis)\b/giu, ' ')
+    .replace(/\bdo\s+not\s+use\s+(?:this|the|these|it|output|response|result|results)\b[^.!?\n]{0,160}/giu, ' ');
+}
+
+/** Return true when model prose contains clinical or personalized guidance. */
+function containsProhibitedClinicalGuidance(value) {
+  if (typeof value !== 'string' || !value.trim()) return false;
+  const policyText = removeAllowedBoundaryDisclaimers(value);
+  return CLINICAL_GUIDANCE_PATTERNS.some((pattern) => pattern.test(policyText));
+}
+
+/** Normalize one inline field and fail closed when it crosses the clinical boundary. */
+function cleanNonClinicalText(value, maxLength) {
+  const cleaned = cleanText(value, maxLength);
+  if (!cleaned || containsProhibitedClinicalGuidance(cleaned)) return null;
+  return cleaned;
+}
+
+/**
+ * Normalize a bounded, case-insensitively deduplicated list of strings while
+ * discarding non-string, empty, control-only, or policy-violating entries.
+ */
+function cleanStringArray(value, { maxItems, maxLength, nonClinical = false }) {
   if (!Array.isArray(value)) return [];
   const seen = new Set();
   const cleaned = [];
   for (const item of value) {
-    const text = cleanText(item, maxLength);
+    const text = nonClinical
+      ? cleanNonClinicalText(item, maxLength)
+      : cleanText(item, maxLength);
     if (!text) continue;
     const key = text.toLocaleLowerCase('en-US');
     if (seen.has(key)) continue;
@@ -57,6 +122,37 @@ function cleanStringArray(value, { maxItems, maxLength }) {
     cleaned.push(text);
     if (cleaned.length >= maxItems) break;
   }
+  return cleaned;
+}
+
+/**
+ * Preserve useful Markdown line structure while stripping active markup,
+ * links, controls, excessive blank lines, and output beyond the task limit.
+ */
+function cleanNarrativeFormatting(value, maxLength) {
+  if (typeof value !== 'string') return null;
+  const lines = value
+    .replace(/\r\n?/gu, '\n')
+    .split('\n')
+    .map((line) => stripUntrustedMarkupAndLinks(replaceControlCharacters(line))
+      .replace(/[ \t]+/gu, ' ')
+      .trimEnd());
+  const normalized = lines
+    .join('\n')
+    .replace(/\n{3,}/gu, '\n\n')
+    .trim();
+  if (!normalized) return null;
+  return normalized.slice(0, maxLength);
+}
+
+/**
+ * Return a bounded narrative or a deterministic withholding/empty message.
+ * Published research and learning tasks never pass provider prose through raw.
+ */
+function sanitizeNarrativeOutput(result, { maxLength, emptyMessage }) {
+  const cleaned = cleanNarrativeFormatting(result, maxLength);
+  if (!cleaned) return emptyMessage;
+  if (containsProhibitedClinicalGuidance(cleaned)) return PUBLICATION_BOUNDARY_MESSAGE;
   return cleaned;
 }
 
@@ -104,7 +200,7 @@ function parseJsonCandidate(result) {
 
 /**
  * Convert one untrusted candidate record into the publication-safe gene lead
- * shape. Only symbol, bounded name, and bounded explanation survive.
+ * shape. Only symbol, bounded name, and bounded non-clinical explanation survive.
  */
 function normalizeCandidateGene(value) {
   if (!isPlainObject(value)) return null;
@@ -114,7 +210,7 @@ function normalizeCandidateGene(value) {
   if (!GENE_SYMBOL.test(symbol)) return null;
 
   const name = cleanText(value.name, 256);
-  const explanation = cleanText(value.explanation, 2_000);
+  const explanation = cleanNonClinicalText(value.explanation, 2_000);
   return {
     symbol,
     ...(name ? { name } : {}),
@@ -195,15 +291,19 @@ function normalizeClassification(parsed, taskInput = {}) {
   const isDisease = trusted?.isDisease ?? modelIsDisease;
   const isHPOTerm = trusted?.isHPOTerm ?? source.isHPOTerm === true;
   const diseaseName = isDisease
-    ? trusted?.diseaseName ?? cleanText(source.diseaseName, 256)
+    ? trusted?.diseaseName ?? cleanNonClinicalText(source.diseaseName, 256)
     : null;
-  const inheritancePattern = cleanText(source.inheritancePattern, 256);
+  const inheritancePattern = cleanNonClinicalText(source.inheritancePattern, 256);
   return {
     queryType,
     isDisease,
     ...(diseaseName ? { diseaseName } : {}),
     isHPOTerm,
-    mainFeatures: cleanStringArray(source.mainFeatures, { maxItems: 20, maxLength: 256 }),
+    mainFeatures: cleanStringArray(source.mainFeatures, {
+      maxItems: 20,
+      maxLength: 256,
+      nonClinical: true,
+    }),
     synonyms: cleanStringArray(source.synonyms, { maxItems: 20, maxLength: 256 }),
     ...(inheritancePattern ? { inheritancePattern } : {}),
     // Model-supplied ontology identifiers are never source records.
@@ -217,16 +317,17 @@ function normalizeClassification(parsed, taskInput = {}) {
  */
 function normalizeGeneProfile(parsed) {
   const source = isPlainObject(parsed) ? parsed : {};
-  const summary = cleanText(source.summary, 4_000);
+  const summary = cleanNonClinicalText(source.summary, 4_000);
   const keyTakeaways = cleanStringArray(source.keyTakeaways, {
     maxItems: 12,
     maxLength: 500,
+    nonClinical: true,
   });
   const phenotypeNames = cleanStringArray(
     Array.isArray(source.phenotypes)
       ? source.phenotypes.map((item) => (isPlainObject(item) ? item.name : item))
       : [],
-    { maxItems: 20, maxLength: 256 },
+    { maxItems: 20, maxLength: 256, nonClinical: true },
   );
   return {
     ...(summary ? { summary } : {}),
@@ -248,18 +349,8 @@ function safeEmptyCandidateOutput(operation, taskInput) {
   return { ...normalizeClassification({}, taskInput), candidateGenes: [] };
 }
 
-/**
- * Convert untrusted model output into the exact bounded browser contract for a
- * structured publication task. Candidate-gene output fails closed: malformed
- * JSON, invalid symbols, unsupported fields, control characters, duplicates,
- * and oversized collections never reach the client. Query classification is
- * derived from the validated server-owned reference rather than model claims.
- */
-export function sanitizePublicationTaskOutput(publicationTask, taskInput, result) {
-  if (publicationTask !== CANDIDATE_TASK) {
-    return typeof result === 'string' ? result : String(result ?? '');
-  }
-
+/** Convert candidate-gene model output into the exact bounded browser contract. */
+function sanitizeCandidateTaskOutput(taskInput, result) {
   const operation = taskInput?.operation;
   const parsed = parseJsonCandidate(result);
   if (!parsed) return JSON.stringify(safeEmptyCandidateOutput(operation, taskInput));
@@ -286,13 +377,45 @@ export function sanitizePublicationTaskOutput(publicationTask, taskInput, result
   });
 }
 
+/**
+ * Convert untrusted model output into a task-specific bounded publication
+ * contract. No recognized published task receives raw provider output.
+ */
+export function sanitizePublicationTaskOutput(publicationTask, taskInput, result) {
+  if (publicationTask === TASKS.CANDIDATE_GENE) {
+    return sanitizeCandidateTaskOutput(taskInput, result);
+  }
+  if (RESEARCH_TASKS.has(publicationTask)) {
+    return sanitizeNarrativeOutput(result, {
+      maxLength: 12_000,
+      emptyMessage: EMPTY_RESEARCH_MESSAGE,
+    });
+  }
+  if (publicationTask === TASKS.LEARNING_ACTIVITY) {
+    return sanitizeNarrativeOutput(result, {
+      maxLength: 3_000,
+      emptyMessage: EMPTY_LEARNING_MESSAGE,
+    });
+  }
+  // The route rejects unknown publication tasks before provider invocation.
+  // Keep this helper backward compatible for non-published internal callers.
+  return typeof result === 'string' ? result : String(result ?? '');
+}
+
 export const __test = {
   cleanText,
+  cleanNonClinicalText,
   cleanStringArray,
+  cleanNarrativeFormatting,
+  containsProhibitedClinicalGuidance,
+  sanitizeNarrativeOutput,
   parseJsonCandidate,
   normalizeCandidateGene,
   normalizeCandidateGenes,
   trustedQueryClassification,
   normalizeClassification,
   normalizeGeneProfile,
+  PUBLICATION_BOUNDARY_MESSAGE,
+  EMPTY_RESEARCH_MESSAGE,
+  EMPTY_LEARNING_MESSAGE,
 };
