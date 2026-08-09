@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AccountSettings from '../AccountSettings';
@@ -127,7 +127,10 @@ describe('AccountSettings', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: /permanently delete my account/i }));
 
-    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/billing cancellation cannot be verified/i));
-    expect(auth.clearSession).not.toHaveBeenCalled();
+    const errorText = await screen.findByText(/billing cancellation cannot be verified/i);
+    const errorAlert = errorText.closest('[role="alert"]');
+    expect(errorAlert).toBeTruthy();
+    expect(within(errorAlert).getByText(/no account data was deleted/i)).toBeInTheDocument();
+    await waitFor(() => expect(auth.clearSession).not.toHaveBeenCalled());
   });
 });
