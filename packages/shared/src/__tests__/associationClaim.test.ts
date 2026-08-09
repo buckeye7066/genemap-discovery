@@ -132,6 +132,30 @@ describe('associationClaim', () => {
     expect(parts.computational).toHaveLength(1);
   });
 
+  it('gives AI-lead state precedence over contradictory verified fields', () => {
+    const contradictory = createAssociationClaim({
+      source: 'Untrusted candidate source',
+      recordId: 'MODEL:1',
+      claim: 'Model lead with contradictory verified-looking metadata',
+      taxon: '9606',
+      evidenceClass: 'human_verified',
+      evidenceType: 'gene_disease_association',
+      evidenceStrength: 'strong',
+      releaseVersion: 'model-output',
+      directLink: null,
+      isAiLead: true,
+    });
+
+    const parts = partitionClaimsBySpecies([contradictory]);
+    expect(parts.aiLeads).toEqual([contradictory]);
+    expect(parts.human).toEqual([]);
+    expect(parts.animal).toEqual([]);
+    expect(parts.computational).toEqual([]);
+    expect(parts.external).toEqual([]);
+    expect(claimProvenanceRole(contradictory)).toBe('ai_candidate_lead');
+    expect(claimSortKey(contradictory)).toBe(0);
+  });
+
   it('derives one ranking basis from genuine association evidence only', () => {
     const identity = humanGeneIdentityClaim({ symbol: 'RUNX1', entrezId: '861' });
     const computational = createAssociationClaim({
