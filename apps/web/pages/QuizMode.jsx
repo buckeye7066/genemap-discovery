@@ -165,9 +165,12 @@ export default function QuizMode() {
     if (currentIndex + 1 >= questions.length) {
       setFinished(true);
       try {
+        // handleAnswer already incorporated the selected final answer into
+        // `score` before this button becomes available. Adding it here again
+        // persisted impossible states such as 6/5 while the UI showed 5/5.
         await apiClient.updateLearningProgress({
           topicId,
-          score: score + (selectedAnswer === questions[currentIndex]?.correctIndex ? 1 : 0),
+          score,
           totalQuestions: questions.length,
         });
       } catch {
