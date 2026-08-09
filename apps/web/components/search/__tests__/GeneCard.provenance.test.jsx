@@ -45,9 +45,8 @@ const identityClaim = {
 const gene = {
   symbol: 'RUNX1',
   name: 'RUNX family transcription factor 1',
-  // Identity verification is visible provenance but does not verify the
-  // candidate's association with the bounded query.
-  rankingBasis: 'ai_lead',
+  // rankingBasis is intentionally absent: identity verification must not make
+  // the fallback badge look like verified gene-query association evidence.
   associationClaims: [aiClaim, identityClaim],
   evidencePartition: {
     human: [identityClaim],
