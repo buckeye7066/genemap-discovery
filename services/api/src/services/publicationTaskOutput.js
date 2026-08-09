@@ -23,7 +23,7 @@ const CLINICAL_GUIDANCE_PATTERNS = [
   /\b(?:consult|contact|see|seek)\b[^.!?\n]{0,60}\b(?:doctor|physician|clinician|genetic counselor|medical professional|emergency department|emergency care)\b/iu,
   /\b(?:diagnos(?:e|ed|es|ing)|diagnosis|prognosis|prognostic conclusion|clinical recommendation|treatment recommendation|screening recommendation|medication recommendation|drug recommendation)\b/iu,
   /\b(?:dose|dosing|dosage)\b[^.!?\n]{0,80}\b(?:recommend\w*|should|must|take|administer|adjust|increase|decrease|mg|mcg|ug|units?)\b/iu,
-  /\b\d+(?:\.\d+)?\s*(?:mg|mcg|μg|ug|ml|mL|units?)\b/u,
+  /\b\d+(?:\.\d+)?\s*(?:mg|mcg|μg|ug|ml|units?)\b/iu,
   // Providers sometimes spell out quantities or dosage forms. Those variants
   // must not evade the same conservative boundary already applied to numeric
   // doses, especially inside model-controlled names, summaries, and takeaways.
@@ -64,12 +64,8 @@ function replaceControlCharacters(value) {
  */
 function stripUntrustedMarkupAndLinks(value) {
   return value
-    // Reference-style image/link uses must be neutralized before their
-    // definitions are removed, preserving visible alt/link text only.
     .replace(/!\[([^\]]*)\]\s*\[[^\]]*\]/gu, '$1')
     .replace(/\[([^\]]+)\]\s*\[[^\]]*\]/gu, '$1')
-    // A definition can make a distant reference-style image trigger a request.
-    // Remove the full definition regardless of URL scheme or title syntax.
     .replace(/^\s*\[[^\]\n]{1,128}\]:\s*.*$/gmu, ' ')
     .replace(/<[^>]*>/gu, ' ')
     .replace(/!\[([^\]]*)\]\((?:\\.|[^)])*\)/gu, '$1')
@@ -228,9 +224,6 @@ function normalizeCandidateGene(value) {
     : '';
   if (!GENE_SYMBOL.test(symbol)) return null;
 
-  // A model-controlled string can be syntactically gene-like while spelling a
-  // clinical instruction (for example STOP-DRUG or TAKE-5MG). Apply the same
-  // publication policy after converting separators and compact units to prose.
   const symbolPolicyText = symbol
     .replace(/-/gu, ' ')
     .replace(/(\d)(MG|MCG|UG|ML|UNITS?)\b/gu, '$1 $2');
@@ -337,7 +330,6 @@ function normalizeClassification(parsed, taskInput = {}) {
       nonClinical: true,
     }),
     ...(inheritancePattern ? { inheritancePattern } : {}),
-    // Model-supplied ontology identifiers are never source records.
     hpoTerms: [],
   };
 }
@@ -375,8 +367,6 @@ function normalizeGeneProfile(parsed) {
     summary,
     summaryStatus,
     keyTakeaways,
-    // Only a bounded name survives. HPO ids and association metadata must be
-    // resolved separately through an authoritative server-owned adapter.
     phenotypes: phenotypeNames.map((name) => ({ name })),
   };
 }
@@ -440,8 +430,6 @@ export function sanitizePublicationTaskOutput(publicationTask, taskInput, result
       emptyMessage: EMPTY_LEARNING_MESSAGE,
     });
   }
-  // The route rejects unknown publication tasks before provider invocation.
-  // Keep this helper backward compatible for non-published internal callers.
   return typeof result === 'string' ? result : String(result ?? '');
 }
 
