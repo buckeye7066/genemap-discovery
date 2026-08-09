@@ -192,13 +192,19 @@ function GeneCard({ gene, rank, isSelected = false, onSelect = null }) {
           <div className="mb-4 border border-slate-200 rounded-lg p-3 bg-white" data-testid="association-claims">
             <h4 className="font-medium text-slate-900 mb-2 flex items-center gap-2 text-sm">
               <BookOpen className="w-4 h-4" />
-              Association claims (source · version · evidence class · species · retrieved)
+              Association claims (source · version · evidence class/type/strength · species · retrieved)
             </h4>
             <ul className="space-y-2">
               {claims.map((claim, idx) => (
                 <li key={`${claim.source}-${claim.recordId || idx}`} className="text-xs text-slate-700 border-b border-slate-100 pb-2 last:border-0 last:pb-0">
                   <div className="flex flex-wrap gap-1 mb-1">
                     <Badge variant="outline" className="text-[10px]">{claim.evidenceClass}</Badge>
+                    <Badge variant="outline" className="text-[10px]" title="Evidence type">
+                      {claim.evidenceType || 'type not recorded'}
+                    </Badge>
+                    <Badge variant="outline" className="text-[10px]" title="Evidence strength">
+                      {claim.evidenceStrength || 'strength not recorded'}
+                    </Badge>
                     <Badge variant="outline" className="text-[10px]">{claim.species || claim.taxon}</Badge>
                     {claim.isAiLead && <Badge className="text-[10px] bg-amber-100 text-amber-900 border-amber-200">AI lead</Badge>}
                   </div>
