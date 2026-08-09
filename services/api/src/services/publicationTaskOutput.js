@@ -88,18 +88,18 @@ function cleanText(value, maxLength) {
 }
 
 /**
- * Remove only complete, known non-clinical disclaimer phrases before policy
- * matching. The expressions intentionally stop before punctuation so text such
- * as "Do not use this output for diagnosis; take 5 mg daily" retains and rejects
- * the medication instruction instead of hiding it inside the disclaimer match.
+ * Remove only complete, known non-clinical disclaimer clauses before policy
+ * matching. Every expression requires punctuation, a line ending, or end of
+ * input after the disclaimer. A phrase cannot therefore consume the subject of
+ * following clinical guidance such as “treatment is recommended”.
  */
 function removeAllowedBoundaryDisclaimers(value) {
   return value
-    .replace(/\bnot\s+(?:a\s+)?diagnosis\b/giu, ' ')
-    .replace(/\bnot\s+medical\s+advice\b/giu, ' ')
-    .replace(/\bnot\s+(?:intended|suitable)\s+for\s+clinical\s+use\b/giu, ' ')
-    .replace(/\bdoes\s+not\s+(?:assess|predict|establish)\s+(?:personal\s+)?(?:risk|diagnosis|prognosis)\b/giu, ' ')
-    .replace(/\bdo\s+not\s+use\s+(?:it|(?:this|the)\s+(?:output|response|result|results)|these\s+results|output|response|result|results)\s+(?:medically|for\s+(?:medical\s+advice|clinical\s+use|clinical\s+decisions?|(?:diagnosis|personal(?:-|\s)risk(?:\s+prediction)?|treatment|dosing|screening)(?:\s*(?:,|and|or)\s*(?:diagnosis|personal(?:-|\s)risk(?:\s+prediction)?|treatment|dosing|screening))*(?:\s*,?\s*(?:and|or)\s+(?:other\s+)?clinical\s+decisions?)?))\b/giu, ' ');
+    .replace(/\bnot\s+(?:a\s+)?diagnosis\b(?=$|[.!?;:\n])/giu, ' ')
+    .replace(/\bnot\s+medical\s+advice\b(?=$|[.!?;:\n])/giu, ' ')
+    .replace(/\bnot\s+(?:intended|suitable)\s+for\s+clinical\s+use\b(?=$|[.!?;:\n])/giu, ' ')
+    .replace(/\bdoes\s+not\s+(?:assess|predict|establish)\s+(?:personal\s+)?(?:risk|diagnosis|prognosis)\b(?=$|[.!?;:\n])/giu, ' ')
+    .replace(/\bdo\s+not\s+use\s+(?:it|(?:this|the)\s+(?:output|response|result|results)|these\s+results|output|response|result|results)\s+(?:medically|for\s+(?:medical\s+advice|clinical\s+use|clinical\s+decisions?|(?:diagnosis|personal(?:-|\s)risk(?:\s+prediction)?|treatment|dosing|screening)(?:\s*(?:,|and|or)\s*(?:diagnosis|personal(?:-|\s)risk(?:\s+prediction)?|treatment|dosing|screening))*(?:\s*,?\s*(?:and|or)\s+(?:other\s+)?clinical\s+decisions?)?))\b(?=$|[.!?;:\n])/giu, ' ');
 }
 
 /** Return true when model prose contains clinical or personalized guidance. */
@@ -221,6 +221,14 @@ function normalizeCandidateGene(value) {
     ? value.symbol.trim().toUpperCase()
     : '';
   if (!GENE_SYMBOL.test(symbol)) return null;
+
+  // A model-controlled string can be syntactically gene-like while spelling a
+  // clinical instruction (for example STOP-DRUG or TAKE-5MG). Apply the same
+  // publication policy after converting separators and compact units to prose.
+  const symbolPolicyText = symbol
+    .replace(/-/gu, ' ')
+    .replace(/(\d)(MG|MCG|UG|ML|UNITS?)\b/gu, '$1 $2');
+  if (containsProhibitedClinicalGuidance(symbolPolicyText)) return null;
 
   const name = cleanNonClinicalText(value.name, 256);
   const explanation = cleanNonClinicalText(value.explanation, 2_000);
