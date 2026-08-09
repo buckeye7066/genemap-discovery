@@ -1,204 +1,190 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useState } from "react";
+import ReactMarkdown from "react-markdown";
 import { apiClient } from "@genemap/shared";
+import { Link, useNavigate } from "react-router-dom";
+import { useAuth } from "../lib/AuthContext";
+import { createPageUrl } from "@/utils";
+import { normalizeSearchHistoryEntry } from "../lib/searchHistory";
+import {
+  publicationHistoryReplay,
+  publicationReferenceFromHistory,
+} from "../lib/publicationConceptCatalog";
+import { log } from "../components/shared/logger";
+import { DASHBOARD_REFRESH_INTERVAL_MS } from "../components/shared/constants";
+import { safeModelMarkdownComponents } from "../components/shared/safeModelMarkdown";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Link } from "react-router-dom";
-import { createPageUrl } from "@/utils";
 import {
-  Search,
-  Upload,
-  BookOpen,
-  Dna,
-  TrendingUp,
+  Beaker,
+  BookmarkPlus,
+  ChevronRight,
   Clock,
-  Award,
-  ArrowRight,
-  BarChart3,
-  Target,
-  Activity,
-  FileText,
-  Bookmark,
-  Users,
-  Microscope,
-  Shield,
-  Zap
+  Dna,
+  Eye,
+  LayoutDashboard,
+  Plus,
+  RefreshCw,
+  Search,
+  Sparkles,
+  TrendingUp,
+  BookOpen,
 } from "lucide-react";
-import ReactMarkdown from 'react-markdown';
-import { safeModelMarkdownComponents } from '../components/shared/safeModelMarkdown';
+import OnboardingTour from "../components/dashboard/OnboardingTour";
+
+const insightMarkdownComponents = Object.freeze({
+  p: ({ children }) => <p className="mb-3">{children}</p>,
+  strong: ({ children }) => <strong className="font-semibold text-indigo-900">{children}</strong>,
+  ul: ({ children }) => <ul className="ml-5 mb-3 list-disc space-y-1">{children}</ul>,
+  ol: ({ children }) => <ol className="ml-5 mb-3 list-decimal space-y-1">{children}</ol>,
+  li: ({ children }) => <li>{children}</li>,
+  ...safeModelMarkdownComponents,
+});
 
 export default function Dashboard() {
-  const [user, setUser] = useState(null);
-  const [recentActivity, setRecentActivity] = useState([]);
-  const [bookmarks, setBookmarks] = useState([]);
-  const [studies, setStudies] = useState([]);
-  const [learningProgress, setLearningProgress] = useState([]);
-  const [stats, setStats] = useState({
-    genesExplored: 0,
-    variantsAnalyzed: 0,
-    studiesCreated: 0,
-    modulesCompleted: 0
-  });
-  const [loading, setLoading] = useState(true);
-  const [aiInsights, setAiInsights] = useState(null);
-  const [aiInsightsError, setAiInsightsError] = useState(null);
-  const [aiInsightsLoading, setAiInsightsLoading] = useState(false);
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const [activities, setActivities] = useState([]);
+  const [recentSearches, setRecentSearches] = useState([]);
+  const [projects, setProjects] = useState([]);
+  const [geneSets, setGeneSets] = useState([]);
+  const [researchSummary, setResearchSummary] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+
+  const generateResearchSummary = async (currentUser, activityRows, searchRows) => {
+    try {
+      const recentGenes = [...new Set(
+        activityRows
+          .filter((row) => row.activityType === 'gene_view')
+          .map((row) => row.entityId || row.metadata?.gene_symbol)
+          .filter(Boolean),
+      )].slice(0, 5);
+      const recentConcepts = searchRows
+        .map(normalizeSearchHistoryEntry)
+        .map(publicationReferenceFromHistory)
+        .filter(Boolean)
+        .slice(0, 3);
+      if (recentGenes.length === 0 && recentConcepts.length === 0) {
+        setResearchSummary(null);
+        return;
+      }
+
+      const allowedLevels = new Set([
+        'elementary',
+        'middle_school',
+        'high_school',
+        'undergraduate',
+        'graduate',
+        'postgraduate',
+      ]);
+      const educationLevel = allowedLevels.has(currentUser?.education_level)
+        ? currentUser.education_level
+        : 'undergraduate';
+      const response = await apiClient.invokePublicationTask(
+        'learning_activity_summary',
+        {
+          version: 1,
+          educationLevel,
+          recentGenes,
+          recentConcepts,
+        },
+      );
+      const text = typeof response?.result === 'string' ? response.result.trim() : '';
+      setResearchSummary(text || null);
+    } catch (error) {
+      log.debug('Research activity summary unavailable:', error);
+      setResearchSummary(null);
+    }
+  };
+
+  const loadDashboardData = async (autoRefresh = false, signal = null) => {
+    if (!autoRefresh) setIsLoading(true);
+    try {
+      if (signal?.aborted || !user?.email) return;
+      const [activityRows, searchRows, projectRows, setRows] = await Promise.all([
+        apiClient.getUserActivity().catch(() => []),
+        apiClient.getSearchHistory().catch(() => []),
+        apiClient.getProjects ? apiClient.getProjects().catch(() => []) : Promise.resolve([]),
+        apiClient.getGeneSets().catch(() => []),
+      ]);
+      if (signal?.aborted) return;
+
+      setActivities(activityRows);
+      setRecentSearches(searchRows);
+      setProjects(projectRows);
+      setGeneSets(setRows);
+
+      const onboardingComplete = Boolean(
+        user.demographicsCollected ?? user.demographics_collected,
+      );
+      if (
+        !onboardingComplete
+        && activityRows.length === 0
+        && searchRows.length === 0
+        && setRows.length === 0
+      ) {
+        setShowOnboarding(true);
+      }
+      await generateResearchSummary(user, activityRows, searchRows);
+    } catch (error) {
+      log.error('Error loading dashboard:', error);
+    } finally {
+      if (!signal?.aborted) {
+        setIsLoading(false);
+        setIsRefreshing(false);
+      }
+    }
+  };
 
   useEffect(() => {
-    loadDashboardData();
-  }, []);
-
-  const loadDashboardData = async () => {
-    setLoading(true);
-    try {
-      const currentUser = await apiClient.getCurrentUser();
-      setUser(currentUser);
-
-      // Load user-specific data
-      const [activities, userBookmarks, userStudies, progress] = await Promise.all([
-        apiClient.getActivities({ limit: 10 }),
-        apiClient.getBookmarks(),
-        apiClient.getStudies(),
-        apiClient.getLearningProgress()
-      ]);
-
-      setRecentActivity(activities);
-      setBookmarks(userBookmarks);
-      setStudies(userStudies);
-      setLearningProgress(progress);
-
-      // Calculate stats
-      const genesExplored = activities.filter(a => a.activity_type === 'gene_view').length;
-      const variantsAnalyzed = activities.filter(a => a.activity_type === 'variant_analysis').length;
-      const modulesCompleted = progress.filter(p => p.completed).length;
-
-      setStats({
-        genesExplored,
-        variantsAnalyzed,
-        studiesCreated: userStudies.length,
-        modulesCompleted
-      });
-
-      // Load AI insights
-      loadAIInsights(currentUser, activities, userStudies, progress);
-    } catch (error) {
-      console.error('Failed to load dashboard data:', error);
-    } finally {
-      setLoading(false);
+    if (!user?.email) {
+      setIsLoading(false);
+      return undefined;
     }
+    const controller = new AbortController();
+    void loadDashboardData(false, controller.signal);
+    const interval = setInterval(() => {
+      void loadDashboardData(true, controller.signal);
+    }, DASHBOARD_REFRESH_INTERVAL_MS);
+    return () => {
+      clearInterval(interval);
+      controller.abort();
+    };
+  }, [user?.email]);
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await loadDashboardData();
   };
 
-  const loadAIInsights = async (currentUser, activities, userStudies, progress) => {
-    if (!activities.length && !userStudies.length && !progress.length) {
-      return;
-    }
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+  const displayName = (
+    user?.fullName
+    || user?.full_name
+    || user?.displayName
+    || user?.display_name
+    || 'there'
+  ).split(' ')[0];
+  const geneViews = activities.filter((row) => row.activityType === 'gene_view');
+  const normalizedSearches = recentSearches
+    .map(normalizeSearchHistoryEntry)
+    .map((search) => ({ ...search, replay: publicationHistoryReplay(search) }))
+    .filter((search, index, rows) => (
+      index === 0
+      || (search.query || '').toLowerCase() !== (rows[index - 1].query || '').toLowerCase()
+    ));
 
-    setAiInsightsLoading(true);
-    setAiInsightsError(null);
-    try {
-      const insights = await apiClient.invokeLlm(
-        {
-          operation: 'learning_activity_summary',
-          user: {
-            fullName: currentUser.full_name,
-            role: currentUser.role,
-          },
-          activity: {
-            recentActivities: activities.slice(0, 5).map((activity) => ({
-              activityType: activity.activity_type,
-              geneSymbol: activity.gene_symbol || null,
-              createdDate: activity.created_date,
-            })),
-            studiesCreated: userStudies.length,
-            learningModulesCompleted: progress.filter((item) => item.completed).length,
-          },
-        },
-        'learning_activity_summary',
-      );
-      setAiInsights(insights);
-    } catch (error) {
-      console.error('Failed to load AI insights:', error);
-      setAiInsights(null);
-      setAiInsightsError('AI learning insights are unavailable right now.');
-    } finally {
-      setAiInsightsLoading(false);
-    }
-  };
-
-  const getActivityIcon = (type) => {
-    switch (type) {
-      case 'gene_view': return Dna;
-      case 'variant_analysis': return BarChart3;
-      case 'study_created': return Microscope;
-      case 'module_completed': return Award;
-      case 'bookmark_added': return Bookmark;
-      default: return Activity;
-    }
-  };
-
-  const getActivityColor = (type) => {
-    switch (type) {
-      case 'gene_view': return 'bg-blue-100 text-blue-600';
-      case 'variant_analysis': return 'bg-purple-100 text-purple-600';
-      case 'study_created': return 'bg-green-100 text-green-600';
-      case 'module_completed': return 'bg-yellow-100 text-yellow-600';
-      case 'bookmark_added': return 'bg-red-100 text-red-600';
-      default: return 'bg-gray-100 text-gray-600';
-    }
-  };
-
-  const calculateOverallProgress = () => {
-    if (!learningProgress.length) return 0;
-    const totalProgress = learningProgress.reduce((sum, p) => sum + (p.progress_percentage || 0), 0);
-    return Math.round(totalProgress / learningProgress.length);
-  };
-
-  const quickActions = [
-    {
-      title: "Search Genes",
-      description: "Explore gene functions and relationships",
-      icon: Search,
-      color: "bg-blue-500",
-      url: createPageUrl("GeneSearch")
-    },
-    {
-      title: "Analyze VCF",
-      description: "Upload and analyze genetic variants",
-      icon: Upload,
-      color: "bg-purple-500",
-      url: createPageUrl("VCFUpload")
-    },
-    {
-      title: "Start Learning",
-      description: "Continue your genetics education",
-      icon: BookOpen,
-      color: "bg-green-500",
-      url: createPageUrl("Learning")
-    },
-    {
-      title: "Research Mode",
-      description: "Create and manage research studies",
-      icon: Microscope,
-      color: "bg-orange-500",
-      url: createPageUrl("ResearchMode")
-    }
-  ];
-
-  if (loading) {
+  if (isLoading) {
     return (
-      <div className="p-6 bg-gradient-to-br from-slate-50 to-blue-50 min-h-screen">
-        <div className="max-w-7xl mx-auto space-y-6">
-          <Skeleton className="h-20 w-full" />
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {[...Array(4)].map((_, i) => (
-              <Skeleton key={i} className="h-32" />
-            ))}
-          </div>
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <Skeleton className="h-96 lg:col-span-2" />
-            <Skeleton className="h-96" />
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-6">
+        <div className="mx-auto max-w-7xl animate-pulse space-y-4">
+          <div className="h-32 rounded-lg bg-slate-200" />
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="h-64 rounded-lg bg-slate-200" />
+            <div className="h-64 rounded-lg bg-slate-200" />
           </div>
         </div>
       </div>
@@ -206,374 +192,268 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="p-6 bg-gradient-to-br from-slate-50 to-blue-50 min-h-screen">
-      <div className="max-w-7xl mx-auto space-y-6">
-        {/* Welcome Header */}
-        <Card className="bg-gradient-to-r from-blue-600 to-indigo-700 text-white border-0">
-          <CardContent className="p-6">
-            <div className="flex flex-col md:flex-row md:items-center justify-between">
-              <div>
-                <h1 className="text-3xl font-bold mb-2">
-                  Welcome back, {user?.full_name?.split(' ')[0] || 'Researcher'}!
-                </h1>
-                <p className="text-blue-100 text-lg">
-                  Continue your journey into the fascinating world of genetics
-                </p>
-              </div>
-              <div className="mt-4 md:mt-0 flex items-center gap-3">
-                <div className="text-right">
-                  <div className="text-2xl font-bold">{calculateOverallProgress()}%</div>
-                  <div className="text-blue-200 text-sm">Learning Progress</div>
-                </div>
-                <div className="w-16 h-16 rounded-full bg-white/20 flex items-center justify-center">
-                  <TrendingUp className="w-8 h-8" />
-                </div>
-              </div>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-4 sm:p-6">
+      <OnboardingTour onComplete={() => setShowOnboarding(false)} forceShow={showOnboarding} />
+      <div className="mx-auto max-w-7xl">
+        <div className="mb-8">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h1 className="flex items-center gap-2 text-3xl font-bold text-slate-900 md:text-4xl">
+                <LayoutDashboard className="h-8 w-8 text-blue-600" />
+                {greeting}, {displayName}
+              </h1>
+              <p className="mt-1 text-slate-600">Your genetics learning and early-research workspace</p>
             </div>
-          </CardContent>
-        </Card>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={handleRefresh} disabled={isRefreshing}>
+                <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+                Refresh
+              </Button>
+              <Button variant="outline" onClick={() => setShowOnboarding(true)}>
+                <Sparkles className="mr-2 h-4 w-4" />
+                Tour
+              </Button>
+            </div>
+          </div>
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card className="hover:shadow-lg transition-shadow">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-slate-500 text-sm font-medium">Genes Explored</p>
-                  <p className="text-3xl font-bold text-slate-900">{stats.genesExplored}</p>
-                </div>
-                <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                  <Dna className="w-6 h-6 text-blue-600" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="hover:shadow-lg transition-shadow">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-slate-500 text-sm font-medium">Variants Analyzed</p>
-                  <p className="text-3xl font-bold text-slate-900">{stats.variantsAnalyzed}</p>
-                </div>
-                <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-                  <BarChart3 className="w-6 h-6 text-purple-600" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="hover:shadow-lg transition-shadow">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-slate-500 text-sm font-medium">Research Studies</p>
-                  <p className="text-3xl font-bold text-slate-900">{stats.studiesCreated}</p>
-                </div>
-                <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-                  <Microscope className="w-6 h-6 text-green-600" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="hover:shadow-lg transition-shadow">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-slate-500 text-sm font-medium">Modules Completed</p>
-                  <p className="text-3xl font-bold text-slate-900">{stats.modulesCompleted}</p>
-                </div>
-                <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
-                  <Award className="w-6 h-6 text-yellow-600" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+            {[
+              [Eye, geneViews.length, 'Genes Viewed', 'text-blue-600', 'bg-blue-100'],
+              [Search, recentSearches.length, 'Searches', 'text-purple-600', 'bg-purple-100'],
+              [Beaker, projects.length, 'Projects', 'text-green-600', 'bg-green-100'],
+              [BookmarkPlus, geneSets.length, 'Gene Sets', 'text-amber-600', 'bg-amber-100'],
+            ].map(([Icon, count, label, textClass, backgroundClass]) => (
+              <Card key={label}>
+                <CardContent className="pt-6">
+                  <div className="flex items-center gap-3">
+                    <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${backgroundClass}`}>
+                      <Icon className={`h-5 w-5 ${textClass}`} />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold text-slate-900">{count}</p>
+                      <p className="text-xs text-slate-600">{label}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
         </div>
 
-        {/* Main Content Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Quick Actions */}
-          <Card className="lg:col-span-2">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Zap className="w-5 h-5 text-yellow-500" />
-                Quick Actions
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {quickActions.map((action, index) => (
-                  <Link key={index} to={action.url}>
-                    <div className="group p-4 border border-slate-200 rounded-lg hover:border-blue-300 hover:shadow-md transition-all cursor-pointer">
-                      <div className="flex items-start gap-4">
-                        <div className={`w-12 h-12 ${action.color} rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform`}>
-                          <action.icon className="w-6 h-6 text-white" />
-                        </div>
-                        <div className="flex-1">
-                          <h3 className="font-semibold text-slate-900 mb-1 group-hover:text-blue-600 transition-colors">
-                            {action.title}
-                          </h3>
-                          <p className="text-sm text-slate-600 mb-2">
-                            {action.description}
-                          </p>
-                          <div className="flex items-center text-blue-600 text-sm font-medium">
-                            Get Started
-                            <ArrowRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" />
+        <div className="grid gap-6 lg:grid-cols-3">
+          <div className="space-y-6 lg:col-span-2">
+            <Card className="shadow-lg">
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="flex items-center gap-2">
+                    <TrendingUp className="h-5 w-5 text-blue-600" />
+                    Recently Viewed Genes
+                  </CardTitle>
+                  <Badge variant="outline">{geneViews.length}</Badge>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {geneViews.length === 0 ? (
+                  <div className="py-8 text-center">
+                    <Eye className="mx-auto mb-3 h-12 w-12 text-slate-300" />
+                    <p className="text-sm text-slate-500">No genes viewed yet</p>
+                    <Link to={createPageUrl('Search')}>
+                      <Button variant="outline" size="sm" className="mt-3">Start Searching</Button>
+                    </Link>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {geneViews.slice(0, 5).map((activity, index) => {
+                      const symbol = activity.entityId || activity.metadata?.gene_symbol || 'Unknown';
+                      return (
+                        <Link
+                          key={activity.id || `${symbol}-${index}`}
+                          to={`${createPageUrl('Search')}?query=${encodeURIComponent(symbol)}`}
+                          className="block rounded-lg p-3 transition-colors hover:bg-slate-50"
+                        >
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="font-semibold text-slate-900">{symbol}</p>
+                              <p className="text-xs text-slate-500">
+                                <Clock className="mr-1 inline h-3 w-3" />
+                                {activity.createdAt ? new Date(activity.createdAt).toLocaleString() : 'Date unavailable'}
+                              </p>
+                            </div>
+                            <ChevronRight className="h-4 w-4 text-slate-400" />
                           </div>
-                        </div>
-                      </div>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
 
-          {/* AI Insights */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Target className="w-5 h-5 text-purple-500" />
-                AI Insights
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {aiInsightsLoading ? (
-                <div className="space-y-3">
-                  <Skeleton className="h-4 w-full" />
-                  <Skeleton className="h-4 w-3/4" />
-                  <Skeleton className="h-4 w-1/2" />
+            <Card className="shadow-lg">
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="flex items-center gap-2">
+                    <Search className="h-5 w-5 text-purple-600" />
+                    Recent Searches
+                  </CardTitle>
+                  <Link to={createPageUrl('History')}>
+                    <Button variant="ghost" size="sm">View All</Button>
+                  </Link>
                 </div>
-              ) : aiInsights ? (
-                <div className="prose prose-sm max-w-none text-slate-700">
-                  <ReactMarkdown
-                    components={{
-                      ...safeModelMarkdownComponents,
-                      p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
-                      strong: ({ children }) => <strong className="font-semibold text-slate-900">{children}</strong>,
-                      ul: ({ children }) => <ul className="list-disc pl-4 space-y-1">{children}</ul>,
-                      li: ({ children }) => <li>{children}</li>,
-                    }}
-                  >
-                    {aiInsights}
+              </CardHeader>
+              <CardContent>
+                {normalizedSearches.length === 0 ? (
+                  <div className="py-8 text-center">
+                    <Search className="mx-auto mb-3 h-12 w-12 text-slate-300" />
+                    <p className="text-sm text-slate-500">No searches yet</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {normalizedSearches.slice(0, 8).map((search, index) => (
+                      <Link
+                        key={search.id || `${search.query}-${index}`}
+                        to={`${createPageUrl('Search')}?query=${encodeURIComponent(search.replay?.query || search.query)}`}
+                        title={search.replay?.autoRun
+                          ? 'Replay from the stored structured reference; external IDs are revalidated by the server.'
+                          : 'Open this legacy query for review. It will not run automatically.'}
+                        className="block rounded-lg p-3 transition-colors hover:bg-slate-50"
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate font-medium text-slate-900">{search.query}</p>
+                            <div className="mt-1 flex flex-wrap items-center gap-2">
+                              <Badge variant="outline" className="text-xs">{search.count || 0} genes</Badge>
+                              <Badge variant="outline" className="text-xs">
+                                {search.replay?.autoRun ? 'Structured replay' : 'Prefill only'}
+                              </Badge>
+                              {search.createdAt && (
+                                <span className="text-xs text-slate-500">
+                                  {new Date(search.createdAt).toLocaleDateString()}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <ChevronRight className="h-4 w-4 shrink-0 text-slate-400" />
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {geneSets.length > 0 && (
+              <Card className="shadow-lg">
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="flex items-center gap-2">
+                      <BookmarkPlus className="h-5 w-5 text-amber-600" />
+                      Saved Gene Sets
+                    </CardTitle>
+                    <Badge variant="outline">{geneSets.length}</Badge>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {geneSets.slice(0, 6).map((set, index) => (
+                    <Link
+                      key={set.id || `${set.name}-${index}`}
+                      to={createPageUrl('Search')}
+                      className="block rounded-lg border border-slate-200 p-3 transition-colors hover:bg-slate-50"
+                    >
+                      <div className="mb-2 flex items-center justify-between gap-2">
+                        <p className="font-semibold text-slate-900">{set.name}</p>
+                        <Badge variant="secondary" className="text-xs">{set.genes?.length || 0} genes</Badge>
+                      </div>
+                      {set.description && <p className="text-xs text-slate-600">{set.description}</p>}
+                    </Link>
+                  ))}
+                </CardContent>
+              </Card>
+            )}
+          </div>
+
+          <div className="space-y-6">
+            <Card className="shadow-lg">
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="flex items-center gap-2">
+                    <Beaker className="h-5 w-5 text-green-600" />
+                    Research Projects
+                  </CardTitle>
+                  <Button variant="ghost" size="sm" onClick={() => navigate(createPageUrl('ResearchMode'))}>
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {projects.length === 0 ? (
+                  <div className="py-8 text-center">
+                    <Beaker className="mx-auto mb-3 h-12 w-12 text-slate-300" />
+                    <p className="mb-3 text-sm text-slate-500">No projects yet</p>
+                    <Button size="sm" variant="outline" onClick={() => navigate(createPageUrl('ResearchMode'))}>
+                      <Plus className="mr-2 h-4 w-4" />
+                      Open Research Mode
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {projects.slice(0, 5).map((project, index) => (
+                      <div key={project.id || `${project.name}-${index}`} className="rounded-lg border border-slate-200 p-3">
+                        <p className="font-semibold text-slate-900">{project.name || project.title}</p>
+                        {project.status && <Badge variant="outline" className="mt-2 text-xs">{project.status}</Badge>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {researchSummary && (
+              <Card className="border-indigo-200 bg-gradient-to-br from-indigo-50 to-purple-50 shadow-lg">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Dna className="h-5 w-5 text-indigo-600" />
+                    Research Activity Summary
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="text-sm leading-relaxed text-slate-800">
+                  <ReactMarkdown components={insightMarkdownComponents}>
+                    {researchSummary}
                   </ReactMarkdown>
-                </div>
-              ) : aiInsightsError ? (
-                <p className="text-sm text-slate-500">{aiInsightsError}</p>
-              ) : (
-                <div className="text-center py-4">
-                  <Target className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-                  <p className="text-sm text-slate-500">
-                    Start exploring genes and completing modules to receive personalized insights.
-                  </p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                </CardContent>
+              </Card>
+            )}
+
+            <Card className="border-blue-200 bg-gradient-to-br from-blue-50 to-indigo-50 shadow-lg">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-sm">
+                  <Sparkles className="h-4 w-4 text-blue-600" />
+                  Continue
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <Link to={createPageUrl('TopicExplorer')}>
+                  <Button variant="outline" size="sm" className="w-full justify-start gap-2">
+                    <BookOpen className="h-3 w-3" />
+                    Continue Learning
+                  </Button>
+                </Link>
+                <Link to={createPageUrl('Search')}>
+                  <Button variant="outline" size="sm" className="w-full justify-start gap-2">
+                    <Search className="h-3 w-3" />
+                    Search Candidate Genes
+                  </Button>
+                </Link>
+                <Link to={createPageUrl('ResearchMode')}>
+                  <Button variant="outline" size="sm" className="w-full justify-start gap-2">
+                    <Beaker className="h-3 w-3" />
+                    Guided Research Mode
+                  </Button>
+                </Link>
+              </CardContent>
+            </Card>
+          </div>
         </div>
-
-        {/* Activity and Progress Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Recent Activity */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Clock className="w-5 h-5 text-blue-500" />
-                Recent Activity
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {recentActivity.length > 0 ? (
-                <div className="space-y-4">
-                  {recentActivity.slice(0, 6).map((activity, index) => {
-                    const ActivityIcon = getActivityIcon(activity.activity_type);
-                    return (
-                      <div key={index} className="flex items-center gap-3 p-3 rounded-lg hover:bg-slate-50 transition-colors">
-                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${getActivityColor(activity.activity_type)}`}>
-                          <ActivityIcon className="w-5 h-5" />
-                        </div>
-                        <div className="flex-1">
-                          <p className="font-medium text-slate-900">
-                            {activity.description || activity.activity_type.replace('_', ' ')}
-                          </p>
-                          <p className="text-sm text-slate-500">
-                            {new Date(activity.created_date).toLocaleDateString()}
-                          </p>
-                        </div>
-                        {activity.gene_symbol && (
-                          <Badge variant="outline">{activity.gene_symbol}</Badge>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="text-center py-8">
-                  <Activity className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-                  <p className="text-slate-500">No recent activity</p>
-                  <p className="text-sm text-slate-400">Start exploring to see your activity here</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Learning Progress */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <BookOpen className="w-5 h-5 text-green-500" />
-                Learning Progress
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {learningProgress.length > 0 ? (
-                <div className="space-y-4">
-                  {learningProgress.slice(0, 5).map((progress, index) => (
-                    <div key={index} className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="font-medium text-slate-900">{progress.module_name}</p>
-                          <p className="text-sm text-slate-500">
-                            {progress.completed ? 'Completed' : 'In Progress'}
-                          </p>
-                        </div>
-                        <Badge variant={progress.completed ? "default" : "secondary"}>
-                          {progress.progress_percentage || 0}%
-                        </Badge>
-                      </div>
-                      <Progress value={progress.progress_percentage || 0} className="h-2" />
-                    </div>
-                  ))}
-                  <Link to={createPageUrl("Learning")}>
-                    <Button variant="outline" className="w-full mt-4">
-                      Continue Learning
-                      <ArrowRight className="w-4 h-4 ml-2" />
-                    </Button>
-                  </Link>
-                </div>
-              ) : (
-                <div className="text-center py-8">
-                  <BookOpen className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-                  <p className="text-slate-500 mb-3">Ready to start learning?</p>
-                  <Link to={createPageUrl("Learning")}>
-                    <Button>
-                      Browse Modules
-                      <ArrowRight className="w-4 h-4 ml-2" />
-                    </Button>
-                  </Link>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Bookmarks and Studies */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Recent Bookmarks */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Bookmark className="w-5 h-5 text-red-500" />
-                  Recent Bookmarks
-                </div>
-                <Badge variant="secondary">{bookmarks.length}</Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {bookmarks.length > 0 ? (
-                <div className="space-y-3">
-                  {bookmarks.slice(0, 4).map((bookmark, index) => (
-                    <div key={index} className="flex items-center gap-3 p-3 border border-slate-200 rounded-lg">
-                      <div className="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center">
-                        <Bookmark className="w-5 h-5 text-red-600" />
-                      </div>
-                      <div className="flex-1">
-                        <p className="font-medium text-slate-900">{bookmark.title}</p>
-                        <p className="text-sm text-slate-500">{bookmark.bookmark_type}</p>
-                      </div>
-                    </div>
-                  ))}
-                  <Link to={createPageUrl("Bookmarks")}>
-                    <Button variant="ghost" className="w-full">
-                      View All Bookmarks
-                      <ArrowRight className="w-4 h-4 ml-2" />
-                    </Button>
-                  </Link>
-                </div>
-              ) : (
-                <div className="text-center py-6">
-                  <Bookmark className="w-10 h-10 text-slate-300 mx-auto mb-2" />
-                  <p className="text-sm text-slate-500">No bookmarks yet</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Research Studies */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Microscope className="w-5 h-5 text-green-500" />
-                  Research Studies
-                </div>
-                <Badge variant="secondary">{studies.length}</Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {studies.length > 0 ? (
-                <div className="space-y-3">
-                  {studies.slice(0, 4).map((study, index) => (
-                    <div key={index} className="flex items-center gap-3 p-3 border border-slate-200 rounded-lg">
-                      <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                        <FileText className="w-5 h-5 text-green-600" />
-                      </div>
-                      <div className="flex-1">
-                        <p className="font-medium text-slate-900">{study.title}</p>
-                        <div className="flex items-center gap-2 mt-1">
-                          <Badge variant="outline" className="text-xs">{study.study_type}</Badge>
-                          <span className="text-xs text-slate-500">{study.status}</span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                  <Link to={createPageUrl("ResearchMode")}>
-                    <Button variant="ghost" className="w-full">
-                      View All Studies
-                      <ArrowRight className="w-4 h-4 ml-2" />
-                    </Button>
-                  </Link>
-                </div>
-              ) : (
-                <div className="text-center py-6">
-                  <Microscope className="w-10 h-10 text-slate-300 mx-auto mb-2" />
-                  <p className="text-sm text-slate-500 mb-3">No research studies yet</p>
-                  <Link to={createPageUrl("ResearchMode")}>
-                    <Button size="sm">Create Study</Button>
-                  </Link>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Privacy Notice */}
-        <Card className="border-green-200 bg-green-50">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <Shield className="w-5 h-5 text-green-600" />
-              <div className="flex-1">
-                <p className="text-sm font-medium text-green-800">Your Privacy Matters</p>
-                <p className="text-xs text-green-700">
-                  Your data is encrypted and never shared. You have full control over your genetic information.
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
       </div>
     </div>
   );
