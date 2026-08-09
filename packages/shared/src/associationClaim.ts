@@ -51,6 +51,22 @@ export function isoRetrievalDate(date = new Date()): string {
   return date.toISOString().slice(0, 10);
 }
 
+/**
+ * Association links are rendered by both React and printable HTML surfaces.
+ * Keep only absolute HTTP(S) URLs at the shared contract boundary so every
+ * downstream consumer receives the same safe, canonical value.
+ */
+export function safeExternalHttpUrl(value: string | null | undefined): string | null {
+  if (typeof value !== 'string' || !value.trim()) return null;
+  try {
+    const url = new URL(value.trim());
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') return null;
+    return url.href;
+  } catch {
+    return null;
+  }
+}
+
 export function createAssociationClaim(
   partial: Omit<AssociationClaim, 'species' | 'isAiLead' | 'retrievalDate'> & {
     species?: string;
@@ -70,7 +86,7 @@ export function createAssociationClaim(
     evidenceStrength: partial.evidenceStrength,
     releaseVersion: partial.releaseVersion ?? null,
     retrievalDate: partial.retrievalDate || isoRetrievalDate(),
-    directLink: partial.directLink ?? null,
+    directLink: safeExternalHttpUrl(partial.directLink),
     isAiLead: partial.isAiLead ?? evidenceClass === 'ai_lead',
   };
 }
