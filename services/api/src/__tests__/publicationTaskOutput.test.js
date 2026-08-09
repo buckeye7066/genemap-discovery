@@ -5,9 +5,36 @@ import {
 } from '../services/publicationTaskOutput.js';
 
 const TASK = 'candidate_gene_research';
+const DISEASE_QUERY = {
+  kind: 'curated_concept',
+  conceptId: 'disease:cystic-fibrosis',
+  canonicalLabel: 'Cystic Fibrosis',
+  conceptKind: 'disease',
+  source: 'genemap_curated',
+  version: 1,
+};
+const PHENOTYPE_QUERY = {
+  kind: 'curated_concept',
+  conceptId: 'phenotype:seizures',
+  canonicalLabel: 'seizures',
+  conceptKind: 'phenotype',
+  source: 'genemap_curated',
+  version: 1,
+};
+const HPO_QUERY = {
+  kind: 'hpo',
+  identifier: 'HP:0001250',
+  canonicalLabel: 'Seizure',
+  source: 'NLM Clinical Tables HPO',
+  apiVersion: 'v3',
+  obsolete: false,
+};
 
-function sanitize(operation, result) {
-  return JSON.parse(sanitizePublicationTaskOutput(TASK, { operation }, result));
+function sanitize(operation, result, query = DISEASE_QUERY) {
+  const taskInput = operation === 'gene_profile'
+    ? { operation }
+    : { operation, query };
+  return JSON.parse(sanitizePublicationTaskOutput(TASK, taskInput, result));
 }
 
 describe('sanitizePublicationTaskOutput', () => {
@@ -32,10 +59,11 @@ describe('sanitizePublicationTaskOutput', () => {
       Here is the requested JSON:
       \`\`\`json
       ${JSON.stringify({
-        queryType: 'disease',
-        isDisease: true,
-        diseaseName: ' Cystic\nFibrosis ',
-        isHPOTerm: false,
+        // Contradictory model classification must not override the trusted query.
+        queryType: 'phenotype',
+        isDisease: false,
+        diseaseName: 'Invented model label',
+        isHPOTerm: true,
         mainFeatures: ['lung disease', 'lung disease', { unsafe: true }, 'sweat chloride'],
         synonyms: ['CF', 'CF', '\u0000'],
         inheritancePattern: ' autosomal\nrecessive ',
@@ -47,6 +75,7 @@ describe('sanitizePublicationTaskOutput', () => {
 
     expect(result.queryType).toBe('disease');
     expect(result.isDisease).toBe(true);
+    expect(result.isHPOTerm).toBe(false);
     expect(result.diseaseName).toBe('Cystic Fibrosis');
     expect(result.mainFeatures).toEqual(['lung disease', 'sweat chloride']);
     expect(result.synonyms).toEqual(['CF']);
@@ -71,6 +100,38 @@ describe('sanitizePublicationTaskOutput', () => {
     }
   });
 
+  it('derives classification from trusted curated and ontology references', () => {
+    const phenotype = sanitize('classify', {
+      queryType: 'disease',
+      isDisease: true,
+      diseaseName: 'Wrong model label',
+      isHPOTerm: true,
+    }, PHENOTYPE_QUERY);
+    expect(phenotype).toEqual({
+      queryType: 'phenotype',
+      isDisease: false,
+      isHPOTerm: false,
+      mainFeatures: [],
+      synonyms: [],
+      hpoTerms: [],
+    });
+
+    const hpo = sanitize('classify', {
+      queryType: 'disease',
+      isDisease: true,
+      diseaseName: 'Wrong model label',
+      isHPOTerm: false,
+    }, HPO_QUERY);
+    expect(hpo).toEqual({
+      queryType: 'hpo_term',
+      isDisease: false,
+      isHPOTerm: true,
+      mainFeatures: [],
+      synonyms: [],
+      hpoTerms: [],
+    });
+  });
+
   it('accepts an array for suggest_candidates and fails closed on malformed output', () => {
     expect(sanitize('suggest_candidates', [
       { symbol: 'runx1' },
@@ -79,7 +140,7 @@ describe('sanitizePublicationTaskOutput', () => {
     ])).toEqual({ candidateGenes: [{ symbol: 'RUNX1' }] });
 
     expect(sanitize('suggest_candidates', 'not json at all')).toEqual({ candidateGenes: [] });
-    expect(sanitize('classify_and_suggest', '{broken')).toEqual({
+    expect(sanitize('classify_and_suggest', '{broken', PHENOTYPE_QUERY)).toEqual({
       queryType: 'phenotype',
       isDisease: false,
       isHPOTerm: false,
@@ -120,7 +181,7 @@ describe('sanitizePublicationTaskOutput', () => {
 
   it('returns a stable empty profile for invalid model output', () => {
     expect(sanitize('gene_profile', null)).toEqual({ keyTakeaways: [], phenotypes: [] });
-    expect(sanitize('classify', [])).toEqual({
+    expect(sanitize('classify', [], PHENOTYPE_QUERY)).toEqual({
       queryType: 'phenotype',
       isDisease: false,
       isHPOTerm: false,
