@@ -7,6 +7,7 @@ import LevelPicker from '@/components/education/LevelPicker';
 import UsageBanner from '@/components/education/UsageBanner';
 import MedicalDisclaimer from '@/components/shared/MedicalDisclaimer';
 import SourceList from '@/components/shared/SourceList';
+import { safeModelMarkdownComponents } from '@/components/shared/safeModelMarkdown';
 import { apiClient } from '@genemap/shared';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -21,7 +22,8 @@ import ReactMarkdown from 'react-markdown';
  * main thread; rendering every message's markdown on each parent re-render
  * (e.g. on every keystroke in the chat input) blocked the thread and caused the
  * renderer timeouts. Memoizing on `msg` means a bubble only re-parses when its
- * own content changes.
+ * own content changes. Generated links and images remain inert even if an
+ * upstream sanitizer regresses.
  */
 const ChatBubble = React.memo(function ChatBubble({ msg }) {
   return (
@@ -33,7 +35,7 @@ const ChatBubble = React.memo(function ChatBubble({ msg }) {
       }`}>
         {msg.role === 'assistant' ? (
           <div className="prose prose-sm max-w-none prose-p:my-1 prose-li:my-0">
-            <ReactMarkdown>{msg.content}</ReactMarkdown>
+            <ReactMarkdown components={safeModelMarkdownComponents}>{msg.content}</ReactMarkdown>
           </div>
         ) : (
           msg.content
@@ -138,10 +140,6 @@ export default function TopicExplorer() {
   const [chatMessages, setChatMessages] = useState([]);
   const [loading, setLoading] = useState({ explanation: false, image: false, chat: false });
 
-  // Reset per-topic state whenever the topic changes. Without this, switching
-  // topics (or returning to /topicexplorer with no topic) left the previous
-  // topic's explanation, generated image, and chat transcript on screen because
-  // the component never unmounts across query-param changes.
   useEffect(() => {
     setImageData(null);
     setChatMessages([]);
@@ -150,17 +148,11 @@ export default function TopicExplorer() {
   }, [topicId]);
 
   useEffect(() => {
-    // Load as soon as we have a topic. The level only tunes the prompt persona
-    // and defaults server-side, so we no longer block the explanation on the
-    // user having explicitly picked a level (which left the tab blank).
     if (topicTitle) {
       loadExplanation();
     }
-
   }, [topicTitle, level]);
 
-  // No topic selected (e.g. the sidebar "Topic Explorer" link) → show a clean
-  // topic browser instead of whatever topic was last open.
   if (!topicId) {
     return <TopicBrowser navigate={navigate} levelConfig={levelConfig} />;
   }
@@ -184,8 +176,6 @@ export default function TopicExplorer() {
   };
 
   const loadImage = async () => {
-    // The API rejects an empty topic with a 400 ("Validation failed"). Guard it
-    // here so the user gets actionable guidance instead of a cryptic error.
     if (!topicTitle) {
       setImageData({ error: 'Pick a topic from Learn Genetics first, then generate an illustration.' });
       return;
