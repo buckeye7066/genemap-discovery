@@ -78,6 +78,7 @@ describe('GeneCard claim-level provenance', () => {
     expect(row.getByText('gene_identity')).toBeInTheDocument();
     expect(row.getByText('supporting')).toBeInTheDocument();
     expect(row.getByText('Homo sapiens')).toBeInTheDocument();
+    expect(row.getByText('taxon 9606')).toBeInTheDocument();
     expect(row.getByText('ClinGen', { selector: 'span' })).toBeInTheDocument();
     expect(row.getByText(/RUNX1-001/)).toBeInTheDocument();
     expect(row.getByText(/GRCh38 \/ ClinGen 2026-08/)).toBeInTheDocument();
