@@ -84,12 +84,12 @@ describe('GeneCard claim-level provenance', () => {
     expect(identity.getByText('supporting')).toBeInTheDocument();
     expect(identity.getByText('Homo sapiens')).toBeInTheDocument();
     expect(identity.getByText('taxon 9606')).toBeInTheDocument();
-    expect(identity.getByText(/Source: ClinGen/)).toBeInTheDocument();
-    expect(identity.getByText(/Record ID: RUNX1-001/)).toBeInTheDocument();
-    expect(identity.getByText(/Source release\/version: Not recorded/)).toBeInTheDocument();
-    expect(identity.getByText(/Reference assembly: GRCh38/)).toBeInTheDocument();
-    expect(identity.getByText(/Retrieved: 2026-08-09/)).toBeInTheDocument();
-    expect(identity.getByText(/AI lead: false/)).toBeInTheDocument();
+    expect(identityRow).toHaveTextContent('Source: ClinGen');
+    expect(identityRow).toHaveTextContent('Record ID: RUNX1-001');
+    expect(identityRow).toHaveTextContent('Source release/version: Not recorded');
+    expect(identityRow).toHaveTextContent('Reference assembly: GRCh38');
+    expect(identityRow).toHaveTextContent('Retrieved: 2026-08-09');
+    expect(identityRow).toHaveTextContent('AI lead: false');
 
     const sourceLink = identity.getByRole('link', { name: /open source record/i });
     expect(sourceLink).toHaveAttribute('href', identityClaim.directLink);
@@ -99,8 +99,8 @@ describe('GeneCard claim-level provenance', () => {
     const aiRow = aiText.closest('li');
     const ai = within(aiRow);
     expect(ai.getByText('AI candidate lead')).toBeInTheDocument();
-    expect(ai.getByText(/AI lead: true/)).toBeInTheDocument();
-    expect(ai.getByText(/No validated HTTP\(S\) source link recorded/)).toBeInTheDocument();
+    expect(aiRow).toHaveTextContent('AI lead: true');
+    expect(aiRow).toHaveTextContent('No validated HTTP(S) source link recorded');
 
     await waitFor(() => expect(apiClient.logActivity).toHaveBeenCalledWith(
       expect.objectContaining({
