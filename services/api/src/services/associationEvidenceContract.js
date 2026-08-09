@@ -53,10 +53,16 @@ function safeUrl(value) {
   }
 }
 
+function validDateOnly(value) {
+  if (!DATE_ONLY.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+}
+
 function safeDate(value) {
   const date = cleanText(value, 32);
   if (!date) return null;
-  if (DATE_ONLY.test(date)) return date;
+  if (validDateOnly(date)) return date;
   if (ISO_DATE_TIME.test(date) && Number.isFinite(Date.parse(date))) return date.slice(0, 10);
   return null;
 }
@@ -64,6 +70,16 @@ function safeDate(value) {
 function safeDateTime(value) {
   const date = cleanText(value, 64);
   return date && ISO_DATE_TIME.test(date) && Number.isFinite(Date.parse(date)) ? date : null;
+}
+
+/**
+ * Monarch KG releases are date strings. API package/build versions such as
+ * `0.1.0` are not dataset release provenance and must remain unrecorded rather
+ * than being displayed as though they identify the underlying knowledge graph.
+ */
+function safeReleaseVersion(value) {
+  const release = cleanText(value, 32);
+  return release && validDateOnly(release) ? release : null;
 }
 
 function cleanSymbol(value) {
@@ -108,7 +124,7 @@ function sanitizeClaim(value) {
     evidenceClass,
     evidenceType,
     evidenceStrength: safeEvidenceStrength(value.evidenceStrength),
-    releaseVersion: cleanText(value.releaseVersion, 128),
+    releaseVersion: safeReleaseVersion(value.releaseVersion),
     referenceAssembly: null,
     retrievalDate: safeDate(value.retrievalDate),
     directLink: safeUrl(value.directLink),
@@ -133,7 +149,7 @@ function sanitizeQuery(value) {
     canonicalLabel: cleanText(value.canonicalLabel, 256) || identifier,
     source: cleanText(value.source, 256) || null,
     apiVersion: cleanText(value.apiVersion, 64) || null,
-    ontologyVersion: cleanText(value.ontologyVersion, 128) || null,
+    ontologyVersion: safeReleaseVersion(value.ontologyVersion),
     obsolete: value.obsolete === true,
     curatedConceptId: cleanText(value.curatedConceptId, 128) || null,
   };
@@ -143,7 +159,7 @@ function sanitizeSource(value, fallbackApiVersion) {
   const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
   return {
     apiVersion: cleanText(source.apiVersion, 64) || fallbackApiVersion,
-    releaseVersion: cleanText(source.releaseVersion, 128),
+    releaseVersion: safeReleaseVersion(source.releaseVersion),
   };
 }
 
@@ -253,6 +269,7 @@ export const __test = {
   safeDate,
   safeDateTime,
   safeEvidenceStrength,
+  safeReleaseVersion,
   safeTaxon,
   safeUrl,
   sanitizeClaim,
