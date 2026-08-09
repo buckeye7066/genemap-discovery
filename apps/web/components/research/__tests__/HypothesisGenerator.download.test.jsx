@@ -54,7 +54,7 @@ describe('HypothesisGenerator downloadable artifact', () => {
     expect(capturedBlob).toBeInstanceOf(Blob);
     const markdown = await readBlobAsText(capturedBlob);
     expect(markdown).toContain('Control group present: No');
-    expect(markdown).toContain('Focus: Early-onset symptoms (phenotype; phenotype:early-onset-symptoms; genemap_curated@1)');
+    expect(markdown).toContain('Focus: early-onset symptoms (phenotype; phenotype:early-onset-symptoms; genemap_curated@1)');
     expect(markdown).toContain('Objective: identify_variants');
     expect(markdown).toContain('Modalities: wes, phenotype');
     expect(markdown).toContain('## Bounded result');
