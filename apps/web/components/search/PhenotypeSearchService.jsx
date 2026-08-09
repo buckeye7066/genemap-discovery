@@ -1,669 +1,573 @@
-import { apiClient } from '@genemap/shared';
+import { apiClient } from "@genemap/shared";
+// Import provenance helpers by source path. The browser alias maps
+// `@genemap/shared` to the HTTP client rather than the package barrel.
 import {
   aiLeadClaim,
-  deriveRankingBasisFromClaims,
+  externalFollowupClaim,
   humanGeneIdentityClaim,
   hpoPhenotypeClaim,
-  externalFollowupClaim,
+  deriveRankingBasisFromClaims,
   partitionClaimsBySpecies,
   rankGenesByProvenance,
   stripLlmSelfScores,
-} from '../../../../packages/shared/src/associationClaim.ts';
+} from "../../../../packages/shared/src/associationClaim.ts";
+import { log } from "../shared/logger";
+import { getErrorMessage } from "../shared/errorUtils";
+import { GENE_ENRICHMENT_CONCURRENCY } from "../shared/constants";
+import { parseLLMJson } from "../shared/llmJson";
+import { resolvePublicationSearchReference } from "@/lib/publicationConceptCatalog";
 
-/**
- * PhenotypeSearchService
- *
- * Two-mode architecture:
- *   - basic:    Educator-friendly keyword search using a curated, deterministic
- *               phenotype/disease dataset. No LLM required; always available.
- *   - advanced: LLM-assisted candidate-gene research flow for researchers. It
- *               still relies on server-owned publication tasks, strips model
- *               self-scores, enriches identifiers through authoritative
- *               adapters, and clearly labels AI candidate output.
- *
- * This module is intentionally free of React dependencies so both modes can be
- * tested as plain functions.
- */
+const UNAVAILABLE_PROFILE_SUMMARY = 'Generated profile unavailable. This gene remains an unverified AI-suggested candidate lead; verify relevance in cited authoritative sources.';
 
-const CURATED_CONCEPTS = [
-  {
-    conceptId: 'phenotype:seizures',
-    conceptKind: 'phenotype',
-    label: 'Seizures',
-    synonyms: ['seizure', 'epilepsy', 'convulsions', 'fits'],
-    description: 'Episodes of abnormal electrical activity in the brain. The listed genes are educational starting points, not a diagnostic panel.',
-    genes: [
-      { symbol: 'SCN1A', name: 'Sodium voltage-gated channel alpha subunit 1', explanation: 'Well-established epilepsy research gene.' },
-      { symbol: 'KCNQ2', name: 'Potassium voltage-gated channel subfamily Q member 2', explanation: 'Frequently studied in neonatal seizure disorders.' },
-      { symbol: 'STXBP1', name: 'Syntaxin binding protein 1', explanation: 'Studied in developmental and epileptic encephalopathies.' },
-    ],
-    sources: ['MedlinePlus Genetics', 'NCBI Gene', 'Human Phenotype Ontology'],
-  },
-  {
-    conceptId: 'phenotype:developmental-delay',
-    conceptKind: 'phenotype',
-    label: 'Developmental Delay',
-    synonyms: ['developmental delay', 'delayed development', 'global developmental delay', 'learning delay'],
-    description: 'A broad educational phenotype involving delayed acquisition of developmental milestones.',
-    genes: [
-      { symbol: 'MECP2', name: 'Methyl-CpG binding protein 2', explanation: 'Widely studied in neurodevelopmental research.' },
-      { symbol: 'DDX3X', name: 'DEAD-box helicase 3 X-linked', explanation: 'Associated with neurodevelopmental research cohorts.' },
-      { symbol: 'ARID1B', name: 'AT-rich interaction domain 1B', explanation: 'Studied in syndromic developmental delay.' },
-    ],
-    sources: ['MedlinePlus Genetics', 'NCBI Gene', 'Human Phenotype Ontology'],
-  },
-  {
-    conceptId: 'phenotype:ataxia',
-    conceptKind: 'phenotype',
-    label: 'Ataxia',
-    synonyms: ['ataxia', 'poor coordination', 'unsteady gait', 'balance problems'],
-    description: 'A phenotype involving impaired balance or coordination. Many acquired and genetic causes exist.',
-    genes: [
-      { symbol: 'ATXN1', name: 'Ataxin 1', explanation: 'Classic spinocerebellar ataxia research gene.' },
-      { symbol: 'CACNA1A', name: 'Calcium voltage-gated channel subunit alpha1 A', explanation: 'Studied across episodic and progressive ataxia phenotypes.' },
-      { symbol: 'FXN', name: 'Frataxin', explanation: 'Well-established in Friedreich ataxia research.' },
-    ],
-    sources: ['MedlinePlus Genetics', 'NCBI Gene', 'Human Phenotype Ontology'],
-  },
-  {
-    conceptId: 'phenotype:hearing-loss',
-    conceptKind: 'phenotype',
-    label: 'Hearing Loss',
-    synonyms: ['hearing loss', 'deafness', 'hard of hearing', 'auditory impairment'],
-    description: 'Reduced hearing ability. Environmental, age-related, infectious, medication-related, and genetic causes can all contribute.',
-    genes: [
-      { symbol: 'GJB2', name: 'Gap junction protein beta 2', explanation: 'Commonly studied in nonsyndromic hearing-loss genetics.' },
-      { symbol: 'SLC26A4', name: 'Solute carrier family 26 member 4', explanation: 'Studied in Pendred syndrome and enlarged vestibular aqueduct.' },
-      { symbol: 'OTOF', name: 'Otoferlin', explanation: 'Associated with auditory neuropathy research.' },
-    ],
-    sources: ['MedlinePlus Genetics', 'NCBI Gene', 'Human Phenotype Ontology'],
-  },
-  {
-    conceptId: 'disease:cystic-fibrosis',
-    conceptKind: 'disease',
-    label: 'Cystic Fibrosis',
-    synonyms: ['cystic fibrosis', 'cf', 'mucoviscidosis'],
-    description: 'An inherited disorder affecting mucus-producing organs. The basic result highlights the principal gene for educational study.',
-    genes: [
-      { symbol: 'CFTR', name: 'CF transmembrane conductance regulator', explanation: 'The established causal gene for cystic fibrosis.' },
-    ],
-    sources: ['MedlinePlus Genetics', 'NCBI Gene'],
-  },
-  {
-    conceptId: 'disease:sickle-cell',
-    conceptKind: 'disease',
-    label: 'Sickle Cell Disease',
-    synonyms: ['sickle cell disease', 'sickle cell anemia', 'sickle-cell', 'sickle cell'],
-    description: 'A group of inherited red-blood-cell disorders involving hemoglobin S.',
-    genes: [
-      { symbol: 'HBB', name: 'Hemoglobin subunit beta', explanation: 'The principal gene involved in sickle cell disease.' },
-    ],
-    sources: ['MedlinePlus Genetics', 'NCBI Gene'],
-  },
-  {
-    conceptId: 'disease:familial-hypercholesterolemia',
-    conceptKind: 'disease',
-    label: 'Familial Hypercholesterolemia',
-    synonyms: ['familial hypercholesterolemia', 'fh', 'inherited high cholesterol'],
-    description: 'An inherited disorder characterized by very high LDL cholesterol from early life.',
-    genes: [
-      { symbol: 'LDLR', name: 'Low density lipoprotein receptor', explanation: 'The most common established gene in familial hypercholesterolemia.' },
-      { symbol: 'APOB', name: 'Apolipoprotein B', explanation: 'An established FH-associated gene.' },
-      { symbol: 'PCSK9', name: 'Proprotein convertase subtilisin/kexin type 9', explanation: 'Gain-of-function variants are an established FH mechanism.' },
-    ],
-    sources: ['MedlinePlus Genetics', 'NCBI Gene'],
-  },
-  {
-    conceptId: 'phenotype:cardiomyopathy',
-    conceptKind: 'phenotype',
-    label: 'Cardiomyopathy',
-    synonyms: ['cardiomyopathy', 'heart muscle disease', 'hypertrophic cardiomyopathy', 'dilated cardiomyopathy'],
-    description: 'A broad group of disorders affecting heart muscle. Clinical diagnosis requires cardiac evaluation; this is an educational gene overview.',
-    genes: [
-      { symbol: 'MYH7', name: 'Myosin heavy chain 7', explanation: 'Frequently studied in inherited cardiomyopathy.' },
-      { symbol: 'MYBPC3', name: 'Myosin binding protein C3', explanation: 'A major hypertrophic-cardiomyopathy research gene.' },
-      { symbol: 'TTN', name: 'Titin', explanation: 'Widely studied in dilated cardiomyopathy.' },
-    ],
-    sources: ['MedlinePlus Genetics', 'NCBI Gene'],
-  },
-];
-
-const RESEARCH_BOUNDARY = 'Research candidates only — not diagnosis, personal risk prediction, treatment, or medical advice.';
-const PROFILE_UNAVAILABLE = 'Generated profile unavailable. This gene remains an unverified AI-suggested candidate lead; verify relevance in cited authoritative sources.';
-const MODEL_SUGGESTION_SOURCE = 'AI-generated candidate lead';
-const VERIFIED_METADATA_SOURCE = 'MyGene.info (Ensembl/NCBI)';
-const HPO_VALIDATED_SOURCE = 'Human Phenotype Ontology';
-const DEFAULT_BASIC_LIMIT = 8;
-const DEFAULT_ADVANCED_LIMIT = 15;
-
-function normalizeSearchTerm(value) {
-  return String(value || '')
-    .trim()
-    .toLowerCase()
-    .replace(/[_-]+/g, ' ')
-    .replace(/\s+/g, ' ');
-}
-
-function uniqueStrings(values) {
-  return [...new Set((values || []).filter(Boolean))];
-}
-
-function matchCuratedConcepts(query) {
-  const normalized = normalizeSearchTerm(query);
-  if (!normalized) return [];
-
-  return CURATED_CONCEPTS.map((concept) => {
-    const candidates = [concept.label, ...concept.synonyms].map(normalizeSearchTerm);
-    const exact = candidates.some((value) => value === normalized);
-    const partial = candidates.some((value) => value.includes(normalized) || normalized.includes(value));
-    const tokenMatches = normalized.split(' ').filter((token) =>
-      candidates.some((value) => value.includes(token))
-    ).length;
-    return {
-      concept,
-      score: exact ? 100 : partial ? 50 : tokenMatches,
-    };
-  })
-    .filter((entry) => entry.score > 0)
-    .sort((a, b) => b.score - a.score);
-}
-
-async function safeEnrich(symbols, phenotypes = []) {
-  if ((!symbols || symbols.length === 0) && (!phenotypes || phenotypes.length === 0)) {
-    return { genes: {}, phenotypes: {}, adapterRetrievedAt: null };
-  }
-  try {
-    return await apiClient.enrichGenomicData({ symbols, phenotypes });
-  } catch (error) {
-    console.warn('Authoritative enrichment unavailable:', error);
-    return { genes: {}, phenotypes: {}, adapterRetrievedAt: null };
-  }
-}
-
-function applyAuthoritativeData(gene, record) {
-  const rec = record && record.verified ? record : null;
-  if (!rec) {
-    return {
-      ...gene,
-      coordinatesVerified: false,
-      verificationStatus: 'unresolved',
-      verificationSource: null,
-      authoritativeRetrievedAt: null,
-      chromosome: null,
-      start: null,
-      end: null,
-      strand: null,
-      ensemblId: null,
-      entrezId: null,
-      mapLocation: null,
-      genomeBuild: null,
-    };
-  }
-
-  return {
-    ...gene,
-    symbol: rec.symbol || gene.symbol,
-    name: rec.name || gene.name,
-    description: rec.summary || gene.description,
-    chromosome: rec.chromosome || null,
-    start: rec.start ?? null,
-    end: rec.end ?? null,
-    strand: rec.strand ?? null,
-    ensemblId: rec.ensemblId || null,
-    entrezId: rec.entrezId || null,
-    mapLocation: rec.mapLocation || null,
-    genomeBuild: rec.genomeBuild || null,
-    coordinatesVerified: true,
-    verificationStatus: 'verified',
-    verificationSource: rec.source || 'MyGene.info',
-    authoritativeRetrievedAt: rec.retrievedAt || null,
-  };
-}
-
-function isoDateFromAdapterTimestamp(value) {
+function adapterDate(value) {
   if (typeof value !== 'string' || !value.trim()) return null;
   const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return null;
-  return parsed.toISOString().slice(0, 10);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString().slice(0, 10);
 }
 
-function attachProvenance(gene) {
-  const claims = buildAssociationClaims(gene);
-  const partition = partitionClaimsBySpecies(claims);
-  const rankingBasis = deriveRankingBasisFromClaims(claims);
-  const rankingReason = rankingBasis === 'human_verified'
-    ? 'Ranked by human-verified gene-query association evidence.'
-    : rankingBasis === 'computational'
-      ? 'Ranked by computational gene-query association evidence.'
-      : rankingBasis === 'animal_model'
-        ? 'Ranked by animal-model gene-query association evidence; not human clinical evidence.'
-        : 'AI-suggested candidate order only; gene identity, coordinates, ontology terms, and database links do not verify relevance to the query.';
-
-  return {
-    ...gene,
-    associationClaims: claims,
-    evidencePartition: partition,
-    rankingBasis,
-    rankingReason,
-  };
-}
-
-function buildAssociationClaims(gene) {
-  const claims = [];
-  const phenotypeQuery = gene.query || gene.searchQuery || gene.phenotypeQuery || 'the search query';
-  const symbol = gene.symbol || 'Unknown gene';
-  const sourceSet = new Set(gene.sources || []);
-
-  // Always preserve the AI lead as an explicit, unverified claim.
-  claims.push(aiLeadClaim(symbol, phenotypeQuery));
-
-  // Authoritative coordinate / identity verification is source metadata only;
-  // it does not verify relevance to the phenotype query and cannot promote rank.
-  if (gene.coordinatesVerified && (gene.ensemblId || gene.entrezId)) {
-    claims.push(humanGeneIdentityClaim({
-      symbol,
-      ensemblId: gene.ensemblId,
-      entrezId: gene.entrezId,
-      genomeBuild: gene.genomeBuild,
-      source: gene.verificationSource || VERIFIED_METADATA_SOURCE,
-      retrievalDate: isoDateFromAdapterTimestamp(gene.authoritativeRetrievedAt),
-    }));
+export class PhenotypeSearchService {
+  static async getUserContext() {
+    let isAdmin = false;
+    let userPreferences = null;
+    try {
+      const user = await apiClient.getMe();
+      isAdmin = user?.role === "admin"
+        || user?.role === "super_admin"
+        || user?.entitlements?.isAdmin === true;
+      userPreferences = {
+        education_level: user?.education_level,
+        field_of_study: user?.field_of_study,
+      };
+    } catch {
+      isAdmin = false;
+    }
+    return { isAdmin, userPreferences };
   }
 
-  // HPO validation confirms an ontology term exists; it is not a curated
-  // gene-phenotype association and is kept as external follow-up metadata.
-  for (const phenotype of gene.phenotypes || []) {
-    if (phenotype?.hpoVerified && phenotype.hpoId) {
-      claims.push(hpoPhenotypeClaim({
-        geneSymbol: symbol,
-        phenotypeName: phenotype.name,
-        hpoId: phenotype.hpoId,
-        retrievalDate: isoDateFromAdapterTimestamp(phenotype.retrievedAt),
-      }));
+  /**
+   * FAST phase. Generate bounded candidate leads and replace model-controlled
+   * coordinates/identifiers with authoritative MyGene records before the cards
+   * appear. Per-gene profile text is deliberately deferred to enrichCandidates.
+   */
+  static async findCandidates(
+    phenotypeQuery,
+    isPremium = false,
+    searchMode = 'free_text',
+    selectedReference = null,
+  ) {
+    try {
+      const queryReference = resolvePublicationSearchReference(
+        phenotypeQuery,
+        searchMode,
+        selectedReference,
+      );
+      if (!queryReference) {
+        throw new Error(
+          'Choose a reviewed disease/phenotype result or enter an exact HPO identifier. Free-text labels are not sent to the model.',
+        );
+      }
+
+      const [{ isAdmin, userPreferences }, fused] = await Promise.all([
+        this.getUserContext(),
+        this.analyzeAndFindCandidates(queryReference),
+      ]);
+      const effectivePremium = isPremium || isAdmin;
+      let { analysis, candidateGenes } = fused;
+
+      // A sparse but syntactically valid response receives one bounded fallback
+      // through the same immutable reference, never through model-generated text.
+      if (!candidateGenes.length) {
+        analysis = await this.analyzePhenotype(queryReference);
+        candidateGenes = await this.findCandidateGenes(
+          analysis,
+          effectivePremium,
+          queryReference,
+        );
+      }
+
+      const usesDiseaseCandidateLimit = this.usesDiseaseCandidatePrompt(
+        analysis,
+        queryReference,
+      );
+      const maxCandidateLeads = analysis.isDisease
+        || analysis.queryType === 'disease'
+        || usesDiseaseCandidateLimit
+        ? 15
+        : 8;
+      candidateGenes = candidateGenes.slice(0, maxCandidateLeads);
+
+      const symbols = candidateGenes.map((gene) => gene.symbol).filter(Boolean);
+      const { genes: authGenes } = await this.safeEnrich(symbols, []);
+      const baseGenes = this.attachProvenance(
+        this.applyAuthoritativeData(
+          candidateGenes.map((gene) => ({
+            ...gene,
+            sources: ['AI-suggested'],
+            phenotypes: [],
+            detailsPending: true,
+          })),
+          authGenes,
+          {},
+        ),
+        phenotypeQuery,
+      );
+
+      return {
+        query: phenotypeQuery,
+        candidateGenes: baseGenes,
+        isPremium: effectivePremium,
+        hpoTerms: [],
+        queryType: analysis.queryType || 'phenotype',
+        userPreferences,
+        enriched: false,
+      };
+    } catch (error) {
+      log.error("Search (find candidates) error:", error);
+      throw new Error(getErrorMessage(error) || "Failed to search for genes. Please try again.");
     }
   }
 
-  // External resources are links to continue checking, not automatic evidence
-  // that the queried association is true. No retrieval date is recorded because
-  // the browser has not retrieved these linked records.
-  const resourceRows = gene.furtherReading?.resources || [];
-  for (const resource of resourceRows) {
-    if (!resource?.url) continue;
-    claims.push(externalFollowupClaim({
-      geneSymbol: symbol,
-      database: resource.name || 'External database',
-      url: resource.url,
-      recordId: null,
-    }));
-  }
-
-  if (gene.coordinatesVerified) sourceSet.add(VERIFIED_METADATA_SOURCE);
-  if ((gene.phenotypes || []).some((p) => p?.hpoVerified)) sourceSet.add(HPO_VALIDATED_SOURCE);
-
-  return claims;
-}
-
-function buildFurtherReading(symbol, sources = []) {
-  const resources = [
-    {
-      name: 'NCBI Gene',
-      url: `https://www.ncbi.nlm.nih.gov/gene/?term=${encodeURIComponent(symbol)}[sym]`,
-    },
-    {
-      name: 'Ensembl',
-      url: `https://www.ensembl.org/Multi/Search/Results?q=${encodeURIComponent(symbol)};site=ensembl`,
-    },
-    {
-      name: 'PubMed',
-      url: `https://pubmed.ncbi.nlm.nih.gov/?term=${encodeURIComponent(symbol)}[Title%2FAbstract]`,
-    },
-  ];
-
-  return {
-    resources,
-    pubmedSearchTerms: uniqueStrings([symbol, `${symbol} genetics`, `${symbol} phenotype`]),
-    sourceLabels: uniqueStrings(sources),
-  };
-}
-
-function buildBasicGeneResult(gene, concept, rank) {
-  return {
-    ...gene,
-    rank,
-    query: concept.label,
-    resultMode: 'basic',
-    resultModeLabel: 'Curated educational result',
-    isAiSuggested: false,
-    confidence_score: null,
-    evidenceLevel: 'curated educational summary',
-    description: concept.description,
-    diseases: concept.conceptKind === 'disease' ? [concept.label] : [],
-    phenotypes: concept.conceptKind === 'phenotype'
-      ? [{ name: concept.label, hpoId: null, hpoVerified: false }]
-      : [],
-    sources: uniqueStrings([...concept.sources, MODEL_SUGGESTION_SOURCE]),
-    furtherReading: buildFurtherReading(gene.symbol, concept.sources),
-    disclaimer: RESEARCH_BOUNDARY,
-  };
-}
-
-async function basicSearch(query, options = {}) {
-  const matches = matchCuratedConcepts(query);
-  const limit = options.limit || DEFAULT_BASIC_LIMIT;
-
-  if (!matches.length) {
-    return {
-      mode: 'basic',
-      query,
-      classification: {
-        queryType: 'unknown',
-        isDisease: false,
-        diseaseName: null,
-        mainFeatures: [],
-        synonyms: [],
-        inheritancePattern: null,
+  /** One strict server-owned request classifies the reference and returns leads. */
+  static async analyzeAndFindCandidates(queryReference) {
+    const response = await apiClient.invokePublicationTask(
+      'candidate_gene_research',
+      {
+        version: 1,
+        operation: 'classify_and_suggest',
+        query: queryReference,
+        audience: 'researcher',
       },
-      results: [],
-      educationalSummary: 'No close curated match was found. Try a plain-language phenotype such as “seizures,” “ataxia,” “hearing loss,” or a named condition such as “cystic fibrosis.”',
-      disclaimer: RESEARCH_BOUNDARY,
+      { maxTokens: 4096 },
+    );
+
+    const parsed = parseLLMJson(response, {});
+    const candidateGenes = (
+      Array.isArray(parsed.candidateGenes) ? parsed.candidateGenes : []
+    ).filter((gene) => gene && gene.symbol);
+    return {
+      analysis: {
+        queryType: parsed.queryType || (parsed.isDisease ? 'disease' : 'phenotype'),
+        isDisease: Boolean(parsed.isDisease),
+        diseaseName: parsed.diseaseName || null,
+        isHPOTerm: Boolean(parsed.isHPOTerm),
+        mainFeatures: Array.isArray(parsed.mainFeatures) ? parsed.mainFeatures : [],
+        synonyms: Array.isArray(parsed.synonyms) ? parsed.synonyms : [],
+        inheritancePattern: parsed.inheritancePattern || null,
+        // Model-created ontology identifiers are not authoritative records.
+        hpoTerms: [],
+      },
+      candidateGenes,
     };
   }
 
-  const selectedConcepts = matches.slice(0, 2).map((entry) => entry.concept);
-  const geneRows = [];
-  for (const concept of selectedConcepts) {
-    for (const gene of concept.genes) {
-      if (!geneRows.some((row) => row.symbol === gene.symbol)) {
-        geneRows.push(buildBasicGeneResult(gene, concept, geneRows.length + 1));
+  /**
+   * SLOW phase. Fill profile text and phenotype names only after cards exist,
+   * then validate those names through HPO and reattach complete provenance.
+   */
+  static async enrichCandidates(base) {
+    try {
+      const enrichedGenes = await this.enrichGeneData(
+        base.candidateGenes,
+        base.isPremium,
+        base.userPreferences,
+      );
+      const phenotypeNames = this.collectPhenotypeNames(enrichedGenes);
+      const { phenotypes: authHpo } = await this.safeEnrich([], phenotypeNames);
+      const finalGenes = this.finalizeEnriched(
+        enrichedGenes,
+        authHpo,
+        base.query,
+      ).map((gene) => ({ ...gene, detailsPending: false }));
+      return { ...base, candidateGenes: finalGenes, enriched: true };
+    } catch (error) {
+      log.error("Search (enrich) error:", error);
+      return {
+        ...base,
+        candidateGenes: this.attachProvenance(
+          (base.candidateGenes || []).map((gene) => ({
+            ...gene,
+            detailsPending: false,
+            aiSummary: UNAVAILABLE_PROFILE_SUMMARY,
+            profileStatus: 'unavailable',
+            keyTakeaways: [],
+            phenotypes: [],
+          })),
+          base.query,
+        ),
+        enriched: true,
+      };
+    }
+  }
+
+  static async searchGenes(
+    phenotypeQuery,
+    isPremium = false,
+    searchMode = 'free_text',
+    selectedReference = null,
+  ) {
+    const base = await this.findCandidates(
+      phenotypeQuery,
+      isPremium,
+      searchMode,
+      selectedReference,
+    );
+    return this.enrichCandidates(base);
+  }
+
+  static finalizeEnriched(genes, authHpo = {}, phenotypeQuery = '') {
+    const hpoChecked = Object.keys(authHpo).length > 0;
+    const finalized = (genes || []).map((gene) => {
+      const merged = {
+        ...gene,
+        sources: this.honestSources(Boolean(gene.coordinatesVerified)),
+      };
+      if (Array.isArray(merged.phenotypes)) {
+        merged.hpoChecked = hpoChecked;
+        merged.phenotypes = merged.phenotypes.map((phenotype) => {
+          if (!phenotype || typeof phenotype.name !== 'string') return phenotype;
+          const record = authHpo[phenotype.name.trim().toLowerCase()];
+          if (record?.verified) {
+            return {
+              ...phenotype,
+              hpoId: record.hpoId,
+              hpoVerified: true,
+              retrievedAt: record.retrievedAt || null,
+            };
+          }
+          return {
+            ...phenotype,
+            hpoId: null,
+            hpoVerified: false,
+            retrievedAt: null,
+          };
+        });
+      }
+      return merged;
+    });
+    return this.attachProvenance(finalized, phenotypeQuery);
+  }
+
+  static async safeEnrich(symbols, phenotypes) {
+    if ((!symbols || symbols.length === 0) && (!phenotypes || phenotypes.length === 0)) {
+      return { genes: {}, phenotypes: {} };
+    }
+    try {
+      const response = await apiClient.enrichGenomicData(symbols || [], phenotypes || []);
+      return {
+        genes: response?.genes || {},
+        phenotypes: response?.phenotypes || {},
+      };
+    } catch (error) {
+      log.debug('Authoritative enrichment unavailable:', error?.message);
+      return { genes: {}, phenotypes: {} };
+    }
+  }
+
+  static collectPhenotypeNames(genes) {
+    const names = new Map();
+    for (const gene of genes || []) {
+      for (const phenotype of (gene.phenotypes || []).slice(0, 6)) {
+        const value = typeof phenotype?.name === 'string' ? phenotype.name.trim() : '';
+        if (value) names.set(value.toLocaleLowerCase('en-US'), value);
       }
     }
+    return [...names.values()].slice(0, 60);
   }
 
-  const limitedRows = geneRows.slice(0, limit);
-  const enrichment = await safeEnrich(
-    limitedRows.map((row) => row.symbol),
-    selectedConcepts
-      .filter((concept) => concept.conceptKind === 'phenotype')
-      .map((concept) => concept.label)
-  );
-
-  const withAuthoritativeData = limitedRows.map((row) => {
-    const enriched = applyAuthoritativeData(row, enrichment.genes?.[row.symbol]);
-    const phenotypeRows = (enriched.phenotypes || []).map((phenotype) => {
-      const validation = enrichment.phenotypes?.[normalizeSearchTerm(phenotype.name)];
-      return validation
-        ? {
-            ...phenotype,
-            hpoId: validation.hpoId || null,
-            hpoVerified: Boolean(validation.verified),
-            retrievedAt: validation.retrievedAt || null,
-          }
-        : phenotype;
-    });
-    return attachProvenance({ ...enriched, phenotypes: phenotypeRows });
-  });
-
-  const primaryConcept = selectedConcepts[0];
-  return {
-    mode: 'basic',
-    query,
-    classification: {
-      queryType: primaryConcept.conceptKind,
-      isDisease: primaryConcept.conceptKind === 'disease',
-      diseaseName: primaryConcept.conceptKind === 'disease' ? primaryConcept.label : null,
-      mainFeatures: primaryConcept.conceptKind === 'phenotype' ? [primaryConcept.label] : [],
-      synonyms: primaryConcept.synonyms,
-      inheritancePattern: null,
-    },
-    results: rankGenesByProvenance(withAuthoritativeData).map((row, index) => ({
-      ...row,
-      rank: index + 1,
-    })),
-    educationalSummary: primaryConcept.description,
-    disclaimer: RESEARCH_BOUNDARY,
-  };
-}
-
-function parseJsonObject(result) {
-  if (!result) return null;
-  if (typeof result === 'object') return result;
-  const cleaned = String(result).replace(/```json\n?|\n?```/g, '').trim();
-  return JSON.parse(cleaned);
-}
-
-async function classifyAdvancedQuery(queryReference) {
-  const parsed = parseJsonObject(await apiClient.invokeLlm(
-    {
-      operation: 'classify',
-      query: queryReference,
-    },
-    'candidate_gene_research',
-  ));
-  return {
-    queryType: parsed.queryType || 'phenotype',
-    isDisease: Boolean(parsed.isDisease),
-    diseaseName: parsed.diseaseName || null,
-    mainFeatures: Array.isArray(parsed.mainFeatures) ? parsed.mainFeatures : [],
-    synonyms: Array.isArray(parsed.synonyms) ? parsed.synonyms : [],
-    inheritancePattern: parsed.inheritancePattern || null,
-    hpoTerms: [],
-  };
-}
-
-async function suggestAdvancedCandidates(queryReference, classification, limit) {
-  const parsed = parseJsonObject(await apiClient.invokeLlm(
-    {
-      operation: 'suggest_candidates',
-      query: queryReference,
-      classification: {
-        queryType: classification.queryType,
-        isDisease: classification.isDisease,
-        diseaseName: classification.diseaseName,
-        mainFeatures: classification.mainFeatures,
-        synonyms: classification.synonyms,
-        inheritancePattern: classification.inheritancePattern,
-      },
-      limit,
-    },
-    'candidate_gene_research',
-  ));
-  return (parsed.candidateGenes || []).slice(0, limit);
-}
-
-async function enrichGeneCombined(gene, queryReference, classification) {
-  try {
-    const profile = parseJsonObject(await apiClient.invokeLlm(
-      {
-        operation: 'gene_profile',
-        gene: {
-          symbol: gene.symbol,
-          name: gene.name || gene.symbol,
-        },
-        query: queryReference,
-        classification: {
-          queryType: classification.queryType,
-          diseaseName: classification.diseaseName,
-          mainFeatures: classification.mainFeatures,
-        },
-      },
-      'candidate_gene_research',
-    ));
-
-    return {
-      ...gene,
-      aiSummary: profile.summary || PROFILE_UNAVAILABLE,
-      aiSummaryStatus: profile.summaryStatus || 'unavailable',
-      keyTakeaways: Array.isArray(profile.keyTakeaways) ? profile.keyTakeaways : [],
-      phenotypes: Array.isArray(profile.phenotypes) ? profile.phenotypes : [],
-    };
-  } catch (error) {
-    console.warn(`Failed to load bounded profile for ${gene.symbol}:`, error);
-    return {
-      ...gene,
-      aiSummary: PROFILE_UNAVAILABLE,
-      aiSummaryStatus: 'unavailable',
-      keyTakeaways: [],
-      phenotypes: [],
-    };
-  }
-}
-
-async function resolveAdvancedQueryReference(query) {
-  const curatedMatch = matchCuratedConcepts(query)[0]?.concept;
-  if (curatedMatch) {
-    return {
-      kind: 'curated_concept',
-      conceptId: curatedMatch.conceptId,
-      canonicalLabel: curatedMatch.label,
-      conceptKind: curatedMatch.conceptKind,
-      source: 'genemap_curated',
-      version: 1,
-    };
+  static honestSources(verified) {
+    return verified
+      ? ['MyGene.info (Ensembl/NCBI) identity metadata', 'AI-suggested candidate lead']
+      : ['AI-suggested candidate lead'];
   }
 
-  const hpoResults = await apiClient.searchPhenotypes(query).catch(() => ({ terms: [] }));
-  const hpoTerm = Array.isArray(hpoResults?.terms) ? hpoResults.terms[0] : null;
-  if (hpoTerm?.id && hpoTerm?.name) {
-    return {
-      kind: 'hpo',
-      identifier: hpoTerm.id,
-      canonicalLabel: hpoTerm.name,
-      source: 'NLM Clinical Tables HPO',
-      apiVersion: 'v3',
-      obsolete: Boolean(hpoTerm.obsolete),
-    };
-  }
+  static buildAssociationClaims(gene, phenotypeQuery = '') {
+    const claims = [];
+    const query = phenotypeQuery || gene?.query || 'phenotype search';
+    claims.push(aiLeadClaim(gene.symbol, query));
 
-  const mondoResults = await apiClient.searchMondoDiseases(query).catch(() => ({ diseases: [] }));
-  const mondoDisease = Array.isArray(mondoResults?.diseases) ? mondoResults.diseases[0] : null;
-  if (mondoDisease?.id && mondoDisease?.name) {
-    return {
-      kind: 'mondo',
-      identifier: mondoDisease.id,
-      canonicalLabel: mondoDisease.name,
-      source: 'EBI OLS4 MONDO',
-      obsolete: Boolean(mondoDisease.obsolete),
-    };
-  }
-
-  return null;
-}
-
-async function advancedSearch(query, options = {}) {
-  const limit = options.limit || DEFAULT_ADVANCED_LIMIT;
-  const queryReference = await resolveAdvancedQueryReference(query);
-  if (!queryReference) {
-    throw new Error(
-      'Advanced research search requires a recognized HPO phenotype or MONDO disease term. Try a curated basic-search term or a more specific ontology label.'
-    );
-  }
-  const classification = await classifyAdvancedQuery(queryReference);
-  const candidates = await suggestAdvancedCandidates(queryReference, classification, limit);
-
-  const prepared = candidates.map((candidate, index) => {
-    const stripped = stripLlmSelfScores(candidate);
-    return {
-      ...stripped,
-      rank: index + 1,
-      query: queryReference.canonicalLabel,
-      resultMode: 'advanced',
-      resultModeLabel: 'AI-assisted research candidate',
-      isAiSuggested: true,
-      coordinatesVerified: false,
-      detailsPending: true,
-      name: stripped.name || stripped.symbol,
-      explanation: stripped.explanation || 'AI-suggested candidate requiring independent verification.',
-      sources: [MODEL_SUGGESTION_SOURCE],
-      furtherReading: buildFurtherReading(stripped.symbol, [MODEL_SUGGESTION_SOURCE]),
-      disclaimer: RESEARCH_BOUNDARY,
-    };
-  });
-
-  const enrichment = await safeEnrich(prepared.map((row) => row.symbol));
-  const authoritative = prepared.map((row) => applyAuthoritativeData(row, enrichment.genes?.[row.symbol]));
-
-  const detailed = [];
-  const concurrency = 3;
-  for (let index = 0; index < authoritative.length; index += concurrency) {
-    const batch = authoritative.slice(index, index + concurrency);
-    const enrichedBatch = await Promise.all(
-      batch.map((row) => enrichGeneCombined(row, queryReference, classification))
-    );
-    detailed.push(...enrichedBatch);
-  }
-
-  const phenotypeNames = uniqueStrings(
-    detailed.flatMap((row) => (row.phenotypes || []).map((phenotype) => phenotype?.name))
-  ).slice(0, 100);
-  const hpoValidation = phenotypeNames.length
-    ? await safeEnrich([], phenotypeNames)
-    : { phenotypes: {} };
-
-  const withHpoValidation = detailed.map((row) => ({
-    ...row,
-    phenotypes: (row.phenotypes || []).map((phenotype) => {
-      const validation = hpoValidation.phenotypes?.[normalizeSearchTerm(phenotype?.name)];
-      return validation
-        ? {
-            ...phenotype,
-            hpoId: validation.hpoId || null,
-            hpoVerified: Boolean(validation.verified),
-            retrievedAt: validation.retrievedAt || null,
-          }
-        : { ...phenotype, hpoId: null, hpoVerified: false, retrievedAt: null };
-    }),
-  }));
-
-  const withProvenance = withHpoValidation.map(attachProvenance);
-  const ranked = rankGenesByProvenance(withProvenance).map((row, index) => ({
-    ...row,
-    rank: index + 1,
-  }));
-
-  return {
-    mode: 'advanced',
-    query,
-    classification,
-    results: ranked,
-    educationalSummary: `Advanced mode produced ${ranked.length} AI-assisted research candidates. Treat them as leads until each claim is verified in primary databases and literature.`,
-    disclaimer: RESEARCH_BOUNDARY,
-  };
-}
-
-export const PhenotypeSearchService = {
-  async search(query, options = {}) {
-    const mode = options.mode === 'advanced' ? 'advanced' : 'basic';
-    if (!String(query || '').trim()) {
-      throw new Error('A phenotype or disease search term is required.');
+    if (gene.coordinatesVerified && (gene.ensemblId || gene.entrezId)) {
+      claims.push(humanGeneIdentityClaim({
+        symbol: gene.symbol,
+        ensemblId: gene.ensemblId,
+        entrezId: gene.entrezId,
+        genomeBuild: gene.genomeBuild || null,
+        source: gene.verifiedSource || 'MyGene.info (Ensembl/NCBI)',
+        retrievalDate: adapterDate(gene.authoritativeRetrievedAt),
+      }));
     }
-    return mode === 'advanced'
-      ? advancedSearch(query, options)
-      : basicSearch(query, options);
-  },
 
-  getAvailableModes() {
-    return [
+    for (const phenotype of gene.phenotypes || []) {
+      if (phenotype?.hpoVerified && phenotype.hpoId) {
+        claims.push(hpoPhenotypeClaim({
+          geneSymbol: gene.symbol,
+          phenotypeName: phenotype.name,
+          hpoId: phenotype.hpoId,
+          retrievalDate: adapterDate(phenotype.retrievedAt),
+        }));
+      }
+    }
+
+    // These deterministic search URLs are follow-up destinations. GeneMap has
+    // not retrieved the destination record, so retrievalDate remains null.
+    for (const resource of gene.furtherReading?.resources || []) {
+      if (resource?.url && resource?.name) {
+        claims.push(externalFollowupClaim({
+          geneSymbol: gene.symbol,
+          database: resource.name,
+          url: resource.url,
+          retrievalDate: null,
+        }));
+      }
+    }
+    return claims;
+  }
+
+  static attachProvenance(genes, phenotypeQuery = '') {
+    const withClaims = (genes || []).map((gene) => {
+      const stripped = stripLlmSelfScores(gene);
+      const associationClaims = this.buildAssociationClaims(stripped, phenotypeQuery);
+      return {
+        ...stripped,
+        associationClaims,
+        evidencePartition: partitionClaimsBySpecies(associationClaims),
+        rankingBasis: deriveRankingBasisFromClaims(associationClaims),
+        // The model order is retained only as an uncalibrated display hint.
+        leadOrderHint: Number.isFinite(gene.leadOrderHint)
+          ? gene.leadOrderHint
+          : null,
+      };
+    });
+    return rankGenesByProvenance(withClaims);
+  }
+
+  static applyAuthoritativeData(genes, authGenes = {}, authHpo = {}) {
+    const hpoChecked = Object.keys(authHpo).length > 0;
+    return (genes || []).map((gene) => {
+      const record = authGenes[gene.symbol];
+      const verified = Boolean(record?.verified);
+      const merged = {
+        ...gene,
+        coordinatesVerified: verified,
+        verifiedSource: verified ? record.source : null,
+        authoritativeRetrievedAt: verified ? record.retrievedAt || null : null,
+        sources: this.honestSources(verified),
+      };
+      if (verified) {
+        merged.chromosome = record.chromosome ?? null;
+        merged.start = record.start ?? null;
+        merged.end = record.end ?? null;
+        merged.ensemblId = record.ensemblId ?? null;
+        merged.entrezId = record.entrezId ?? null;
+        merged.name = record.name || merged.name;
+        merged.genomeBuild = record.genomeBuild || null;
+        merged.mapLocation = record.mapLocation || null;
+      } else {
+        merged.chromosome = null;
+        merged.start = null;
+        merged.end = null;
+        merged.ensemblId = null;
+        merged.entrezId = null;
+        merged.genomeBuild = null;
+        merged.mapLocation = null;
+      }
+
+      if (Array.isArray(merged.phenotypes)) {
+        merged.hpoChecked = hpoChecked;
+        merged.phenotypes = merged.phenotypes.map((phenotype) => {
+          if (!phenotype || typeof phenotype.name !== 'string') return phenotype;
+          const hpoRecord = authHpo[phenotype.name.trim().toLowerCase()];
+          if (hpoRecord?.verified) {
+            return {
+              ...phenotype,
+              hpoId: hpoRecord.hpoId,
+              hpoVerified: true,
+              retrievedAt: hpoRecord.retrievedAt || null,
+            };
+          }
+          return {
+            ...phenotype,
+            hpoId: null,
+            hpoVerified: false,
+            retrievedAt: null,
+          };
+        });
+      }
+      return merged;
+    });
+  }
+
+  static getAudience(userPreferences) {
+    const level = userPreferences?.education_level;
+    if (level === 'medical_professional') return 'medical_researcher';
+    if (level === 'researcher' || level === 'phd') return 'researcher';
+    if (level === 'graduate' || level === 'postgraduate') return 'graduate';
+    if (level === 'high_school') return 'general';
+    return 'undergraduate';
+  }
+
+  static async analyzePhenotype(queryReference) {
+    const response = await apiClient.invokePublicationTask(
+      'candidate_gene_research',
       {
-        id: 'basic',
-        label: 'Basic / Educator',
-        description: 'Fast curated educational results without AI. Best for classrooms, families, and introductory learning.',
+        version: 1,
+        operation: 'classify',
+        query: queryReference,
+        audience: 'researcher',
       },
+    );
+    return parseLLMJson(response, {});
+  }
+
+  static async findCandidateGenes(_phenotypeAnalysis, _isPremium, queryReference) {
+    const response = await apiClient.invokePublicationTask(
+      'candidate_gene_research',
       {
-        id: 'advanced',
-        label: 'Advanced / Research',
-        description: 'AI-assisted candidate exploration with authoritative identifier enrichment and explicit research boundaries.',
+        version: 1,
+        operation: 'suggest_candidates',
+        query: queryReference,
+        audience: 'researcher',
       },
-    ];
-  },
+      { maxTokens: 4096 },
+    );
+    const parsed = parseLLMJson(response, { candidateGenes: [] });
+    const result = Array.isArray(parsed) ? { candidateGenes: parsed } : parsed;
+    return (result?.candidateGenes || []).filter((gene) => gene && gene.symbol);
+  }
 
-  getCuratedConcepts() {
-    return CURATED_CONCEPTS.map((concept) => ({
-      conceptId: concept.conceptId,
-      label: concept.label,
-      conceptKind: concept.conceptKind,
-      synonyms: [...concept.synonyms],
-    }));
-  },
-};
+  static usesDiseaseCandidatePrompt(phenotypeAnalysis, queryReference) {
+    const searchTerms = [
+      phenotypeAnalysis?.mainFeatures,
+      phenotypeAnalysis?.synonyms,
+    ].flat().filter(Boolean).join(', ');
+    return Boolean(
+      phenotypeAnalysis?.isDisease
+      || phenotypeAnalysis?.queryType === 'disease'
+      || queryReference?.conceptKind === 'disease'
+      || queryReference?.kind === 'mondo'
+      || (!searchTerms && queryReference),
+    );
+  }
 
-export default PhenotypeSearchService;
+  static async enrichGeneData(candidateGenes, isPremium, userPreferences) {
+    const enrichedGenes = [];
+    const concurrency = GENE_ENRICHMENT_CONCURRENCY;
+    for (let index = 0; index < candidateGenes.length; index += concurrency) {
+      const batch = candidateGenes.slice(index, index + concurrency);
+      const batchResults = await Promise.all(batch.map(async (gene) => {
+        try {
+          const enriched = await this.enrichGeneCombined(gene, userPreferences);
+          const premiumData = isPremium
+            ? await this.getPremiumGeneData(gene.symbol, userPreferences)
+            : {};
+          return {
+            ...gene,
+            ...enriched,
+            sources: this.honestSources(Boolean(gene.coordinatesVerified)),
+            ...premiumData,
+          };
+        } catch (error) {
+          log.error(`Error enriching gene ${gene.symbol}:`, error);
+          return {
+            ...gene,
+            phenotypes: [],
+            aiSummary: UNAVAILABLE_PROFILE_SUMMARY,
+            profileStatus: 'unavailable',
+            keyTakeaways: [],
+            furtherReading: this.deterministicFurtherReading(gene.symbol),
+            expressionData: [],
+            sources: this.honestSources(Boolean(gene.coordinatesVerified)),
+          };
+        }
+      }));
+      enrichedGenes.push(...batchResults);
+    }
+    return enrichedGenes;
+  }
+
+  static async enrichGeneCombined(gene, userPreferences) {
+    const verifiedIdentifier = gene.ensemblId || gene.entrezId;
+    if (!gene.coordinatesVerified || !verifiedIdentifier) {
+      return {
+        phenotypes: [],
+        aiSummary: `${gene.symbol} is an AI-suggested candidate lead. Authoritative gene-identifier verification was unavailable, so no additional model profile was generated.`,
+        profileStatus: 'unavailable',
+        keyTakeaways: [],
+        expressionData: [],
+        furtherReading: this.deterministicFurtherReading(gene.symbol),
+      };
+    }
+
+    const response = await apiClient.invokePublicationTask(
+      'candidate_gene_research',
+      {
+        version: 1,
+        operation: 'gene_profile',
+        gene: { symbol: gene.symbol },
+        audience: this.getAudience(userPreferences),
+      },
+      { maxTokens: 2048 },
+    );
+    const parsed = parseLLMJson(response, {});
+    const summary = typeof parsed.summary === 'string' && parsed.summary.trim()
+      ? parsed.summary
+      : UNAVAILABLE_PROFILE_SUMMARY;
+    return {
+      phenotypes: Array.isArray(parsed.phenotypes) ? parsed.phenotypes : [],
+      aiSummary: summary,
+      profileStatus: parsed.summaryStatus || 'unavailable',
+      keyTakeaways: Array.isArray(parsed.keyTakeaways) ? parsed.keyTakeaways : [],
+      expressionData: [],
+      furtherReading: this.deterministicFurtherReading(gene.symbol),
+    };
+  }
+
+  static deterministicFurtherReading(geneSymbol) {
+    const symbol = String(geneSymbol || '').trim().toUpperCase();
+    const encoded = encodeURIComponent(symbol);
+    if (!symbol) return { resources: [], pubmedSearchTerms: [] };
+    return {
+      resources: [
+        { name: `NCBI Gene search: ${symbol}`, url: `https://www.ncbi.nlm.nih.gov/gene/?term=${encoded}` },
+        { name: `ClinVar search: ${symbol}`, url: `https://www.ncbi.nlm.nih.gov/clinvar/?term=${encoded}` },
+        { name: `UniProt search: ${symbol}`, url: `https://www.uniprot.org/uniprotkb?query=${encoded}` },
+        { name: `PubMed search: ${symbol}`, url: `https://pubmed.ncbi.nlm.nih.gov/?term=${encoded}` },
+      ],
+      pubmedSearchTerms: [symbol, `${symbol} gene phenotype`, `${symbol} functional evidence`],
+    };
+  }
+
+  static async getPremiumGeneData() {
+    // Versioned population prevalence, pathogenicity, and treatment adapters do
+    // not exist in this release. Empty fields are safer than model-generated data.
+    return {
+      prevalenceData: null,
+      historyData: null,
+      mutationData: [],
+      treatmentData: [],
+    };
+  }
+
+  static async compareGeneSets(userGenes, phenotypeGenes, phenotype, isPremium) {
+    const userSet = new Set(userGenes.map((gene) => gene.toUpperCase()));
+    const phenotypeSet = new Set(phenotypeGenes.map((gene) => gene.toUpperCase()));
+    const overlapping = userGenes.filter((gene) => phenotypeSet.has(gene.toUpperCase()));
+    const uniqueToUser = userGenes.filter((gene) => !phenotypeSet.has(gene.toUpperCase()));
+    const uniqueToPhenotype = phenotypeGenes.filter((gene) => !userSet.has(gene.toUpperCase()));
+    const context = phenotype ? ` for the exploratory query “${phenotype}”` : '';
+    return {
+      userGenes,
+      phenotypeGenes,
+      phenotype,
+      overlapping,
+      uniqueToUser,
+      uniqueToPhenotype,
+      analysis: [
+        `This comparison checks list overlap${context}; it does not evaluate a person's genome.`,
+        `${overlapping.length} gene(s) appear in both lists, ${uniqueToUser.length} only in the input list, and ${uniqueToPhenotype.length} only in the AI-generated candidate list.`,
+        'Overlap is a research-organizing signal, not evidence of causation, diagnosis, or personal risk. Verify each association in primary sources.',
+      ].join(' '),
+      functionalRelationships: [],
+      isPremium,
+    };
+  }
+}
