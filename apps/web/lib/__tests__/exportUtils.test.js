@@ -3,6 +3,7 @@ import {
   buildGeneReportSections,
   buildGeneShareText,
   exportGeneReport,
+  exportVCFReport,
 } from '../exportUtils';
 
 const gene = {
@@ -44,6 +45,15 @@ const gene = {
     },
   ],
 };
+
+function installPrintWindow() {
+  vi.useFakeTimers();
+  const write = vi.fn();
+  const close = vi.fn();
+  const print = vi.fn();
+  vi.spyOn(window, 'open').mockReturnValue({ document: { write, close }, print });
+  return { write, close, print };
+}
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -107,11 +117,7 @@ describe('gene report provenance', () => {
   });
 
   it('writes the same provenance-complete sections into the printable report', () => {
-    vi.useFakeTimers();
-    const write = vi.fn();
-    const close = vi.fn();
-    const print = vi.fn();
-    vi.spyOn(window, 'open').mockReturnValue({ document: { write, close }, print });
+    const { write, close, print } = installPrintWindow();
 
     exportGeneReport(gene);
 
@@ -125,5 +131,51 @@ describe('gene report provenance', () => {
 
     vi.runAllTimers();
     expect(print).toHaveBeenCalledTimes(1);
+  });
+
+  it('normalizes explicit null input instead of crashing or inventing data', () => {
+    const sections = buildGeneReportSections(null);
+    const overview = sections.find(section => section.title === 'Gene Overview');
+    const provenance = sections.find(section => section.title === 'Association Claims and Provenance');
+    const summary = buildGeneShareText(null);
+
+    expect(overview.content).toContain('Not recorded');
+    expect(provenance.content).toMatch(/No claim-level provenance was supplied/);
+    expect(summary).toContain('GeneMap Discovery - Gene: Unknown gene');
+    expect(summary).toContain('Association claims: none supplied');
+
+    const { write } = installPrintWindow();
+    expect(() => exportGeneReport(null)).not.toThrow();
+    expect(write.mock.calls[0][0]).toContain('Gene Report: Unknown gene');
+  });
+
+  it('renders non-finite expression and VCF numbers as N/A', () => {
+    const sections = buildGeneReportSections({
+      symbol: 'RUNX1',
+      expressionData: [
+        { tissue: 'Bone marrow', value: Number.NaN },
+        { tissue: 'Blood', value: Number.POSITIVE_INFINITY },
+        { tissue: 'Spleen', value: 1.234 },
+      ],
+    });
+    const expression = sections.find(section => section.title === 'Expression Data');
+
+    expect(expression.content).not.toContain('NaN');
+    expect(expression.content).not.toContain('Infinity');
+    expect(expression.content.match(/N\/A/g)).toHaveLength(2);
+    expect(expression.content).toContain('1.23');
+
+    const { write } = installPrintWindow();
+    exportVCFReport([
+      { gene: 'RUNX1', variant: 'v1', classification: 'research lead', frequency: Number.NaN },
+      { gene: 'CFTR', variant: 'v2', classification: 'research lead', frequency: Number.NEGATIVE_INFINITY },
+      { gene: 'FBN1', variant: 'v3', classification: 'research lead', frequency: 0.012345 },
+    ], {});
+
+    const html = write.mock.calls[0][0];
+    expect(html).not.toContain('NaN');
+    expect(html).not.toContain('Infinity');
+    expect(html.match(/N\/A/g)).toHaveLength(2);
+    expect(html).toContain('0.0123');
   });
 });
