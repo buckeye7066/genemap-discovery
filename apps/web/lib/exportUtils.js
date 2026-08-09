@@ -2,7 +2,7 @@ import {
   claimProvenanceRole,
   deriveRankingBasisFromClaims,
   safeExternalHttpUrl,
-} from '../../../packages/shared/src/associationClaim.ts';
+} from '../../../packages/shared/src/associationClaim.js';
 
 /**
  * Export utilities for GeneMap Discovery
