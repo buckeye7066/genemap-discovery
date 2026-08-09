@@ -24,6 +24,12 @@ const CLINICAL_GUIDANCE_PATTERNS = [
   /\b(?:diagnos(?:e|ed|es|ing)|diagnosis|prognosis|prognostic conclusion|clinical recommendation|treatment recommendation|screening recommendation|medication recommendation|drug recommendation)\b/iu,
   /\b(?:dose|dosing|dosage)\b[^.!?\n]{0,80}\b(?:recommend\w*|should|must|take|administer|adjust|increase|decrease|mg|mcg|ug|units?)\b/iu,
   /\b\d+(?:\.\d+)?\s*(?:mg|mcg|μg|ug|ml|mL|units?)\b/u,
+  // Providers sometimes spell out quantities or dosage forms. Those variants
+  // must not evade the same conservative boundary already applied to numeric
+  // doses, especially inside model-controlled names, summaries, and takeaways.
+  /\b(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|half|quarter)\s+(?:milli?grams?|micrograms?|grams?|milliliters?|units?)\b/iu,
+  /\b(?:take|start|stop|avoid|administer|inject|swallow|apply|use)\b[^.!?\n]{0,100}\b(?:one|two|three|four|five|six|seven|eight|nine|ten|half|a|an|\d+)\s+(?:tablets?|capsules?|pills?|drops?|puffs?|sprays?|inhalations?|teaspoons?|tablespoons?|units?)\b/iu,
+  /\b(?:take|start|stop|avoid|administer|inject|swallow|apply|use)\b[^.!?\n]{0,100}\b(?:daily|nightly|weekly|once\s+(?:a\s+)?day|twice\s+(?:a\s+)?day|every\s+\w+\s+hours?|at\s+bedtime|with\s+meals?|as\s+needed)\b/iu,
 ];
 
 /**
