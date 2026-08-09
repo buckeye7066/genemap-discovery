@@ -13,7 +13,9 @@ function isPlainObject(value) {
 function replaceControlCharacters(value) {
   return Array.from(value, (character) => {
     const codePoint = character.codePointAt(0) ?? -1;
-    return codePoint <= 0x1f || codePoint === 0x7f ? ' ' : character;
+    const isC0OrDel = codePoint <= 0x1f || codePoint === 0x7f;
+    const isC1 = codePoint >= 0x80 && codePoint <= 0x9f;
+    return isC0OrDel || isC1 ? ' ' : character;
   }).join('');
 }
 
