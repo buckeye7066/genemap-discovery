@@ -7,7 +7,7 @@
 **Local path recorded by prior executor:** `C:\Users\firer\genemap-discovery` (not independently accessible from this session)  
 **Deployed app:** https://genemap-discovery.vercel.app  
 **API:** https://genemap-api-production.up.railway.app  
-**Current default-branch SHA:** `4a3fe456b9fceb949ba6bd4132c96f87f501459f`  
+**Reviewed baseline default-branch SHA:** `4a3fe456b9fceb949ba6bd4132c96f87f501459f`  
 **Purpose-defining software merge SHA:** `f0d3b64b9ae17f70ef2656b173cd51ca4c71215b`  
 **Implementation PR:** https://github.com/buckeye7066/genemap-discovery/pull/121 (merged 2026-08-09T00:51:04Z)  
 **Evidence PR:** https://github.com/buckeye7066/genemap-discovery/pull/122 (merged 2026-08-09T00:59:23Z)  
@@ -62,10 +62,10 @@ CI for implementation PR #121:
   build-web, desktop-build-smoke, desktop-build-windows-smoke -> pass
 
 Independent connected-tool re-verification on 2026-08-09:
-  GitHub default branch                     -> main @ 4a3fe456
-  Open pull requests                        -> 0
-  GitHub deployment status on exact SHA     -> Vercel success; Railway success
-  Exact-SHA checks                          -> no failed check run found
+  GitHub reviewed baseline                  -> main @ 4a3fe456
+  Open pull requests at review start        -> 0
+  GitHub deployment status on baseline SHA  -> Vercel success; Railway success
+  Baseline-SHA checks                       -> no failed check run found
   Live health/readiness/CORS/web-shell job  -> success
   Public Chromium E2E                       -> success
   Vercel production deployment              -> READY @ 4a3fe456
@@ -94,10 +94,11 @@ An authenticated learner journey on the exact live release should also be captur
 
 ## Deployment and rollback contract
 
-- Current GitHub `main`: `4a3fe456b9fceb949ba6bd4132c96f87f501459f`.
-- Purpose-defining software is contained in ancestor merge `f0d3b64b9ae17f70ef2656b173cd51ca4c71215b`; the later commits are readiness-documentation updates.
-- Vercel production identifies exact current `main` SHA `4a3fe456` and is READY.
-- GitHub reports successful Vercel and Railway deployment contexts for exact current `main`.
+- Reviewed GitHub `main` baseline: `4a3fe456b9fceb949ba6bd4132c96f87f501459f`.
+- Purpose-defining software is contained in ancestor merge `f0d3b64b9ae17f70ef2656b173cd51ca4c71215b`; later commits in this wave are readiness-documentation updates.
+- Vercel production identified the exact reviewed baseline SHA `4a3fe456` and was READY.
+- GitHub reported successful Vercel and Railway deployment contexts for the exact reviewed baseline.
+- The final default-branch merge SHA for this documentation correction must be recorded and verified outside this self-referential file after merge.
 - Rollback target for the software wave is the last known-good pre-wave default-branch SHA, selected and recorded before rollback; database rollback must use forward-compatible migrations or a verified restore, never an unreviewed schema downgrade.
 - Local launch information above is historical evidence only until independently verified on Dr. White's Windows machine.
 
