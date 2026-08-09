@@ -3,7 +3,8 @@
  *
  * AI candidate leads are never treated as calibrated evidence grades.
  * Every material claim must carry source, record id, taxon/species,
- * evidence class, release/version, retrieval date, and a direct link when known.
+ * evidence class, release/version, and a direct link when known. Retrieval dates
+ * are recorded only when an authoritative adapter actually returned a record.
  */
 
 export type EvidenceClass =
@@ -33,7 +34,8 @@ export interface AssociationClaim {
   evidenceStrength: EvidenceStrength;
   releaseVersion: string | null;
   referenceAssembly: string | null;
-  retrievalDate: string;
+  /** Date the cited authoritative record was actually retrieved; null when no lookup occurred. */
+  retrievalDate: string | null;
   directLink: string | null;
   isAiLead: boolean;
 }
@@ -59,11 +61,6 @@ const NON_ASSOCIATION_EVIDENCE_TYPES = new Set([
   'database_link',
 ]);
 
-/** Return a calendar-date stamp for claim retrieval provenance. */
-export function isoRetrievalDate(date = new Date()): string {
-  return date.toISOString().slice(0, 10);
-}
-
 /**
  * Association links are rendered by both React and printable HTML surfaces.
  * Keep only absolute HTTP(S) URLs at the shared contract boundary so every
@@ -80,12 +77,12 @@ export function safeExternalHttpUrl(value: string | null | undefined): string | 
   }
 }
 
-/** Create a normalized claim with stable species, date, link, and AI-lead fields. */
+/** Create a normalized claim with stable species, link, and AI-lead fields. */
 export function createAssociationClaim(
   partial: Omit<AssociationClaim, 'species' | 'isAiLead' | 'retrievalDate' | 'referenceAssembly'> & {
     species?: string;
     isAiLead?: boolean;
-    retrievalDate?: string;
+    retrievalDate?: string | null;
     referenceAssembly?: string | null;
   },
 ): AssociationClaim {
@@ -101,14 +98,15 @@ export function createAssociationClaim(
     evidenceStrength: partial.evidenceStrength,
     releaseVersion: partial.releaseVersion ?? null,
     referenceAssembly: partial.referenceAssembly ?? null,
-    retrievalDate: partial.retrievalDate || isoRetrievalDate(),
+    // Never substitute the claim-construction date for an upstream retrieval.
+    retrievalDate: partial.retrievalDate ?? null,
     directLink: safeExternalHttpUrl(partial.directLink),
     isAiLead: partial.isAiLead ?? evidenceClass === 'ai_lead',
   };
 }
 
 /** Build the AI-lead claim that must accompany every untrusted model suggestion. */
-export function aiLeadClaim(symbol: string, phenotypeQuery: string, retrievalDate?: string): AssociationClaim {
+export function aiLeadClaim(symbol: string, phenotypeQuery: string): AssociationClaim {
   return createAssociationClaim({
     source: 'GeneMap AI candidate generator',
     recordId: null,
@@ -118,7 +116,7 @@ export function aiLeadClaim(symbol: string, phenotypeQuery: string, retrievalDat
     evidenceType: 'model_suggestion',
     evidenceStrength: 'lead',
     releaseVersion: 'publication-task/candidate_gene_research@1',
-    retrievalDate,
+    retrievalDate: null,
     directLink: null,
     isAiLead: true,
   });
@@ -132,7 +130,7 @@ export function humanGeneIdentityClaim(input: {
   genomeBuild?: string | null;
   source?: string | null;
   sourceVersion?: string | null;
-  retrievalDate?: string;
+  retrievalDate?: string | null;
 }): AssociationClaim {
   const recordId = input.ensemblId || (input.entrezId ? `ENTREZ:${input.entrezId}` : null);
   const link = input.ensemblId
@@ -153,7 +151,7 @@ export function humanGeneIdentityClaim(input: {
     // supplies an actual dataset or service release identifier.
     releaseVersion: input.sourceVersion ?? null,
     referenceAssembly: input.genomeBuild ?? null,
-    retrievalDate: input.retrievalDate,
+    retrievalDate: input.retrievalDate ?? null,
     directLink: link,
     isAiLead: false,
   });
@@ -164,7 +162,7 @@ export function hpoPhenotypeClaim(input: {
   geneSymbol: string;
   phenotypeName: string;
   hpoId: string;
-  retrievalDate?: string;
+  retrievalDate?: string | null;
 }): AssociationClaim {
   return createAssociationClaim({
     source: 'Human Phenotype Ontology',
@@ -178,7 +176,7 @@ export function hpoPhenotypeClaim(input: {
     evidenceType: 'phenotype_ontology',
     evidenceStrength: 'supporting',
     releaseVersion: null,
-    retrievalDate: input.retrievalDate,
+    retrievalDate: input.retrievalDate ?? null,
     directLink: `https://hpo.jax.org/app/browse/term/${input.hpoId}`,
     isAiLead: false,
   });
@@ -190,7 +188,7 @@ export function externalFollowupClaim(input: {
   database: string;
   url: string;
   recordId?: string | null;
-  retrievalDate?: string;
+  retrievalDate?: string | null;
 }): AssociationClaim {
   return createAssociationClaim({
     source: input.database,
@@ -201,7 +199,7 @@ export function externalFollowupClaim(input: {
     evidenceType: 'database_link',
     evidenceStrength: 'none',
     releaseVersion: null,
-    retrievalDate: input.retrievalDate,
+    retrievalDate: input.retrievalDate ?? null,
     directLink: input.url,
     isAiLead: false,
   });
