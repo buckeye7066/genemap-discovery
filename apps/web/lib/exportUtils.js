@@ -118,9 +118,14 @@ function associationClaimContent(claim, index) {
   const evidenceClass = displayValue(claim?.evidenceClass);
   const evidenceType = displayValue(claim?.evidenceType);
   const evidenceStrength = displayValue(claim?.evidenceStrength);
-  const species = displayValue(claim?.species || claim?.taxon);
+  const species = displayValue(claim?.species);
   const taxon = displayValue(claim?.taxon);
   const retrievalDate = displayValue(claim?.retrievalDate);
+  const aiLead = claim?.isAiLead === true
+    ? 'Yes'
+    : claim?.isAiLead === false
+      ? 'No'
+      : 'Not recorded';
 
   return `
     <div class="claim">
@@ -135,7 +140,7 @@ function associationClaimContent(claim, index) {
         <tr><th>Species</th><td>${escapeHtml(species)}</td></tr>
         <tr><th>Taxon</th><td>${escapeHtml(taxon)}</td></tr>
         <tr><th>Retrieved</th><td>${escapeHtml(retrievalDate)}</td></tr>
-        <tr><th>AI Lead</th><td>${claim?.isAiLead === true ? 'Yes' : 'No'}</td></tr>
+        <tr><th>AI Lead</th><td>${aiLead}</td></tr>
         <tr><th>Source Record</th><td>${safeLink
           ? `<a href="${escapeHtml(safeLink)}" target="_blank" rel="noopener noreferrer">Open source record</a>`
           : 'No validated HTTP(S) link recorded'}</td></tr>
@@ -148,6 +153,7 @@ function associationClaimContent(claim, index) {
  * completeness and escaping can be regression-tested without opening a window.
  */
 export function buildGeneReportSections(gene = {}) {
+  gene = gene ?? {};
   const sections = [];
   const claims = Array.isArray(gene.associationClaims) ? gene.associationClaims : [];
   const rankingLabel = rankingLabelFor(gene.rankingBasis);
@@ -179,7 +185,7 @@ export function buildGeneReportSections(gene = {}) {
       title: 'Candidate Disease Labels',
       content: `
         <p class="notice"><strong>Candidate labels only.</strong> These labels are not verified associations unless a claim-level row above cites supporting evidence.</p>
-        <ul>${gene.diseases.map(d => `<li>${escapeHtml(typeof d === 'string' ? d : d.name || d.disease || '')}</li>`).join('')}</ul>`,
+        <ul>${gene.diseases.map(d => `<li>${escapeHtml(typeof d === 'string' ? d : d?.name || d?.disease || '')}</li>`).join('')}</ul>`,
     });
   }
 
@@ -190,10 +196,11 @@ export function buildGeneReportSections(gene = {}) {
         <p class="notice"><strong>Candidate terms only.</strong> An HPO identifier validates an ontology term, not a gene-phenotype association.</p>
         <ul>${gene.phenotypes.map(p => {
           if (typeof p === 'string') return `<li>${escapeHtml(p)}</li>`;
-          const identifier = p.hpoId
-            ? ` · ${p.hpoId}${p.hpoVerified ? ' (HPO-validated term)' : ' (unverified identifier)'}`
+          const phenotype = p ?? {};
+          const identifier = phenotype.hpoId
+            ? ` · ${phenotype.hpoId}${phenotype.hpoVerified ? ' (HPO-validated term)' : ' (unverified identifier)'}`
             : '';
-          return `<li>${escapeHtml(`${p.name || ''}${identifier}`)}</li>`;
+          return `<li>${escapeHtml(`${phenotype.name || ''}${identifier}`)}</li>`;
         }).join('')}</ul>`,
     });
   }
@@ -202,8 +209,8 @@ export function buildGeneReportSections(gene = {}) {
     sections.push({
       title: 'Expression Data',
       content: `<table><tr><th>Tissue</th><th>Level</th></tr>${gene.expressionData.slice(0, 15).map(e => {
-        const level = typeof e.value === 'number' ? e.value.toFixed(2) : e.level || 'N/A';
-        return `<tr><td>${escapeHtml(e.tissue || e.name || '')}</td><td>${escapeHtml(level)}</td></tr>`;
+        const level = Number.isFinite(e?.value) ? e.value.toFixed(2) : e?.level || 'N/A';
+        return `<tr><td>${escapeHtml(e?.tissue || e?.name || '')}</td><td>${escapeHtml(level)}</td></tr>`;
       }).join('')}</table>`,
     });
   }
@@ -246,10 +253,10 @@ export function exportVCFReport(variants, summary) {
         <tr><th>Gene</th><th>Variant</th><th>Classification</th><th>Frequency</th></tr>
         ${variants.slice(0, 50).map(v => `
           <tr>
-            <td>${escapeHtml(v.gene || '')}</td>
-            <td>${escapeHtml(v.variant || v.hgvs || `${v.chrom}:${v.pos}`)}</td>
-            <td>${escapeHtml(v.classification || v.clinicalSignificance || '')}</td>
-            <td>${typeof v.frequency === 'number' ? v.frequency.toFixed(4) : 'N/A'}</td>
+            <td>${escapeHtml(v?.gene || '')}</td>
+            <td>${escapeHtml(v?.variant || v?.hgvs || `${v?.chrom}:${v?.pos}`)}</td>
+            <td>${escapeHtml(v?.classification || v?.clinicalSignificance || '')}</td>
+            <td>${Number.isFinite(v?.frequency) ? v.frequency.toFixed(4) : 'N/A'}</td>
           </tr>`
         ).join('')}
       </table>`,
@@ -267,6 +274,7 @@ export function exportVCFReport(variants, summary) {
  * Build a provenance-preserving plain-text gene summary.
  */
 export function buildGeneShareText(data = {}) {
+  data = data ?? {};
   const lines = [
     `GeneMap Discovery - Gene: ${displayValue(data.symbol, 'Unknown gene')}`,
     `Name: ${displayValue(data.name || data.fullName)}`,
@@ -285,7 +293,7 @@ export function buildGeneShareText(data = {}) {
         `record=${displayValue(claim?.recordId)}`,
         `version=${displayValue(claim?.releaseVersion)}`,
         `evidence=${displayValue(claim?.evidenceClass)}`,
-        `species=${displayValue(claim?.species || claim?.taxon)}`,
+        `species=${displayValue(claim?.species)}`,
         `taxon=${displayValue(claim?.taxon)}`,
         `retrieved=${displayValue(claim?.retrievalDate)}`,
         sourceLink ? `link=${sourceLink}` : 'link=not recorded',
@@ -298,7 +306,7 @@ export function buildGeneShareText(data = {}) {
   if (data.diseases?.length) {
     lines.push(`Candidate disease labels, unverified unless supported above: ${data.diseases
       .slice(0, 5)
-      .map(d => typeof d === 'string' ? d : d.name || d.disease || '')
+      .map(d => typeof d === 'string' ? d : d?.name || d?.disease || '')
       .join(', ')}`);
   }
 
