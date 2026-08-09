@@ -140,6 +140,9 @@ describe('sanitizePublicationTaskOutput', () => {
   it('caps individual text fields without retaining control characters', () => {
     const cleaned = __test.cleanText(`A\n${'B'.repeat(600)}`, 32);
     expect(cleaned).toHaveLength(32);
-    expect(cleaned).not.toMatch(/[\u0000-\u001f\u007f]/u);
+    expect(Array.from(cleaned).every((character) => {
+      const codePoint = character.codePointAt(0) ?? -1;
+      return codePoint > 0x1f && codePoint !== 0x7f;
+    })).toBe(true);
   });
 });
