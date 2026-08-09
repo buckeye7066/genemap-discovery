@@ -132,9 +132,12 @@ export function hpoPhenotypeClaim(input: {
   return createAssociationClaim({
     source: 'Human Phenotype Ontology',
     recordId: input.hpoId,
-    claim: `${input.geneSymbol} candidate linked to phenotype term ${input.phenotypeName}`,
+    // This verifies the phenotype term itself (ontology record), not a curated
+    // gene–phenotype association. Keep wording neutral and non-associative.
+    claim: `Phenotype term validated in HPO: ${input.phenotypeName}`,
     taxon: '9606',
-    evidenceClass: 'human_verified',
+    // Presence of an HPO term is a follow-up pointer, not curated association evidence.
+    evidenceClass: 'external_followup',
     evidenceType: 'phenotype_ontology',
     evidenceStrength: 'supporting',
     releaseVersion: 'HPO',

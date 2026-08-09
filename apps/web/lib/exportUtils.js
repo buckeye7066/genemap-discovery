@@ -92,6 +92,15 @@ export function exportReport({ title, subtitle, sections, generatedAt = new Date
 export function exportGeneReport(gene) {
   const sections = [];
 
+  const rankingLabel = (() => {
+    const basis = gene?.rankingBasis || 'ai_lead';
+    if (basis === 'human_verified') return 'Human-verified provenance';
+    if (basis === 'computational') return 'Computational evidence';
+    if (basis === 'animal_model') return 'Animal-model evidence';
+    if (basis === 'external_followup') return 'External follow-up source';
+    return 'AI research lead';
+  })();
+
   sections.push({
     title: 'Gene Overview',
     content: `
@@ -99,7 +108,7 @@ export function exportGeneReport(gene) {
         <tr><th>Symbol</th><td>${escapeHtml(gene.symbol || '')}</td></tr>
         <tr><th>Full Name</th><td>${escapeHtml(gene.name || gene.fullName || '')}</td></tr>
         <tr><th>Location</th><td>${escapeHtml(gene.chromosome || '')}${gene.location ? ` (${gene.location})` : ''}</td></tr>
-        <tr><th>Relevance Score</th><td>${gene.score != null ? gene.score.toFixed(2) : 'N/A'}</td></tr>
+        <tr><th>Ranking Basis</th><td>${escapeHtml(rankingLabel)}</td></tr>
         ${gene.omimId ? `<tr><th>OMIM</th><td>${gene.omimId}</td></tr>` : ''}
       </table>
       ${gene.description ? `<p>${escapeHtml(gene.description)}</p>` : ''}
@@ -181,7 +190,14 @@ export function exportVCFReport(variants, summary) {
 export async function copyShareableLink(data, type = 'gene') {
   let text;
   if (type === 'gene') {
-    text = `GeneMap Discovery - Gene: ${data.symbol}\nName: ${data.name || data.fullName || ''}\nLocation: ${data.chromosome || ''}${data.location ? ` (${data.location})` : ''}\nScore: ${data.score != null ? data.score.toFixed(2) : 'N/A'}\n${data.diseases?.length ? `Diseases: ${data.diseases.slice(0, 5).map(d => typeof d === 'string' ? d : d.name || '').join(', ')}` : ''}`;
+    const basis = data?.rankingBasis || 'ai_lead';
+    const label =
+      basis === 'human_verified' ? 'Human-verified provenance'
+      : basis === 'computational' ? 'Computational evidence'
+      : basis === 'animal_model' ? 'Animal-model evidence'
+      : basis === 'external_followup' ? 'External follow-up source'
+      : 'AI research lead';
+    text = `GeneMap Discovery - Gene: ${data.symbol}\nName: ${data.name || data.fullName || ''}\nLocation: ${data.chromosome || ''}${data.location ? ` (${data.location})` : ''}\nRanking: ${label}\n${data.diseases?.length ? `Diseases: ${data.diseases.slice(0, 5).map(d => typeof d === 'string' ? d : d.name || '').join(', ')}` : ''}`;
   } else {
     text = `GeneMap Discovery Analysis\n${JSON.stringify(data, null, 2).substring(0, 500)}`;
   }

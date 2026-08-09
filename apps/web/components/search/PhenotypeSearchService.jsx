@@ -6,6 +6,7 @@ import {
   externalFollowupClaim,
   humanGeneIdentityClaim,
   hpoPhenotypeClaim,
+  claimSortKey,
   rankGenesByProvenance,
   stripLlmSelfScores,
 } from "../../../../packages/shared/src/associationClaim.ts";
@@ -294,9 +295,13 @@ export class PhenotypeSearchService {
     const withClaims = (genes || []).map((gene) => {
       const stripped = stripLlmSelfScores(gene);
       const associationClaims = this.buildAssociationClaims(stripped, phenotypeQuery);
-      const bestClass = associationClaims.some((c) => c.evidenceClass === 'human_verified')
-        ? 'human_verified'
-        : 'ai_lead';
+      // Determine the strongest evidence class present on this gene using the
+      // same ranking that sorting uses, so the badge text matches ordering.
+      const bestClaim = associationClaims.reduce((best, c) => {
+        if (!best) return c;
+        return claimSortKey(c) > claimSortKey(best) ? c : best;
+      }, null);
+      const bestClass = bestClaim ? bestClaim.evidenceClass : 'ai_lead';
       return {
         ...stripped,
         associationClaims,
@@ -309,7 +314,10 @@ export class PhenotypeSearchService {
         },
         rankingBasis: bestClass,
         // Preserve ordinal for display only — never as a calibrated score.
-        leadOrderHint: typeof gene.score === 'number' ? gene.score : null,
+        leadOrderHint:
+          typeof gene.score === 'number'
+            ? gene.score
+            : (gene.leadOrderHint ?? null),
       };
     });
     return rankGenesByProvenance(withClaims);

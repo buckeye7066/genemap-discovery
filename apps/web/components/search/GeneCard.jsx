@@ -83,15 +83,20 @@ function GeneCard({ gene, rank, isSelected = false, onSelect = null }) {
       ? 'Computational evidence'
       : rankingBasis === 'animal_model'
         ? 'Animal-model evidence'
-        : 'AI research lead';
+        : rankingBasis === 'external_followup'
+          ? 'External follow-up source'
+          : 'AI research lead';
   const rankingColor = rankingBasis === 'human_verified'
     ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
     : rankingBasis === 'computational'
       ? 'bg-sky-100 text-sky-800 border-sky-200'
-      : 'bg-amber-100 text-amber-800 border-amber-200';
+      : rankingBasis === 'external_followup'
+        ? 'bg-violet-100 text-violet-800 border-violet-200'
+        : 'bg-amber-100 text-amber-800 border-amber-200';
   const RankingIcon = rankingBasis === 'human_verified' ? CheckCircle
     : rankingBasis === 'computational' ? Info
-      : AlertTriangle;
+      : rankingBasis === 'external_followup' ? Info
+        : AlertTriangle;
 
   return (
     <Card className={`shadow-md hover:shadow-lg transition-all duration-200 ${isSelected ? 'ring-2 ring-blue-500 bg-blue-50/30' : ''}`}>
