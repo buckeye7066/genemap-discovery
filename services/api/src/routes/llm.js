@@ -5,7 +5,7 @@ import { withHonestyPrefix } from '../services/scientificHonesty.js';
 import { assertNoRawGenomicLLM } from '../services/genomicGuard.js';
 import { sanitizePublicationTaskOutput } from '../services/publicationTaskOutput.js';
 import { createAuditLog } from '../utils/audit.js';
-import { ValidationError } from '../utils/errors.js';
+import { AppError, ValidationError } from '../utils/errors.js';
 import { MAX_PROMPT_CHARS } from '../config/llmLimits.js';
 import {
   composePublicationPrompt,
@@ -41,6 +41,24 @@ const INVOKE_TEXT_PROVIDER = process.env.LLM_TEXT_PROVIDER || 'openai';
 const INVOKE_TEXT_MODEL = process.env.LLM_INVOKE_TEXT_MODEL
   || process.env.LLM_EDU_TEXT_MODEL
   || (INVOKE_TEXT_PROVIDER === 'openai' || INVOKE_TEXT_PROVIDER === 'gpt' ? 'gpt-4o-mini' : undefined);
+
+/**
+ * Emergency fail-closed switch for every generated publication surface.
+ *
+ * Set DISABLE_MODEL_PUBLICATION=1 before a risky recovery, provider incident,
+ * or rollback. This check runs after authentication/entitlement but before
+ * quota accounting, external-reference resolution, prompt composition, and the
+ * provider call, so a disabled request neither publishes output nor consumes a
+ * user's allowance.
+ */
+export function assertModelPublicationEnabled(source = process.env) {
+  if (source.DISABLE_MODEL_PUBLICATION === '1') {
+    throw new AppError(
+      'Generated research and learning content is temporarily unavailable during safe recovery.',
+      503,
+    );
+  }
+}
 
 function validatePrompt(prompt) {
   if (!prompt || typeof prompt !== 'string') {
@@ -125,14 +143,15 @@ function clampTemperature(requested) {
 export default async function llmRoutes(fastify) {
   const prisma = fastify.prisma;
 
-  // Every /llm/* route requires authentication, an active entitlement
-  // (free or premium), and consumes the per-user daily usage budget.
-  // External identifiers are server-resolved in preHandler. The route handler
-  // (and therefore the model provider) is never entered for forged/mismatched
-  // gene IDs or nonexistent/obsolete HPO IDs.
+  // Every /llm/* route requires authentication and an active entitlement.
+  // The recovery switch precedes quota accounting and all provider-facing work.
+  // External identifiers are then server-resolved in preHandler. The route
+  // handler is never entered for a disabled publication surface or for
+  // forged/mismatched gene IDs and nonexistent/obsolete HPO IDs.
   const guarded = [
     authenticate,
     checkEducationEntitlement,
+    assertModelPublicationEnabled,
     enforceUsageLimit,
     prepareStructuredInvocation(),
   ];
@@ -177,13 +196,13 @@ export default async function llmRoutes(fastify) {
     return { result: safeResult, disclaimer: 'For educational purposes only. Not medical advice.' };
   });
 
-  fastify.post('/chat', { preHandler: guarded }, async (request) => {
+  fastify.post('/chat', { preHandler: guarded }, async () => {
     throw new ValidationError(
       'arbitrary chat is not available; use a structured publication task or the guided genetics tutor'
     );
   });
 
-  fastify.post('/image', { preHandler: guarded }, async (request) => {
+  fastify.post('/image', { preHandler: guarded }, async () => {
     throw new ValidationError(
       'arbitrary image generation is not available; use the bounded genetics education image route'
     );
@@ -191,6 +210,7 @@ export default async function llmRoutes(fastify) {
 }
 
 export const __test = {
+  assertModelPublicationEnabled,
   clampTokens,
   clampTemperature,
   validatePrompt,
