@@ -26,6 +26,7 @@ import { exportGeneReport, exportJSON, copyShareableLink } from "../../lib/expor
 import {
   claimProvenanceRole,
   deriveRankingBasisFromClaims,
+  partitionClaimsBySpecies,
   safeExternalHttpUrl,
 } from "../../../../packages/shared/src/associationClaim.ts";
 import { Download, Copy, Printer } from "lucide-react";
@@ -85,19 +86,17 @@ function GeneCard({ gene, rank, isSelected = false, onSelect = null }) {
         }
       });
     } catch (err) {
-      // Silently fail - activity tracking shouldn't break the app
+      // A failed request must not poison the session de-duplication set. Remove
+      // the key so a later mount can retry without affecting successful de-dupe.
+      loggedGeneViews.delete(viewKey);
       console.log("Could not track activity:", err);
     }
   };
 
   const claims = Array.isArray(gene.associationClaims) ? gene.associationClaims : [];
-  const partition = gene.evidencePartition || {
-    human: claims.filter((c) => c.evidenceClass === 'human_verified'),
-    animal: claims.filter((c) => c.evidenceClass === 'animal_model'),
-    computational: claims.filter((c) => c.evidenceClass === 'computational'),
-    aiLeads: claims.filter((c) => c.evidenceClass === 'ai_lead'),
-    external: claims.filter((c) => c.evidenceClass === 'external_followup'),
-  };
+  // Use the shared partition contract so isAiLead always takes precedence over
+  // contradictory evidenceClass/taxon fields in both data and fallback paths.
+  const partition = gene.evidencePartition || partitionClaimsBySpecies(claims);
   const rankingBasis = gene.rankingBasis || deriveRankingBasisFromClaims(claims);
   const rankingLabel = rankingBasis === 'human_verified'
     ? 'Human-verified association evidence'
