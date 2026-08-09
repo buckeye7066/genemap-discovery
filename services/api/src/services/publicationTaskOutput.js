@@ -88,7 +88,7 @@ function removeAllowedBoundaryDisclaimers(value) {
     .replace(/\bnot\s+medical\s+advice\b/giu, ' ')
     .replace(/\bnot\s+(?:intended|suitable)\s+for\s+clinical\s+use\b/giu, ' ')
     .replace(/\bdoes\s+not\s+(?:assess|predict|establish)\s+(?:personal\s+)?(?:risk|diagnosis|prognosis)\b/giu, ' ')
-    .replace(/\bdo\s+not\s+use\s+(?:this|the|these|it|output|response|result|results)\s+(?:medically|for\s+(?:medical\s+advice|clinical\s+use|clinical\s+decisions?|(?:diagnosis|personal(?:-|\s)risk(?:\s+prediction)?|treatment|dosing|screening)(?:\s*(?:,|and|or)\s*(?:diagnosis|personal(?:-|\s)risk(?:\s+prediction)?|treatment|dosing|screening))*(?:\s*,?\s*(?:and|or)\s+(?:other\s+)?clinical\s+decisions?)?))\b/giu, ' ');
+    .replace(/\bdo\s+not\s+use\s+(?:it|(?:this|the)\s+(?:output|response|result|results)|these\s+results|output|response|result|results)\s+(?:medically|for\s+(?:medical\s+advice|clinical\s+use|clinical\s+decisions?|(?:diagnosis|personal(?:-|\s)risk(?:\s+prediction)?|treatment|dosing|screening)(?:\s*(?:,|and|or)\s*(?:diagnosis|personal(?:-|\s)risk(?:\s+prediction)?|treatment|dosing|screening))*(?:\s*,?\s*(?:and|or)\s+(?:other\s+)?clinical\s+decisions?)?))\b/giu, ' ');
 }
 
 /** Return true when model prose contains clinical or personalized guidance. */
