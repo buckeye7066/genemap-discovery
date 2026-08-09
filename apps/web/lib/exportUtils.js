@@ -287,6 +287,11 @@ export function buildGeneShareText(data = {}) {
     lines.push('Association claims and provenance:');
     claims.forEach((claim, index) => {
       const sourceLink = safeExternalUrl(claim?.directLink);
+      const aiLead = claim?.isAiLead === true
+        ? 'true'
+        : claim?.isAiLead === false
+          ? 'false'
+          : 'not_recorded';
       lines.push([
         `${index + 1}. ${displayValue(claim?.claim, 'Claim text not recorded')}`,
         `source=${displayValue(claim?.source)}`,
@@ -298,6 +303,7 @@ export function buildGeneShareText(data = {}) {
         `species=${displayValue(claim?.species)}`,
         `taxon=${displayValue(claim?.taxon)}`,
         `retrieved=${displayValue(claim?.retrievalDate)}`,
+        `ai_lead=${aiLead}`,
         sourceLink ? `link=${sourceLink}` : 'link=not recorded',
       ].join(' | '));
     });
