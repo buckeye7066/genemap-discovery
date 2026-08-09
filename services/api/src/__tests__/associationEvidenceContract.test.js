@@ -28,6 +28,7 @@ describe('association evidence publication contract', () => {
         canonicalLabel: 'Seizure\u0085term',
         source: 'NLM HPO',
         apiVersion: 'v3',
+        ontologyVersion: '0.1.0',
         obsolete: false,
       },
       claimsByGene: {
@@ -64,6 +65,7 @@ describe('association evidence publication contract', () => {
     expect(result.query).toMatchObject({
       identifier: 'HP:0001250',
       canonicalLabel: 'Seizure term',
+      ontologyVersion: null,
     });
     expect(result.claimCount).toBe(1);
     expect(result.claimsByGene.SCN1A).toEqual([{
@@ -81,7 +83,46 @@ describe('association evidence publication contract', () => {
       directLink: null,
       isAiLead: false,
     }]);
-    expect(JSON.stringify(result)).not.toMatch(/javascript:|0\.999|unsupported_type|GRCh38/);
+    expect(JSON.stringify(result)).not.toMatch(/javascript:|0\.999|unsupported_type|GRCh38|0\.1\.0/);
+  });
+
+  it('records only date-shaped KG releases and never repurposes API package versions', () => {
+    expect(__test.safeReleaseVersion('2026-06-08')).toBe('2026-06-08');
+    expect(__test.safeReleaseVersion('2026-02-31')).toBeNull();
+    expect(__test.safeReleaseVersion('0.1.0')).toBeNull();
+    expect(__test.safeReleaseVersion('v3')).toBeNull();
+
+    const result = sanitizeAssociationEvidence({
+      query: {
+        kind: 'mondo',
+        identifier: 'MONDO:0009061',
+        canonicalLabel: 'cystic fibrosis',
+      },
+      claimsByGene: {
+        CFTR: [{
+          source: 'Monarch Initiative',
+          recordId: 'association-cftr',
+          claim: 'CFTR has source evidence for cystic fibrosis',
+          taxon: '9606',
+          species: 'Homo sapiens',
+          evidenceClass: 'human_verified',
+          evidenceType: 'gene_disease_association',
+          evidenceStrength: 'supporting',
+          releaseVersion: '0.1.0',
+          retrievalDate: '2026-08-09',
+          isAiLead: false,
+        }],
+      },
+      sources: {
+        monarch: { apiVersion: 'v3', releaseVersion: '0.1.0' },
+        openTargets: { apiVersion: 'v4', releaseVersion: '2026-07-01' },
+      },
+      sourceStatus: 'available',
+    }, ['CFTR']);
+
+    expect(result.claimsByGene.CFTR[0].releaseVersion).toBeNull();
+    expect(result.sources.monarch).toEqual({ apiVersion: 'v3', releaseVersion: null });
+    expect(result.sources.openTargets).toEqual({ apiVersion: 'v4', releaseVersion: '2026-07-01' });
   });
 
   it('preserves the final source date across repeated calls by caching the full bounded result', async () => {
