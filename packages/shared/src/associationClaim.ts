@@ -47,6 +47,13 @@ export const SPECIES_LABEL: Record<TaxonCode, string> = {
   unspecified: 'Unspecified',
 };
 
+const NON_ASSOCIATION_EVIDENCE_TYPES = new Set([
+  'gene_identity',
+  'phenotype_ontology',
+  'database_link',
+]);
+
+/** Return a calendar-date stamp for claim retrieval provenance. */
 export function isoRetrievalDate(date = new Date()): string {
   return date.toISOString().slice(0, 10);
 }
@@ -67,6 +74,7 @@ export function safeExternalHttpUrl(value: string | null | undefined): string | 
   }
 }
 
+/** Create a normalized claim with stable species, date, link, and AI-lead fields. */
 export function createAssociationClaim(
   partial: Omit<AssociationClaim, 'species' | 'isAiLead' | 'retrievalDate'> & {
     species?: string;
@@ -138,7 +146,7 @@ export function humanGeneIdentityClaim(input: {
   });
 }
 
-/** HPO phenotype term claim — human ontology only. */
+/** HPO phenotype term claim, limited to ontology-term verification. */
 export function hpoPhenotypeClaim(input: {
   geneSymbol: string;
   phenotypeName: string;
@@ -149,7 +157,7 @@ export function hpoPhenotypeClaim(input: {
     source: 'Human Phenotype Ontology',
     recordId: input.hpoId,
     // This verifies the phenotype term itself (ontology record), not a curated
-    // gene–phenotype association. Keep wording neutral and non-associative.
+    // gene-phenotype association. Keep wording neutral and non-associative.
     claim: `Phenotype term validated in HPO: ${input.phenotypeName}`,
     taxon: '9606',
     // Presence of an HPO term is a follow-up pointer, not curated association evidence.
@@ -186,24 +194,40 @@ export function externalFollowupClaim(input: {
   });
 }
 
+/**
+ * Return an association-ranking score only for evidence that actually supports
+ * a gene-query association. Gene identity, ontology-term verification, and
+ * database links remain visible provenance but cannot promote a candidate.
+ */
 export function claimSortKey(claim: AssociationClaim): number {
+  if (
+    claim.isAiLead
+    || claim.evidenceClass === 'external_followup'
+    || claim.evidenceStrength === 'none'
+    || NON_ASSOCIATION_EVIDENCE_TYPES.has(claim.evidenceType)
+  ) return 0;
   return EVIDENCE_CLASS_RANK[claim.evidenceClass] ?? 0;
 }
 
+/**
+ * Rank only by genuine association evidence. Candidates tied at the same
+ * evidence level retain their original model-lead order; coordinate or identity
+ * verification never substitutes for relevance evidence.
+ */
 export function rankGenesByProvenance<T extends {
   associationClaims?: AssociationClaim[];
-  coordinatesVerified?: boolean;
-  symbol?: string;
 }>(genes: T[]): T[] {
-  return [...genes].sort((a, b) => {
-    const aBest = Math.max(0, ...(a.associationClaims || []).map(claimSortKey));
-    const bBest = Math.max(0, ...(b.associationClaims || []).map(claimSortKey));
-    if (bBest !== aBest) return bBest - aBest;
-    const aVerified = a.coordinatesVerified ? 1 : 0;
-    const bVerified = b.coordinatesVerified ? 1 : 0;
-    if (bVerified !== aVerified) return bVerified - aVerified;
-    return String(a.symbol || '').localeCompare(String(b.symbol || ''));
-  });
+  return genes
+    .map((gene, originalIndex) => ({
+      gene,
+      originalIndex,
+      bestAssociationScore: Math.max(0, ...(gene.associationClaims || []).map(claimSortKey)),
+    }))
+    .sort((a, b) => (
+      b.bestAssociationScore - a.bestAssociationScore
+      || a.originalIndex - b.originalIndex
+    ))
+    .map(({ gene }) => gene);
 }
 
 /** Strip LLM self-scores so they cannot be treated as evidence. */
@@ -217,6 +241,7 @@ export function stripLlmSelfScores<T extends Record<string, unknown>>(gene: T): 
   return next;
 }
 
+/** Partition claims so human, animal, computational, AI, and follow-up evidence never mix silently. */
 export function partitionClaimsBySpecies(claims: AssociationClaim[]) {
   const human: AssociationClaim[] = [];
   const animal: AssociationClaim[] = [];
