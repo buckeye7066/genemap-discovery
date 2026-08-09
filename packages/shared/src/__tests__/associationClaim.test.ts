@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   aiLeadClaim,
+  claimSortKey,
   createAssociationClaim,
   externalFollowupClaim,
   humanGeneIdentityClaim,
@@ -20,9 +21,10 @@ describe('associationClaim', () => {
     expect(claim.recordId).toBeNull();
     expect(claim.species).toBe('Homo sapiens');
     expect(claim.retrievalDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(claimSortKey(claim)).toBe(0);
   });
 
-  it('attaches human gene identity provenance with version and link', () => {
+  it('attaches human gene identity provenance without treating identity as association evidence', () => {
     const claim = humanGeneIdentityClaim({
       symbol: 'CFTR',
       ensemblId: 'ENSG00000001626',
@@ -31,13 +33,15 @@ describe('associationClaim', () => {
       retrievalDate: '2026-08-08',
     });
     expect(claim.evidenceClass).toBe('human_verified');
+    expect(claim.evidenceType).toBe('gene_identity');
     expect(claim.taxon).toBe('9606');
     expect(claim.releaseVersion).toBe('GRCh38');
     expect(claim.directLink).toContain('ENSG00000001626');
     expect(claim.isAiLead).toBe(false);
+    expect(claimSortKey(claim)).toBe(0);
   });
 
-  it('keeps HPO claims human-only and linked', () => {
+  it('keeps HPO term verification visible but outside association ranking', () => {
     const claim = hpoPhenotypeClaim({
       geneSymbol: 'SCN1A',
       phenotypeName: 'Seizure',
@@ -47,6 +51,7 @@ describe('associationClaim', () => {
     expect(claim.taxon).toBe('9606');
     expect(claim.recordId).toBe('HP:0001250');
     expect(claim.directLink).toContain('HP:0001250');
+    expect(claimSortKey(claim)).toBe(0);
   });
 
   it('keeps only absolute HTTP(S) provenance links at the shared boundary', () => {
@@ -63,6 +68,7 @@ describe('associationClaim', () => {
       url: 'javascript:alert(1)',
     });
     expect(unsafe.directLink).toBeNull();
+    expect(claimSortKey(unsafe)).toBe(0);
 
     const safe = externalFollowupClaim({
       geneSymbol: 'RUNX1',
@@ -70,6 +76,7 @@ describe('associationClaim', () => {
       url: 'https://example.org/RUNX1',
     });
     expect(safe.directLink).toBe('https://example.org/RUNX1');
+    expect(claimSortKey(safe)).toBe(0);
   });
 
   it('separates human, animal, computational, and AI claims', () => {
@@ -82,7 +89,7 @@ describe('associationClaim', () => {
         claim: 'mouse ortholog evidence',
         taxon: '10090',
         evidenceClass: 'animal_model',
-        evidenceType: 'ortholog',
+        evidenceType: 'ortholog_association',
         evidenceStrength: 'supporting',
         releaseVersion: 'MGI-2026',
         directLink: 'https://www.informatics.jax.org/marker/MGI:123',
@@ -90,10 +97,10 @@ describe('associationClaim', () => {
       createAssociationClaim({
         source: 'In-silico predictor',
         recordId: null,
-        claim: 'computational score',
+        claim: 'computational association score',
         taxon: '9606',
         evidenceClass: 'computational',
-        evidenceType: 'in_silico',
+        evidenceType: 'gene_phenotype_association_prediction',
         evidenceStrength: 'supporting',
         releaseVersion: 'v1',
         directLink: null,
@@ -106,7 +113,20 @@ describe('associationClaim', () => {
     expect(parts.computational).toHaveLength(1);
   });
 
-  it('ranks verified provenance above AI leads and strips LLM self-scores', () => {
+  it('promotes genuine association evidence but preserves lead order for metadata-only ties', () => {
+    const humanAssociation = createAssociationClaim({
+      source: 'Curated association source',
+      recordId: 'ASSOC:1',
+      claim: 'ASSOC1 is supported for the bounded research query',
+      taxon: '9606',
+      evidenceClass: 'human_verified',
+      evidenceType: 'gene_disease_association',
+      evidenceStrength: 'strong',
+      releaseVersion: '2026.1',
+      directLink: 'https://example.org/associations/1',
+    });
+    expect(claimSortKey(humanAssociation)).toBeGreaterThan(0);
+
     const genes = [
       {
         symbol: 'AI1',
@@ -115,18 +135,25 @@ describe('associationClaim', () => {
         associationClaims: [aiLeadClaim('AI1', 'q')],
       },
       {
-        symbol: 'VER1',
+        symbol: 'ID1',
         score: 0.1,
         coordinatesVerified: true,
         associationClaims: [
-          aiLeadClaim('VER1', 'q'),
-          humanGeneIdentityClaim({ symbol: 'VER1', ensemblId: 'ENSG2' }),
+          aiLeadClaim('ID1', 'q'),
+          humanGeneIdentityClaim({ symbol: 'ID1', ensemblId: 'ENSG2' }),
         ],
       },
+      {
+        symbol: 'ASSOC1',
+        score: 0.01,
+        coordinatesVerified: false,
+        associationClaims: [aiLeadClaim('ASSOC1', 'q'), humanAssociation],
+      },
     ];
+
     const ranked = rankGenesByProvenance(genes);
-    expect(ranked.map((g) => g.symbol)).toEqual(['VER1', 'AI1']);
+    expect(ranked.map((gene) => gene.symbol)).toEqual(['ASSOC1', 'AI1', 'ID1']);
     expect(stripLlmSelfScores(ranked[0]).score).toBeUndefined();
-    expect(stripLlmSelfScores(ranked[0]).confidence_score).toBeUndefined();
+    expect(stripLlmSelfScores(ranked[1]).confidence_score).toBeUndefined();
   });
 });
