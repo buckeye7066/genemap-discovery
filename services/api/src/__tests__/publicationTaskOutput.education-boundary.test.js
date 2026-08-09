@@ -38,8 +38,8 @@ describe('genetics education publication boundary', () => {
     expect(sanitizeEducation(raw)).toBe(__test.PUBLICATION_BOUNDARY_MESSAGE);
   });
 
-  it('allows neutral genetics education that discusses diagnosis without assessing a person', () => {
-    const raw = 'Genetic testing can contribute evidence used during diagnosis, but this lesson does not assess any individual.';
+  it('allows neutral genetics education without personalized or actionable guidance', () => {
+    const raw = 'Genetic testing can contribute evidence used during clinical evaluation, but this lesson does not assess any individual.';
     expect(sanitizeEducation(raw)).toBe(raw);
   });
 
