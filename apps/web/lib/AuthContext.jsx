@@ -10,6 +10,13 @@ export const AuthProvider = ({ children }) => {
   const [isLoadingPublicSettings, setIsLoadingPublicSettings] = useState(false);
   const [authError, setAuthError] = useState(null);
 
+  const clearSession = useCallback((message = 'Authentication required') => {
+    setCsrfToken(null);
+    setUser(null);
+    setIsAuthenticated(false);
+    setAuthError({ type: 'auth_required', message });
+  }, []);
+
   const checkAuth = useCallback(async () => {
     // Anonymous visitors carry no session hint (no cached CSRF token from a
     // prior login). For them GET /auth/me can only 401, and the browser logs
@@ -112,11 +119,9 @@ export const AuthProvider = ({ children }) => {
     try {
       await apiClient.logout();
     } finally {
-      setUser(null);
-      setIsAuthenticated(false);
-      setAuthError({ type: 'auth_required', message: 'Logged out' });
+      clearSession('Logged out');
     }
-  }, []);
+  }, [clearSession]);
 
   const value = useMemo(() => ({
     user,
@@ -128,9 +133,23 @@ export const AuthProvider = ({ children }) => {
     login,
     register,
     logout,
+    clearSession,
     checkAuth,
     applyUser,
-  }), [user, isAuthenticated, isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin, login, register, logout, checkAuth, applyUser]);
+  }), [
+    user,
+    isAuthenticated,
+    isLoadingAuth,
+    isLoadingPublicSettings,
+    authError,
+    navigateToLogin,
+    login,
+    register,
+    logout,
+    clearSession,
+    checkAuth,
+    applyUser,
+  ]);
 
   return (
     <AuthContext.Provider value={value}>
