@@ -2,6 +2,7 @@ import React from 'react';
 import ReactMarkdown from 'react-markdown';
 import { BookOpen } from 'lucide-react';
 import AiThinkingIndicator from '@/components/AiThinkingIndicator';
+import { safeModelMarkdownComponents } from '@/components/shared/safeModelMarkdown';
 
 export default function AdaptiveExplanation({ content, loading, level }) {
   if (loading) {
@@ -73,6 +74,7 @@ export default function AdaptiveExplanation({ content, loading, level }) {
               {children}
             </code>
           ),
+          ...safeModelMarkdownComponents,
         }}
       >
         {content}
