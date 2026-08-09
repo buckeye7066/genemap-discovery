@@ -64,6 +64,7 @@ const myDataNav = [
 
 const accountNav = [
   { title: "Profile", url: createPageUrl("Profile"), icon: User },
+  { title: "Account & Privacy", url: createPageUrl("AccountSettings"), icon: ShieldOff },
   // Store policy: native builds get no upgrade entry point. The Premium page
   // itself is also gated, so deep links stay compliant too. (isNativeApp() is
   // constant for the app's lifetime, so module scope is safe.)
