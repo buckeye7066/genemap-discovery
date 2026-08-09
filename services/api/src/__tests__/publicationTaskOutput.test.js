@@ -195,7 +195,7 @@ describe('sanitizePublicationTaskOutput', () => {
     });
   });
 
-  it('reduces gene-profile output to bounded non-clinical text and phenotype names only', () => {
+  it('reduces safe gene-profile output to bounded non-clinical text and phenotype names only', () => {
     const result = sanitize('gene_profile', {
       summary: 'This is not a diagnosis. Exploratory\nsummary\u0000with boundaries.',
       keyTakeaways: [
@@ -219,6 +219,7 @@ describe('sanitizePublicationTaskOutput', () => {
     });
 
     expect(result.summary).toBe('This is not a diagnosis. Exploratory summary with boundaries.');
+    expect(result.summaryStatus).toBe('available');
     expect(result.keyTakeaways).toHaveLength(12);
     expect(result.keyTakeaways.slice(0, 2)).toEqual(['First point', 'Second point']);
     expect(result.keyTakeaways).not.toContain('Patients should start medication.');
@@ -226,19 +227,26 @@ describe('sanitizePublicationTaskOutput', () => {
     expect(JSON.stringify(result)).not.toMatch(/hpoId|directLink|expressionData|treatmentData|MODEL-GUESS|5 mg/);
   });
 
-  it('withholds clinical summary and takeaway fields rather than displaying them', () => {
+  it('returns an explicit safe withheld profile instead of allowing a client-side association fallback', () => {
     const result = sanitize('gene_profile', {
       summary: 'The patient should begin treatment and take 10 mg daily.',
       keyTakeaways: ['Screening is recommended for this patient.', 'Verify source records.'],
       phenotypes: [],
     });
 
-    expect(result.summary).toBeUndefined();
+    expect(result.summaryStatus).toBe('withheld');
+    expect(result.summary).toBe(__test.WITHHELD_PROFILE_SUMMARY);
+    expect(result.summary).not.toMatch(/associated with|treatment|10 mg daily/i);
     expect(result.keyTakeaways).toEqual(['Verify source records.']);
   });
 
-  it('returns a stable empty profile for invalid model output', () => {
-    expect(sanitize('gene_profile', null)).toEqual({ keyTakeaways: [], phenotypes: [] });
+  it('returns a deterministic unavailable profile for invalid or missing model output', () => {
+    expect(sanitize('gene_profile', null)).toEqual({
+      summary: __test.UNAVAILABLE_PROFILE_SUMMARY,
+      summaryStatus: 'unavailable',
+      keyTakeaways: [],
+      phenotypes: [],
+    });
     expect(sanitize('classify', [], PHENOTYPE_QUERY)).toEqual({
       queryType: 'phenotype',
       isDisease: false,
@@ -261,6 +269,26 @@ describe('sanitizePublicationTaskOutput', () => {
     expect(result).not.toContain('https://');
     expect(result).not.toContain('\u0085');
     expect(result).not.toMatch(/\n{3,}/);
+  });
+
+  it('neutralizes reference-style Markdown, image definitions, and protocol-relative URLs', () => {
+    const raw = [
+      '# Bounded narrative',
+      'Review [the source][record] and ![tracking pixel][pixel].',
+      '[record]: https://untrusted.example/source "source"',
+      '[pixel]: //tracker.example/pixel.png',
+      'Also inspect //another.example/path.',
+    ].join('\n');
+
+    const result = sanitizePublicationTaskOutput(RESEARCH_TASK, {}, raw);
+
+    expect(result).toContain('Review the source and tracking pixel.');
+    expect(result).toContain('[external link removed]');
+    expect(result).not.toContain('[record]:');
+    expect(result).not.toContain('[pixel]:');
+    expect(result).not.toContain('https://');
+    expect(result).not.toContain('//tracker.example');
+    expect(result).not.toContain('//another.example');
   });
 
   it('withholds clinical guidance from research and learning publication tasks', () => {
