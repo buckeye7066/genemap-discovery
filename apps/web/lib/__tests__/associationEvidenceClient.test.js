@@ -16,7 +16,7 @@ describe('associationEvidenceClient', () => {
     vi.clearAllMocks();
   });
 
-  it('deduplicates and bounds candidate symbols before calling the authenticated API', async () => {
+  it('deduplicates, policy-filters, and bounds candidate symbols before calling the authenticated API', async () => {
     apiClient.request.mockResolvedValue({
       query: { ...query, canonicalLabel: 'Seizure' },
       claimsByGene: { SCN1A: [] },
@@ -28,6 +28,8 @@ describe('associationEvidenceClient', () => {
       'scn1a',
       'SCN1A',
       'not a symbol',
+      'TAKE-5MG',
+      'STOP-DRUG',
       ...Array.from({ length: 20 }, (_, index) => `G${index + 10}`),
     ]);
 
@@ -40,6 +42,10 @@ describe('associationEvidenceClient', () => {
       timeoutMs: 45_000,
     });
     expect(result.sourceStatus).toBe('no_matching_associations');
+    expect(__test.isPublicationGeneSymbol('SCN1A')).toBe(true);
+    expect(__test.isPublicationGeneSymbol('STOP1')).toBe(true);
+    expect(__test.isPublicationGeneSymbol('TAKE-5MG')).toBe(false);
+    expect(__test.isPublicationGeneSymbol('STOP-DRUG')).toBe(false);
   });
 
   it('fails soft without promoting or removing candidate leads when the source API is unavailable', async () => {
@@ -59,6 +65,7 @@ describe('associationEvidenceClient', () => {
   it('does not make a request without a valid reference and at least one bounded symbol', async () => {
     expect(await fetchAssociationEvidence(null, ['SCN1A'])).toEqual(__test.EMPTY_RESULT);
     expect(await fetchAssociationEvidence(query, ['not a gene'])).toEqual(__test.EMPTY_RESULT);
+    expect(await fetchAssociationEvidence(query, ['TAKE-5MG'])).toEqual(__test.EMPTY_RESULT);
     expect(apiClient.request).not.toHaveBeenCalled();
   });
 });
