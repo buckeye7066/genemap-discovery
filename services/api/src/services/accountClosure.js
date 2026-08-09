@@ -159,6 +159,7 @@ export async function closeUserAccount({
   const scrubbedEmail = anonymizedEmail(normalizedEmail);
   const actorToken = deletedActorToken(user.id);
 
+  /** @type {Map<string, number>} */
   const assignmentCounts = new Map();
   for (const assignment of seatAssignments) {
     if (String(assignment.status || '').toLowerCase() !== 'active') continue;
