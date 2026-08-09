@@ -9,7 +9,10 @@ import {
   enrichGenes,
   validateHpoTerms,
 } from '../services/genomicDatabases.js';
-import { getPublicationAssociationEvidence } from '../services/associationEvidenceContract.js';
+import {
+  getPublicationAssociationEvidence,
+  isPublicationGeneSymbol,
+} from '../services/associationEvidenceContract.js';
 import { parseVcfText, enrichVcfVariants, VCF_LIMITS } from '../services/vcf.js';
 import { ValidationError, NotFoundError } from '../utils/errors.js';
 import { createAuditLog } from '../utils/audit.js';
@@ -66,15 +69,19 @@ const curatedReferenceSchema = z.object({
   version: z.literal(1),
 }).strict();
 
+const publicationSymbolSchema = z.string()
+  .trim()
+  .toUpperCase()
+  .regex(/^[A-Z0-9][A-Z0-9-]{1,14}$/u)
+  .refine(isPublicationGeneSymbol, 'Candidate symbol violates the publication boundary');
+
 const associationEvidenceSchema = z.object({
   query: z.discriminatedUnion('kind', [
     hpoReferenceSchema,
     mondoReferenceSchema,
     curatedReferenceSchema,
   ]),
-  symbols: z.array(
-    z.string().trim().toUpperCase().regex(/^[A-Z0-9][A-Z0-9-]{1,14}$/u),
-  ).min(1).max(15),
+  symbols: z.array(publicationSymbolSchema).min(1).max(15),
 }).strict();
 
 /**
