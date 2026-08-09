@@ -5,6 +5,9 @@ import {
 } from '../services/publicationTaskOutput.js';
 
 const TASK = 'candidate_gene_research';
+const RESEARCH_TASK = 'research_hypothesis';
+const AGGREGATE_TASK = 'aggregate_genomics_research';
+const LEARNING_TASK = 'learning_activity_summary';
 const DISEASE_QUERY = {
   kind: 'curated_concept',
   conceptId: 'disease:cystic-fibrosis',
@@ -100,6 +103,27 @@ describe('sanitizePublicationTaskOutput', () => {
     }
   });
 
+  it('drops clinical guidance embedded in candidate explanations', () => {
+    const result = sanitize('suggest_candidates', {
+      candidateGenes: [
+        {
+          symbol: 'CFTR',
+          name: 'CFTR',
+          explanation: 'Patients should start medication and take 5 mg daily.',
+        },
+        {
+          symbol: 'RUNX1',
+          explanation: 'An exploratory candidate for source verification.',
+        },
+      ],
+    });
+
+    expect(result.candidateGenes).toEqual([
+      { symbol: 'CFTR', name: 'CFTR' },
+      { symbol: 'RUNX1', explanation: 'An exploratory candidate for source verification.' },
+    ]);
+  });
+
   it('derives classification from trusted curated and ontology references', () => {
     const phenotype = sanitize('classify', {
       queryType: 'disease',
@@ -151,11 +175,12 @@ describe('sanitizePublicationTaskOutput', () => {
     });
   });
 
-  it('reduces gene-profile output to bounded text and phenotype names only', () => {
+  it('reduces gene-profile output to bounded non-clinical text and phenotype names only', () => {
     const result = sanitize('gene_profile', {
-      summary: '  Exploratory\nsummary\u0000with boundaries  ',
+      summary: 'This is not a diagnosis. Exploratory\nsummary\u0000with boundaries.',
       keyTakeaways: [
         'First point',
+        'Patients should start medication.',
         { text: 'object must be dropped' },
         'first point',
         'Second\npoint',
@@ -165,6 +190,7 @@ describe('sanitizePublicationTaskOutput', () => {
         { name: 'Seizure', hpoId: 'HP:MODEL-GUESS', directLink: 'https://untrusted.example' },
         'Ataxia',
         { name: 'seizure' },
+        { name: 'Take 5 mg daily' },
         { name: { object: true } },
         null,
       ],
@@ -172,11 +198,23 @@ describe('sanitizePublicationTaskOutput', () => {
       treatmentData: ['not publishable'],
     });
 
-    expect(result.summary).toBe('Exploratory summary with boundaries');
+    expect(result.summary).toBe('This is not a diagnosis. Exploratory summary with boundaries.');
     expect(result.keyTakeaways).toHaveLength(12);
     expect(result.keyTakeaways.slice(0, 2)).toEqual(['First point', 'Second point']);
+    expect(result.keyTakeaways).not.toContain('Patients should start medication.');
     expect(result.phenotypes).toEqual([{ name: 'Seizure' }, { name: 'Ataxia' }]);
-    expect(JSON.stringify(result)).not.toMatch(/hpoId|directLink|expressionData|treatmentData|MODEL-GUESS/);
+    expect(JSON.stringify(result)).not.toMatch(/hpoId|directLink|expressionData|treatmentData|MODEL-GUESS|5 mg/);
+  });
+
+  it('withholds clinical summary and takeaway fields rather than displaying them', () => {
+    const result = sanitize('gene_profile', {
+      summary: 'The patient should begin treatment and take 10 mg daily.',
+      keyTakeaways: ['Screening is recommended for this patient.', 'Verify source records.'],
+      phenotypes: [],
+    });
+
+    expect(result.summary).toBeUndefined();
+    expect(result.keyTakeaways).toEqual(['Verify source records.']);
   });
 
   it('returns a stable empty profile for invalid model output', () => {
@@ -191,11 +229,52 @@ describe('sanitizePublicationTaskOutput', () => {
     });
   });
 
-  it('does not rewrite unrelated publication task output', () => {
-    const original = '{"cohort":"aggregate"}';
-    expect(sanitizePublicationTaskOutput('aggregate_genomics_research', { operation: 'x' }, original))
-      .toBe(original);
-    expect(sanitizePublicationTaskOutput('aggregate_genomics_research', {}, null)).toBe('');
+  it('normalizes every published research narrative instead of passing provider prose through', () => {
+    const raw = '# Cohort hypothesis\n<script>alert(1)</script>\nReview [the source](https://untrusted.example) and https://other.example/path.\u0085\n\n\nUse deidentified aggregate data.';
+    const result = sanitizePublicationTaskOutput(RESEARCH_TASK, {}, raw);
+
+    expect(result).toContain('# Cohort hypothesis');
+    expect(result).toContain('the source');
+    expect(result).toContain('[external link removed]');
+    expect(result).toContain('Use deidentified aggregate data.');
+    expect(result).not.toContain('<script>');
+    expect(result).not.toContain('https://');
+    expect(result).not.toContain('\u0085');
+    expect(result).not.toMatch(/\n{3,}/);
+  });
+
+  it('withholds clinical guidance from research and learning publication tasks', () => {
+    const clinical = 'The patient should begin treatment and take 5 mg daily.';
+    expect(sanitizePublicationTaskOutput(RESEARCH_TASK, {}, clinical))
+      .toBe(__test.PUBLICATION_BOUNDARY_MESSAGE);
+    expect(sanitizePublicationTaskOutput(AGGREGATE_TASK, {}, clinical))
+      .toBe(__test.PUBLICATION_BOUNDARY_MESSAGE);
+    expect(sanitizePublicationTaskOutput(LEARNING_TASK, {}, 'You should consult your physician for screening.'))
+      .toBe(__test.PUBLICATION_BOUNDARY_MESSAGE);
+  });
+
+  it('allows explicit non-clinical boundary disclaimers and caps narrative output', () => {
+    const safe = sanitizePublicationTaskOutput(
+      LEARNING_TASK,
+      {},
+      `This is not medical advice. Compare aggregate patterns only. ${'A'.repeat(4_000)}`,
+    );
+    expect(safe).not.toBe(__test.PUBLICATION_BOUNDARY_MESSAGE);
+    expect(safe).toContain('This is not medical advice.');
+    expect(safe.length).toBeLessThanOrEqual(3_000);
+  });
+
+  it('returns task-specific empty messages for missing published narratives', () => {
+    expect(sanitizePublicationTaskOutput(RESEARCH_TASK, {}, null))
+      .toBe(__test.EMPTY_RESEARCH_MESSAGE);
+    expect(sanitizePublicationTaskOutput(LEARNING_TASK, {}, null))
+      .toBe(__test.EMPTY_LEARNING_MESSAGE);
+  });
+
+  it('keeps backward compatibility only for unknown non-published tasks', () => {
+    const original = '{"internal":"aggregate"}';
+    expect(sanitizePublicationTaskOutput('internal_non_published_task', {}, original)).toBe(original);
+    expect(sanitizePublicationTaskOutput('internal_non_published_task', {}, null)).toBe('');
   });
 
   it('caps individual text fields without retaining C0, DEL, or C1 controls', () => {
