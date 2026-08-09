@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   aiLeadClaim,
+  claimProvenanceRole,
   claimSortKey,
   createAssociationClaim,
+  deriveRankingBasisFromClaims,
   externalFollowupClaim,
   humanGeneIdentityClaim,
   hpoPhenotypeClaim,
@@ -19,12 +21,14 @@ describe('associationClaim', () => {
     expect(claim.evidenceClass).toBe('ai_lead');
     expect(claim.evidenceStrength).toBe('lead');
     expect(claim.recordId).toBeNull();
+    expect(claim.referenceAssembly).toBeNull();
     expect(claim.species).toBe('Homo sapiens');
     expect(claim.retrievalDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(claimSortKey(claim)).toBe(0);
+    expect(claimProvenanceRole(claim)).toBe('ai_candidate_lead');
   });
 
-  it('attaches human gene identity provenance without treating identity as association evidence', () => {
+  it('records reference assembly separately from an unknown source release', () => {
     const claim = humanGeneIdentityClaim({
       symbol: 'CFTR',
       ensemblId: 'ENSG00000001626',
@@ -35,10 +39,23 @@ describe('associationClaim', () => {
     expect(claim.evidenceClass).toBe('human_verified');
     expect(claim.evidenceType).toBe('gene_identity');
     expect(claim.taxon).toBe('9606');
-    expect(claim.releaseVersion).toBe('GRCh38');
+    expect(claim.releaseVersion).toBeNull();
+    expect(claim.referenceAssembly).toBe('GRCh38');
     expect(claim.directLink).toContain('ENSG00000001626');
     expect(claim.isAiLead).toBe(false);
     expect(claimSortKey(claim)).toBe(0);
+    expect(claimProvenanceRole(claim)).toBe('source_metadata');
+  });
+
+  it('retains a real source release when an authoritative adapter supplies one', () => {
+    const claim = humanGeneIdentityClaim({
+      symbol: 'RUNX1',
+      entrezId: '861',
+      genomeBuild: 'GRCh38',
+      sourceVersion: 'MyGene.info 2026-08 snapshot',
+    });
+    expect(claim.releaseVersion).toBe('MyGene.info 2026-08 snapshot');
+    expect(claim.referenceAssembly).toBe('GRCh38');
   });
 
   it('keeps HPO term verification visible but outside association ranking', () => {
@@ -50,8 +67,10 @@ describe('associationClaim', () => {
     });
     expect(claim.taxon).toBe('9606');
     expect(claim.recordId).toBe('HP:0001250');
+    expect(claim.releaseVersion).toBeNull();
     expect(claim.directLink).toContain('HP:0001250');
     expect(claimSortKey(claim)).toBe(0);
+    expect(claimProvenanceRole(claim)).toBe('source_metadata');
   });
 
   it('keeps only absolute HTTP(S) provenance links at the shared boundary', () => {
@@ -111,6 +130,24 @@ describe('associationClaim', () => {
     expect(parts.human).toHaveLength(1);
     expect(parts.animal).toHaveLength(1);
     expect(parts.computational).toHaveLength(1);
+  });
+
+  it('derives one ranking basis from genuine association evidence only', () => {
+    const identity = humanGeneIdentityClaim({ symbol: 'RUNX1', entrezId: '861' });
+    const computational = createAssociationClaim({
+      source: 'Reviewed computational fixture',
+      recordId: 'COMP:1',
+      claim: 'RUNX1 computationally supports the bounded research query',
+      taxon: '9606',
+      evidenceClass: 'computational',
+      evidenceType: 'gene_phenotype_association_prediction',
+      evidenceStrength: 'supporting',
+      releaseVersion: 'v1',
+      directLink: 'https://example.org/COMP:1',
+    });
+    expect(deriveRankingBasisFromClaims([aiLeadClaim('RUNX1', 'q'), identity])).toBe('ai_lead');
+    expect(deriveRankingBasisFromClaims([identity, computational])).toBe('computational');
+    expect(claimProvenanceRole(computational)).toBe('association_evidence');
   });
 
   it('promotes genuine association evidence but preserves lead order for metadata-only ties', () => {
