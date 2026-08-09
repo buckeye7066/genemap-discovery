@@ -12,7 +12,22 @@ vi.mock('../../../lib/AuthContext', () => ({
   useAuth: () => ({ user: { email: 'provenance-test@example.invalid' } }),
 }));
 
-const claim = {
+const aiClaim = {
+  source: 'GeneMap AI candidate generator',
+  recordId: null,
+  claim: 'RUNX1 is an AI-suggested candidate lead for the bounded query',
+  taxon: '9606',
+  species: 'Homo sapiens',
+  evidenceClass: 'ai_lead',
+  evidenceType: 'model_suggestion',
+  evidenceStrength: 'lead',
+  releaseVersion: 'publication-task/candidate_gene_research@1',
+  retrievalDate: '2026-08-09',
+  directLink: null,
+  isAiLead: true,
+};
+
+const identityClaim = {
   source: 'ClinGen',
   recordId: 'RUNX1-001',
   claim: 'RUNX1 gene identity verified in Homo sapiens',
@@ -30,13 +45,15 @@ const claim = {
 const gene = {
   symbol: 'RUNX1',
   name: 'RUNX family transcription factor 1',
-  rankingBasis: 'human_verified',
-  associationClaims: [claim],
+  // Identity verification is visible provenance but does not verify the
+  // candidate's association with the bounded query.
+  rankingBasis: 'ai_lead',
+  associationClaims: [aiClaim, identityClaim],
   evidencePartition: {
-    human: [claim],
+    human: [identityClaim],
     animal: [],
     computational: [],
-    aiLeads: [],
+    aiLeads: [aiClaim],
     external: [],
   },
   sources: ['ClinGen'],
@@ -47,22 +64,27 @@ const gene = {
 describe('GeneCard claim-level provenance', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it('renders the complete provenance tuple for a representative ranked claim', async () => {
+  it('renders the complete identity provenance tuple without promoting association status', async () => {
     render(<GeneCard gene={gene} rank={1} />);
 
+    expect(screen.getByText('AI research lead')).toBeInTheDocument();
     const claims = screen.getByTestId('association-claims');
-    expect(within(claims).getByText('human_verified')).toBeInTheDocument();
-    expect(within(claims).getByText('gene_identity')).toBeInTheDocument();
-    expect(within(claims).getByText('supporting')).toBeInTheDocument();
-    expect(within(claims).getByText('Homo sapiens')).toBeInTheDocument();
-    expect(within(claims).getByText(claim.claim)).toBeInTheDocument();
-    expect(within(claims).getByText('ClinGen', { selector: 'span' })).toBeInTheDocument();
-    expect(within(claims).getByText(/RUNX1-001/)).toBeInTheDocument();
-    expect(within(claims).getByText(/GRCh38 \/ ClinGen 2026-08/)).toBeInTheDocument();
-    expect(within(claims).getByText(/retrieved 2026-08-09/)).toBeInTheDocument();
+    const identityText = within(claims).getByText(identityClaim.claim);
+    const identityRow = identityText.closest('li');
+    expect(identityRow).toBeTruthy();
 
-    const sourceLink = within(claims).getByRole('link', { name: /open source record/i });
-    expect(sourceLink).toHaveAttribute('href', claim.directLink);
+    const row = within(identityRow);
+    expect(row.getByText('human_verified')).toBeInTheDocument();
+    expect(row.getByText('gene_identity')).toBeInTheDocument();
+    expect(row.getByText('supporting')).toBeInTheDocument();
+    expect(row.getByText('Homo sapiens')).toBeInTheDocument();
+    expect(row.getByText('ClinGen', { selector: 'span' })).toBeInTheDocument();
+    expect(row.getByText(/RUNX1-001/)).toBeInTheDocument();
+    expect(row.getByText(/GRCh38 \/ ClinGen 2026-08/)).toBeInTheDocument();
+    expect(row.getByText(/retrieved 2026-08-09/)).toBeInTheDocument();
+
+    const sourceLink = row.getByRole('link', { name: /open source record/i });
+    expect(sourceLink).toHaveAttribute('href', identityClaim.directLink);
     expect(sourceLink).toHaveAttribute('rel', 'noopener noreferrer');
 
     await waitFor(() => expect(apiClient.logActivity).toHaveBeenCalledWith(
