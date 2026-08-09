@@ -48,10 +48,10 @@ const gene = {
 
 function installPrintWindow() {
   vi.useFakeTimers();
-  const write = vi.fn();
-  const close = vi.fn();
-  const print = vi.fn();
-  vi.spyOn(window, 'open').mockReturnValue({ document: { write, close }, print });
+  const write = vi.spyOn(document, 'write').mockImplementation(() => {});
+  const close = vi.spyOn(document, 'close').mockImplementation(() => {});
+  const print = vi.spyOn(window, 'print').mockImplementation(() => {});
+  vi.spyOn(window, 'open').mockReturnValue(window);
   return { write, close, print };
 }
 
