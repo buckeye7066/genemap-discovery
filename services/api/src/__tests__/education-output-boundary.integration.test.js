@@ -15,6 +15,7 @@ vi.mock('../services/llm.js', () => ({
 import { authCookie, buildTestApp, createPrismaMock } from './setup.js';
 
 const user = { userId: 'education-output-user', email: 'education-output@example.com', role: 'user' };
+const topic = 'what-is-dna';
 
 describe('education route publication boundaries', () => {
   let app;
@@ -44,7 +45,7 @@ describe('education route publication boundaries', () => {
       method: 'POST',
       url: '/education/explain',
       headers: { cookie },
-      payload: { topic: 'dna', level: 'undergraduate' },
+      payload: { topic, level: 'undergraduate' },
     });
 
     expect(response.statusCode).toBe(200);
@@ -66,7 +67,7 @@ describe('education route publication boundaries', () => {
         publicationTask: 'genetics_education',
         taskInput: {
           version: 1,
-          topic: 'dna',
+          topic,
           level: 'undergraduate',
           interaction: 'give_example',
         },
@@ -97,7 +98,7 @@ describe('education route publication boundaries', () => {
       method: 'POST',
       url: '/education/quiz',
       headers: { cookie },
-      payload: { topic: 'dna', level: 'undergraduate', questionCount: 5 },
+      payload: { topic, level: 'undergraduate', questionCount: 5 },
     });
 
     expect(response.statusCode).toBe(200);
@@ -121,7 +122,7 @@ describe('education route publication boundaries', () => {
       method: 'POST',
       url: '/education/image',
       headers: { cookie },
-      payload: { topic: 'dna', level: 'undergraduate' },
+      payload: { topic, level: 'undergraduate' },
     });
 
     expect(response.statusCode).toBe(200);
