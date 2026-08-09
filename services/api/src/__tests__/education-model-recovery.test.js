@@ -15,6 +15,7 @@ vi.mock('../services/llm.js', () => ({
 import { authCookie, buildTestApp, createPrismaMock } from './setup.js';
 
 const user = { userId: 'education-recovery-user', email: 'learner@example.com', role: 'user' };
+const topic = 'what-is-dna';
 
 describe('education model-publication recovery switch', () => {
   let app;
@@ -33,14 +34,14 @@ describe('education model-publication recovery switch', () => {
   });
 
   it.each([
-    ['/education/explain', { topic: 'dna', level: 'undergraduate' }],
-    ['/education/image', { topic: 'dna', level: 'undergraduate' }],
-    ['/education/quiz', { topic: 'dna', level: 'undergraduate', questionCount: 3 }],
+    ['/education/explain', { topic, level: 'undergraduate' }],
+    ['/education/image', { topic, level: 'undergraduate' }],
+    ['/education/quiz', { topic, level: 'undergraduate', questionCount: 3 }],
     ['/education/chat', {
       publicationTask: 'genetics_education',
       taskInput: {
         version: 1,
-        topic: 'dna',
+        topic,
         level: 'undergraduate',
         interaction: 'give_example',
       },
@@ -58,7 +59,7 @@ describe('education model-publication recovery switch', () => {
     });
 
     expect(response.statusCode).toBe(503);
-    expect(JSON.parse(response.payload).error).toMatch(/model publication is temporarily disabled/i);
+    expect(JSON.parse(response.payload).error).toMatch(/temporarily unavailable during safe recovery/i);
     expect(prisma.learningSession.count).not.toHaveBeenCalled();
     expect(generateExplanation).not.toHaveBeenCalled();
     expect(generateImage).not.toHaveBeenCalled();
