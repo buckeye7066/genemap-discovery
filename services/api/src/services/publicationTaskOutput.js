@@ -147,7 +147,7 @@ function stripRenderedMarkupForSafety(value, { separateFormatting = false } = {}
     .replace(/<!--[\s\S]*?-->/gu, '')
     .replace(/<(?:[^"'<>]|"[^"]*"|'[^']*')*>/gu, '');
   return stripUntrustedMarkupAndLinks(withoutHtml)
-    .replace(/\\([\\`*{}\[\]()#+\-.!_>~|])/gu, '$1')
+    .replace(/\\([\\`*{}[\]()#+\-.!_>~|])/gu, '$1')
     .replace(/[`*_~]+/gu, separateFormatting ? ' ' : '')
     .replace(/^\s{0,3}#{1,6}\s*/gmu, '')
     .replace(/^\s*>\s?/gmu, ' ')
@@ -215,7 +215,7 @@ function containsSuspiciousClinicalConfusable(value) {
   ).replace(/\p{M}+/gu, '');
   for (const match of normalized.matchAll(/\p{L}{2,}/gu)) {
     const token = match[0];
-    if (!/[^\x00-\x7f]/u.test(token)) continue;
+    if (!Array.from(token).some((character) => (character.codePointAt(0) ?? 0) > 0x7f)) continue;
     const skeleton = Array.from(token, (character) => {
       const mapped = SAFETY_CONFUSABLES.get(character);
       if (mapped) return mapped;
