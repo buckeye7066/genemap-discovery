@@ -118,6 +118,30 @@ function errorWithReceipt(error, receiptId) {
   return error;
 }
 
+/**
+ * A production account must not lose billing or checkout state merely because
+ * the restore-independent deletion ledger is known to be unavailable. This
+ * preflight runs before the closure receipt, audit-start row, checkout expiry,
+ * or Stripe cancellation. The ledger still writes its exact authorization only
+ * after billing has been secured, preserving the external deletion boundary.
+ */
+function assertAccountClosureLedgerReady(ledger, env = process.env) {
+  if (env.NODE_ENV === 'production' && ledger?.configured !== true) {
+    throw codedError(
+      'Account deletion is temporarily unavailable because the independent deletion ledger is not configured. No billing or account data was changed.',
+      503,
+      'ACCOUNT_DELETE_LEDGER_UNAVAILABLE',
+    );
+  }
+  if (typeof ledger?.authorize !== 'function' || typeof ledger?.hashIdentity !== 'function') {
+    throw codedError(
+      'Account deletion is temporarily unavailable because the independent deletion ledger client is incomplete. No billing or account data was changed.',
+      503,
+      'ACCOUNT_DELETE_LEDGER_UNAVAILABLE',
+    );
+  }
+}
+
 export function createAccountClosureStripeClient(env = process.env) {
   return env.STRIPE_SECRET_KEY ? new Stripe(env.STRIPE_SECRET_KEY) : null;
 }
@@ -575,6 +599,8 @@ export async function closeUserAccount({
     }
   }
 
+  assertAccountClosureLedgerReady(ledger);
+
   const receiptId = crypto.randomUUID();
   const plan = billingPlan(subscriptions, checkoutAuditRows);
 
@@ -664,16 +690,20 @@ export async function closeUserAccount({
           503,
           'ACCOUNT_DELETE_DATABASE_FINALIZE_FAILED',
         );
-    errorWithProgress(errorWithReceipt(wrapped, receiptId), billingProgress, receiptId);
+    const wrappedWithProgress = errorWithProgress(
+      errorWithReceipt(wrapped, receiptId),
+      billingProgress,
+      receiptId,
+    );
     await recordFailureAudit(prisma, {
       actorUserId,
       actorMode,
       user,
       receiptId,
       stage: 'database_finalize',
-      error: wrapped,
+      error: wrappedWithProgress,
     });
-    throw wrapped;
+    throw wrappedWithProgress;
   }
 
   const customerCleanup = await cleanupCustomersAfterCommit({
@@ -826,6 +856,7 @@ export const __test = {
   anonymizedEmail,
   isMissingStripeResource,
   billingPlan,
+  assertAccountClosureLedgerReady,
   reconcileCheckoutSessions,
   secureStripeBilling,
   finalizeDatabaseClosure,
