@@ -84,7 +84,7 @@ describe('GeneComparison claim-level evidence', () => {
     expect(screen.queryByText(/not scored/i)).not.toBeInTheDocument();
     expect(screen.getAllByText(/human association/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/model-organism/i).length).toBeGreaterThan(0);
-    expect(screen.getByText(/metadata/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/metadata/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/SCN1A has a source-recorded association/i)).toBeInTheDocument();
     expect(screen.getByText(/Mouse ortholog phenotype overlaps/i)).toBeInTheDocument();
 
