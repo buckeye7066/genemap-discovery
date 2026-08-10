@@ -812,17 +812,20 @@ export async function getAssociationEvidence(reference, symbols, dependencies = 
     claimCount += claimsByGene[symbol].length;
   }
 
-  const monarchOk = monarchAssociations.ok
-    && orthologResults.every((result) => result.ok);
-  const monarchTruncated = monarchAssociations.truncated
-    || orthologResults.some((result) => result.truncated);
+  const orthologIncomplete = orthologResults.some((result) => (
+    !result.ok || result.truncated
+  ));
+  const monarchOk = monarchAssociations.ok;
+  const monarchTruncated = monarchAssociations.truncated || orthologIncomplete;
   const monarchRetrievedAt = [
     monarchAssociations.retrievedAt,
     ...orthologResults.map((result) => result.retrievedAt),
   ].filter(Boolean).sort().at(-1) || null;
 
+  // MyGene resolves candidate identity but does not establish a gene-query
+  // association. Keep its health visible in `sources`, but do not let an
+  // identity lookup turn failed association providers into `partial_coverage`.
   const relevantSources = [
-    { applicable: true, ok: geneIdentity.ok, truncated: geneIdentity.partial },
     { applicable: true, ok: monarchOk, truncated: monarchTruncated },
     { applicable: openTargets.applicable, ok: openTargets.ok, truncated: openTargets.truncated },
   ];

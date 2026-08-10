@@ -622,7 +622,14 @@ export async function closeUserAccount({
       },
     }, { required: true });
   } catch (error) {
-    const wrapped = errorWithProgress(errorWithReceipt(error, receiptId), billingProgress || emptyBillingProgress(plan), receiptId);
+    const failureProgress = error?.billingProgress
+      || billingProgress
+      || emptyBillingProgress(plan);
+    const wrapped = errorWithProgress(
+      errorWithReceipt(error, receiptId),
+      failureProgress,
+      receiptId,
+    );
     await recordFailureAudit(prisma, {
       actorUserId,
       actorMode,

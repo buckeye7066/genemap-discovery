@@ -96,7 +96,7 @@ export default function GeneComparison({ genes = [], onClose }) {
     return (
       <Card className="border-blue-200 shadow-lg">
         <CardHeader className="flex flex-row items-center justify-between gap-4">
-          <CardTitle className="flex items-center gap-2">
+          <CardTitle role="heading" aria-level={2} className="flex items-center gap-2">
             <GitCompare className="w-5 h-5 text-blue-600" />
             Gene Evidence Comparison
           </CardTitle>
@@ -122,7 +122,7 @@ export default function GeneComparison({ genes = [], onClose }) {
       <Card className="border-blue-200 shadow-lg">
         <CardHeader className="flex flex-row items-start justify-between gap-4">
           <div>
-            <CardTitle className="flex items-center gap-2">
+            <CardTitle role="heading" aria-level={2} className="flex items-center gap-2">
               <GitCompare className="w-5 h-5 text-blue-600" />
               Gene Evidence Comparison
             </CardTitle>
