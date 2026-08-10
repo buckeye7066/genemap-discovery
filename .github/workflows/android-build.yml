@@ -12,6 +12,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: android-build-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   ANDROID_VERSION_CODE: ${{ github.run_number }}
   ANDROID_VERSION_NAME: 1.0.${{ github.run_number }}
@@ -93,10 +97,23 @@ jobs:
         run: |
           set -euo pipefail
           TAG="android-v${ANDROID_VERSION_NAME}"
-          gh release create "$TAG" \
-            "GeneMap-${ANDROID_VERSION_NAME}.apk" \
-            "GeneMap-${ANDROID_VERSION_NAME}.aab" \
-            genemap-android.sha256 \
-            --target "$GITHUB_SHA" \
-            --title "GeneMap Android ${ANDROID_VERSION_NAME}" \
-            --notes "Automated signed Android release from main at ${GITHUB_SHA}. Package com.genemap.discovery. Intended for repo-direct phone updates; Android requires the same signing certificate as the installed copy."
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists; uploading assets and updating metadata"
+            gh release upload "$TAG" \
+              "GeneMap-${ANDROID_VERSION_NAME}.apk" \
+              "GeneMap-${ANDROID_VERSION_NAME}.aab" \
+              genemap-android.sha256 \
+              --clobber
+            gh release edit "$TAG" \
+              --target "$GITHUB_SHA" \
+              --title "GeneMap Android ${ANDROID_VERSION_NAME}" \
+              --notes "Automated signed Android release from main at ${GITHUB_SHA}. Package com.genemap.discovery. Intended for repo-direct phone updates; Android requires the same signing certificate as the installed copy."
+          else
+            gh release create "$TAG" \
+              "GeneMap-${ANDROID_VERSION_NAME}.apk" \
+              "GeneMap-${ANDROID_VERSION_NAME}.aab" \
+              genemap-android.sha256 \
+              --target "$GITHUB_SHA" \
+              --title "GeneMap Android ${ANDROID_VERSION_NAME}" \
+              --notes "Automated signed Android release from main at ${GITHUB_SHA}. Package com.genemap.discovery. Intended for repo-direct phone updates; Android requires the same signing certificate as the installed copy."
+          fi
