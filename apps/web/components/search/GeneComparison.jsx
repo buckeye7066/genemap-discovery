@@ -7,6 +7,7 @@ import { GitCompare, X, Dna, MapPin, Info, ExternalLink } from "lucide-react";
 import {
   claimProvenanceRole,
   partitionClaimsBySpecies,
+  safeExternalHttpUrl,
 } from "../../../../packages/shared/src/associationClaim.ts";
 
 function normalizeText(value) {
@@ -209,31 +210,34 @@ export default function GeneComparison({ genes = [], onClose }) {
 
                   {row.associationClaims.length > 0 ? (
                     <ul className="mt-3 space-y-3">
-                      {row.associationClaims.map((claim, index) => (
-                        <li key={`${claim.source}:${claim.recordId || index}:${claim.evidenceType}`} className="rounded-md bg-slate-50 p-3">
-                          <p className="text-sm text-slate-800">{claim.claim}</p>
-                          <dl className="mt-2 grid gap-x-4 gap-y-1 text-xs text-slate-600 sm:grid-cols-2">
-                            <div><dt className="inline font-semibold">Class:</dt> <dd className="inline">{claim.evidenceClass}</dd></div>
-                            <div><dt className="inline font-semibold">Type:</dt> <dd className="inline">{claim.evidenceType}</dd></div>
-                            <div><dt className="inline font-semibold">Species:</dt> <dd className="inline">{claim.species || 'not recorded'} ({claim.taxon || 'taxon not recorded'})</dd></div>
-                            <div><dt className="inline font-semibold">Source:</dt> <dd className="inline">{claim.source}</dd></div>
-                            <div><dt className="inline font-semibold">Release:</dt> <dd className="inline">{sourceVersion(claim)}</dd></div>
-                            <div><dt className="inline font-semibold">Retrieved:</dt> <dd className="inline">{retrievalLabel(claim)}</dd></div>
-                          </dl>
-                          {claim.directLink ? (
-                            <a
-                              href={claim.directLink}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-blue-700 hover:underline"
-                            >
-                              Open source record <ExternalLink className="h-3 w-3" />
-                            </a>
-                          ) : (
-                            <p className="mt-2 text-xs text-slate-500">Direct source link not recorded.</p>
-                          )}
-                        </li>
-                      ))}
+                      {row.associationClaims.map((claim, index) => {
+                        const directLink = safeExternalHttpUrl(claim.directLink);
+                        return (
+                          <li key={`${claim.source}:${claim.recordId || index}:${claim.evidenceType}`} className="rounded-md bg-slate-50 p-3">
+                            <p className="text-sm text-slate-800">{claim.claim}</p>
+                            <dl className="mt-2 grid gap-x-4 gap-y-1 text-xs text-slate-600 sm:grid-cols-2">
+                              <div><dt className="inline font-semibold">Class:</dt> <dd className="inline">{claim.evidenceClass}</dd></div>
+                              <div><dt className="inline font-semibold">Type:</dt> <dd className="inline">{claim.evidenceType}</dd></div>
+                              <div><dt className="inline font-semibold">Species:</dt> <dd className="inline">{claim.species || 'not recorded'} ({claim.taxon || 'taxon not recorded'})</dd></div>
+                              <div><dt className="inline font-semibold">Source:</dt> <dd className="inline">{claim.source}</dd></div>
+                              <div><dt className="inline font-semibold">Release:</dt> <dd className="inline">{sourceVersion(claim)}</dd></div>
+                              <div><dt className="inline font-semibold">Retrieved:</dt> <dd className="inline">{retrievalLabel(claim)}</dd></div>
+                            </dl>
+                            {directLink ? (
+                              <a
+                                href={directLink}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-blue-700 hover:underline"
+                              >
+                                Open source record <ExternalLink className="h-3 w-3" />
+                              </a>
+                            ) : (
+                              <p className="mt-2 text-xs text-slate-500">Direct source link not recorded.</p>
+                            )}
+                          </li>
+                        );
+                      })}
                     </ul>
                   ) : (
                     <p className="mt-3 text-sm text-slate-600">
