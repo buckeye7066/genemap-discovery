@@ -23,6 +23,7 @@ const MIN_SECRET_LENGTH = 32;
 
 // 32 bytes = 64 hex chars for AES-256-GCM key.
 const MEDICAL_KEY_HEX_LENGTH = 64;
+const LEDGER_IDENTITY_KEY_ID = /^[A-Za-z0-9._-]{1,64}$/u;
 
 const baseSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -78,11 +79,12 @@ const baseSchema = z.object({
 
   // Restore-independent account-deletion ledger. These remain optional at
   // process startup so an existing deployment stays probeable, but production
-  // launch verification and account deletion fail closed until all three are
-  // configured.
+  // launch verification and account deletion fail closed until URLs, the
+  // transport secret, and the rotation-safe identity key ring are configured.
   ACCOUNT_CLOSURE_LEDGER_WRITE_URL: z.string().url().optional(),
   ACCOUNT_CLOSURE_LEDGER_READ_URL: z.string().url().optional(),
   ACCOUNT_CLOSURE_LEDGER_SECRET: z.string().optional(),
+  ACCOUNT_CLOSURE_LEDGER_IDENTITY_KEYS: z.string().optional(),
 });
 
 const PRODUCTION_REQUIRED = [
@@ -141,6 +143,24 @@ function isValidStripeLiveSecret(value) {
 
 function isValidStripeWebhookSecret(value) {
   return typeof value === 'string' && value.startsWith('whsec_') && value.length > 'whsec_'.length + 8;
+}
+
+function isValidLedgerIdentityKeyConfig(value) {
+  if (typeof value !== 'string' || !value.trim()) return false;
+  const entries = value.split(',').map((entry) => entry.trim()).filter(Boolean);
+  if (!entries.length) return false;
+  const seen = new Set();
+  for (const entry of entries) {
+    const delimiter = entry.indexOf('=');
+    if (delimiter <= 0) return false;
+    const id = entry.slice(0, delimiter).trim();
+    const secret = entry.slice(delimiter + 1).trim();
+    if (!LEDGER_IDENTITY_KEY_ID.test(id) || secret.length < MIN_SECRET_LENGTH || seen.has(id)) {
+      return false;
+    }
+    seen.add(id);
+  }
+  return true;
 }
 
 /**
@@ -262,7 +282,8 @@ export function loadEnv(opts = {}) {
       });
       return validUrls
         && typeof env.ACCOUNT_CLOSURE_LEDGER_SECRET === 'string'
-        && env.ACCOUNT_CLOSURE_LEDGER_SECRET.length >= MIN_SECRET_LENGTH;
+        && env.ACCOUNT_CLOSURE_LEDGER_SECRET.length >= MIN_SECRET_LENGTH
+        && isValidLedgerIdentityKeyConfig(env.ACCOUNT_CLOSURE_LEDGER_IDENTITY_KEYS);
     },
 
     corsAllowList() {
@@ -297,4 +318,5 @@ export const ENV_CONSTANTS = {
   MIN_SECRET_LENGTH,
   MEDICAL_KEY_HEX_LENGTH,
   PRODUCTION_REQUIRED,
+  isValidLedgerIdentityKeyConfig,
 };
