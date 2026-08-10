@@ -3,6 +3,10 @@ import { z } from 'zod';
 import { authenticate } from '../middleware/auth.js';
 import { ValidationError, ForbiddenError } from '../utils/errors.js';
 import { createAuditLog } from '../utils/audit.js';
+import {
+  assertCheckoutAllowed,
+  recordCheckoutOrExpire,
+} from '../services/accountClosureState.js';
 
 const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY) : null;
 
@@ -32,19 +36,12 @@ function priceIdsFromEnv() {
   };
 }
 
-/**
- * Resolve a price ID for the requested plan key. In production, missing
- * env vars are fatal — env.js asserts them on boot, but we re-check here
- * to give a clearer error if someone calls a plan that has never been
- * configured (e.g. team_monthly when only individual plans exist).
- */
 function priceIdForKey(key) {
   const ids = priceIdsFromEnv();
   const id = ids[key];
   if (!id) {
     throw new ValidationError(`Plan '${key}' is not configured for this deployment`);
   }
-  // Guard against committed placeholder values from before this fix landed.
   if (/^price_(monthly|yearly|team_|dept_|ent_)/.test(id)) {
     if (process.env.NODE_ENV === 'production') {
       throw new ValidationError(`Plan '${key}' is using a placeholder Stripe price ID`);
@@ -81,11 +78,6 @@ function isStripeEventDuplicate(error) {
   return fields.some((field) => field === 'stripeEventId' || field === 'stripe_event_id');
 }
 
-/**
- * Reject Stripe redirect URLs that point outside our trusted origins.
- * Otherwise an attacker could prefill `successUrl` with a domain they own,
- * receive the `?session_id=` and harvest checkout tokens or phish the user.
- */
 function assertAllowedRedirect(url, env) {
   let parsed;
   try {
@@ -103,10 +95,6 @@ function assertAllowedRedirect(url, env) {
   }
 }
 
-// Self-test mode is reserved for `NODE_ENV=test` integration runs that
-// cannot reach the live Stripe API. Production / development bodies that
-// include `_selfTest` are ignored entirely — see the parsed schemas above
-// which deliberately do not include the field.
 function selfTestEnabled() {
   return process.env.NODE_ENV === 'test';
 }
@@ -127,21 +115,20 @@ export default async function billingRoutes(fastify) {
       });
     }
 
-    const user = await prisma.user.findUnique({ where: { id: request.user.userId } });
+    const userId = request.user.userId;
+    await assertCheckoutAllowed(prisma, userId);
+    const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) {
       throw new ValidationError('User not found');
     }
 
     const priceId = priceIdForKey(body.plan);
-
     let customerId = null;
     const existingSub = await prisma.subscription.findFirst({
       where: { userId: user.id },
       orderBy: { createdAt: 'desc' },
     });
-    if (existingSub?.stripeCustomerId) {
-      customerId = existingSub.stripeCustomerId;
-    }
+    if (existingSub?.stripeCustomerId) customerId = existingSub.stripeCustomerId;
 
     const sessionParams = {
       mode: 'subscription',
@@ -153,13 +140,16 @@ export default async function billingRoutes(fastify) {
       metadata: { userId: user.id },
     };
 
-    const session = await requireStripe().checkout.sessions.create(sessionParams);
-
-    await createAuditLog(prisma, {
+    const stripeClient = requireStripe();
+    const session = await stripeClient.checkout.sessions.create(sessionParams);
+    await recordCheckoutOrExpire({
+      prisma,
+      stripeClient,
       userId: user.id,
+      session,
       action: 'billing.checkout_created',
       entityType: 'subscription',
-      metadata: { sessionId: session.id, plan: body.plan },
+      metadata: { plan: body.plan },
     });
 
     return reply.send({ url: session.url, sessionId: session.id });
@@ -173,6 +163,7 @@ export default async function billingRoutes(fastify) {
       return reply.send({ url: body.returnUrl });
     }
 
+    await assertCheckoutAllowed(prisma, request.user.userId);
     const subscription = await prisma.subscription.findFirst({
       where: { userId: request.user.userId },
       orderBy: { createdAt: 'desc' },
@@ -191,7 +182,7 @@ export default async function billingRoutes(fastify) {
       userId: request.user.userId,
       action: 'billing.portal_accessed',
       entityType: 'subscription',
-    });
+    }, { required: true });
 
     return reply.send({ url: session.url });
   });
@@ -208,14 +199,15 @@ export default async function billingRoutes(fastify) {
       });
     }
 
-    const user = await prisma.user.findUnique({ where: { id: request.user.userId } });
+    const userId = request.user.userId;
+    await assertCheckoutAllowed(prisma, userId);
+    const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) {
       throw new ValidationError('User not found');
     }
 
-    const priceKey = `${body.licenseType}_${body.billing}`; // e.g. team_monthly
+    const priceKey = `${body.licenseType}_${body.billing}`;
     const priceId = priceIdForKey(priceKey);
-
     const sessionParams = {
       mode: 'subscription',
       customer_email: body.contactEmail,
@@ -232,14 +224,16 @@ export default async function billingRoutes(fastify) {
       },
     };
 
-    const session = await requireStripe().checkout.sessions.create(sessionParams);
-
-    await createAuditLog(prisma, {
+    const stripeClient = requireStripe();
+    const session = await stripeClient.checkout.sessions.create(sessionParams);
+    await recordCheckoutOrExpire({
+      prisma,
+      stripeClient,
       userId: user.id,
+      session,
       action: 'billing.institutional_checkout_created',
       entityType: 'institutional_license',
       metadata: {
-        sessionId: session.id,
         organizationName: body.organizationName,
         licenseType: body.licenseType,
       },
@@ -252,10 +246,7 @@ export default async function billingRoutes(fastify) {
     const sig = request.headers['stripe-signature'];
     const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
-    if (!sig) {
-      return reply.status(400).send({ error: 'Missing stripe-signature header' });
-    }
-
+    if (!sig) return reply.status(400).send({ error: 'Missing stripe-signature header' });
     if (!webhookSecret) {
       console.error('STRIPE_WEBHOOK_SECRET not configured');
       return reply.status(500).send({ error: 'Webhook not configured' });
@@ -276,14 +267,6 @@ export default async function billingRoutes(fastify) {
     }
 
     try {
-      // Pre-fetch any external Stripe data BEFORE opening the DB transaction.
-      // A network round-trip to Stripe inside an interactive transaction can
-      // exceed Prisma's default 5s transaction timeout and roll the whole thing
-      // back — so a user who just paid would never get their Subscription row
-      // and would be stuck on the free tier until Stripe's async retry. Doing
-      // the retrieve out here also keeps a DB pool connection from being held
-      // open across the round-trip. If this throws, stripeEvent.create never
-      // runs, so Stripe safely retries (idempotency preserved).
       let prefetchedSubscription = null;
       if (event.type === 'checkout.session.completed') {
         const s = event.data.object;
@@ -304,7 +287,6 @@ export default async function billingRoutes(fastify) {
           if (session.metadata?.isInstitutional === 'true') {
             const subscriptionId = session.subscription;
             const customerId = session.customer;
-
             const pricing = {
               monthly:
                 session.metadata.licenseType === 'team' ? 7.99 :
@@ -328,9 +310,6 @@ export default async function billingRoutes(fastify) {
                 stripeCustomerId: customerId,
                 stripeSubscriptionId: subscriptionId,
                 pricing,
-                // Store the purchaser's USER ID. License management routes
-                // (entities.js /licenses, /licenses/:id/assign) match
-                // adminUsers against request.user.userId — keep them in sync.
                 adminUsers: [session.metadata.userId],
               },
             });
@@ -344,11 +323,8 @@ export default async function billingRoutes(fastify) {
           } else {
             const userId = session.metadata?.userId;
             if (!userId) break;
-
             const subscriptionId = session.subscription;
             const customerId = session.customer;
-
-            // Retrieved before the transaction opened (see prefetch above).
             const subscription = prefetchedSubscription;
             if (!subscription) break;
 
@@ -402,9 +378,8 @@ export default async function billingRoutes(fastify) {
 
         case 'invoice.payment_succeeded': {
           const invoice = event.data.object;
-          const subscriptionId = invoice.subscription;
           await tx.subscription.updateMany({
-            where: { stripeSubscriptionId: subscriptionId },
+            where: { stripeSubscriptionId: invoice.subscription },
             data: {
               status: 'active',
               currentPeriodEnd: new Date(invoice.period_end * 1000),
@@ -415,9 +390,8 @@ export default async function billingRoutes(fastify) {
 
         case 'invoice.payment_failed': {
           const invoice = event.data.object;
-          const subscriptionId = invoice.subscription;
           await tx.subscription.updateMany({
-            where: { stripeSubscriptionId: subscriptionId },
+            where: { stripeSubscriptionId: invoice.subscription },
             data: { status: 'past_due' },
           });
           break;
