@@ -1,12 +1,4 @@
-name: Android build
-
-# Builds Android binaries on every push to main and uploads them as
-# Actions artifacts, where App Store Publisher's "From GitHub" tab can
-# list and fetch them:
-#   genemap-debug-apk   — debug-signed, installable for testing
-#   genemap-release-aab — upload-key-signed .aab, ready for Play Store
-# Release signing uses the ANDROID_KEYSTORE_* repo secrets (upload
-# keystore lives at ~/.android-keystores/genemap-upload.jks locally).
+name: Android build and repo-direct release
 
 on:
   push:
@@ -14,62 +6,170 @@ on:
     paths:
       - 'apps/web/**'
       - 'packages/**'
+      - 'scripts/**'
+      - 'pnpm-lock.yaml'
+      - 'package.json'
       - '.github/workflows/android-build.yml'
   workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: android-build-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  ANDROID_VERSION_CODE: ${{ github.run_number }}
+  ANDROID_VERSION_NAME: 1.0.${{ github.run_number }}
+
 jobs:
   android:
-    name: Build APK + AAB
+    name: Build signed APK + AAB
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: '24'
           cache: 'pnpm'
-      - uses: actions/setup-java@v5
+      - uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5.6.0
         with:
           distribution: 'temurin'
           java-version: '21'
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-      # Inside Capacitor the origin is https://localhost, so the API base
-      # must be baked in at build time (client.ts falls back to origin).
-      - name: Build web app
-        run: pnpm --filter @genemap/shared build && pnpm --filter @genemap/web build
+      - name: Release gates
+        run: pnpm release:check
+      - name: Build and verify production-configured web app
         env:
           VITE_API_URL: https://genemap-api-production.up.railway.app
-      # npx (isolated install), NOT pnpm exec: the repo's hoisted node_modules
-      # pairs CJS wrap-ansi with an ESM string-width and the in-repo Capacitor
-      # CLI crashes with "stringWidth is not a function".
+        run: |
+          pnpm --filter @genemap/shared build
+          pnpm --filter @genemap/web build
+          node scripts/verify-publication-bundle.mjs
       - name: Sync Capacitor
         run: npx -y @capacitor/cli@8.4.1 sync android
         working-directory: apps/web
-      - run: ./gradlew assembleDebug --no-daemon
-        working-directory: apps/web/android
-      - name: Decode upload keystore
-        run: echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/upload.jks"
+      - name: Require persistent Android signing identity
+        shell: bash
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-      - name: Build signed release bundle
-        run: ./gradlew bundleRelease --no-daemon
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test -n "$ANDROID_KEYSTORE_BASE64" || { echo 'ANDROID_KEYSTORE_BASE64 is missing'; exit 1; }
+          test -n "$ANDROID_KEYSTORE_PASSWORD" || { echo 'ANDROID_KEYSTORE_PASSWORD is missing'; exit 1; }
+          test -n "$ANDROID_KEY_ALIAS" || { echo 'ANDROID_KEY_ALIAS is missing'; exit 1; }
+          test -n "$ANDROID_KEY_PASSWORD" || { echo 'ANDROID_KEY_PASSWORD is missing'; exit 1; }
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/upload.jks"
+          keytool -list -v \
+            -keystore "$RUNNER_TEMP/upload.jks" \
+            -alias "$ANDROID_KEY_ALIAS" \
+            -storepass "$ANDROID_KEYSTORE_PASSWORD" \
+            -keypass "$ANDROID_KEY_PASSWORD" \
+            | awk -F': ' '/SHA256:/{gsub(":", "", $2); print tolower($2); exit}' \
+            > "$RUNNER_TEMP/keystore-cert.sha256"
+          test -s "$RUNNER_TEMP/keystore-cert.sha256"
+
+          BASELINE_TAG=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 100 --json tagName --jq '.[] | select(.tagName | startswith("android-v")) | .tagName' | head -n 1 || true)
+          if [ -n "$BASELINE_TAG" ]; then
+            mkdir -p "$RUNNER_TEMP/signing-baseline"
+            gh release download "$BASELINE_TAG" --repo "$GITHUB_REPOSITORY" --pattern genemap-signing-cert.sha256 --dir "$RUNNER_TEMP/signing-baseline"
+            test -s "$RUNNER_TEMP/signing-baseline/genemap-signing-cert.sha256" || { echo "Existing Android release lacks signing fingerprint"; exit 1; }
+            cmp "$RUNNER_TEMP/signing-baseline/genemap-signing-cert.sha256" "$RUNNER_TEMP/keystore-cert.sha256" || { echo 'Configured keystore certificate differs from prior Android releases'; exit 1; }
+          else
+            echo 'No prior signed Android release: this main build will establish the signing fingerprint bootstrap.'
+          fi
+      - name: Build signed release APK and AAB
+        run: ./gradlew assembleRelease bundleRelease --no-daemon
         working-directory: apps/web/android
         env:
           ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/upload.jks
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-      - uses: actions/upload-artifact@v7
+          ANDROID_VERSION_CODE: ${{ env.ANDROID_VERSION_CODE }}
+          ANDROID_VERSION_NAME: ${{ env.ANDROID_VERSION_NAME }}
+      - name: Verify signing certificate and prepare release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK='apps/web/android/app/build/outputs/apk/release/app-release.apk'
+          AAB='apps/web/android/app/build/outputs/bundle/release/app-release.aab'
+          test -f "$APK"
+          test -f "$AAB"
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -maxdepth 2 -type f -name apksigner | sort -V | tail -n 1)
+          test -n "$APKSIGNER"
+          "$APKSIGNER" verify --print-certs "$APK" > "$RUNNER_TEMP/apk-certs.txt"
+          awk -F': ' '/Signer #1 certificate SHA-256 digest:/{gsub(":", "", $2); print tolower($2); exit}' "$RUNNER_TEMP/apk-certs.txt" > "$RUNNER_TEMP/apk-cert.sha256"
+          test -s "$RUNNER_TEMP/apk-cert.sha256"
+          cmp "$RUNNER_TEMP/keystore-cert.sha256" "$RUNNER_TEMP/apk-cert.sha256" || { echo 'Built APK signing certificate does not match configured persistent keystore'; exit 1; }
+          cp "$APK" "GeneMap-${ANDROID_VERSION_NAME}.apk"
+          cp "$AAB" "GeneMap-${ANDROID_VERSION_NAME}.aab"
+          cp "$RUNNER_TEMP/apk-cert.sha256" genemap-signing-cert.sha256
+          sha256sum "GeneMap-${ANDROID_VERSION_NAME}.apk" > genemap-android.sha256
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: genemap-debug-apk
-          path: apps/web/android/app/build/outputs/apk/debug/app-debug.apk
+          name: genemap-signed-android
+          path: |
+            GeneMap-*.apk
+            GeneMap-*.aab
+            genemap-android.sha256
+            genemap-signing-cert.sha256
           if-no-files-found: error
-      - uses: actions/upload-artifact@v7
+
+  publish:
+    name: Publish repo-direct Android release
+    needs: android
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
-          name: genemap-release-aab
-          path: apps/web/android/app/build/outputs/bundle/release/app-release.aab
-          if-no-files-found: error
+          name: genemap-signed-android
+      - name: Publish GitHub Release for phone updater
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="android-v${ANDROID_VERSION_NAME}"
+          NOTES="Automated signed Android release from main at ${GITHUB_SHA}. Package com.genemap.discovery. Intended for repo-direct phone updates; Android requires the same signing certificate as the installed copy."
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            TARGET=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json targetCommitish --jq .targetCommitish)
+            test "$TARGET" = "$GITHUB_SHA" || { echo "Existing $TAG targets $TARGET, expected $GITHUB_SHA"; exit 1; }
+            gh release upload "$TAG" \
+              "GeneMap-${ANDROID_VERSION_NAME}.apk" \
+              "GeneMap-${ANDROID_VERSION_NAME}.aab" \
+              genemap-android.sha256 \
+              genemap-signing-cert.sha256 \
+              --repo "$GITHUB_REPOSITORY" \
+              --clobber
+            gh release edit "$TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "GeneMap Android ${ANDROID_VERSION_NAME}" \
+              --notes "$NOTES" \
+              --draft=false
+          else
+            gh release create "$TAG" \
+              "GeneMap-${ANDROID_VERSION_NAME}.apk" \
+              "GeneMap-${ANDROID_VERSION_NAME}.aab" \
+              genemap-android.sha256 \
+              genemap-signing-cert.sha256 \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" \
+              --title "GeneMap Android ${ANDROID_VERSION_NAME}" \
+              --notes "$NOTES"
+          fi
