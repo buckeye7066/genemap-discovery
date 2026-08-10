@@ -4,6 +4,7 @@ import { AppError } from '../utils/errors.js';
 const LEDGER_TIMEOUT_MS = 8_000;
 const MIN_LEDGER_SECRET_LENGTH = 32;
 const MAX_LEDGER_CLOCK_SKEW_MS = 5 * 60 * 1000;
+const IDENTITY_KEY_ID = /^[A-Za-z0-9._-]{1,64}$/u;
 
 function codedError(message, statusCode, code) {
   const error = new AppError(message, statusCode);
@@ -36,12 +37,44 @@ function signature(secret, timestamp, body) {
     .digest('hex');
 }
 
-
 function identityHash(secret, value) {
   return crypto
     .createHmac('sha256', secret)
     .update(`account-closure-identity:${String(value)}`)
     .digest('hex');
+}
+
+/**
+ * Parse `ACCOUNT_CLOSURE_LEDGER_IDENTITY_KEYS` as a comma-separated, ordered
+ * key ring: `current-id=current-secret,retired-id=retired-secret`.
+ *
+ * The first entry is the sole write key. Retired entries remain read-only so a
+ * deletion tombstone survives key rotation. The transport HMAC secret is kept
+ * separate from this identity-key ring.
+ */
+function parseIdentityKeyConfig(value) {
+  if (typeof value !== 'string' || !value.trim()) {
+    return { valid: false, keys: [], reason: 'missing' };
+  }
+
+  const entries = value.split(',').map((entry) => entry.trim()).filter(Boolean);
+  const keys = [];
+  const seen = new Set();
+  for (const entry of entries) {
+    const delimiter = entry.indexOf('=');
+    if (delimiter <= 0) return { valid: false, keys: [], reason: 'invalid_entry' };
+    const id = entry.slice(0, delimiter).trim();
+    const secret = entry.slice(delimiter + 1).trim();
+    if (!IDENTITY_KEY_ID.test(id) || secret.length < MIN_LEDGER_SECRET_LENGTH || seen.has(id)) {
+      return { valid: false, keys: [], reason: 'invalid_entry' };
+    }
+    seen.add(id);
+    keys.push({ id, secret });
+  }
+
+  return keys.length
+    ? { valid: true, keys, reason: null }
+    : { valid: false, keys: [], reason: 'missing' };
 }
 
 function headerValue(headers, name) {
@@ -81,11 +114,20 @@ function verifySignedResponse(response, body, secret, now = Date.now()) {
   }
 }
 
-async function fetchWithTimeout(fetchImpl, url, options) {
+/** Keep the abort deadline active until the optional response consumer finishes. */
+async function fetchWithTimeout(
+  fetchImpl,
+  url,
+  options,
+  { consume = null, timeoutMs = LEDGER_TIMEOUT_MS } = {},
+) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), LEDGER_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    return await fetchImpl(url, { ...options, signal: controller.signal });
+    const response = await fetchImpl(url, { ...options, signal: controller.signal });
+    if (typeof consume !== 'function') return response;
+    const consumed = await consume(response);
+    return { response, consumed };
   } finally {
     clearTimeout(timer);
   }
@@ -97,16 +139,68 @@ function ledgerConfig(env = process.env) {
   const secret = typeof env.ACCOUNT_CLOSURE_LEDGER_SECRET === 'string'
     ? env.ACCOUNT_CLOSURE_LEDGER_SECRET
     : '';
+  const identity = parseIdentityKeyConfig(env.ACCOUNT_CLOSURE_LEDGER_IDENTITY_KEYS);
   return {
     writeUrl,
     readUrl,
     secret,
+    identityKeys: identity.keys,
+    identityKeyConfigValid: identity.valid,
     configured: Boolean(
       writeUrl
       && readUrl
       && secret.length >= MIN_LEDGER_SECRET_LENGTH
+      && identity.valid
     ),
   };
+}
+
+function identityCandidates(config, value) {
+  const candidates = config.identityKeys.map((key) => ({
+    identityKeyId: key.id,
+    userIdHash: identityHash(key.secret, value),
+  }));
+
+  // Version-1 tombstones were keyed with the transport secret. Retain a
+  // migration-only candidate so existing deletion receipts can still be
+  // reconciled while all new writes use an explicit, rotation-safe key ID.
+  if (config.secret.length >= MIN_LEDGER_SECRET_LENGTH) {
+    const legacyHash = identityHash(config.secret, value);
+    if (!candidates.some((candidate) => candidate.userIdHash === legacyHash)) {
+      candidates.push({ identityKeyId: 'legacy-transport', userIdHash: legacyHash });
+    }
+  }
+  return candidates;
+}
+
+function validateWriteAcknowledgement(response, rawBody, secret, receiptId) {
+  try {
+    verifySignedResponse(response, rawBody, secret);
+  } catch {
+    throw codedError(
+      'Account deletion stopped because the independent deletion ledger did not authenticate its write acknowledgement. Billing changes already completed, if any, were recorded; the account remains available for a safe retry.',
+      503,
+      'ACCOUNT_DELETE_LEDGER_WRITE_FAILED',
+    );
+  }
+
+  let acknowledgement;
+  try {
+    acknowledgement = JSON.parse(rawBody);
+  } catch {
+    throw codedError(
+      'Account deletion stopped because the independent deletion ledger returned an invalid write acknowledgement. Billing changes already completed, if any, were recorded; the account remains available for a safe retry.',
+      503,
+      'ACCOUNT_DELETE_LEDGER_WRITE_FAILED',
+    );
+  }
+  if (acknowledgement?.recorded !== true || acknowledgement?.receiptId !== receiptId) {
+    throw codedError(
+      'Account deletion stopped because the independent deletion ledger did not confirm the exact deletion receipt. Billing changes already completed, if any, were recorded; the account remains available for a safe retry.',
+      503,
+      'ACCOUNT_DELETE_LEDGER_WRITE_FAILED',
+    );
+  }
 }
 
 /**
@@ -114,14 +208,17 @@ function ledgerConfig(env = process.env) {
  *
  * Protocol contract:
  * - POST `ACCOUNT_CLOSURE_LEDGER_WRITE_URL` with an HMAC-signed JSON tombstone.
+ * - A successful write returns an HMAC-signed JSON acknowledgement containing
+ *   `{ "recorded": true, "receiptId": "..." }` for the exact receipt.
  * - GET `ACCOUNT_CLOSURE_LEDGER_READ_URL` returns an HMAC-signed JSON body,
  *   either an array or `{ tombstones: [...] }`, for quarantined restore
  *   reconciliation. The response signs `timestamp.rawBody`.
  * - Writes are idempotent by `receiptId` and `Idempotency-Key`.
  *
- * The payload contains only a secret-keyed user identifier hash, the deletion receipt, the
- * authorization timestamp, release identity, and completed billing counts. It
- * never sends the user's raw email, name, profile, search, or research data.
+ * The payload contains only a rotation-safe, secret-keyed user identifier hash,
+ * its key ID, the deletion receipt, authorization timestamp, release identity,
+ * and completed billing counts. It never sends raw email, name, profile,
+ * search, research, medical, or genomic content.
  */
 export function createAccountClosureLedger({
   env = process.env,
@@ -129,6 +226,7 @@ export function createAccountClosureLedger({
 } = {}) {
   const config = ledgerConfig(env);
   const production = env.NODE_ENV === 'production';
+  const currentIdentityKey = config.identityKeys[0] || null;
 
   async function authorize(tombstone) {
     if (!config.configured || typeof fetchImpl !== 'function') {
@@ -142,11 +240,17 @@ export function createAccountClosureLedger({
       return { mode: 'non_production_noop', recorded: false };
     }
 
+    const identityKeyId = tombstone.identityKeyId || currentIdentityKey.id;
     const userIdHash = tombstone.userIdHash || (tombstone.userId != null
-      ? identityHash(config.secret, tombstone.userId)
+      ? identityHash(currentIdentityKey.secret, tombstone.userId)
       : null);
-    if (typeof tombstone.receiptId !== 'string' || !tombstone.receiptId.trim()
-      || typeof userIdHash !== 'string' || !/^[a-f0-9]{64}$/u.test(userIdHash)) {
+    if (
+      identityKeyId !== currentIdentityKey.id
+      || typeof tombstone.receiptId !== 'string'
+      || !tombstone.receiptId.trim()
+      || typeof userIdHash !== 'string'
+      || !/^[a-f0-9]{64}$/u.test(userIdHash)
+    ) {
       throw codedError(
         'Account deletion stopped because the independent deletion authorization was incomplete.',
         500,
@@ -155,10 +259,11 @@ export function createAccountClosureLedger({
     }
 
     const payload = {
-      version: 1,
+      version: 2,
       event: 'account_deletion_authorized',
       receiptId: tombstone.receiptId.trim(),
       userIdHash,
+      identityKeyId,
       actorMode: tombstone.actorMode,
       authorizedAt: tombstone.authorizedAt,
       releaseSha: tombstone.releaseSha || releaseSha(env),
@@ -170,20 +275,26 @@ export function createAccountClosureLedger({
     const body = JSON.stringify(payload);
     const timestamp = new Date().toISOString();
     let response;
+    let rawBody;
     try {
-      response = await fetchWithTimeout(fetchImpl, config.writeUrl, {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          'idempotency-key': payload.receiptId,
-          'x-genemap-ledger-timestamp': timestamp,
-          'x-genemap-ledger-signature': `sha256=${signature(config.secret, timestamp, body)}`,
+      ({ response, consumed: rawBody } = await fetchWithTimeout(
+        fetchImpl,
+        config.writeUrl,
+        {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            'idempotency-key': payload.receiptId,
+            'x-genemap-ledger-timestamp': timestamp,
+            'x-genemap-ledger-signature': `sha256=${signature(config.secret, timestamp, body)}`,
+          },
+          body,
         },
-        body,
-      });
-    } catch (error) {
+        { consume: (result) => (result?.ok ? result.text() : Promise.resolve('')) },
+      ));
+    } catch {
       throw codedError(
-        'Account deletion stopped because the independent deletion ledger could not be reached. Billing changes already completed, if any, were recorded; the account remains available for a safe retry.',
+        'Account deletion stopped because the independent deletion ledger could not be reached or did not complete its response. Billing changes already completed, if any, were recorded; the account remains available for a safe retry.',
         503,
         'ACCOUNT_DELETE_LEDGER_WRITE_FAILED',
       );
@@ -196,7 +307,13 @@ export function createAccountClosureLedger({
         'ACCOUNT_DELETE_LEDGER_WRITE_FAILED',
       );
     }
-    return { mode: 'external', recorded: true, receiptId: payload.receiptId };
+    validateWriteAcknowledgement(response, rawBody, config.secret, payload.receiptId);
+    return {
+      mode: 'external',
+      recorded: true,
+      receiptId: payload.receiptId,
+      identityKeyId,
+    };
   }
 
   async function listTombstones() {
@@ -210,18 +327,24 @@ export function createAccountClosureLedger({
     const timestamp = new Date().toISOString();
     const body = '';
     let response;
+    let rawBody;
     try {
-      response = await fetchWithTimeout(fetchImpl, config.readUrl, {
-        method: 'GET',
-        headers: {
-          accept: 'application/json',
-          'x-genemap-ledger-timestamp': timestamp,
-          'x-genemap-ledger-signature': `sha256=${signature(config.secret, timestamp, body)}`,
+      ({ response, consumed: rawBody } = await fetchWithTimeout(
+        fetchImpl,
+        config.readUrl,
+        {
+          method: 'GET',
+          headers: {
+            accept: 'application/json',
+            'x-genemap-ledger-timestamp': timestamp,
+            'x-genemap-ledger-signature': `sha256=${signature(config.secret, timestamp, body)}`,
+          },
         },
-      });
+        { consume: (result) => (result?.ok ? result.text() : Promise.resolve('')) },
+      ));
     } catch {
       throw codedError(
-        'Deletion-ledger reconciliation could not reach the external ledger.',
+        'Deletion-ledger reconciliation could not reach or finish reading the external ledger.',
         503,
         'ACCOUNT_DELETE_LEDGER_READ_FAILED',
       );
@@ -231,16 +354,6 @@ export function createAccountClosureLedger({
         `Deletion-ledger reconciliation received HTTP ${response?.status || 'unknown'} from the external ledger.`,
         503,
         'ACCOUNT_DELETE_LEDGER_READ_FAILED',
-      );
-    }
-    let rawBody;
-    try {
-      rawBody = await response.text();
-    } catch {
-      throw codedError(
-        'Deletion-ledger reconciliation could not read the external ledger response.',
-        503,
-        'ACCOUNT_DELETE_LEDGER_INVALID_RESPONSE',
       );
     }
     verifySignedResponse(response, rawBody, config.secret);
@@ -262,22 +375,28 @@ export function createAccountClosureLedger({
         'ACCOUNT_DELETE_LEDGER_INVALID_RESPONSE',
       );
     }
-    return tombstones.filter((item) => (
-      item
-      && item.version === 1
-      && item.event === 'account_deletion_authorized'
-      && typeof item.receiptId === 'string'
-      && typeof item.userIdHash === 'string'
-    ));
+    return tombstones.filter((item) => {
+      if (!item || item.event !== 'account_deletion_authorized') return false;
+      if (item.version !== 1 && item.version !== 2) return false;
+      if (typeof item.receiptId !== 'string' || typeof item.userIdHash !== 'string') return false;
+      if (!/^[a-f0-9]{64}$/u.test(item.userIdHash)) return false;
+      return item.version === 1
+        || (typeof item.identityKeyId === 'string' && IDENTITY_KEY_ID.test(item.identityKeyId));
+    });
   }
 
   return {
     configured: config.configured,
     writeUrl: config.writeUrl,
     readUrl: config.readUrl,
+    currentIdentityKeyId: currentIdentityKey?.id || null,
+    identityKeyIds: config.identityKeys.map((key) => key.id),
     authorize,
     listTombstones,
-    hashIdentity: (value) => identityHash(config.secret, value),
+    hashIdentity: (value) => currentIdentityKey
+      ? identityHash(currentIdentityKey.secret, value)
+      : null,
+    hashIdentityCandidates: (value) => identityCandidates(config, value),
   };
 }
 
@@ -288,16 +407,23 @@ export function accountClosureLedgerStatus(env = process.env) {
     writeUrlConfigured: Boolean(config.writeUrl),
     readUrlConfigured: Boolean(config.readUrl),
     secretConfigured: config.secret.length >= MIN_LEDGER_SECRET_LENGTH,
+    identityKeysConfigured: config.identityKeyConfigValid,
+    currentIdentityKeyId: config.identityKeys[0]?.id || null,
+    retiredIdentityKeyCount: Math.max(0, config.identityKeys.length - 1),
   };
 }
 
 export const __test = {
   constantTimeEqual,
+  fetchWithTimeout,
   headerValue,
+  identityCandidates,
   identityHash,
   ledgerConfig,
+  parseIdentityKeyConfig,
   releaseSha,
   safeHttpsUrl,
   signature,
+  validateWriteAcknowledgement,
   verifySignedResponse,
 };
