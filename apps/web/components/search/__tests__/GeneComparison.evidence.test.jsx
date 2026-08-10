@@ -70,6 +70,7 @@ const genes = [
         evidenceType: 'ortholog_phenotype_inference',
         evidenceStrength: 'supporting',
         retrievalDate: '2026-08-09',
+        directLink: 'javascript:alert(1)',
         isAiLead: false,
       },
     ],
@@ -77,7 +78,7 @@ const genes = [
 ];
 
 describe('GeneComparison claim-level evidence', () => {
-  it('compares separated human/model/computational evidence and provenance instead of legacy model scores', () => {
+  it('compares separated evidence and renders only safe absolute source links', () => {
     render(<GeneComparison genes={genes} />);
 
     expect(screen.getByRole('heading', { name: /gene evidence comparison/i })).toBeInTheDocument();
@@ -88,9 +89,11 @@ describe('GeneComparison claim-level evidence', () => {
     expect(screen.getByText(/SCN1A has a source-recorded association/i)).toBeInTheDocument();
     expect(screen.getByText(/Mouse ortholog phenotype overlaps/i)).toBeInTheDocument();
 
-    const sourceLink = screen.getByRole('link', { name: /open source record/i });
-    expect(sourceLink).toHaveAttribute('href', 'https://example.org/scn1a');
-    expect(sourceLink).toHaveAttribute('rel', expect.stringContaining('noopener'));
+    const sourceLinks = screen.getAllByRole('link', { name: /open source record/i });
+    expect(sourceLinks).toHaveLength(1);
+    expect(sourceLinks[0]).toHaveAttribute('href', 'https://example.org/scn1a');
+    expect(sourceLinks[0]).toHaveAttribute('rel', expect.stringContaining('noopener'));
+    expect(document.querySelector('a[href^="javascript:"]')).toBeNull();
 
     const scn1aSection = screen.getByRole('heading', { name: 'SCN1A' }).closest('section');
     expect(scn1aSection).toBeTruthy();
