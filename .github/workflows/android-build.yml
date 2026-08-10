@@ -64,6 +64,7 @@ jobs:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           test -n "$ANDROID_KEYSTORE_BASE64" || { echo 'ANDROID_KEYSTORE_BASE64 is missing'; exit 1; }
@@ -71,6 +72,24 @@ jobs:
           test -n "$ANDROID_KEY_ALIAS" || { echo 'ANDROID_KEY_ALIAS is missing'; exit 1; }
           test -n "$ANDROID_KEY_PASSWORD" || { echo 'ANDROID_KEY_PASSWORD is missing'; exit 1; }
           printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/upload.jks"
+          keytool -list -v \
+            -keystore "$RUNNER_TEMP/upload.jks" \
+            -alias "$ANDROID_KEY_ALIAS" \
+            -storepass "$ANDROID_KEYSTORE_PASSWORD" \
+            -keypass "$ANDROID_KEY_PASSWORD" \
+            | awk -F': ' '/SHA256:/{gsub(":", "", $2); print tolower($2); exit}' \
+            > "$RUNNER_TEMP/keystore-cert.sha256"
+          test -s "$RUNNER_TEMP/keystore-cert.sha256"
+
+          BASELINE_TAG=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 100 --json tagName --jq '.[] | select(.tagName | startswith("android-v")) | .tagName' | head -n 1 || true)
+          if [ -n "$BASELINE_TAG" ]; then
+            mkdir -p "$RUNNER_TEMP/signing-baseline"
+            gh release download "$BASELINE_TAG" --repo "$GITHUB_REPOSITORY" --pattern genemap-signing-cert.sha256 --dir "$RUNNER_TEMP/signing-baseline"
+            test -s "$RUNNER_TEMP/signing-baseline/genemap-signing-cert.sha256" || { echo "Existing Android release lacks signing fingerprint"; exit 1; }
+            cmp "$RUNNER_TEMP/signing-baseline/genemap-signing-cert.sha256" "$RUNNER_TEMP/keystore-cert.sha256" || { echo 'Configured keystore certificate differs from prior Android releases'; exit 1; }
+          else
+            echo 'No prior signed Android release: this main build will establish the signing fingerprint bootstrap.'
+          fi
       - name: Build signed release APK and AAB
         run: ./gradlew assembleRelease bundleRelease --no-daemon
         working-directory: apps/web/android
@@ -81,7 +100,7 @@ jobs:
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
           ANDROID_VERSION_CODE: ${{ env.ANDROID_VERSION_CODE }}
           ANDROID_VERSION_NAME: ${{ env.ANDROID_VERSION_NAME }}
-      - name: Prepare release assets
+      - name: Verify signing certificate and prepare release assets
         shell: bash
         run: |
           set -euo pipefail
@@ -89,8 +108,15 @@ jobs:
           AAB='apps/web/android/app/build/outputs/bundle/release/app-release.aab'
           test -f "$APK"
           test -f "$AAB"
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -maxdepth 2 -type f -name apksigner | sort -V | tail -n 1)
+          test -n "$APKSIGNER"
+          "$APKSIGNER" verify --print-certs "$APK" > "$RUNNER_TEMP/apk-certs.txt"
+          awk -F': ' '/Signer #1 certificate SHA-256 digest:/{gsub(":", "", $2); print tolower($2); exit}' "$RUNNER_TEMP/apk-certs.txt" > "$RUNNER_TEMP/apk-cert.sha256"
+          test -s "$RUNNER_TEMP/apk-cert.sha256"
+          cmp "$RUNNER_TEMP/keystore-cert.sha256" "$RUNNER_TEMP/apk-cert.sha256" || { echo 'Built APK signing certificate does not match configured persistent keystore'; exit 1; }
           cp "$APK" "GeneMap-${ANDROID_VERSION_NAME}.apk"
           cp "$AAB" "GeneMap-${ANDROID_VERSION_NAME}.aab"
+          cp "$RUNNER_TEMP/apk-cert.sha256" genemap-signing-cert.sha256
           sha256sum "GeneMap-${ANDROID_VERSION_NAME}.apk" > genemap-android.sha256
       - uses: actions/upload-artifact@v7
         with:
@@ -99,6 +125,7 @@ jobs:
             GeneMap-*.apk
             GeneMap-*.aab
             genemap-android.sha256
+            genemap-signing-cert.sha256
           if-no-files-found: error
 
   publish:
@@ -127,6 +154,7 @@ jobs:
               "GeneMap-${ANDROID_VERSION_NAME}.apk" \
               "GeneMap-${ANDROID_VERSION_NAME}.aab" \
               genemap-android.sha256 \
+              genemap-signing-cert.sha256 \
               --repo "$GITHUB_REPOSITORY" \
               --clobber
             gh release edit "$TAG" \
@@ -139,6 +167,7 @@ jobs:
               "GeneMap-${ANDROID_VERSION_NAME}.apk" \
               "GeneMap-${ANDROID_VERSION_NAME}.aab" \
               genemap-android.sha256 \
+              genemap-signing-cert.sha256 \
               --repo "$GITHUB_REPOSITORY" \
               --target "$GITHUB_SHA" \
               --title "GeneMap Android ${ANDROID_VERSION_NAME}" \
