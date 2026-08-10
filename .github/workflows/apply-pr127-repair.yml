@@ -28,6 +28,7 @@ jobs:
           base64 --decode /tmp/pr127.patch.gz.b64 | gzip --decompress > /tmp/pr127.patch
           echo 'a4c6dadbb93bdca63f1882b6fd9383de246f6d118b4429497e9f867f58ba2a0e  /tmp/pr127.patch' | sha256sum --check --strict
           patch --batch --forward -p1 < /tmp/pr127.patch
+          sed -i 's/[[:blank:]]\+$//' docs/PROCESSOR_REGISTER.md
           rm -rf .release/pr127-repair
           rm -f .github/workflows/apply-pr127-repair.yml
           git config user.name 'ChatGPT release executor'
