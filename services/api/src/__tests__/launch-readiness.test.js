@@ -49,6 +49,7 @@ const VALID_ENV = {
   ACCOUNT_CLOSURE_LEDGER_WRITE_URL: 'https://ledger.example.com/write',
   ACCOUNT_CLOSURE_LEDGER_READ_URL: 'https://ledger.example.com/read',
   ACCOUNT_CLOSURE_LEDGER_SECRET: 'l'.repeat(48),
+  ACCOUNT_CLOSURE_LEDGER_IDENTITY_KEYS: `2026-08=${'i'.repeat(48)},2026-01=${'r'.repeat(48)}`,
 };
 
 const VALID_EVIDENCE = {
@@ -147,7 +148,16 @@ describe('production launch verification', () => {
     delete source.ACCOUNT_CLOSURE_LEDGER_WRITE_URL;
     delete source.ACCOUNT_CLOSURE_LEDGER_READ_URL;
     delete source.ACCOUNT_CLOSURE_LEDGER_SECRET;
+    delete source.ACCOUNT_CLOSURE_LEDGER_IDENTITY_KEYS;
     const { checks } = validateLaunchEnv(source);
+    expect(failures(checks).map((check) => check.id)).toContain('accountClosure.ledger');
+  });
+
+  it('rejects a deletion ledger without a rotation-safe identity key ring', () => {
+    const { checks } = validateLaunchEnv({
+      ...VALID_ENV,
+      ACCOUNT_CLOSURE_LEDGER_IDENTITY_KEYS: '',
+    });
     expect(failures(checks).map((check) => check.id)).toContain('accountClosure.ledger');
   });
 
