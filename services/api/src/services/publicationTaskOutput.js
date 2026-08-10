@@ -352,7 +352,7 @@ function cleanStringArray(value, { maxItems, maxLength, nonClinical = false }) {
   return cleaned;
 }
 
-function cleanNarrativeFormatting(value, maxLength) {
+function normalizeNarrativeFormatting(value) {
   if (typeof value !== 'string') return null;
   const lines = normalizeVisibleText(value)
     .replace(/\r\n?/gu, '\n')
@@ -365,7 +365,7 @@ function cleanNarrativeFormatting(value, maxLength) {
     .replace(/\n{3,}/gu, '\n\n')
     .trim();
   if (!normalized) return null;
-  return normalized.slice(0, maxLength);
+  return normalized;
 }
 
 function sanitizeNarrativeArtifact(result, {
@@ -380,14 +380,16 @@ function sanitizeNarrativeArtifact(result, {
       correlationId,
     });
   }
-  const cleaned = cleanNarrativeFormatting(result, maxLength);
-  if (!cleaned) {
+  const normalized = normalizeNarrativeFormatting(result);
+  if (!normalized) {
     return createPublicationArtifact({
       status: PUBLICATION_STATUSES.UNAVAILABLE,
       reasonCode: emptyReasonCode,
       correlationId,
     });
   }
+  const locallyTruncated = normalized.length > maxLength;
+  const cleaned = normalized.slice(0, maxLength);
   if (containsProhibitedClinicalGuidance(cleaned)) {
     return createPublicationArtifact({
       status: PUBLICATION_STATUSES.WITHHELD,
@@ -396,9 +398,15 @@ function sanitizeNarrativeArtifact(result, {
     });
   }
   return createPublicationArtifact({
-    status: PUBLICATION_STATUSES.AVAILABLE,
+    status: locallyTruncated
+      ? PUBLICATION_STATUSES.PARTIAL
+      : PUBLICATION_STATUSES.AVAILABLE,
     content: cleaned,
+    reasonCode: locallyTruncated ? 'local_output_truncated' : null,
     correlationId,
+    limitations: locallyTruncated
+      ? ['The response exceeded the local publication length limit and was truncated.']
+      : [],
   });
 }
 
@@ -887,7 +895,8 @@ export function sanitizePublicationArtifact(publicationTask, taskInput, result, 
     ...taskConfig,
     correlationId,
   });
-  if (provider.completion !== 'truncated' || artifact.status !== PUBLICATION_STATUSES.AVAILABLE) {
+  if (provider.completion !== 'truncated'
+    || ![PUBLICATION_STATUSES.AVAILABLE, PUBLICATION_STATUSES.PARTIAL].includes(artifact.status)) {
     return artifact;
   }
   return createPublicationArtifact({
@@ -895,7 +904,10 @@ export function sanitizePublicationArtifact(publicationTask, taskInput, result, 
     content: artifact.content,
     reasonCode: 'provider_truncated',
     correlationId,
-    limitations: ['The provider reached its output limit; the response may be incomplete.'],
+    limitations: [
+      'The provider reached its output limit; the response may be incomplete.',
+      ...artifact.limitations,
+    ],
   });
 }
 
@@ -912,7 +924,6 @@ export const __test = {
   cleanText,
   cleanNonClinicalText,
   cleanStringArray,
-  cleanNarrativeFormatting,
   containsProhibitedClinicalGuidance,
   parseJsonCandidate,
   normalizeCandidateGene,

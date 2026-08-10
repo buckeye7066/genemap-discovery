@@ -13,6 +13,25 @@ import PublicationState, {
   publicationContent,
 } from '@/components/shared/PublicationState';
 
+const QUIZ_LEVEL_BY_PROFILE_LEVEL = Object.freeze({
+  elementary: 'elementary',
+  middle_school: 'middle_school',
+  high_school: 'high_school',
+  undergraduate: 'undergraduate',
+  graduate: 'graduate',
+  postgraduate: 'postgraduate',
+  // Legacy Profile.jsx values must resolve to one of the API's six levels.
+  phd: 'graduate',
+  medical: 'postgraduate',
+  researcher: 'postgraduate',
+});
+
+function canonicalQuizLevel(profileLevel) {
+  return Object.prototype.hasOwnProperty.call(QUIZ_LEVEL_BY_PROFILE_LEVEL, profileLevel)
+    ? QUIZ_LEVEL_BY_PROFILE_LEVEL[profileLevel]
+    : 'undergraduate';
+}
+
 function isReusableQuiz(content) {
   return Array.isArray(content) && content.length > 0 && content.every((item) => (
     item
@@ -118,7 +137,7 @@ export default function QuizMode() {
 
   const topicParam = searchParams.get('topic');
   const topicId = topicParam || 'what-is-dna';
-  const quizLevel = level || 'undergraduate';
+  const quizLevel = canonicalQuizLevel(level);
   const quizRequestScope = `${topicId}\u0000${quizLevel}`;
   const quizRequestRef = useRef({ scope: quizRequestScope, sequence: 0 });
   if (quizRequestRef.current.scope !== quizRequestScope) {

@@ -395,15 +395,19 @@ describe('sanitizePublicationTaskOutput', () => {
     expect(publication.content).toBeNull();
   });
 
-  it('allows complete known non-clinical boundary disclaimers and caps narrative output', () => {
+  it('allows complete known non-clinical boundary disclaimers and reports narrative capping', () => {
     const safePublication = sanitizePublicationTaskOutput(
       LEARNING_TASK,
       {},
       `This is not medical advice. Compare aggregate patterns only. ${'A'.repeat(4_000)}`,
     );
-    const safe = expectPublication(safePublication);
+    const safe = expectPublication(safePublication, {
+      status: 'partial',
+      reasonCode: 'local_output_truncated',
+    });
     expect(safe).toContain('This is not medical advice.');
     expect(safe.length).toBeLessThanOrEqual(3_000);
+    expect(safePublication.limitations).toHaveLength(1);
 
     const completeBoundary = 'Do not use this output for diagnosis, personal-risk prediction, treatment, dosing, screening, or other clinical decisions. Compare aggregate patterns only.';
     const completePublication = sanitizePublicationTaskOutput(

@@ -11,7 +11,10 @@ import {
   rankGenesByProvenance,
   stripLlmSelfScores,
 } from "../../../../packages/shared/src/associationClaim.ts";
-import { createPublicationArtifact } from "@genemap/shared/publicationStatus";
+import {
+  createPublicationArtifact,
+  isCanonicalPublicationArtifact,
+} from "@genemap/shared/publicationStatus";
 import { log } from "../shared/logger";
 import { getErrorMessage } from "../shared/errorUtils";
 import { GENE_ENRICHMENT_CONCURRENCY } from "../shared/constants";
@@ -30,6 +33,31 @@ function unavailableProfilePublication(reasonCode) {
     reasonCode,
     correlationId: `client-profile:${reasonCode}`,
   });
+}
+
+const INVALID_CANDIDATE_PUBLICATION = Object.freeze(createPublicationArtifact({
+  status: 'unavailable',
+  reasonCode: 'invalid_candidate_publication',
+  correlationId: 'client-candidate:invalid-publication',
+}));
+
+function normalizeCandidatePublication(artifact) {
+  return isCanonicalPublicationArtifact(artifact)
+    ? artifact
+    : INVALID_CANDIDATE_PUBLICATION;
+}
+
+const TERMINAL_PUBLICATION_STATUSES = new Set([
+  'withheld',
+  'unavailable',
+  'superseded',
+]);
+
+function isTerminalPublicationArtifact(artifact) {
+  return Boolean(
+    isCanonicalPublicationArtifact(artifact)
+    && TERMINAL_PUBLICATION_STATUSES.has(artifact.status),
+  );
 }
 
 export class PhenotypeSearchService {
@@ -80,16 +108,24 @@ export class PhenotypeSearchService {
       ]);
       const effectivePremium = isPremium || isAdmin;
       let { analysis, candidateGenes, publication } = fused;
+      publication = normalizeCandidatePublication(publication);
+      if (isTerminalPublicationArtifact(publication)) candidateGenes = [];
 
       // A sparse but syntactically valid response receives one bounded fallback
       // through the same immutable reference, never through model-generated text.
       if (!candidateGenes.length && reusablePublicationArtifact({ publication })) {
         analysis = await this.analyzePhenotype(queryReference);
-        candidateGenes = await this.findCandidateGenes(
-          analysis,
-          effectivePremium,
-          queryReference,
-        );
+        publication = normalizeCandidatePublication(analysis.publication);
+        if (!isTerminalPublicationArtifact(publication)) {
+          const fallback = await this.findCandidateGenes(
+            analysis,
+            effectivePremium,
+            queryReference,
+          );
+          candidateGenes = fallback.candidateGenes;
+          publication = normalizeCandidatePublication(fallback.publication);
+          if (isTerminalPublicationArtifact(publication)) candidateGenes = [];
+        }
       }
 
       const usesDiseaseCandidateLimit = this.usesDiseaseCandidatePrompt(
@@ -222,6 +258,13 @@ export class PhenotypeSearchService {
       searchMode,
       selectedReference,
     );
+    if (
+      isTerminalPublicationArtifact(base.publication)
+      || (
+        base.publication.status === 'partial'
+        && base.candidateGenes.length === 0
+      )
+    ) return base;
     return this.enrichCandidates(base);
   }
 
@@ -445,9 +488,13 @@ export class PhenotypeSearchService {
     );
     const parsed = parseLLMJson(response, { candidateGenes: [] });
     const result = Array.isArray(parsed) ? { candidateGenes: parsed } : parsed;
-    return (result?.candidateGenes || [])
-      .filter((gene) => gene && gene.symbol)
-      .map((gene) => ({ ...gene, candidatePublication: response?.publication || null }));
+    const publication = response?.publication || null;
+    return {
+      candidateGenes: (result?.candidateGenes || [])
+        .filter((gene) => gene && gene.symbol)
+        .map((gene) => ({ ...gene, candidatePublication: publication })),
+      publication,
+    };
   }
 
   static usesDiseaseCandidatePrompt(phenotypeAnalysis, queryReference) {

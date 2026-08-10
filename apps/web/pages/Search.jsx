@@ -1,5 +1,6 @@
 import React, { useState, useRef, lazy, Suspense } from "react";
 import { apiClient } from "@genemap/shared";
+import { createPublicationArtifact } from "@genemap/shared/publicationStatus";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../lib/AuthContext";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -15,6 +16,9 @@ import { Search, AlertCircle, GitCompare, Library, Brain } from "lucide-react";
 import SearchForm from "../components/search/SearchForm";
 import GeneResults from "../components/search/GeneResults";
 import AiThinkingIndicator from "@/components/AiThinkingIndicator";
+import PublicationState, {
+  isCanonicalPublicationArtifact,
+} from "../components/shared/PublicationState";
 const GeneComparison = lazy(() => import("../components/search/GeneComparison"));
 const GeneInputForm = lazy(() => import("../components/search/GeneInputForm"));
 const GeneSetComparison = lazy(() => import("../components/search/GeneSetComparison"));
@@ -34,15 +38,55 @@ const QUICK_STARTS = Object.freeze([
   { query: 'HP:0001250', searchMode: 'free_text' },
 ]);
 
+const TERMINAL_PUBLICATION_STATUSES = new Set([
+  'withheld',
+  'unavailable',
+  'superseded',
+]);
+
+function isTerminalCandidatePublication(artifact) {
+  return Boolean(
+    isCanonicalPublicationArtifact(artifact)
+    && TERMINAL_PUBLICATION_STATUSES.has(artifact.status),
+  );
+}
+
+const INVALID_CANDIDATE_PUBLICATION = Object.freeze(createPublicationArtifact({
+  status: 'unavailable',
+  reasonCode: 'invalid_candidate_publication',
+  correlationId: 'client-candidate:invalid-publication',
+}));
+
+function normalizeCandidateResult(result) {
+  if (isCanonicalPublicationArtifact(result?.publication)) return result;
+  return {
+    ...(result && typeof result === 'object' ? result : {}),
+    candidateGenes: [],
+    publication: INVALID_CANDIDATE_PUBLICATION,
+    enriched: false,
+  };
+}
+
+function isPartialEmptyCandidateResult(result) {
+  return Boolean(
+    isCanonicalPublicationArtifact(result?.publication)
+    && result.publication.status === 'partial'
+    && Array.isArray(result.candidateGenes)
+    && result.candidateGenes.length === 0,
+  );
+}
+
 export default function SearchPage() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isSearchLoading, setIsSearchLoading] = useState(false);
+  const [isComparisonLoading, setIsComparisonLoading] = useState(false);
   const [isEnriching, setIsEnriching] = useState(false);
   const [error, setError] = useState(null);
   const searchTokenRef = useRef(0);
+  const comparisonTokenRef = useRef(0);
   const [searchType, setSearchType] = useState("free");
   const [selectedGenes, setSelectedGenes] = useState([]);
   const [showComparison, setShowComparison] = useState(false);
@@ -50,6 +94,7 @@ export default function SearchPage() {
   const [geneSetComparison, setGeneSetComparison] = useState(null);
   const [showSavedSets, setShowSavedSets] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const isLoading = isSearchLoading || isComparisonLoading;
 
   React.useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
@@ -75,9 +120,11 @@ export default function SearchPage() {
     }
 
     const token = ++searchTokenRef.current;
+    const comparisonScope = ++comparisonTokenRef.current;
     const isCurrent = () => token === searchTokenRef.current;
 
-    setIsLoading(true);
+    setIsSearchLoading(true);
+    setIsComparisonLoading(false);
     setIsEnriching(false);
     setError(null);
     setSearchResults(null);
@@ -93,15 +140,26 @@ export default function SearchPage() {
         searchMode,
         selectedReference,
       );
-      const base = await PhenotypeSearchService.findCandidates(
-        query,
-        isPremium,
-        searchMode,
-        publicationReference,
+      const base = normalizeCandidateResult(
+        await PhenotypeSearchService.findCandidates(
+          query,
+          isPremium,
+          searchMode,
+          publicationReference,
+        ),
       );
       if (!isCurrent()) return;
       setSearchResults(base);
-      setIsLoading(false);
+      setIsSearchLoading(false);
+
+      // A canonical terminal publication is the result of this request, not an
+      // evidence-free success. Keep it visible and do not enrich, compare, or
+      // persist it as a successful zero-candidate search.
+      if (
+        isTerminalCandidatePublication(base.publication)
+        || isPartialEmptyCandidateResult(base)
+      ) return;
+
       setIsEnriching(true);
 
       const enriched = await PhenotypeSearchService.enrichCandidates(base);
@@ -109,15 +167,42 @@ export default function SearchPage() {
       setSearchResults(enriched);
       setIsEnriching(false);
 
-      if (userInputGenes.length > 0) {
-        const comparison = await PhenotypeSearchService.compareGeneSets(
-          userInputGenes,
-          enriched.candidateGenes.map(g => g.symbol),
-          query,
-          isPremium
-        );
+      if (
+        userInputGenes.length > 0
+        && comparisonScope === comparisonTokenRef.current
+      ) {
+        const comparisonToken = ++comparisonTokenRef.current;
+        setIsComparisonLoading(true);
+        try {
+          const comparison = await PhenotypeSearchService.compareGeneSets(
+            userInputGenes,
+            enriched.candidateGenes.map(g => g.symbol),
+            query,
+            isPremium
+          );
+          if (
+            isCurrent()
+            && comparisonToken === comparisonTokenRef.current
+          ) {
+            setGeneSetComparison(comparison);
+          }
+        } catch (comparisonError) {
+          if (
+            isCurrent()
+            && comparisonToken === comparisonTokenRef.current
+          ) {
+            setError(getErrorMessage(comparisonError) || "Failed to compare gene sets");
+            log.error("Gene set comparison error:", comparisonError);
+          }
+        } finally {
+          if (
+            isCurrent()
+            && comparisonToken === comparisonTokenRef.current
+          ) {
+            setIsComparisonLoading(false);
+          }
+        }
         if (!isCurrent()) return;
-        setGeneSetComparison(comparison);
       }
 
       try {
@@ -141,7 +226,7 @@ export default function SearchPage() {
       }
     } finally {
       if (isCurrent()) {
-        setIsLoading(false);
+        setIsSearchLoading(false);
         setIsEnriching(false);
       }
     }
@@ -162,31 +247,61 @@ export default function SearchPage() {
   };
 
   const handleGeneInput = (genes) => {
+    const comparisonToken = ++comparisonTokenRef.current;
     setUserInputGenes(genes);
     setGeneSetComparison(null);
-    if (searchResults && genes.length > 0) {
-      handleCompareWithPhenotype(genes);
+    if (
+      searchResults
+      && genes.length > 0
+      && !isTerminalCandidatePublication(searchResults.publication)
+      && !isPartialEmptyCandidateResult(searchResults)
+    ) {
+      handleCompareWithPhenotype(genes, comparisonToken);
+    } else {
+      setIsComparisonLoading(false);
     }
   };
 
-  const handleCompareWithPhenotype = async (genes) => {
-    if (!searchResults) return;
+  const handleCompareWithPhenotype = async (
+    genes,
+    comparisonToken = ++comparisonTokenRef.current,
+  ) => {
+    if (
+      !searchResults
+      || isTerminalCandidatePublication(searchResults.publication)
+      || isPartialEmptyCandidateResult(searchResults)
+    ) {
+      if (comparisonToken === comparisonTokenRef.current) {
+        setIsComparisonLoading(false);
+      }
+      return;
+    }
 
-    setIsLoading(true);
+    const searchToken = searchTokenRef.current;
+    const isCurrent = () => (
+      searchToken === searchTokenRef.current
+      && comparisonToken === comparisonTokenRef.current
+    );
+    const scopedResults = searchResults;
+    const scopedQuery = searchQuery;
+    setIsComparisonLoading(true);
     setError(null);
     try {
       const comparison = await PhenotypeSearchService.compareGeneSets(
         genes,
-        searchResults.candidateGenes.map(g => g.symbol),
-        searchQuery,
-        searchResults.isPremium
+        scopedResults.candidateGenes.map(g => g.symbol),
+        scopedQuery,
+        scopedResults.isPremium
       );
+      if (!isCurrent()) return;
       setGeneSetComparison(comparison);
     } catch (err) {
-      setError(getErrorMessage(err) || "Failed to compare gene sets");
-      log.error("Gene set comparison error:", err);
+      if (isCurrent()) {
+        setError(getErrorMessage(err) || "Failed to compare gene sets");
+        log.error("Gene set comparison error:", err);
+      }
     } finally {
-      setIsLoading(false);
+      if (isCurrent()) setIsComparisonLoading(false);
     }
   };
 
@@ -245,6 +360,25 @@ export default function SearchPage() {
     setShowComparison(false);
   };
 
+  const terminalCandidatePublication = isTerminalCandidatePublication(
+    searchResults?.publication,
+  )
+    ? searchResults.publication
+    : null;
+  const partialEmptyCandidatePublication = isPartialEmptyCandidateResult(searchResults)
+    ? searchResults.publication
+    : null;
+  const boundaryCandidatePublication = terminalCandidatePublication
+    || partialEmptyCandidatePublication;
+  const isAvailableEmptyResult = Boolean(
+    searchResults
+    && !boundaryCandidatePublication
+    && isCanonicalPublicationArtifact(searchResults.publication)
+    && searchResults.publication.status === 'available'
+    && Array.isArray(searchResults.candidateGenes)
+    && searchResults.candidateGenes.length === 0,
+  );
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-4 sm:p-6 overflow-x-hidden">
       <div className="max-w-7xl mx-auto min-w-0">
@@ -275,7 +409,7 @@ export default function SearchPage() {
                 <CardContent>
                   <SearchForm
                     onSearch={handleSearch}
-                    isLoading={isLoading}
+                    isLoading={isSearchLoading}
                     initialQuery={searchQuery}
                   />
                 </CardContent>
@@ -303,7 +437,7 @@ export default function SearchPage() {
                   <Suspense fallback={<p className="text-sm text-slate-500">Loading gene tools…</p>}>
                     <GeneInputForm
                       onGenesSubmit={handleGeneInput}
-                      isLoading={isLoading}
+                      isLoading={isSearchLoading}
                       initialGenes={userInputGenes}
                     />
                   </Suspense>
@@ -324,11 +458,20 @@ export default function SearchPage() {
               </Alert>
             )}
 
-            {isLoading && (
+            {isSearchLoading && (
               <AiThinkingIndicator
                 label={`Finding genes for "${searchQuery || 'your query'}"…`}
                 hint="Identifying candidate genes and verifying their coordinates. Results appear first, then details fill in."
               />
+            )}
+
+            {isComparisonLoading && !isSearchLoading && (
+              <Alert className="mb-4 border-blue-200 bg-blue-50" role="status">
+                <GitCompare className="h-4 w-4 text-blue-600" aria-hidden="true" />
+                <AlertDescription className="text-blue-900">
+                  Comparing the current gene input with these candidate leads…
+                </AlertDescription>
+              </Alert>
             )}
 
             {isEnriching && !isLoading && (
@@ -349,7 +492,31 @@ export default function SearchPage() {
               </Suspense>
             )}
 
-            {searchResults && !isLoading && !geneSetComparison && (
+            {boundaryCandidatePublication && !isLoading && !geneSetComparison && (
+              <PublicationState
+                artifact={boundaryCandidatePublication}
+                className="mb-6 sm:mb-8"
+              />
+            )}
+
+            {isAvailableEmptyResult && !isLoading && !geneSetComparison && (
+              <Alert
+                className="mb-6 border-slate-300 bg-slate-50 text-slate-800 sm:mb-8"
+                role="status"
+              >
+                <Search className="h-4 w-4" aria-hidden="true" />
+                <AlertDescription>
+                  <span className="font-semibold">No candidate genes were generated.</span>{' '}
+                  The reviewed search completed successfully, but returned no candidate leads.
+                </AlertDescription>
+              </Alert>
+            )}
+
+            {searchResults
+              && !isLoading
+              && !geneSetComparison
+              && !boundaryCandidatePublication
+              && !isAvailableEmptyResult && (
               <ErrorBoundary name="Search results">
                 <GeneResults
                   results={searchResults}

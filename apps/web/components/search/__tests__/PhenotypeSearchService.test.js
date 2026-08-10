@@ -258,6 +258,108 @@ describe('PhenotypeSearchService staged candidate journey', () => {
     expect(taskInput.query).toEqual({ kind: 'mondo', identifier: 'MONDO:0007947' });
     expect(JSON.stringify(taskInput)).not.toContain('untrusted browser label');
   });
+
+  it.each(['withheld', 'unavailable'])(
+    'returns a canonical %s candidate publication without empty-result fallback work',
+    async (status) => {
+      const publication = {
+        contractVersion: 1,
+        status,
+        content: null,
+        reasonCode: `candidate_${status}`,
+        correlationId: `candidate:${status}`,
+        limitations: [],
+      };
+      const invoke = vi.spyOn(apiClient, 'invokePublicationTask').mockResolvedValue({ publication });
+      vi.spyOn(apiClient, 'getMe').mockResolvedValue({});
+      const enrich = vi.spyOn(apiClient, 'enrichGenomicData');
+
+      const base = await PhenotypeSearchService.findCandidates(
+        'Cystic Fibrosis',
+        false,
+        'disease',
+      );
+
+      expect(base.publication).toEqual(publication);
+      expect(base.candidateGenes).toEqual([]);
+      expect(base.enriched).toBe(false);
+      expect(invoke).toHaveBeenCalledTimes(1);
+      expect(enrich).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['missing', undefined],
+    ['malformed', { ...envelope({ candidateGenes: [] }).publication, raw: 'leak' }],
+  ])(
+    'canonicalizes a %s candidate publication and searchGenes does not enrich it',
+    async (_caseName, publication) => {
+      vi.spyOn(apiClient, 'invokePublicationTask').mockResolvedValue({ publication });
+      vi.spyOn(apiClient, 'getMe').mockResolvedValue({});
+      const authoritativeEnrich = vi.spyOn(apiClient, 'enrichGenomicData');
+      const candidateEnrich = vi.spyOn(PhenotypeSearchService, 'enrichCandidates');
+
+      const result = await PhenotypeSearchService.searchGenes(
+        'Cystic Fibrosis',
+        false,
+        'disease',
+      );
+
+      expect(result.publication).toEqual({
+        contractVersion: 1,
+        status: 'unavailable',
+        content: null,
+        reasonCode: 'invalid_candidate_publication',
+        correlationId: 'client-candidate:invalid-publication',
+        limitations: [],
+      });
+      expect(result.candidateGenes).toEqual([]);
+      expect(result.enriched).toBe(false);
+      expect(authoritativeEnrich).not.toHaveBeenCalled();
+      expect(candidateEnrich).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    { stage: 'classify', status: 'unavailable', calls: 2 },
+    { stage: 'suggest_candidates', status: 'withheld', calls: 3 },
+  ])(
+    'propagates a terminal $status publication from the $stage fallback',
+    async ({ stage, status, calls }) => {
+      const terminal = {
+        publication: {
+          contractVersion: 1,
+          status,
+          content: null,
+          reasonCode: `fallback_${status}`,
+          correlationId: `fallback:${stage}:${status}`,
+          limitations: [],
+        },
+      };
+      const responses = [
+        envelope({ queryType: 'disease', isDisease: true, candidateGenes: [] }),
+      ];
+      if (stage === 'suggest_candidates') {
+        responses.push(envelope({ queryType: 'disease', isDisease: true, mainFeatures: [] }));
+      }
+      responses.push(terminal);
+      const invoke = vi.spyOn(apiClient, 'invokePublicationTask');
+      for (const response of responses) invoke.mockResolvedValueOnce(response);
+      vi.spyOn(apiClient, 'getMe').mockResolvedValue({});
+      const enrich = vi.spyOn(apiClient, 'enrichGenomicData');
+
+      const base = await PhenotypeSearchService.findCandidates(
+        'Cystic Fibrosis',
+        false,
+        'disease',
+      );
+
+      expect(base.publication).toEqual(terminal.publication);
+      expect(base.candidateGenes).toEqual([]);
+      expect(invoke).toHaveBeenCalledTimes(calls);
+      expect(enrich).not.toHaveBeenCalled();
+    },
+  );
 });
 
 describe('PhenotypeSearchService profile and comparison behavior', () => {

@@ -104,7 +104,10 @@ function hasOnlyKeys(value, allowed) {
 }
 
 function validateGenerationOptions(options) {
-  if (options == null) return;
+  if (options === undefined) return;
+  if (options === null) {
+    throw new ValidationError('generation options must be an object');
+  }
   if (!hasOnlyKeys(options, GENERATION_OPTION_KEYS)) {
     throw new ValidationError('generation options contain unsupported fields');
   }

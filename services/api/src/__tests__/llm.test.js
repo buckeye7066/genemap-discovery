@@ -319,6 +319,29 @@ describe('LLM route protection', () => {
     expect(prisma.learningSession.count).not.toHaveBeenCalled();
   });
 
+  it('rejects explicit null generation options before quota or provider work', async () => {
+    const llmService = await import('../services/llm.js');
+    llmService.generateExplanation.mockClear();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/llm/invoke',
+      headers: {
+        cookie: authCookie({ userId: 'free-user', email: 'free@example.com', role: 'user' }),
+      },
+      payload: {
+        publicationTask: 'aggregate_genomics_research',
+        taskInput: STRUCTURED_RESEARCH_INPUT,
+        options: null,
+      },
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body).error).toMatch(/generation options must be an object/i);
+    expect(prisma.learningSession.count).not.toHaveBeenCalled();
+    expect(llmService.generateExplanation).not.toHaveBeenCalled();
+  });
+
   it('premium user is not subject to the daily limit', async () => {
     const cookie = authCookie({
       userId: 'premium-user',

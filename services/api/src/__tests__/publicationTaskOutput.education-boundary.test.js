@@ -354,6 +354,100 @@ describe('genetics education publication boundary', () => {
     expect(result.limitations).toHaveLength(1);
   });
 
+  it.each([
+    ['genetics_education', 8_000],
+    ['research_hypothesis', 12_000],
+    ['aggregate_genomics_research', 12_000],
+    ['learning_activity_summary', 3_000],
+  ])('marks locally capped complete %s narrative output partial', (task, maxLength) => {
+    const result = sanitizePublicationArtifact(
+      task,
+      {},
+      { completion: 'complete', text: 'A'.repeat(maxLength + 1) },
+      { correlationId: `local-cap-${task}` },
+    );
+
+    expect(result).toMatchObject({
+      status: 'partial',
+      reasonCode: 'local_output_truncated',
+      correlationId: `local-cap-${task}`,
+    });
+    expect(result.content).toHaveLength(maxLength);
+    expect(result.limitations).toEqual([
+      'The response exceeded the local publication length limit and was truncated.',
+    ]);
+  });
+
+  it.each([
+    ['genetics_education', 8_000],
+    ['research_hypothesis', 12_000],
+    ['aggregate_genomics_research', 12_000],
+    ['learning_activity_summary', 3_000],
+  ])('does not mark unchanged in-limit %s narrative output partial', (task, maxLength) => {
+    const text = 'A'.repeat(maxLength);
+    const result = sanitizePublicationArtifact(
+      task,
+      {},
+      { completion: 'complete', text },
+      { correlationId: `no-local-cap-${task}` },
+    );
+
+    expect(result).toMatchObject({
+      status: 'available',
+      content: text,
+      reasonCode: null,
+      limitations: [],
+    });
+  });
+
+  it('does not report local truncation when normalization brings raw text under the limit', () => {
+    const result = sanitizePublicationArtifact(
+      'learning_activity_summary',
+      {},
+      { completion: 'complete', text: `Safe${' '.repeat(4_000)}learning summary.` },
+      { correlationId: 'normalized-under-local-cap' },
+    );
+
+    expect(result).toMatchObject({
+      status: 'available',
+      content: 'Safe learning summary.',
+      reasonCode: null,
+      limitations: [],
+    });
+  });
+
+  it('checks the complete provider narrative for unsafe content before local capping', () => {
+    const result = sanitizePublicationArtifact(
+      'learning_activity_summary',
+      {},
+      { completion: 'complete', text: `${'A'.repeat(3_001)}\nTake aspirin.` },
+      { correlationId: 'unsafe-tail-after-local-cap' },
+    );
+
+    expect(result).toMatchObject({
+      status: 'withheld',
+      content: null,
+      reasonCode: 'clinical_boundary',
+    });
+    expect(JSON.stringify(result)).not.toContain('Take aspirin');
+  });
+
+  it('retains provider-truncation honesty when local publication capping also occurs', () => {
+    const result = sanitizePublicationArtifact(
+      'learning_activity_summary',
+      {},
+      { completion: 'truncated', text: 'A'.repeat(3_001) },
+      { correlationId: 'provider-and-local-truncation' },
+    );
+
+    expect(result).toMatchObject({
+      status: 'partial',
+      reasonCode: 'provider_truncated',
+    });
+    expect(result.content).toHaveLength(3_000);
+    expect(result.limitations).toHaveLength(2);
+  });
+
   it('fails closed on truncated structured output even when its parsed prefix looks valid', () => {
     const result = sanitizeEducationQuizArtifact({
       completion: 'truncated',

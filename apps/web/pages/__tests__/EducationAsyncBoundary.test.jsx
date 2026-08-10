@@ -159,6 +159,48 @@ describe('education async publication boundaries', () => {
     expect(screen.queryByText(/generating quiz questions/i)).toBeNull();
   });
 
+  it.each([
+    ['elementary', 'elementary'],
+    ['middle_school', 'middle_school'],
+    ['high_school', 'high_school'],
+    ['undergraduate', 'undergraduate'],
+    ['graduate', 'graduate'],
+    ['postgraduate', 'postgraduate'],
+    ['phd', 'graduate'],
+    ['medical', 'postgraduate'],
+    ['researcher', 'postgraduate'],
+  ])('sends saved level %s to the quiz API as %s', async (savedLevel, apiLevel) => {
+    educationState.level = savedLevel;
+    apiClient.generateQuiz.mockResolvedValue(
+      quizResponse('what-is-dna', 'What is DNA?', `${savedLevel} quiz question?`),
+    );
+
+    render(routedElement('/quizmode?topic=what-is-dna', QuizMode));
+
+    await waitFor(() => expect(apiClient.generateQuiz).toHaveBeenCalledWith({
+      topic: 'what-is-dna',
+      level: apiLevel,
+      questionCount: 5,
+    }));
+    expect(await screen.findByText(`${savedLevel} quiz question?`)).toBeInTheDocument();
+  });
+
+  it('falls back to undergraduate for an unrecognized saved level', async () => {
+    educationState.level = 'unknown_profile_level';
+    apiClient.generateQuiz.mockResolvedValue(
+      quizResponse('what-is-dna', 'What is DNA?', 'Fallback quiz question?'),
+    );
+
+    render(routedElement('/quizmode?topic=what-is-dna', QuizMode));
+
+    await waitFor(() => expect(apiClient.generateQuiz).toHaveBeenCalledWith({
+      topic: 'what-is-dna',
+      level: 'undergraduate',
+      questionCount: 5,
+    }));
+    expect(await screen.findByText('Fallback quiz question?')).toBeInTheDocument();
+  });
+
   it('keeps explanation, image, and chat completions independent and scoped to topic plus level', async () => {
     const staleExplanation = deferred();
     const currentExplanation = deferred();
