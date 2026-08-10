@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { apiClient } from "@genemap/shared";
 import { useAuth } from "../lib/AuthContext";
+import MobileUpdateCard from "../components/MobileUpdateCard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -542,6 +543,9 @@ export default function ProfilePage() {
               </form>
             </CardContent>
           </Card>
+
+          {/* Native app only: manual OTA update check (renders nothing on web). */}
+          <MobileUpdateCard />
         </div>
       </div>
     </div>
