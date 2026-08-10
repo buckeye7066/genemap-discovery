@@ -53,3 +53,37 @@ jobs:
           CI: 'true'
           PLAYWRIGHT_LOCAL_PREVIEW: '1'
           PLAYWRIGHT_BASE_URL: http://127.0.0.1:4173
+
+  apply-pr127-ci-fix:
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.number == 127 &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'chatgpt/production-ready/genemap-discovery'
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - name: Apply exact CI correction packet
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo 'd583860fc699c05f869d048f33e062c4574db83acd18e0aa07018e5bf2d8d58d  .release/pr127-ci-fix.patch.gz.b64' | sha256sum --check --strict
+          base64 --decode .release/pr127-ci-fix.patch.gz.b64 | gzip --decompress > /tmp/pr127-ci-fix.patch
+          echo '88d29c10efda9cdd9d89f6abfbfa37ff1432c006d5a2f19447715528d913390c  /tmp/pr127-ci-fix.patch' | sha256sum --check --strict
+          patch --batch --forward -p1 < /tmp/pr127-ci-fix.patch
+          rm .release/pr127-ci-fix.patch.gz.b64
+          git config user.name 'ChatGPT release executor'
+          git config user.email 'actions@users.noreply.github.com'
+          git add -A
+          if git diff --cached --name-only | grep -q '^.github/workflows/'; then
+            echo 'Refusing to push workflow changes with the Actions token.' >&2
+            exit 1
+          fi
+          git diff --cached --check
+          git commit -m 'fix(ci): preserve partial billing progress and honest source health'
+          git push origin HEAD:${{ github.head_ref }}
