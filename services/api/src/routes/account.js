@@ -2,8 +2,9 @@ import { z } from 'zod';
 import { authenticate } from '../middleware/auth.js';
 import { verifyPassword } from '../utils/auth.js';
 import { getClearCookieOptions } from '../utils/cookies.js';
-import { UnauthorizedError, ValidationError } from '../utils/errors.js';
+import { AppError, UnauthorizedError, ValidationError } from '../utils/errors.js';
 import { closeUserAccount } from '../services/accountClosure.js';
+import { withAccountClosureLock } from '../services/accountClosureState.js';
 
 const deleteAccountSchema = z.object({
   email: z.string().email(),
@@ -13,6 +14,24 @@ const deleteAccountSchema = z.object({
 
 function normalizeEmail(value) {
   return String(value || '').trim().toLowerCase();
+}
+
+/**
+ * The closure service always attaches the exact receipt and internal progress
+ * before rethrowing a post-billing failure. Convert an unexpected persistence
+ * error into an operational response while preserving only the safe fields the
+ * central error handler publishes as counts.
+ */
+function operationalClosureError(error) {
+  if (error?.isOperational || !error?.receiptId || !error?.billingProgress) return error;
+  const wrapped = new AppError(
+    'Billing and deletion authorization were secured, but GeneMap could not finish closing the account. The account remains available with billing cancelled; retry or contact support with the deletion receipt.',
+    503,
+  );
+  wrapped.code = 'ACCOUNT_DELETE_FINALIZE_RECOVERY_REQUIRED';
+  wrapped.receiptId = error.receiptId;
+  wrapped.billingProgress = error.billingProgress;
+  return wrapped;
 }
 
 export default async function accountRoutes(fastify) {
@@ -43,12 +62,26 @@ export default async function accountRoutes(fastify) {
         throw new UnauthorizedError('Password confirmation failed');
       }
 
-      const result = await closeUserAccount({
+      const result = await withAccountClosureLock(
         prisma,
-        user,
-        actorUserId: user.id,
-        actorMode: 'self_service',
-      });
+        {
+          userId: user.id,
+          actorUserId: user.id,
+          actorMode: 'self_service',
+        },
+        async () => {
+          try {
+            return await closeUserAccount({
+              prisma,
+              user,
+              actorUserId: user.id,
+              actorMode: 'self_service',
+            });
+          } catch (error) {
+            throw operationalClosureError(error);
+          }
+        },
+      );
 
       return reply
         .clearCookie('accessToken', getClearCookieOptions())
@@ -58,3 +91,5 @@ export default async function accountRoutes(fastify) {
     },
   );
 }
+
+export const __test = { operationalClosureError };
