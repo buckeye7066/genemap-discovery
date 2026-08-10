@@ -7,7 +7,7 @@ import { ShieldCheck, ArrowLeft } from "lucide-react";
  * published data flows and the fail-closed boundary around personal clinical
  * and genomic information. Have counsel review before commercial reliance.
  */
-const UPDATED = "August 6, 2026";
+const UPDATED = "August 9, 2026";
 const CONTACT = "dr.johnwhite@axiombiolabs.org";
 
 function Section({ title, children }) {
@@ -163,12 +163,15 @@ export default function PrivacyPolicy() {
                 retention settings have not yet been documented.
               </li>
               <li>
-                <strong>NLM Clinical Tables, Monarch Initiative, and MyGene.info:</strong> active scientific
-                lookup services receive phenotype search text or exact HPO identifiers, disease search text
-                or exact MONDO identifiers, or human-gene symbols and fixed requested fields. These requests
-                originate from the API but may remain user-linked within GeneMap. These services are lookup
-                and follow-up sources, not automatic verification of an AI-generated claim and are not
-                represented here as contracted processors.
+                <strong>NLM Clinical Tables, Monarch Initiative, MyGene.info, and Open Targets:</strong>
+                active scientific lookup services receive phenotype search text or exact HPO identifiers,
+                disease search text or exact MONDO identifiers, human-gene symbols and fixed requested
+                fields, or an exact MONDO-derived disease identifier plus a bounded candidate-symbol set for
+                target-association lookup. These requests originate from the API but may remain user-linked
+                within GeneMap. Open Targets results are displayed only as computed research-comparison
+                signals, never as clinical conclusions. These services are lookup and follow-up sources, not
+                automatic verification of an AI-generated claim, and are not represented here as contracted
+                processors.
               </li>
             </ul>
             <p>

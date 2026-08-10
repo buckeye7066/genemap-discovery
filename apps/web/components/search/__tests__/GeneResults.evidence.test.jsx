@@ -208,4 +208,94 @@ describe('GeneResults evidence merge', () => {
     await screen.findByText(/remain unverified AI research leads/i);
     expect(screen.getByTestId('gene-SCN1A')).toHaveTextContent('1:SCN1A:ai_lead:1');
   });
+  it('uses the immutable publication reference instead of re-deriving from display query type', async () => {
+    const publicationReference = {
+      kind: 'curated_concept',
+      conceptId: 'disease:cystic-fibrosis',
+      canonicalLabel: 'Cystic Fibrosis',
+      conceptKind: 'disease',
+      source: 'genemap_curated',
+      version: 1,
+    };
+    evidenceClient.fetchAssociationEvidence.mockResolvedValue({
+      sourceStatus: 'no_matching_associations',
+      claimCount: 0,
+      claimsByGene: { CFTR: [] },
+      sources: {},
+    });
+
+    render(
+      <GeneResults
+        results={{
+          query: 'Cystic Fibrosis',
+          // Deliberately mismatched legacy/model label. The immutable reference
+          // must win so evidence is not silently skipped.
+          queryType: 'phenotype',
+          publicationReference,
+          isPremium: false,
+          candidateGenes: [{
+            symbol: 'CFTR',
+            name: 'CF transmembrane conductance regulator',
+            associationClaims: [aiLead('CFTR')],
+          }],
+        }}
+      />,
+    );
+
+    await waitFor(() => expect(evidenceClient.fetchAssociationEvidence).toHaveBeenCalledWith(
+      publicationReference,
+      ['CFTR'],
+    ));
+  });
+
+  it('renders partial source coverage neutrally and publishes enriched genes to comparison state', async () => {
+    const onEvidenceGenesChange = vi.fn();
+    evidenceClient.fetchAssociationEvidence.mockResolvedValue({
+      sourceStatus: 'partial_coverage',
+      claimCount: 1,
+      claimsByGene: { SCN1A: [humanAssociation('SCN1A')] },
+      sources: {
+        monarch: {
+          status: 'partial',
+          truncated: true,
+          retrievedAt: '2026-08-09T12:00:00.000Z',
+        },
+        openTargets: {
+          status: 'not_applicable',
+          truncated: false,
+          retrievedAt: null,
+        },
+      },
+    });
+
+    render(
+      <GeneResults
+        results={{
+          query: 'HP:0001250',
+          queryType: 'hpo_term',
+          publicationReference: { kind: 'hpo', identifier: 'HP:0001250' },
+          isPremium: false,
+          candidateGenes: [{
+            symbol: 'SCN1A',
+            name: 'SCN1A',
+            associationClaims: [aiLead('SCN1A')],
+          }],
+        }}
+        onEvidenceGenesChange={onEvidenceGenesChange}
+      />,
+    );
+
+    expect(await screen.findByText(/absence from this result is not evidence/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/partial coverage/i).length).toBeGreaterThan(0);
+    await waitFor(() => expect(onEvidenceGenesChange).toHaveBeenLastCalledWith([
+      expect.objectContaining({
+        symbol: 'SCN1A',
+        rankingBasis: 'human_verified',
+        associationClaims: expect.arrayContaining([
+          expect.objectContaining({ evidenceType: 'gene_phenotype_association' }),
+        ]),
+      }),
+    ]));
+  });
+
 });

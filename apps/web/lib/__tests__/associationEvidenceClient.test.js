@@ -1,13 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { apiClient } from '@genemap/shared';
+
+const shared = vi.hoisted(() => ({
+  request: vi.fn(),
+}));
+
+vi.mock('@genemap/shared', () => ({
+  apiClient: shared,
+}));
+
 import {
   fetchAssociationEvidence,
   __test,
 } from '../associationEvidenceClient';
-
-vi.mock('@genemap/shared', () => ({
-  apiClient: { request: vi.fn() },
-}));
 
 const query = { kind: 'hpo', identifier: 'HP:0001250' };
 
@@ -17,7 +21,7 @@ describe('associationEvidenceClient', () => {
   });
 
   it('deduplicates, policy-filters, and bounds candidate symbols before calling the authenticated API', async () => {
-    apiClient.request.mockResolvedValue({
+    shared.request.mockResolvedValue({
       query: { ...query, canonicalLabel: 'Seizure' },
       claimsByGene: { SCN1A: [] },
       sourceStatus: 'no_matching_associations',
@@ -33,7 +37,7 @@ describe('associationEvidenceClient', () => {
       ...Array.from({ length: 20 }, (_, index) => `G${index + 10}`),
     ]);
 
-    expect(apiClient.request).toHaveBeenCalledWith('/genomics/association-evidence', {
+    expect(shared.request).toHaveBeenCalledWith('/genomics/association-evidence', {
       method: 'POST',
       body: JSON.stringify({
         query,
@@ -49,7 +53,7 @@ describe('associationEvidenceClient', () => {
   });
 
   it('fails soft without promoting or removing candidate leads when the source API is unavailable', async () => {
-    apiClient.request.mockRejectedValue(new Error('upstream unavailable'));
+    shared.request.mockRejectedValue(new Error('upstream unavailable'));
 
     const result = await fetchAssociationEvidence(query, ['SCN1A']);
 
@@ -66,6 +70,6 @@ describe('associationEvidenceClient', () => {
     expect(await fetchAssociationEvidence(null, ['SCN1A'])).toEqual(__test.EMPTY_RESULT);
     expect(await fetchAssociationEvidence(query, ['not a gene'])).toEqual(__test.EMPTY_RESULT);
     expect(await fetchAssociationEvidence(query, ['TAKE-5MG'])).toEqual(__test.EMPTY_RESULT);
-    expect(apiClient.request).not.toHaveBeenCalled();
+    expect(shared.request).not.toHaveBeenCalled();
   });
 });

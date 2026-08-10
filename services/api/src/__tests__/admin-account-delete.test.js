@@ -53,20 +53,24 @@ describe('DELETE /admin/users/:idOrEmail billing and ownership safety', () => {
     expect(body).toMatchObject({
       success: true,
       receiptId: expect.any(String),
-      billing: { subscriptionsCancelled: 0, customersDeleted: 0 },
+      billing: { checkoutSessionsExpired: 0, subscriptionsCancelled: 0, customersDeleted: 0, customerCleanupPending: false },
     });
-    expect(prisma._store.auditLog).toEqual([
-      expect.objectContaining({
-        userId: SUPER.userId,
-        action: 'account.deleted_by_admin',
-        entityType: 'user',
-        entityId: target.id,
-        metadata: expect.objectContaining({
-          receiptId: body.receiptId,
-          actorMode: 'admin',
-        }),
-      }),
+    expect(prisma._store.auditLog.map((row) => row.action)).toEqual([
+      'account.closure_started',
+      'account.closure_billing_secured',
+      'account.deleted_by_admin',
+      'account.closure_customer_cleanup_completed',
     ]);
+    expect(prisma._store.auditLog.find((row) => row.action === 'account.deleted_by_admin')).toEqual(expect.objectContaining({
+      userId: SUPER.userId,
+      action: 'account.deleted_by_admin',
+      entityType: 'user',
+      entityId: target.id,
+      metadata: expect.objectContaining({
+        receiptId: body.receiptId,
+        actorMode: 'admin',
+      }),
+    }));
   });
 
   it('leaves a billable account intact when cancellation cannot be verified', async () => {
@@ -89,9 +93,13 @@ describe('DELETE /admin/users/:idOrEmail billing and ownership safety', () => {
     expect(response.statusCode).toBe(503);
     expect(JSON.parse(response.payload)).toMatchObject({
       code: 'ACCOUNT_DELETE_BILLING_UNAVAILABLE',
+      receiptId: expect.any(String),
     });
     expect(prisma._store.user.find((user) => user.id === target.id)).toBeDefined();
-    expect(prisma._store.auditLog).toHaveLength(0);
+    expect(prisma._store.auditLog.map((row) => row.action)).toEqual([
+      'account.closure_started',
+      'account.closure_failed',
+    ]);
   });
 
   it('blocks deletion while the target is responsible for an active institution', async () => {

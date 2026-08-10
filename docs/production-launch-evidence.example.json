@@ -11,7 +11,9 @@
     "retentionDays": 30,
     "lastSuccessfulBackupAt": "2026-06-27T09:00:00.000Z",
     "restoreTestedAt": "2026-06-20T09:00:00.000Z",
-    "restoreRunbook": "docs/BACKUP.md"
+    "restoreRunbook": "docs/BACKUP.md",
+    "externalDeletionLedgerConfigured": true,
+    "deletionLedgerReconciledAt": "2026-06-20T10:00:00.000Z"
   },
   "monitoring": {
     "errorTrackingConfigured": true,

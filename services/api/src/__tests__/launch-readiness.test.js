@@ -46,6 +46,9 @@ const VALID_ENV = {
   STRIPE_PRICE_ENT_MONTHLY: 'price_123456entMonthly',
   STRIPE_PRICE_ENT_YEARLY: 'price_123456entYearly',
   OPENAI_API_KEY: 'sk-live-openai-placeholder-for-validation',
+  ACCOUNT_CLOSURE_LEDGER_WRITE_URL: 'https://ledger.example.com/write',
+  ACCOUNT_CLOSURE_LEDGER_READ_URL: 'https://ledger.example.com/read',
+  ACCOUNT_CLOSURE_LEDGER_SECRET: 'l'.repeat(48),
 };
 
 const VALID_EVIDENCE = {
@@ -62,6 +65,8 @@ const VALID_EVIDENCE = {
     lastSuccessfulBackupAt: '2026-06-27T09:00:00.000Z',
     restoreTestedAt: '2026-06-20T09:00:00.000Z',
     restoreRunbook: 'docs/BACKUP.md',
+    externalDeletionLedgerConfigured: true,
+    deletionLedgerReconciledAt: '2026-06-20T10:00:00.000Z',
   },
   monitoring: {
     errorTrackingConfigured: true,
@@ -135,6 +140,15 @@ describe('production launch verification', () => {
   it('accepts a hardened production environment', () => {
     const { checks } = validateLaunchEnv(VALID_ENV);
     expect(failures(checks)).toEqual([]);
+  });
+
+  it('rejects a production launch without the restore-independent deletion ledger', () => {
+    const source = { ...VALID_ENV };
+    delete source.ACCOUNT_CLOSURE_LEDGER_WRITE_URL;
+    delete source.ACCOUNT_CLOSURE_LEDGER_READ_URL;
+    delete source.ACCOUNT_CLOSURE_LEDGER_SECRET;
+    const { checks } = validateLaunchEnv(source);
+    expect(failures(checks).map((check) => check.id)).toContain('accountClosure.ledger');
   });
 
   it('rejects test-mode Stripe keys in production', () => {

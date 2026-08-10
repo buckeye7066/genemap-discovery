@@ -3,7 +3,8 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AccountSettings from '../AccountSettings';
-import { apiClient } from '@genemap/shared';
+
+const shared = vi.hoisted(() => ({ request: vi.fn() }));
 
 const auth = vi.hoisted(() => ({
   user: { email: 'learner@example.invalid', role: 'user' },
@@ -16,7 +17,7 @@ vi.mock('@/lib/AuthContext', () => ({
 }));
 
 vi.mock('@genemap/shared', () => ({
-  apiClient: { request: vi.fn() },
+  apiClient: shared,
 }));
 
 function LoginDestination() {
@@ -65,10 +66,10 @@ describe('AccountSettings', () => {
   });
 
   it('submits the exact deletion contract, clears local auth, and navigates to confirmation', async () => {
-    apiClient.request.mockResolvedValue({
+    shared.request.mockResolvedValue({
       success: true,
       receiptId: 'receipt-1',
-      billing: { subscriptionsCancelled: 0, customersDeleted: 0 },
+      billing: { subscriptionsCancelled: 0, customersDeleted: 0, customerCleanupPending: false },
     });
     renderPage();
 
@@ -84,7 +85,7 @@ describe('AccountSettings', () => {
     fireEvent.click(screen.getByRole('button', { name: /permanently delete my account/i }));
 
     await screen.findByText('Login destination ?accountDeleted=1');
-    expect(apiClient.request).toHaveBeenCalledWith('/account/delete', {
+    expect(shared.request).toHaveBeenCalledWith('/account/delete', {
       method: 'POST',
       body: JSON.stringify({
         email: 'learner@example.invalid',
@@ -97,23 +98,25 @@ describe('AccountSettings', () => {
   });
 
   it('executes the limited purge and distinguishes it from account closure', async () => {
-    apiClient.request.mockResolvedValue({ request: { status: 'completed' } });
+    shared.request.mockResolvedValue({ request: { status: 'completed' } });
     renderPage();
 
     fireEvent.click(screen.getByRole('button', { name: /^purge supported content$/i }));
 
     await screen.findByText(/search history and other supported self-service content were purged/i);
-    expect(apiClient.request).toHaveBeenCalledWith('/entities/data-deletion-request', {
+    expect(shared.request).toHaveBeenCalledWith('/entities/data-deletion-request', {
       method: 'POST',
       body: JSON.stringify({}),
     });
     expect(screen.getByText(/does not close your account, cancel billing/i)).toBeInTheDocument();
   });
 
-  it('leaves the user on the page with a precise error when deletion fails closed', async () => {
-    apiClient.request.mockRejectedValue(new Error(
-      'Account deletion is temporarily unavailable because billing cancellation cannot be verified. No account data was deleted.',
-    ));
+  it('leaves the user on the page with a precise error and reconciliation receipt when deletion fails closed', async () => {
+    const error = Object.assign(
+      new Error('Account deletion is temporarily unavailable because billing cancellation cannot be verified. No account data was deleted.'),
+      { receiptId: 'receipt-reconcile-123' },
+    );
+    shared.request.mockRejectedValue(error);
     renderPage();
 
     fireEvent.change(screen.getByLabelText(/account email/i), {
@@ -131,6 +134,23 @@ describe('AccountSettings', () => {
     const errorAlert = errorText.closest('[role="alert"]');
     expect(errorAlert).toBeTruthy();
     expect(within(errorAlert).getByText(/no account data was deleted/i)).toBeInTheDocument();
+    expect(within(errorAlert).getByText(/receipt-reconcile-123/i)).toBeInTheDocument();
     await waitFor(() => expect(auth.clearSession).not.toHaveBeenCalled());
+  });
+
+  it('does not claim support was notified when a limited purge remains pending', async () => {
+    shared.request.mockResolvedValue({ request: { status: 'pending' } });
+    renderPage();
+
+    fireEvent.click(screen.getByRole('button', { name: /^purge supported content$/i }));
+
+    const message = await screen.findByText(/purge request was retained but did not complete/i);
+    expect(message).toHaveTextContent(/open contact support/i);
+    expect(message).not.toHaveTextContent(/support has been notified/i);
+  });
+
+  it('uses a non-live note for the static destructive-action explanation', () => {
+    renderPage();
+    expect(screen.getByRole('note')).toHaveTextContent(/independent deletion authorization/i);
   });
 });

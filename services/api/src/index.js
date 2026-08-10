@@ -30,6 +30,12 @@ import publicationConceptRoutes from './routes/publicationConcepts.js';
 import clinicalTrialRoutes from './routes/clinicalTrials.js';
 import clientErrorRoutes from './routes/clientError.js';
 import {
+  accountClosureCleanupStatus,
+  createAccountClosureStripeClient,
+  reconcilePendingCustomerCleanup,
+} from './services/accountClosure.js';
+import { accountClosureLedgerStatus } from './services/accountClosureLedger.js';
+import {
   PUBLICATION_MODE,
   enforceHiddenPathBoundary,
   enforcePublishingBoundary,
@@ -102,6 +108,8 @@ await fastify.register(cookie, {
 // per-instance counters. Health/readiness routes bypass both layers so an outage
 // can never hide the very status operators need.
 const rateLimitRedis = createRateLimitRedis(env, { logger: fastify.log });
+const accountClosureStripeClient = createAccountClosureStripeClient(process.env);
+let accountClosureCleanupTimer = null;
 
 await fastify.register(rateLimit, {
   max: GLOBAL_RATE_LIMIT_MAX,
@@ -201,7 +209,16 @@ fastify.get('/readyz', { config: { rateLimit: false } }, async (request, reply) 
 
   const rateLimitProtection = rateLimitProtectionStatus(rateLimitRedis);
   const modelPublicationEnabled = isModelPublicationEnabled(process.env);
-  const degraded = rateLimitProtection.emergency || !modelPublicationEnabled;
+  const ledger = accountClosureLedgerStatus(process.env);
+  const accountClosureCleanup = accountClosureCleanupStatus();
+  const accountClosureDegraded = env.isProduction && (
+    !ledger.configured
+    || accountClosureCleanup.lastError
+    || Number(accountClosureCleanup.pending || 0) > 0
+  );
+  const degraded = rateLimitProtection.emergency
+    || !modelPublicationEnabled
+    || accountClosureDegraded;
   return {
     status: degraded ? 'degraded' : 'ready',
     degraded,
@@ -211,6 +228,8 @@ fastify.get('/readyz', { config: { rateLimit: false } }, async (request, reply) 
       status: modelPublicationEnabled ? 'enabled' : 'disabled_for_safe_recovery',
     },
     medicalEncryption: env.hasMedicalEncryption(),
+    accountClosureLedger: ledger,
+    accountClosureCleanup,
     rateLimitStore: rateLimitStoreStatus(rateLimitRedis),
     rateLimitProtection,
     timestamp: new Date().toISOString(),
@@ -224,6 +243,20 @@ fastify.get(
   async () => ({ status: 'ok', timestamp: new Date().toISOString() })
 );
 
+async function runAccountClosureCleanup() {
+  try {
+    const result = await reconcilePendingCustomerCleanup({
+      prisma,
+      stripeClient: accountClosureStripeClient,
+    });
+    if (result.pending || result.completed) {
+      fastify.log.info({ result }, 'account-closure customer cleanup reconciliation completed');
+    }
+  } catch (error) {
+    fastify.log.error({ err: error }, 'account-closure customer cleanup reconciliation failed');
+  }
+}
+
 const start = async () => {
   try {
     // Keep-alive race fix: Node's default keepAliveTimeout (5s; Fastify's 72s
@@ -235,6 +268,9 @@ const start = async () => {
     fastify.server.keepAliveTimeout = Number(process.env.HTTP_KEEPALIVE_TIMEOUT_MS || 620_000);
     fastify.server.headersTimeout = fastify.server.keepAliveTimeout + 5_000;
     await fastify.listen({ port: env.PORT, host: env.HOST });
+    await runAccountClosureCleanup();
+    accountClosureCleanupTimer = setInterval(runAccountClosureCleanup, 15 * 60 * 1000);
+    accountClosureCleanupTimer.unref?.();
     fastify.log.info(
       { port: env.PORT, host: env.HOST, env: env.NODE_ENV, sentry: sentryEnabled },
       'API listening'
@@ -257,6 +293,10 @@ const gracefulShutdown = async (signal) => {
     // Fastify plugins may begin teardown during close(), so suppress expected
     // Redis close/end events before any application resource is dismantled.
     markRateLimitRedisShuttingDown(rateLimitRedis);
+  }
+  if (accountClosureCleanupTimer) {
+    clearInterval(accountClosureCleanupTimer);
+    accountClosureCleanupTimer = null;
   }
   await fastify.close();
   await prisma.$disconnect();

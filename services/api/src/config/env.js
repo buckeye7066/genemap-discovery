@@ -75,6 +75,14 @@ const baseSchema = z.object({
 
   // CSRF
   CSRF_SECRET: z.string().optional(),
+
+  // Restore-independent account-deletion ledger. These remain optional at
+  // process startup so an existing deployment stays probeable, but production
+  // launch verification and account deletion fail closed until all three are
+  // configured.
+  ACCOUNT_CLOSURE_LEDGER_WRITE_URL: z.string().url().optional(),
+  ACCOUNT_CLOSURE_LEDGER_READ_URL: z.string().url().optional(),
+  ACCOUNT_CLOSURE_LEDGER_SECRET: z.string().optional(),
 });
 
 const PRODUCTION_REQUIRED = [
@@ -237,6 +245,24 @@ export function loadEnv(opts = {}) {
 
     hasMedicalEncryption() {
       return isValidMedicalKey(env.MEDICAL_DATA_ENCRYPTION_KEY);
+    },
+
+    accountClosureLedgerConfigured() {
+      const urls = [
+        env.ACCOUNT_CLOSURE_LEDGER_WRITE_URL,
+        env.ACCOUNT_CLOSURE_LEDGER_READ_URL,
+      ];
+      const validUrls = urls.every((value) => {
+        if (!value) return false;
+        try {
+          return new URL(value).protocol === 'https:';
+        } catch {
+          return false;
+        }
+      });
+      return validUrls
+        && typeof env.ACCOUNT_CLOSURE_LEDGER_SECRET === 'string'
+        && env.ACCOUNT_CLOSURE_LEDGER_SECRET.length >= MIN_SECRET_LENGTH;
     },
 
     corsAllowList() {

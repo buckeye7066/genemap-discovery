@@ -1,6 +1,6 @@
 # Processor and external-service register
 
-Last code-flow review: **2026-08-08** (production-ready/genemap-discovery wave)  
+Last code-flow review: **2026-08-09** (production-ready/genemap-discovery wave)
 Scope: public education/early-research build plus legacy data that may still be
 stored from earlier releases.
 
@@ -41,6 +41,7 @@ user-linked inside GeneMap and must be disclosed and minimized.
 | NLM Clinical Tables (HPO) | Phenotype autocomplete and exact HPO revalidation | Two-to-80-character search text or exact HPO identifier, fixed response fields/count | `services/api/src/services/publicationResolvers.js` | Terms, privacy, logging, retention, rate limit, and attribution review pending |
 | Monarch Initiative API | Disease autocomplete and exact MONDO revalidation | Two-to-80-character search text or exact MONDO identifier | `services/api/src/services/publicationResolvers.js` | Terms, privacy, logging, retention, versioning, and attribution review pending |
 | MyGene.info | Exact human-gene symbol resolution before bounded generation | Gene symbols and fixed requested record fields | `services/api/src/services/publicationResolvers.js`, `services/api/src/services/genomicDatabases.js` | Terms, privacy, logging, retention, versioning, and attribution review pending |
+| Open Targets Platform GraphQL API v4 | Bounded MONDO disease-to-candidate target association comparison | Exact MONDO-derived disease identifier and up to 15 bounded candidate gene symbols; returned provider scores are used only to decide whether a source row exists and are not published or ranked | `services/api/src/services/associationEvidence.js`, `services/api/src/services/associationEvidenceContract.js` | Terms, privacy, logging, retention, rate limit, data-release/version, and attribution review pending; production use remains blocked until the owner records the review |
 
 Google Fonts connection hints were removed from `apps/web/index.html`; the
 published web shell should not contact Google Fonts.

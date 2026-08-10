@@ -90,7 +90,12 @@ function summarizeEvidence(genes) {
   return counts;
 }
 
-export default function GeneResults({ results, selectedGenes = [], onGeneSelect }) {
+export default function GeneResults({
+  results,
+  selectedGenes = [],
+  onGeneSelect,
+  onEvidenceGenesChange,
+}) {
   const { query, candidateGenes, isPremium, queryType, publicationReference } = results;
   const [filters, setFilters] = useState({
     symbol: "",
@@ -151,6 +156,21 @@ export default function GeneResults({ results, selectedGenes = [], onGeneSelect 
     () => summarizeEvidence(evidenceGenes),
     [evidenceGenes],
   );
+
+  useEffect(() => {
+    if (onEvidenceGenesChange) onEvidenceGenesChange(evidenceGenes);
+  }, [evidenceGenes, onEvidenceGenesChange]);
+
+  const sourceHealth = useMemo(() => {
+    const sources = evidenceState.result?.sources || {};
+    return Object.entries(sources).map(([key, source]) => ({
+      key,
+      label: key === 'openTargets' ? 'Open Targets' : key === 'myGene' ? 'MyGene identity' : 'Monarch',
+      status: source?.status || 'unavailable',
+      truncated: source?.truncated === true,
+      retrievedAt: source?.retrievedAt || null,
+    }));
+  }, [evidenceState.result?.sources]);
 
   // Apply filters to gene results
   const filteredGenes = useMemo(() => {
@@ -272,15 +292,42 @@ export default function GeneResults({ results, selectedGenes = [], onGeneSelect 
               {evidenceState.result?.claimCount || 0} source-grounded association claim{evidenceState.result?.claimCount === 1 ? '' : 's'} retrieved. Each card shows source, record, species, evidence type, release status, retrieval date, and limitations.
             </div>
           )}
+          {evidenceState.status === 'partial_coverage' && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950" role="status">
+              Source coverage was incomplete because at least one provider was unavailable or returned only a bounded window. Claims that were retrieved are shown, but absence from this result is not evidence that no association exists.
+            </div>
+          )}
           {evidenceState.status === 'no_matching_associations' && (
-            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900" role="status">
-              The checked sources returned no matching association record for these candidate symbols. They remain unverified AI research leads.
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700" role="status">
+              Every applicable source completed within its declared coverage bound and returned no matching association record for these candidate symbols. They remain unverified AI research leads.
             </div>
           )}
           {(evidenceState.status === 'unavailable' || evidenceState.status === 'unresolved_query') && (
             <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700" role="status">
-              Association sources are unavailable or the reviewed reference could not be revalidated. No candidate was promoted; all remain AI research leads.
+              Association sources are unavailable or the reviewed reference could not be revalidated. No negative conclusion was drawn and no candidate was promoted; all remain AI research leads.
             </div>
+          )}
+          {sourceHealth.length > 0 && evidenceState.status !== 'loading' && (
+            <dl className="grid gap-2 sm:grid-cols-2" aria-label="Association source health">
+              {sourceHealth.map((source) => (
+                <div key={source.key} className="rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700">
+                  <div className="flex items-center justify-between gap-2">
+                    <dt className="font-semibold text-slate-900">{source.label}</dt>
+                    <dd className="font-medium">
+                      {source.status === 'not_applicable' ? 'Not applicable'
+                        : source.status === 'available' ? 'Available'
+                          : source.status === 'partial' ? 'Partial coverage'
+                            : 'Unavailable'}
+                    </dd>
+                  </div>
+                  <p className="mt-1 text-slate-500">
+                    {source.truncated ? 'Bounded result window; absence is inconclusive.'
+                      : source.retrievedAt ? `Retrieved ${new Date(source.retrievedAt).toLocaleString()}`
+                        : 'No successful source retrieval recorded.'}
+                  </p>
+                </div>
+              ))}
+            </dl>
           )}
         </CardContent>
       </Card>

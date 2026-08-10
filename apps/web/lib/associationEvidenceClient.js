@@ -1,12 +1,31 @@
 import { apiClient } from '@genemap/shared';
 
+/**
+ * @typedef {object} AssociationEvidenceSource
+ * @property {string|null} [apiVersion]
+ * @property {string|null} [releaseVersion]
+ * @property {string|null} [status]
+ * @property {boolean} [truncated]
+ */
+
+/**
+ * @typedef {object} AssociationEvidenceResponse
+ * @property {object|null} [query]
+ * @property {Record<string, Array<object>>} [claimsByGene]
+ * @property {string|null} [adapterRetrievedAt]
+ * @property {{myGene?: AssociationEvidenceSource, monarch?: AssociationEvidenceSource, openTargets?: AssociationEvidenceSource}} [sources]
+ * @property {string} [sourceStatus]
+ * @property {number} [claimCount]
+ */
+
 const EMPTY_RESULT = Object.freeze({
   query: null,
   claimsByGene: {},
   adapterRetrievedAt: null,
   sources: {
-    monarch: { apiVersion: 'v3', releaseVersion: null },
-    openTargets: { apiVersion: 'v4', releaseVersion: null },
+    myGene: { apiVersion: 'v3', releaseVersion: null, status: 'unavailable', truncated: false },
+    monarch: { apiVersion: 'v3', releaseVersion: null, status: 'unavailable', truncated: false },
+    openTargets: { apiVersion: 'v4', releaseVersion: null, status: 'unavailable', truncated: false },
   },
   sourceStatus: 'unavailable',
   claimCount: 0,
@@ -34,11 +53,16 @@ function normalizeSymbols(symbols) {
  * Fetch bounded public association evidence from GeneMap's authenticated API.
  * Upstream/reference outages are non-destructive: candidate leads remain visible
  * and explicitly unverified rather than disappearing or inheriting fake evidence.
+ *
+ * @param {object|null} query
+ * @param {string[]} symbols
+ * @returns {Promise<AssociationEvidenceResponse & {error?: string}>}
  */
 export async function fetchAssociationEvidence(query, symbols) {
   const cleanSymbols = normalizeSymbols(symbols);
   if (!query || cleanSymbols.length === 0) return EMPTY_RESULT;
   try {
+    /** @type {AssociationEvidenceResponse} */
     const response = await apiClient.request('/genomics/association-evidence', {
       method: 'POST',
       body: JSON.stringify({ query, symbols: cleanSymbols }),

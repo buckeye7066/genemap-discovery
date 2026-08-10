@@ -121,8 +121,8 @@ describe('association evidence publication contract', () => {
     }, ['CFTR']);
 
     expect(result.claimsByGene.CFTR[0].releaseVersion).toBeNull();
-    expect(result.sources.monarch).toEqual({ apiVersion: 'v3', releaseVersion: null });
-    expect(result.sources.openTargets).toEqual({ apiVersion: 'v4', releaseVersion: '2026-07-01' });
+    expect(result.sources.monarch).toMatchObject({ apiVersion: 'v3', releaseVersion: null });
+    expect(result.sources.openTargets).toMatchObject({ apiVersion: 'v4', releaseVersion: '2026-07-01' });
   });
 
   it('preserves the final source date across repeated calls by caching the full bounded result', async () => {
@@ -231,4 +231,70 @@ describe('association evidence publication contract', () => {
     expect(result.claimsByGene).not.toHaveProperty('EXTRA1');
     expect(result.claimCount).toBe(0);
   });
+
+  it('preserves partial-coverage and per-source health instead of converting it to a negative', () => {
+    const result = sanitizeAssociationEvidence({
+      query: {
+        kind: 'hpo',
+        identifier: 'HP:0001250',
+        canonicalLabel: 'Seizure',
+      },
+      claimsByGene: { SCN1A: [] },
+      retrievedAt: '2026-08-09T12:00:00.000Z',
+      sources: {
+        monarch: {
+          apiVersion: 'v3',
+          releaseVersion: '2026-06-08',
+          status: 'partial',
+          truncated: true,
+          retrievedAt: '2026-08-09T11:59:00.000Z',
+        },
+        openTargets: {
+          apiVersion: 'v4',
+          status: 'not_applicable',
+          truncated: false,
+          retrievedAt: null,
+        },
+      },
+      sourceStatus: 'partial_coverage',
+    }, ['SCN1A']);
+
+    expect(result.sourceStatus).toBe('partial_coverage');
+    expect(result.sources.monarch).toMatchObject({
+      status: 'partial',
+      truncated: true,
+      retrievedAt: '2026-08-09T11:59:00.000Z',
+    });
+    expect(result.sources.openTargets.status).toBe('not_applicable');
+  });
+
+  it('rejects verified-human or animal claims whose taxon does not support the class', () => {
+    const result = sanitizeAssociationEvidence({
+      claimsByGene: {
+        SCN1A: [
+          {
+            source: 'ambiguous source',
+            claim: 'Ambiguous taxon must not become human evidence',
+            taxon: 'unspecified',
+            species: 'Unspecified',
+            evidenceClass: 'human_verified',
+            evidenceType: 'gene_phenotype_association',
+          },
+          {
+            source: 'contradictory source',
+            claim: 'Human taxon must not become animal evidence',
+            taxon: '9606',
+            species: 'Homo sapiens',
+            evidenceClass: 'animal_model',
+            evidenceType: 'ortholog_phenotype_inference',
+          },
+        ],
+      },
+      sourceStatus: 'available',
+    }, ['SCN1A']);
+
+    expect(result.claimsByGene.SCN1A).toEqual([]);
+    expect(result.claimCount).toBe(0);
+  });
+
 });

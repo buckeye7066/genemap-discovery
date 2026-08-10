@@ -79,6 +79,10 @@ export function errorHandler(error, request, reply) {
       error: error.message,
       code: error.code,
       requestId,
+      // A deletion receipt is a random operation identifier, not a credential.
+      // Exposing it lets the user and operator reconcile a fail-closed partial
+      // billing/database transition without leaking Stripe IDs or profile data.
+      ...(typeof error.receiptId === 'string' ? { receiptId: error.receiptId } : {}),
     });
   }
 

@@ -23,6 +23,13 @@ const SOURCE_STATUSES = new Set([
   'no_matching_associations',
   'unresolved_query',
   'unavailable',
+  'partial_coverage',
+]);
+const SOURCE_HEALTH = new Set([
+  'available',
+  'partial',
+  'unavailable',
+  'not_applicable',
 ]);
 
 const cache = new Map();
@@ -134,13 +141,19 @@ function sanitizeClaim(value) {
     : null;
   const source = cleanText(value.source, 256);
   const claim = cleanText(value.claim, 2_000);
+  const taxon = safeTaxon(value.taxon);
   if (!evidenceClass || !evidenceType || !source || !claim) return null;
+  // A missing or contradictory taxon can never become verified human or
+  // model-organism evidence merely because an upstream adapter labeled the
+  // class. This is a second fail-closed boundary behind the adapter itself.
+  if (evidenceClass === 'human_verified' && taxon !== '9606') return null;
+  if (evidenceClass === 'animal_model' && (taxon === '9606' || taxon === 'unspecified')) return null;
 
   return {
     source,
     recordId: cleanText(value.recordId, 256),
     claim,
-    taxon: safeTaxon(value.taxon),
+    taxon,
     species: cleanText(value.species, 256) || 'Unspecified',
     evidenceClass,
     evidenceType,
@@ -181,6 +194,9 @@ function sanitizeSource(value, fallbackApiVersion) {
   return {
     apiVersion: cleanText(source.apiVersion, 64) || fallbackApiVersion,
     releaseVersion: safeReleaseVersion(source.releaseVersion),
+    status: SOURCE_HEALTH.has(source.status) ? source.status : 'unavailable',
+    truncated: source.truncated === true,
+    retrievedAt: safeDateTime(source.retrievedAt),
   };
 }
 
@@ -259,11 +275,12 @@ export function sanitizeAssociationEvidence(raw, requestedSymbols = []) {
     claimsByGene,
     adapterRetrievedAt: safeDateTime(raw?.retrievedAt) || new Date().toISOString(),
     sources: {
+      myGene: sanitizeSource(raw?.sources?.myGene, 'v3'),
       monarch: sanitizeSource(raw?.sources?.monarch, 'v3'),
       openTargets: sanitizeSource(raw?.sources?.openTargets, 'v4'),
     },
     sourceStatus: claimCount > 0
-      ? 'available'
+      ? rawStatus === 'partial_coverage' ? 'partial_coverage' : 'available'
       : rawStatus === 'available'
         ? 'no_matching_associations'
         : rawStatus,

@@ -1,6 +1,6 @@
 {
-  "reviewedBy": "REPLACE — name of the person signing off on launch",
-  "reviewedAt": "REPLACE — ISO date of sign-off, e.g. 2026-07-01T00:00:00Z",
+  "reviewedBy": "REPLACE \u2014 name of the person signing off on launch",
+  "reviewedAt": "REPLACE \u2014 ISO date of sign-off, e.g. 2026-07-01T00:00:00Z",
   "productionSecrets": {
     "storedInSecretManager": true,
     "rotatedForLaunch": true,
@@ -9,9 +9,11 @@
   "backups": {
     "automaticBackupsEnabled": true,
     "retentionDays": 7,
-    "lastSuccessfulBackupAt": "REPLACE — ISO date of most recent automated backup",
+    "lastSuccessfulBackupAt": "REPLACE \u2014 ISO date of most recent automated backup",
     "restoreTestedAt": "2026-06-30T00:00:00Z",
-    "restoreRunbook": "docs/BACKUP.md"
+    "restoreRunbook": "docs/BACKUP.md",
+    "externalDeletionLedgerConfigured": true,
+    "deletionLedgerReconciledAt": "REPLACE \u2014 ISO date of the most recent zero-blocker quarantined ledger reconciliation"
   },
   "monitoring": {
     "errorTrackingConfigured": true,
@@ -31,7 +33,7 @@
       "invoice.payment_succeeded",
       "invoice.payment_failed"
     ],
-    "lastWebhookTestAt": "REPLACE — ISO date you last sent a test event from the Stripe dashboard"
+    "lastWebhookTestAt": "REPLACE \u2014 ISO date you last sent a test event from the Stripe dashboard"
   },
   "dataRetention": {
     "policyApproved": true,
@@ -42,8 +44,8 @@
   "legalCompliance": {
     "legalReviewCompleted": true,
     "complianceReviewCompleted": true,
-    "reviewer": "REPLACE — reviewing attorney / compliance owner",
-    "reviewedAt": "REPLACE — ISO date of legal/compliance review",
+    "reviewer": "REPLACE \u2014 reviewing attorney / compliance owner",
+    "reviewedAt": "REPLACE \u2014 ISO date of legal/compliance review",
     "medicalDisclaimerApproved": true,
     "baaStatus": "not_required"
   }

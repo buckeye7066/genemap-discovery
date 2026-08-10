@@ -33,8 +33,18 @@ describe('loadEnv (production)', () => {
     const env = loadEnv({ source: prodEnv() });
     expect(env.isProduction).toBe(true);
     expect(env.hasMedicalEncryption()).toBe(true);
+    expect(env.accountClosureLedgerConfigured()).toBe(false);
     // Capacitor mobile origins are always appended (see corsAllowList).
     expect(env.corsAllowList()).toEqual(['https://app.example.com', 'https://localhost', 'capacitor://localhost']);
+  });
+
+  it('recognizes a complete HTTPS deletion-ledger configuration without making it a startup prerequisite', () => {
+    const env = loadEnv({ source: prodEnv({
+      ACCOUNT_CLOSURE_LEDGER_WRITE_URL: 'https://ledger.example.invalid/write',
+      ACCOUNT_CLOSURE_LEDGER_READ_URL: 'https://ledger.example.invalid/read',
+      ACCOUNT_CLOSURE_LEDGER_SECRET: 'l'.repeat(40),
+    }) });
+    expect(env.accountClosureLedgerConfigured()).toBe(true);
   });
 
   it.each([

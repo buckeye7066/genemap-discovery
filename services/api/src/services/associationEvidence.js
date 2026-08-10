@@ -6,7 +6,7 @@ import {
   resolvePublicationMondo,
   searchPublicationConcepts,
 } from './publicationResolvers.js';
-import { enrichGenes } from './genomicDatabases.js';
+import { enrichGenesWithStatus } from './genomicDatabases.js';
 
 const MONARCH_API_BASE = 'https://api.monarchinitiative.org/v3/api';
 const OPEN_TARGETS_GRAPHQL = 'https://api.platform.opentargets.org/api/v4/graphql';
@@ -16,6 +16,8 @@ const CACHE_MAX = 128;
 const MAX_SYMBOLS = 15;
 const MAX_DIRECT_ASSOCIATIONS = 500;
 const MAX_ORTHOLOG_CANDIDATES = 8;
+const MAX_ORTHOLOG_ROWS = 100;
+const MAX_OPEN_TARGET_ROWS = 500;
 const ORTHOLOG_CONCURRENCY = 3;
 const GENE_SYMBOL = /^[A-Z0-9][A-Z0-9-]{1,14}$/u;
 const MONDO_ID = /^MONDO:\d{7}$/u;
@@ -93,8 +95,16 @@ function curieUrl(value) {
   return safeHttpUrl(curie);
 }
 
+/**
+ * Fetch one upstream JSON document while preserving whether the request itself
+ * succeeded and the exact time that successful payload was received. Callers
+ * must never convert an outage, timeout, non-2xx response, or invalid JSON into
+ * an empty successful result.
+ */
 async function fetchJson(url, options = {}, fetchImpl = globalThis.fetch) {
-  if (typeof fetchImpl !== 'function') return null;
+  if (typeof fetchImpl !== 'function') {
+    return { ok: false, payload: null, retrievedAt: null, httpStatus: null };
+  }
   try {
     const response = await fetchImpl(url, {
       ...options,
@@ -104,10 +114,23 @@ async function fetchJson(url, options = {}, fetchImpl = globalThis.fetch) {
       },
       signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
     });
-    if (!response?.ok) return null;
-    return await response.json();
+    if (!response?.ok) {
+      return {
+        ok: false,
+        payload: null,
+        retrievedAt: null,
+        httpStatus: Number(response?.status) || null,
+      };
+    }
+    const payload = await response.json();
+    return {
+      ok: true,
+      payload,
+      retrievedAt: new Date().toISOString(),
+      httpStatus: Number(response.status) || 200,
+    };
   } catch {
-    return null;
+    return { ok: false, payload: null, retrievedAt: null, httpStatus: null };
   }
 }
 
@@ -117,6 +140,27 @@ function payloadItems(payload) {
     if (Array.isArray(payload?.[key])) return payload[key];
   }
   return [];
+}
+
+function payloadTotal(payload) {
+  const values = [
+    payload?.total,
+    payload?.total_count,
+    payload?.totalCount,
+    payload?.meta?.total,
+    payload?.pagination?.total,
+  ];
+  for (const value of values) {
+    const total = Number(value);
+    if (Number.isFinite(total) && total >= 0) return total;
+  }
+  return null;
+}
+
+function boundedCoverage(payload, rows, limit) {
+  const total = payloadTotal(payload);
+  const truncated = total != null ? total > rows.length : rows.length >= limit;
+  return { total, truncated };
 }
 
 function entityValue(value) {
@@ -278,35 +322,55 @@ function directGeneSide(association, queryId) {
   return null;
 }
 
-function matchingSymbol(geneSide, recordsBySymbol) {
+function matchingGene(geneSide, recordsBySymbol) {
   if (!geneSide) return null;
   const id = normalizedId(geneSide.id);
-  for (const [symbol, record] of Object.entries(recordsBySymbol)) {
-    if (geneIdentifiers(record, symbol).has(id)) return symbol;
+  for (const [symbol, record] of Object.entries(recordsBySymbol || {})) {
+    if (geneIdentifiers(record, symbol).has(id)) {
+      return { symbol, matchedByAuthoritativeIdentifier: true };
+    }
   }
-  // Label fallback is accepted only for human or unspecified direct records.
-  // Non-human labels require the explicit ortholog grid below.
-  const code = taxonCode(geneSide.taxon);
-  if (code !== '9606' && code !== 'unspecified') return null;
+  // Symbol-label fallback is allowed only when the upstream explicitly labels
+  // the edge as human. Missing taxon is never promoted by label alone.
+  if (taxonCode(geneSide.taxon) !== '9606') return null;
   const label = cleanSymbol(geneSide.label);
-  return label && recordsBySymbol[label] ? label : null;
+  return label && recordsBySymbol?.[label]
+    ? { symbol: label, matchedByAuthoritativeIdentifier: false }
+    : null;
 }
 
-function directAssociationClaim({ association, query, geneSide, symbol, releaseVersion, retrievedAt }) {
-  const code = taxonCode(geneSide.taxon);
+function matchingSymbol(geneSide, recordsBySymbol) {
+  return matchingGene(geneSide, recordsBySymbol)?.symbol || null;
+}
+
+function directAssociationClaim({
+  association,
+  query,
+  geneSide,
+  symbol,
+  releaseVersion,
+  retrievedAt,
+  matchedByAuthoritativeIdentifier = false,
+}) {
+  const sourceTaxon = taxonCode(geneSide.taxon);
+  // An omitted taxon is ambiguous even when a symbol or identifier happens to
+  // match a human record. The edge is withheld rather than silently promoted.
+  if (sourceTaxon === 'unspecified') return null;
+
   const computational = isComputationalAssociation(association);
-  const evidenceClass = code !== '9606' && code !== 'unspecified'
-    ? 'animal_model'
-    : computational
-      ? 'computational'
-      : 'human_verified';
+  const evidenceClass = sourceTaxon === '9606'
+    ? computational ? 'computational' : 'human_verified'
+    : 'animal_model';
   const causal = /causal|causes/iu.test(`${association?.category || ''} ${association?.predicate || ''}`);
+  const identifierNote = matchedByAuthoritativeIdentifier
+    ? ''
+    : ' (matched through an explicit human source label)';
   return {
     source: sourceName(association),
     recordId: firstString(association?.id),
-    claim: `${symbol} ${predicateLabel(association?.predicate || association?.original_predicate)} ${query.canonicalLabel}`,
-    taxon: code,
-    species: speciesLabel(code, geneSide.taxonLabel),
+    claim: `${symbol} ${predicateLabel(association?.predicate || association?.original_predicate)} ${query.canonicalLabel}${identifierNote}`,
+    taxon: sourceTaxon,
+    species: speciesLabel(sourceTaxon, geneSide.taxonLabel),
     evidenceClass,
     evidenceType: computational
       ? 'computed_gene_query_association'
@@ -316,7 +380,7 @@ function directAssociationClaim({ association, query, geneSide, symbol, releaseV
     evidenceStrength: evidenceStrength(association, { causal }),
     releaseVersion,
     referenceAssembly: null,
-    retrievalDate: retrievedAt.slice(0, 10),
+    retrievalDate: retrievedAt ? retrievedAt.slice(0, 10) : null,
     directLink: sourceRecordLink(association),
     isAiLead: false,
   };
@@ -326,6 +390,7 @@ function phenotypeIdsForQuery(query, associations) {
   if (query.kind === 'hpo') return new Map([[query.identifier, query.canonicalLabel]]);
   const phenotypes = new Map();
   for (const association of associations) {
+    if (association?.negated === true) continue;
     const subjectId = entityValue(association?.subject);
     const objectId = entityValue(association?.object);
     if (normalizedId(subjectId) === normalizedId(query.identifier) && isPhenotypeCategory(association?.object_category)) {
@@ -389,7 +454,7 @@ function orthologClaimsFromGrid({ grid, symbol, phenotypeIds, releaseVersion, re
         evidenceStrength: evidenceStrength(cell),
         releaseVersion,
         referenceAssembly: null,
-        retrievalDate: retrievedAt.slice(0, 10),
+        retrievalDate: retrievedAt ? retrievedAt.slice(0, 10) : null,
         directLink: publicationLink(cell?.publications),
         isAiLead: false,
       });
@@ -403,16 +468,35 @@ function openTargetsDiseaseId(mondoId) {
   return MONDO_ID.test(mondoId) ? mondoId.replace(':', '_') : null;
 }
 
-async function fetchOpenTargetsClaims({ query, symbols, releaseVersion, retrievedAt, fetchImpl }) {
-  if (query.kind !== 'mondo') return {};
+async function fetchOpenTargetsClaims({ query, symbols, fetchImpl }) {
+  if (query.kind !== 'mondo') {
+    return {
+      applicable: false,
+      ok: true,
+      claimsByGene: {},
+      retrievedAt: null,
+      truncated: false,
+      total: null,
+    };
+  }
   const diseaseId = openTargetsDiseaseId(query.identifier);
-  if (!diseaseId) return {};
+  if (!diseaseId) {
+    return {
+      applicable: true,
+      ok: false,
+      claimsByGene: {},
+      retrievedAt: null,
+      truncated: false,
+      total: null,
+    };
+  }
   const graphQl = `
     query GeneMapDiseaseTargets($diseaseId: String!) {
       disease(efoId: $diseaseId) {
         id
         name
-        associatedTargets(page: { index: 0, size: 500 }) {
+        associatedTargets(page: { index: 0, size: ${MAX_OPEN_TARGET_ROWS} }) {
+          count
           rows {
             target { id approvedSymbol approvedName }
             score
@@ -422,7 +506,7 @@ async function fetchOpenTargetsClaims({ query, symbols, releaseVersion, retrieve
       }
     }
   `;
-  const payload = await fetchJson(
+  const response = await fetchJson(
     OPEN_TARGETS_GRAPHQL,
     {
       method: 'POST',
@@ -431,9 +515,32 @@ async function fetchOpenTargetsClaims({ query, symbols, releaseVersion, retrieve
     },
     fetchImpl,
   );
-  if (Array.isArray(payload?.errors) && payload.errors.length) return {};
-  const rows = payload?.data?.disease?.associatedTargets?.rows;
-  if (!Array.isArray(rows)) return {};
+  const payload = response.payload;
+  if (!response.ok || (Array.isArray(payload?.errors) && payload.errors.length)) {
+    return {
+      applicable: true,
+      ok: false,
+      claimsByGene: {},
+      retrievedAt: null,
+      truncated: false,
+      total: null,
+    };
+  }
+  const associatedTargets = payload?.data?.disease?.associatedTargets;
+  const rows = associatedTargets?.rows;
+  if (!Array.isArray(rows)) {
+    return {
+      applicable: true,
+      ok: false,
+      claimsByGene: {},
+      retrievedAt: null,
+      truncated: false,
+      total: null,
+    };
+  }
+  const totalValue = Number(associatedTargets?.count);
+  const total = Number.isFinite(totalValue) && totalValue >= 0 ? totalValue : null;
+  const truncated = total != null ? total > rows.length : rows.length >= MAX_OPEN_TARGET_ROWS;
   const expected = new Set(symbols);
   const claimsByGene = {};
   for (const row of rows) {
@@ -450,14 +557,21 @@ async function fetchOpenTargetsClaims({ query, symbols, releaseVersion, retrieve
       evidenceClass: 'computational',
       evidenceType: 'computed_target_disease_association',
       evidenceStrength: 'supporting',
-      releaseVersion,
+      releaseVersion: null,
       referenceAssembly: null,
-      retrievalDate: retrievedAt.slice(0, 10),
+      retrievalDate: response.retrievedAt?.slice(0, 10) || null,
       directLink: `https://platform.opentargets.org/disease/${encodeURIComponent(diseaseId)}/associations`,
       isAiLead: false,
     }];
   }
-  return claimsByGene;
+  return {
+    applicable: true,
+    ok: true,
+    claimsByGene,
+    retrievedAt: response.retrievedAt,
+    truncated,
+    total,
+  };
 }
 
 function parseVersion(payload) {
@@ -475,8 +589,8 @@ function parseVersion(payload) {
 async function monarchVersion(fetchImpl) {
   const cached = cacheGet('monarch:version');
   if (cached !== undefined) return cached;
-  const payload = await fetchJson(`${MONARCH_API_BASE}/version`, {}, fetchImpl);
-  return cacheSet('monarch:version', parseVersion(payload));
+  const response = await fetchJson(`${MONARCH_API_BASE}/version`, {}, fetchImpl);
+  return cacheSet('monarch:version', response.ok ? parseVersion(response.payload) : null);
 }
 
 async function resolveEvidenceReference(reference, dependencies = {}) {
@@ -520,8 +634,24 @@ async function fetchMonarchAssociations(queryId, fetchImpl) {
   const url = new URL(`${MONARCH_API_BASE}/association`);
   url.searchParams.set('entity', queryId);
   url.searchParams.set('limit', String(MAX_DIRECT_ASSOCIATIONS));
-  const payload = await fetchJson(url, {}, fetchImpl);
-  return cacheSet(cacheKey, payloadItems(payload));
+  const response = await fetchJson(url, {}, fetchImpl);
+  if (!response.ok) {
+    return cacheSet(cacheKey, {
+      ok: false,
+      items: [],
+      retrievedAt: null,
+      total: null,
+      truncated: false,
+    });
+  }
+  const items = payloadItems(response.payload);
+  const coverage = boundedCoverage(response.payload, items, MAX_DIRECT_ASSOCIATIONS);
+  return cacheSet(cacheKey, {
+    ok: true,
+    items,
+    retrievedAt: response.retrievedAt,
+    ...coverage,
+  });
 }
 
 async function fetchOrthologGrid(geneId, fetchImpl) {
@@ -530,9 +660,25 @@ async function fetchOrthologGrid(geneId, fetchImpl) {
   if (cached !== undefined) return cached;
   const url = new URL(`${MONARCH_API_BASE}/entity/${encodeURIComponent(geneId)}/ortholog-phenotype-grid`);
   url.searchParams.set('direct_only', 'true');
-  url.searchParams.set('limit', '100');
-  const payload = await fetchJson(url, {}, fetchImpl);
-  return cacheSet(cacheKey, payload);
+  url.searchParams.set('limit', String(MAX_ORTHOLOG_ROWS));
+  const response = await fetchJson(url, {}, fetchImpl);
+  if (!response.ok) {
+    return cacheSet(cacheKey, {
+      ok: false,
+      grid: null,
+      retrievedAt: null,
+      total: null,
+      truncated: false,
+    });
+  }
+  const rows = Array.isArray(response.payload?.rows) ? response.payload.rows : [];
+  const coverage = boundedCoverage(response.payload, rows, MAX_ORTHOLOG_ROWS);
+  return cacheSet(cacheKey, {
+    ok: true,
+    grid: response.payload,
+    retrievedAt: response.retrievedAt,
+    ...coverage,
+  });
 }
 
 function preferredMonarchGeneId(record) {
@@ -542,11 +688,32 @@ function preferredMonarchGeneId(record) {
     || null;
 }
 
+function sourceHealth({ ok, truncated = false, applicable = true }) {
+  if (!applicable) return 'not_applicable';
+  if (!ok) return 'unavailable';
+  return truncated ? 'partial' : 'available';
+}
+
+function overallSourceStatus({ claimCount, relevantSources }) {
+  const active = relevantSources.filter((source) => source.applicable !== false);
+  const unavailableCount = active.filter((source) => !source.ok).length;
+  const partialCount = active.filter((source) => source.truncated).length;
+  const successfulCount = active.length - unavailableCount;
+
+  if (claimCount > 0) {
+    return unavailableCount > 0 || partialCount > 0 ? 'partial_coverage' : 'available';
+  }
+  if (successfulCount === 0) return 'unavailable';
+  if (unavailableCount > 0 || partialCount > 0) return 'partial_coverage';
+  return 'no_matching_associations';
+}
+
 /**
  * Retrieve source-grounded association evidence for bounded candidate genes.
  * This service never creates candidates and never interprets a person's data.
  * Direct human/computational edges and cross-species inferences are separated,
- * versioned where the upstream reports a version, and fail soft to empty lists.
+ * versioned where the upstream reports a version, and source outages/coverage
+ * limits remain explicit rather than becoming false negative evidence.
  */
 export async function getAssociationEvidence(reference, symbols, dependencies = {}) {
   const fetchImpl = dependencies.fetchImpl || globalThis.fetch;
@@ -560,29 +727,41 @@ export async function getAssociationEvidence(reference, symbols, dependencies = 
     return { query: null, claimsByGene: {}, retrievedAt: null, sourceStatus: 'unresolved_query' };
   }
 
-  const geneLookup = dependencies.geneLookup || enrichGenes;
-  const recordsBySymbol = await geneLookup(cleanSymbols);
-  const associations = await fetchMonarchAssociations(query.identifier, fetchImpl);
-  const retrievedAt = new Date().toISOString();
+  const geneLookup = dependencies.geneLookup || enrichGenesWithStatus;
+  let geneIdentity;
+  try {
+    const lookupResult = await geneLookup(cleanSymbols);
+    geneIdentity = lookupResult && lookupResult.records
+      ? lookupResult
+      : { records: lookupResult || {}, ok: true, partial: false, retrievedAt: null };
+  } catch {
+    geneIdentity = { records: {}, ok: false, partial: false, retrievedAt: null };
+  }
+  const recordsBySymbol = geneIdentity.records || {};
+  const monarchAssociations = await fetchMonarchAssociations(query.identifier, fetchImpl);
+  const associations = monarchAssociations.items;
   const releaseVersion = await monarchVersion(fetchImpl);
   const claimsByGene = Object.fromEntries(cleanSymbols.map((symbol) => [symbol, []]));
 
   for (const association of associations) {
     if (association?.negated === true || !associationCategoryAllowed(association)) continue;
     const geneSide = directGeneSide(association, query.identifier);
-    const symbol = matchingSymbol(geneSide, recordsBySymbol);
-    if (!symbol) continue;
-    claimsByGene[symbol].push(directAssociationClaim({
+    const match = matchingGene(geneSide, recordsBySymbol);
+    if (!match) continue;
+    const claim = directAssociationClaim({
       association,
       query,
       geneSide,
-      symbol,
+      symbol: match.symbol,
       releaseVersion,
-      retrievedAt,
-    }));
+      retrievedAt: monarchAssociations.retrievedAt,
+      matchedByAuthoritativeIdentifier: match.matchedByAuthoritativeIdentifier,
+    });
+    if (claim) claimsByGene[match.symbol].push(claim);
   }
 
   const phenotypeIds = phenotypeIdsForQuery(query, associations);
+  const orthologResults = [];
   if (phenotypeIds.size) {
     const candidateRecords = cleanSymbols
       .map((symbol) => ({ symbol, record: recordsBySymbol?.[symbol] }))
@@ -596,31 +775,32 @@ export async function getAssociationEvidence(reference, symbols, dependencies = 
       }));
       for (let offset = 0; offset < batch.length; offset += 1) {
         const { symbol } = batch[offset];
-        const grid = grids[offset];
-        if (!grid) continue;
+        const gridResult = grids[offset];
+        if (!gridResult) continue;
+        orthologResults.push(gridResult);
+        if (!gridResult.ok || !gridResult.grid) continue;
         claimsByGene[symbol].push(...orthologClaimsFromGrid({
-          grid,
+          grid: gridResult.grid,
           symbol,
           phenotypeIds,
           releaseVersion,
-          retrievedAt,
+          retrievedAt: gridResult.retrievedAt,
         }));
       }
     }
   }
 
-  const openTargetsClaims = await fetchOpenTargetsClaims({
+  const openTargets = await fetchOpenTargetsClaims({
     query,
     symbols: cleanSymbols,
-    releaseVersion: null,
-    retrievedAt,
     fetchImpl,
   });
-  for (const [symbol, claims] of Object.entries(openTargetsClaims)) {
+  for (const [symbol, claims] of Object.entries(openTargets.claimsByGene)) {
     claimsByGene[symbol] ||= [];
     claimsByGene[symbol].push(...claims);
   }
 
+  let claimCount = 0;
   for (const symbol of cleanSymbols) {
     const seen = new Set();
     claimsByGene[symbol] = (claimsByGene[symbol] || []).filter((claim) => {
@@ -629,35 +809,74 @@ export async function getAssociationEvidence(reference, symbols, dependencies = 
       seen.add(key);
       return true;
     }).slice(0, 12);
+    claimCount += claimsByGene[symbol].length;
   }
+
+  const monarchOk = monarchAssociations.ok
+    && orthologResults.every((result) => result.ok);
+  const monarchTruncated = monarchAssociations.truncated
+    || orthologResults.some((result) => result.truncated);
+  const monarchRetrievedAt = [
+    monarchAssociations.retrievedAt,
+    ...orthologResults.map((result) => result.retrievedAt),
+  ].filter(Boolean).sort().at(-1) || null;
+
+  const relevantSources = [
+    { applicable: true, ok: geneIdentity.ok, truncated: geneIdentity.partial },
+    { applicable: true, ok: monarchOk, truncated: monarchTruncated },
+    { applicable: openTargets.applicable, ok: openTargets.ok, truncated: openTargets.truncated },
+  ];
 
   return {
     query,
     claimsByGene,
-    retrievedAt,
+    retrievedAt: new Date().toISOString(),
     sources: {
-      monarch: { apiVersion: 'v3', releaseVersion },
-      openTargets: { apiVersion: 'v4', releaseVersion: null },
+      myGene: {
+        apiVersion: 'v3',
+        releaseVersion: null,
+        status: sourceHealth({ ok: geneIdentity.ok, truncated: geneIdentity.partial }),
+        truncated: geneIdentity.partial === true,
+        retrievedAt: geneIdentity.retrievedAt || null,
+      },
+      monarch: {
+        apiVersion: 'v3',
+        releaseVersion,
+        status: sourceHealth({ ok: monarchOk, truncated: monarchTruncated }),
+        truncated: monarchTruncated,
+        retrievedAt: monarchRetrievedAt,
+      },
+      openTargets: {
+        apiVersion: 'v4',
+        releaseVersion: null,
+        status: sourceHealth(openTargets),
+        truncated: openTargets.truncated,
+        retrievedAt: openTargets.retrievedAt,
+      },
     },
-    sourceStatus: associations.length || Object.values(openTargetsClaims).some((claims) => claims.length)
-      ? 'available'
-      : 'no_matching_associations',
+    sourceStatus: overallSourceStatus({ claimCount, relevantSources }),
   };
 }
 
 export const __test = {
   associationCategoryAllowed,
+  boundedCoverage,
   directGeneSide,
   directAssociationClaim,
   evidenceStrength,
+  fetchJson,
   isComputationalAssociation,
+  matchingGene,
   matchingSymbol,
   openTargetsDiseaseId,
   orthologClaimsFromGrid,
+  overallSourceStatus,
   parseVersion,
+  payloadTotal,
   phenotypeIdsForQuery,
   preferredMonarchGeneId,
   resolveEvidenceReference,
   rowIdentifiers,
   resetCache: () => cache.clear(),
+  sourceHealth,
 };

@@ -27,6 +27,7 @@ export default function AccountSettings() {
   const [confirmation, setConfirmation] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState('');
+  const [deleteReceiptId, setDeleteReceiptId] = useState('');
 
   const canDelete = useMemo(() => (
     Boolean(user?.email)
@@ -45,7 +46,7 @@ export default function AccountSettings() {
       });
       const status = result?.request?.status;
       if (status !== 'completed') {
-        throw new Error('The purge request was retained but did not complete. Support has been notified.');
+        throw new Error('The purge request was retained but did not complete. Open Contact Support and include the request status so it can be reconciled.');
       }
       setPurgeState({
         loading: false,
@@ -67,6 +68,7 @@ export default function AccountSettings() {
 
     setIsDeleting(true);
     setDeleteError('');
+    setDeleteReceiptId('');
     try {
       await apiClient.request('/account/delete', {
         method: 'POST',
@@ -80,7 +82,8 @@ export default function AccountSettings() {
       clearSession('Account deleted');
       navigate('/login?accountDeleted=1', { replace: true });
     } catch (error) {
-      setDeleteError(error?.message || 'The account could not be deleted. No account data was removed.');
+      setDeleteError(error?.message || 'The account could not be deleted. Review the message before retrying.');
+      setDeleteReceiptId(typeof error?.receiptId === 'string' ? error.receiptId : '');
       setIsDeleting(false);
     }
   };
@@ -159,12 +162,14 @@ export default function AccountSettings() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <Alert className="mb-5 border-red-200 bg-red-50">
+            <Alert role="note" className="mb-5 border-red-200 bg-red-50">
               <AlertCircle className="h-4 w-4 text-red-700" />
               <AlertDescription className="text-red-900">
-                This action is irreversible. GeneMap first cancels verifiable individual Stripe
-                subscriptions and removes the Stripe customer record, then deletes the account and
-                user-owned database records. An active institutional license must be transferred or
+                This action is irreversible. GeneMap expires open checkout links, cancels
+                verifiable subscriptions, records an independent deletion authorization, and then
+                deletes the account and user-owned records. Non-billing customer-record cleanup runs
+                after account deletion and is retried from a durable receipt if the provider is
+                temporarily unavailable. An active institutional license must be transferred or
                 cancelled before its responsible account can be deleted.
               </AlertDescription>
             </Alert>
@@ -172,7 +177,14 @@ export default function AccountSettings() {
             {deleteError && (
               <Alert variant="destructive" className="mb-5" role="alert">
                 <AlertCircle className="h-4 w-4" />
-                <AlertDescription>{deleteError}</AlertDescription>
+                <AlertDescription>
+                  <p>{deleteError}</p>
+                  {deleteReceiptId && (
+                    <p className="mt-2 text-xs">
+                      Deletion receipt: <code className="font-mono">{deleteReceiptId}</code>
+                    </p>
+                  )}
+                </AlertDescription>
               </Alert>
             )}
 

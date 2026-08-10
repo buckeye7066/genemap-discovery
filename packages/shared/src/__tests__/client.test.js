@@ -348,6 +348,31 @@ describe('Error handling', () => {
     await expect(client.getMe()).rejects.toThrow('Unauthorized');
   });
 
+  it('preserves a safe account-deletion receipt on structured API errors', async () => {
+    global.fetch = vi.fn(async () => ({
+      ok: false,
+      status: 503,
+      json: async () => ({
+        error: 'Deletion paused for reconciliation',
+        code: 'ACCOUNT_DELETE_LEDGER_WRITE_FAILED',
+        receiptId: 'receipt-safe-123',
+      }),
+    }));
+
+    let caught;
+    try {
+      await client.request('/account/delete', { method: 'POST', body: '{}' });
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toMatchObject({
+      message: 'Deletion paused for reconciliation',
+      status: 503,
+      code: 'ACCOUNT_DELETE_LEDGER_WRITE_FAILED',
+      receiptId: 'receipt-safe-123',
+    });
+  });
+
   it('should throw generic error if JSON parse fails on error response', async () => {
     global.fetch = vi.fn(async () => ({
       ok: false,

@@ -247,6 +247,150 @@ describe('association evidence adapters', () => {
     });
 
     expect(result.claimsByGene.SCN1A).toEqual([]);
+    expect(result.sourceStatus).toBe('unavailable');
+  });
+
+  it('does not promote a taxon-unspecified direct edge to human evidence', async () => {
+    const fetchImpl = vi.fn(async (input) => {
+      const url = urlString(input);
+      if (url.includes('clinicaltables.nlm.nih.gov')) return jsonResponse(hpoPayload());
+      if (url.endsWith('/version')) return jsonResponse({ version: '2026-06-08' });
+      if (url.includes('/association?')) {
+        return jsonResponse({
+          associations: [{
+            id: 'ambiguous-edge',
+            category: 'biolink:GeneToPhenotypicFeatureAssociation',
+            subject: 'NCBIGene:6323',
+            subject_label: 'SCN1A',
+            subject_category: 'biolink:Gene',
+            predicate: 'biolink:associated_with',
+            object: 'HP:0001250',
+            object_category: 'biolink:PhenotypicFeature',
+          }],
+        });
+      }
+      if (url.includes('/ortholog-phenotype-grid')) {
+        return jsonResponse({ columns: [], rows: [], cells: {} });
+      }
+      throw new Error(`Unexpected URL ${url}`);
+    });
+
+    const result = await getAssociationEvidence(hpoReference, ['SCN1A'], {
+      fetchImpl,
+      geneLookup,
+    });
+
+    expect(result.claimsByGene.SCN1A).toEqual([]);
     expect(result.sourceStatus).toBe('no_matching_associations');
   });
+
+  it('excludes negated disease phenotypes from ortholog inference', () => {
+    const phenotypes = __test.phenotypeIdsForQuery({
+      kind: 'mondo',
+      identifier: 'MONDO:0009061',
+      canonicalLabel: 'cystic fibrosis',
+    }, [{
+      negated: true,
+      subject: 'MONDO:0009061',
+      object: 'HP:0001250',
+      object_category: 'biolink:PhenotypicFeature',
+      object_label: 'Seizure',
+    }]);
+
+    expect([...phenotypes.keys()]).toEqual([]);
+  });
+
+  it('reports bounded source coverage as partial instead of a false source-wide negative', async () => {
+    const fetchImpl = vi.fn(async (input) => {
+      const url = urlString(input);
+      if (url.includes('clinicaltables.nlm.nih.gov')) return jsonResponse(hpoPayload());
+      if (url.endsWith('/version')) return jsonResponse({ version: '2026-06-08' });
+      if (url.includes('/association?')) {
+        return jsonResponse({ total: 1000, associations: [] });
+      }
+      throw new Error(`Unexpected URL ${url}`);
+    });
+
+    const result = await getAssociationEvidence(hpoReference, ['SCN1A'], {
+      fetchImpl,
+      geneLookup,
+    });
+
+    expect(result.claimsByGene.SCN1A).toEqual([]);
+    expect(result.sourceStatus).toBe('partial_coverage');
+    expect(result.sources.monarch).toMatchObject({
+      status: 'partial',
+      truncated: true,
+    });
+  });
+
+  it('preserves the source retrieval date when a raw association cache is reused across UTC midnight', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-09T23:59:59.000Z'));
+    const fetchImpl = vi.fn(async (input) => {
+      const url = urlString(input);
+      if (url.includes('clinicaltables.nlm.nih.gov')) return jsonResponse(hpoPayload());
+      if (url.endsWith('/version')) return jsonResponse({ version: '2026-06-08' });
+      if (url.includes('/association?')) {
+        return jsonResponse({
+          associations: [{
+            id: 'cached-edge',
+            category: 'biolink:GeneToPhenotypicFeatureAssociation',
+            subject: 'NCBIGene:6323',
+            subject_label: 'SCN1A',
+            subject_category: 'biolink:Gene',
+            subject_taxon: 'NCBITaxon:9606',
+            predicate: 'biolink:associated_with',
+            object: 'HP:0001250',
+            object_category: 'biolink:PhenotypicFeature',
+          }],
+        });
+      }
+      if (url.includes('/ortholog-phenotype-grid')) {
+        return jsonResponse({ columns: [], rows: [], cells: {} });
+      }
+      throw new Error(`Unexpected URL ${url}`);
+    });
+
+    const first = await getAssociationEvidence(hpoReference, ['SCN1A'], {
+      fetchImpl,
+      geneLookup,
+    });
+    vi.setSystemTime(new Date('2026-08-10T00:00:01.000Z'));
+    const second = await getAssociationEvidence(hpoReference, ['SCN1A', 'CFTR'], {
+      fetchImpl,
+      geneLookup,
+    });
+
+    expect(first.claimsByGene.SCN1A[0].retrievalDate).toBe('2026-08-09');
+    expect(second.claimsByGene.SCN1A[0].retrievalDate).toBe('2026-08-09');
+    const associationCalls = fetchImpl.mock.calls.filter(([input]) => urlString(input).includes('/association?'));
+    expect(associationCalls).toHaveLength(1);
+    vi.useRealTimers();
+  });
+
+  it('keeps evidence available as partial coverage when gene identity lookup fails', async () => {
+    const fetchImpl = vi.fn(async (input) => {
+      const url = urlString(input);
+      if (url.includes('clinicaltables.nlm.nih.gov')) return jsonResponse(hpoPayload());
+      if (url.endsWith('/version')) return jsonResponse({ version: '2026-06-08' });
+      if (url.includes('/association?')) return jsonResponse({ associations: [] });
+      throw new Error(`Unexpected URL ${url}`);
+    });
+
+    const result = await getAssociationEvidence(hpoReference, ['SCN1A'], {
+      fetchImpl,
+      geneLookup: vi.fn(async () => { throw new Error('MyGene unavailable'); }),
+    });
+
+    expect(result.claimsByGene.SCN1A).toEqual([]);
+    expect(result.sourceStatus).toBe('partial_coverage');
+    expect(result.sources.myGene).toMatchObject({
+      status: 'unavailable',
+      truncated: false,
+      retrievedAt: null,
+    });
+    expect(result.sources.monarch.status).toBe('available');
+  });
+
 });

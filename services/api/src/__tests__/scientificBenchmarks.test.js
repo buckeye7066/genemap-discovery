@@ -44,7 +44,7 @@ describe('scientific benchmarks (deterministic fixtures)', () => {
     }
   });
 
-  it('keeps human and animal evidence separated for the HPO/Monarch fixture', () => {
+  it('keeps ontology metadata separate from animal association evidence for the HPO/Monarch fixture', () => {
     const fixture = fixtures.find((f) => f.id === 'hpo-monarch-seizure-demo');
     const claims = [
       createAssociationClaim({
@@ -73,9 +73,13 @@ describe('scientific benchmarks (deterministic fixtures)', () => {
       }),
     ];
     const parts = partitionClaimsBySpecies(claims);
-    expect(parts.human).toHaveLength(1);
+    expect(parts.human).toHaveLength(0);
+    expect(parts.metadata).toHaveLength(1);
+    expect(parts.metadata[0]).toMatchObject({
+      evidenceType: 'phenotype_ontology',
+      taxon: '9606',
+    });
     expect(parts.animal).toHaveLength(1);
-    expect(parts.human[0].taxon).toBe('9606');
     expect(parts.animal[0].taxon).toBe('10090');
   });
 
