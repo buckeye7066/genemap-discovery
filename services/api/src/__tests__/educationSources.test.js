@@ -7,6 +7,7 @@ import {
   CATEGORY_SOURCES,
 } from '../services/educationSources.js';
 import { resolveEducationTopic } from '../config/educationCatalog.js';
+import { generateExplanation } from '../services/llm.js';
 
 vi.mock('../services/llm.js', () => ({
   generateExplanation: vi.fn(async () => 'explanation body'),
@@ -113,6 +114,7 @@ describe('/education/explain attaches sources', () => {
       payload: { topic: 'some obscure made-up topic', level: 'undergraduate' },
     });
     expect(res.statusCode).toBe(400);
+    expect(generateExplanation).not.toHaveBeenCalled();
   });
 });
 

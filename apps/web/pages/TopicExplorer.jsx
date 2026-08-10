@@ -169,6 +169,7 @@ export default function TopicExplorer() {
 
   const [catalogTopic, setCatalogTopic] = useState(null);
   const [catalogLoading, setCatalogLoading] = useState(false);
+  const [catalogError, setCatalogError] = useState({ topicId: '', message: '' });
   const [topicMetadata, setTopicMetadata] = useState(null);
   const [explanationPublication, setExplanationPublication] = useState(null);
   const [explanationError, setExplanationError] = useState('');
@@ -193,6 +194,7 @@ export default function TopicExplorer() {
   useEffect(() => {
     let active = true;
     setCatalogTopic(null);
+    setCatalogError({ topicId, message: '' });
     setTopicMetadata(null);
     if (!topicId) return () => { active = false; };
 
@@ -207,14 +209,22 @@ export default function TopicExplorer() {
           })))
           .find((topic) => topic?.id === topicId);
         if (!match) {
-          setExplanationError('This education topic is unavailable because it is not in the reviewed catalog.');
+          setCatalogError({
+            topicId,
+            message: 'This education topic is unavailable because it is not in the reviewed catalog.',
+          });
           return;
         }
         setCatalogTopic(match);
         setTopicMetadata(match);
       })
       .catch((error) => {
-        if (active) setExplanationError(error?.message || 'The reviewed topic catalog is unavailable.');
+        if (active) {
+          setCatalogError({
+            topicId,
+            message: error?.message || 'The reviewed topic catalog is unavailable.',
+          });
+        }
       })
       .finally(() => {
         if (active) setCatalogLoading(false);
@@ -355,8 +365,10 @@ export default function TopicExplorer() {
   };
 
   const publicationScopeIsCurrent = publicationStateScope === publicationRequestScope;
+  const visibleCatalogError = catalogError.topicId === topicId ? catalogError.message : '';
   const visibleExplanationPublication = publicationScopeIsCurrent ? explanationPublication : null;
-  const visibleExplanationError = publicationScopeIsCurrent ? explanationError : '';
+  const visibleExplanationError = visibleCatalogError
+    || (publicationScopeIsCurrent ? explanationError : '');
   const visibleSources = publicationScopeIsCurrent ? sources : [];
   const visibleImagePublication = publicationScopeIsCurrent ? imagePublication : null;
   const visibleImageError = publicationScopeIsCurrent ? imageError : '';

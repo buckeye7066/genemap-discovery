@@ -131,4 +131,54 @@ describe('Dashboard research summary identity boundary', () => {
     expect(screen.getByText('Bob current summary.')).toBeInTheDocument();
     expect(screen.queryByText(/alice stale refresh/i)).toBeNull();
   });
+
+  it('keeps the newest overlapping load data and summary for the same identity', async () => {
+    const staleActivityRows = deferred();
+    let runIntervalRefresh;
+    const realSetInterval = globalThis.setInterval.bind(globalThis);
+    const intervalSpy = vi.spyOn(globalThis, 'setInterval').mockImplementation((callback, delay, ...args) => {
+      if (!runIntervalRefresh && delay === 60_000) {
+        runIntervalRefresh = callback;
+        return realSetInterval(() => {}, delay);
+      }
+      return realSetInterval(callback, delay, ...args);
+    });
+
+    apiClient.getUserActivity
+      .mockReset()
+      .mockResolvedValueOnce([{ id: 'initial', activityType: 'gene_view', entityId: 'CFTR' }])
+      .mockImplementationOnce(() => staleActivityRows.promise)
+      .mockResolvedValueOnce([{ id: 'newest', activityType: 'gene_view', entityId: 'RUNX1' }]);
+    apiClient.invokePublicationTask
+      .mockResolvedValueOnce(summaryResponse('Initial summary.', 'summary:initial'))
+      .mockResolvedValueOnce(summaryResponse('Newest summary.', 'summary:newest'))
+      .mockResolvedValueOnce(summaryResponse('Stale summary.', 'summary:stale'));
+
+    const { unmount } = render(dashboardElement());
+    try {
+      expect(await screen.findByText('Initial summary.')).toBeInTheDocument();
+      expect(runIntervalRefresh).toEqual(expect.any(Function));
+
+      fireEvent.click(screen.getByRole('button', { name: /^refresh$/i }));
+      await waitFor(() => expect(apiClient.getUserActivity).toHaveBeenCalledTimes(2));
+
+      act(() => runIntervalRefresh());
+      expect(await screen.findByText('Newest summary.')).toBeInTheDocument();
+      expect(screen.getByText('RUNX1')).toBeInTheDocument();
+
+      await act(async () => {
+        staleActivityRows.resolve([{ id: 'stale', activityType: 'gene_view', entityId: 'BRCA1' }]);
+        await staleActivityRows.promise;
+      });
+
+      expect(screen.getByText('RUNX1')).toBeInTheDocument();
+      expect(screen.queryByText('BRCA1')).toBeNull();
+      expect(screen.getByText('Newest summary.')).toBeInTheDocument();
+      expect(screen.queryByText('Stale summary.')).toBeNull();
+      expect(apiClient.invokePublicationTask).toHaveBeenCalledTimes(2);
+    } finally {
+      unmount();
+      intervalSpy.mockRestore();
+    }
+  });
 });

@@ -282,4 +282,21 @@ describe('education async publication boundaries', () => {
     fireEvent.click(screen.getByRole('button', { name: /^regenerate image$/i }));
     await waitFor(() => expect(screen.getByTestId('adaptive-image')).toHaveTextContent('available:image:valid:https://example.test/valid.png'));
   });
+
+  it('keeps an unknown-topic catalog error across education-level changes', async () => {
+    const path = '/topicexplorer?topic=unknown-topic';
+    const { rerender } = render(routedElement(path, TopicExplorer));
+
+    const catalogError = await screen.findByRole('alert');
+    expect(catalogError).toHaveTextContent(/not in the reviewed catalog/i);
+    expect(apiClient.getTopics).toHaveBeenCalledTimes(1);
+    expect(apiClient.getExplanation).not.toHaveBeenCalled();
+
+    educationState.level = 'graduate';
+    rerender(routedElement(path, TopicExplorer));
+
+    expect(screen.getByRole('alert')).toHaveTextContent(/not in the reviewed catalog/i);
+    expect(apiClient.getTopics).toHaveBeenCalledTimes(1);
+    expect(apiClient.getExplanation).not.toHaveBeenCalled();
+  });
 });

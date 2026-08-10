@@ -97,6 +97,57 @@ describe('genetics education publication boundary', () => {
     });
   });
 
+  it('does not treat a short common Greek token as a fuzzy clinical directive', () => {
+    const raw = 'The Greek neuter plural article τα appears in this language example.';
+
+    expect(__test.containsProhibitedClinicalGuidance(raw)).toBe(false);
+    expect(sanitizeEducation(raw)).toMatchObject({ status: 'available', content: raw });
+  });
+
+  it('still withholds a one-edit mixed-script rendering of a clinical directive', () => {
+    const raw = 'You should takλ Zorblax.';
+
+    expect(__test.containsProhibitedClinicalGuidance(raw)).toBe(true);
+    expect(sanitizeEducation(raw)).toMatchObject({
+      status: 'withheld',
+      content: null,
+      reasonCode: 'clinical_boundary',
+    });
+  });
+
+  it('withholds a one-edit mixed-script rendering of a short clinical directive', () => {
+    const raw = 'You should trλ Zorblax.';
+
+    expect(__test.containsProhibitedClinicalGuidance(raw)).toBe(true);
+    expect(sanitizeEducation(raw)).toMatchObject({
+      status: 'withheld',
+      content: null,
+      reasonCode: 'clinical_boundary',
+    });
+  });
+
+  it('decodes the reviewed named HTML entities without failing the boundary closed', () => {
+    const entities = '&lt;&gt;&amp;&quot;&nbsp;';
+    const raw = 'Reviewed notation includes &lt;, &gt;, &amp;, &quot;quoted&quot;, and a&nbsp;space.';
+
+    expect(__test.decodeHtmlEntities(entities)).toBe('<>&" ');
+    expect(__test.containsProhibitedClinicalGuidance(raw)).toBe(false);
+    expect(sanitizeEducation(raw)).toMatchObject({ status: 'available' });
+  });
+
+  it('preserves an omitted named entity visibly but fails its safety projection closed', () => {
+    const raw = 'Neutral genetics education &mdash; with an unreviewed named entity.';
+
+    expect(__test.decodeHtmlEntities('&mdash;')).toBe('&mdash;');
+    expect(__test.decodeHtmlEntities('&mdash;', { preserveUnknownNamed: false })).toBe('');
+    expect(__test.containsProhibitedClinicalGuidance(raw)).toBe(true);
+    expect(sanitizeEducation(raw)).toMatchObject({
+      status: 'withheld',
+      content: null,
+      reasonCode: 'clinical_boundary',
+    });
+  });
+
   it.each([
     'Screen yourself for cancer.',
     'Get a diagnostic test.',

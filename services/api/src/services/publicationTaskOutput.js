@@ -205,9 +205,17 @@ function semanticSafetyText(value, { separatePunctuation = false } = {}) {
     .trim();
 }
 
-function withinTwoEdits(left, right) {
+function confusableEditBudget(targetLength) {
+  // Short safety keywords have too few characters for a fixed fuzzy-match
+  // budget to be selective. Keep a one-edit floor so three-letter directives
+  // cannot bypass the boundary with one unmapped non-Latin character, and use
+  // the full two-edit fail-closed budget only for words of eight or more.
+  return Math.min(2, Math.max(1, Math.floor(targetLength / 4)));
+}
+
+function withinEditBudget(left, right, maxEdits) {
   if (left === right) return true;
-  if (Math.abs(left.length - right.length) > 2) return false;
+  if (Math.abs(left.length - right.length) > maxEdits) return false;
   let previous = Array.from({ length: right.length + 1 }, (_, index) => index);
   for (let leftIndex = 1; leftIndex <= left.length; leftIndex += 1) {
     const current = [leftIndex];
@@ -222,17 +230,17 @@ function withinTwoEdits(left, right) {
       );
       rowMinimum = Math.min(rowMinimum, current[rightIndex]);
     }
-    if (rowMinimum > 2) return false;
+    if (rowMinimum > maxEdits) return false;
     previous = current;
   }
-  return previous[right.length] <= 2;
+  return previous[right.length] <= maxEdits;
 }
 
 /**
  * UTS-39-style defense for mixed/confusable clinical keywords. The explicit
  * skeleton map handles common Greek/Cyrillic lookalikes; for an unmapped
- * non-Latin letter embedded in an otherwise Latin token, a bounded two-edit
- * comparison fails closed on safety-critical words instead of assuming safety.
+ * non-Latin letter embedded in an otherwise Latin token, a length-scaled
+ * comparison of up to two edits fails closed instead of assuming safety.
  */
 function containsSuspiciousClinicalConfusable(value) {
   if (typeof value !== 'string' || !value.trim()) return false;
@@ -248,7 +256,9 @@ function containsSuspiciousClinicalConfusable(value) {
       return /[A-Za-z]/u.test(character) ? character : '';
     }).join('').toLowerCase();
     if (skeleton.length < 2) continue;
-    if (CLINICAL_SKELETON_WORDS.some((word) => withinTwoEdits(skeleton, word))) {
+    if (CLINICAL_SKELETON_WORDS.some((word) => (
+      withinEditBudget(skeleton, word, confusableEditBudget(word.length))
+    ))) {
       return true;
     }
   }
@@ -816,7 +826,8 @@ export function sanitizePublicationArtifact(publicationTask, taskInput, result, 
       ? content.candidateGenes.length
       : null;
     const hasClassificationDetail = Boolean(
-      content.inheritancePattern
+      content.diseaseName
+      || content.inheritancePattern
       || content.mainFeatures?.length
       || content.synonyms?.length,
     );
@@ -835,6 +846,13 @@ export function sanitizePublicationArtifact(publicationTask, taskInput, result, 
       });
     }
     if (taskInput?.operation === 'classify_and_suggest' && candidateCount === 0) {
+      if (!hasClassificationDetail) {
+        return createPublicationArtifact({
+          status: PUBLICATION_STATUSES.UNAVAILABLE,
+          reasonCode: 'provider_empty',
+          correlationId,
+        });
+      }
       return createPublicationArtifact({
         status: PUBLICATION_STATUSES.PARTIAL,
         content,

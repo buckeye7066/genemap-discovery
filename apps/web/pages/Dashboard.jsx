@@ -59,10 +59,20 @@ export default function Dashboard() {
     identity: summaryUserIdentity,
     sequence: 0,
   });
+  const dashboardLoadRequestRef = useRef({
+    identity: summaryUserIdentity,
+    sequence: 0,
+  });
   if (researchSummaryRequestRef.current.identity !== summaryUserIdentity) {
     researchSummaryRequestRef.current = {
       identity: summaryUserIdentity,
       sequence: researchSummaryRequestRef.current.sequence + 1,
+    };
+  }
+  if (dashboardLoadRequestRef.current.identity !== summaryUserIdentity) {
+    dashboardLoadRequestRef.current = {
+      identity: summaryUserIdentity,
+      sequence: dashboardLoadRequestRef.current.sequence + 1,
     };
   }
   const [activities, setActivities] = useState([]);
@@ -74,13 +84,18 @@ export default function Dashboard() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
 
-  const generateResearchSummary = async (currentUser, activityRows, searchRows) => {
+  const generateResearchSummary = async (currentUser, activityRows, searchRows, isCurrentLoad) => {
     const requestIdentity = dashboardUserIdentity(currentUser);
-    if (!requestIdentity || researchSummaryRequestRef.current.identity !== requestIdentity) return;
+    if (
+      !requestIdentity
+      || !isCurrentLoad()
+      || researchSummaryRequestRef.current.identity !== requestIdentity
+    ) return;
     const requestSequence = researchSummaryRequestRef.current.sequence + 1;
     researchSummaryRequestRef.current.sequence = requestSequence;
     const isCurrentRequest = () => (
-      researchSummaryRequestRef.current.identity === requestIdentity
+      isCurrentLoad()
+      && researchSummaryRequestRef.current.identity === requestIdentity
       && researchSummaryRequestRef.current.sequence === requestSequence
     );
 
@@ -136,16 +151,27 @@ export default function Dashboard() {
   };
 
   const loadDashboardData = async (autoRefresh = false, signal = null) => {
-    if (!autoRefresh) setIsLoading(true);
+    const requestIdentity = dashboardUserIdentity(user);
+    const requestSequence = dashboardLoadRequestRef.current.sequence + 1;
+    dashboardLoadRequestRef.current = {
+      identity: requestIdentity,
+      sequence: requestSequence,
+    };
+    const isCurrentLoad = () => (
+      dashboardLoadRequestRef.current.identity === requestIdentity
+      && dashboardLoadRequestRef.current.sequence === requestSequence
+    );
+
+    if (!autoRefresh && isCurrentLoad()) setIsLoading(true);
     try {
-      if (signal?.aborted || !user?.email) return;
+      if (signal?.aborted || !user?.email || !isCurrentLoad()) return;
       const [activityRows, searchRows, projectRows, setRows] = await Promise.all([
         apiClient.getUserActivity().catch(() => []),
         apiClient.getSearchHistory().catch(() => []),
         apiClient.getProjects ? apiClient.getProjects().catch(() => []) : Promise.resolve([]),
         apiClient.getGeneSets().catch(() => []),
       ]);
-      if (signal?.aborted) return;
+      if (signal?.aborted || !isCurrentLoad()) return;
 
       setActivities(activityRows);
       setRecentSearches(searchRows);
@@ -163,11 +189,11 @@ export default function Dashboard() {
       ) {
         setShowOnboarding(true);
       }
-      await generateResearchSummary(user, activityRows, searchRows);
+      await generateResearchSummary(user, activityRows, searchRows, isCurrentLoad);
     } catch (error) {
       log.error('Error loading dashboard:', error);
     } finally {
-      if (!signal?.aborted) {
+      if (!signal?.aborted && isCurrentLoad()) {
         setIsLoading(false);
         setIsRefreshing(false);
       }

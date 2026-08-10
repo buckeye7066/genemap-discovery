@@ -310,13 +310,21 @@ describe('sanitizePublicationTaskOutput', () => {
     });
     expect(suggestions.content).toBeNull();
 
-    const fused = sanitize('classify_and_suggest', { candidateGenes: [] }, PHENOTYPE_QUERY);
-    const fusedContent = expectPublication(fused, {
+    const emptyFused = sanitize('classify_and_suggest', { candidateGenes: [] }, PHENOTYPE_QUERY);
+    expectPublication(emptyFused, {
+      status: 'unavailable',
+      reasonCode: 'provider_empty',
+    });
+    expect(emptyFused.content).toBeNull();
+
+    const diseaseOnlyFused = sanitize('classify_and_suggest', { candidateGenes: [] });
+    const diseaseOnlyContent = expectPublication(diseaseOnlyFused, {
       status: 'partial',
       reasonCode: 'candidate_leads_missing',
     });
-    expect(fusedContent.candidateGenes).toEqual([]);
-    expect(fused.limitations).toHaveLength(1);
+    expect(diseaseOnlyContent.diseaseName).toBe('Cystic Fibrosis');
+    expect(diseaseOnlyContent.candidateGenes).toEqual([]);
+    expect(diseaseOnlyFused.limitations).toHaveLength(1);
   });
 
   it('normalizes every published research narrative instead of passing provider prose through', () => {
