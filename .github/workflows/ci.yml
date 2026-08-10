@@ -21,20 +21,6 @@ env:
   LOG_LEVEL: silent
 
 jobs:
-  source-snapshot:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - name: Upload exact source snapshot for release repair
-        uses: actions/upload-artifact@v7
-        with:
-          name: source-snapshot-${{ github.sha }}
-          path: |
-            .
-            !.git/**
-          include-hidden-files: true
-          retention-days: 1
-
   lint-and-typecheck:
     runs-on: ubuntu-latest
     steps:
