@@ -1,4 +1,5 @@
 import { getAssociationEvidence } from './associationEvidence.js';
+import { enrichGenesWithStatus } from './genomicDatabases.js';
 
 const CACHE_TTL_MS = 10 * 60 * 1000;
 const CACHE_MAX = 128;
@@ -6,11 +7,9 @@ const GENE_SYMBOL = /^[A-Z0-9][A-Z0-9-]{1,14}$/u;
 const CLINICAL_COMMAND = /^(?:TAKE|START|STOP|AVOID|USE|ADMINISTER|INJECT|SWALLOW|APPLY|PRESCRIBE|SWITCH)\b/u;
 const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/u;
 const ISO_DATE_TIME = /^\d{4}-\d{2}-\d{2}T/u;
-const EVIDENCE_CLASSES = new Set([
-  'human_verified',
-  'animal_model',
-  'computational',
-]);
+const PROVIDER_DEADLINE_MS = 5_000;
+const ORTHOLOG_CANDIDATE_LIMIT = 8;
+const EVIDENCE_CLASSES = new Set(['human_verified', 'animal_model', 'computational']);
 const EVIDENCE_TYPES = new Set([
   'gene_disease_association',
   'gene_phenotype_association',
@@ -25,12 +24,7 @@ const SOURCE_STATUSES = new Set([
   'unavailable',
   'partial_coverage',
 ]);
-const SOURCE_HEALTH = new Set([
-  'available',
-  'partial',
-  'unavailable',
-  'not_applicable',
-]);
+const SOURCE_HEALTH = new Set(['available', 'partial', 'unavailable', 'not_applicable']);
 
 const cache = new Map();
 
@@ -80,11 +74,6 @@ function safeDateTime(value) {
   return date && ISO_DATE_TIME.test(date) && Number.isFinite(Date.parse(date)) ? date : null;
 }
 
-/**
- * Monarch KG releases are date strings. API package/build versions such as
- * `0.1.0` are not dataset release provenance and must remain unrecorded rather
- * than being displayed as though they identify the underlying knowledge graph.
- */
 function safeReleaseVersion(value) {
   const release = cleanText(value, 32);
   return release && validDateOnly(release) ? release : null;
@@ -95,12 +84,6 @@ function syntacticSymbol(value) {
   return symbol && GENE_SYMBOL.test(symbol) ? symbol : null;
 }
 
-/**
- * Apply the same clinical-command policy used at the model publication boundary
- * before a symbol can be sent to a public evidence adapter. Hyphens are treated
- * as token boundaries, so `STOP-DRUG` and `TAKE-5MG` cannot re-enter through a
- * second API even though they satisfy the broad HGNC-style syntax regex.
- */
 export function isPublicationGeneSymbol(value) {
   const symbol = syntacticSymbol(value);
   if (!symbol) return false;
@@ -125,27 +108,17 @@ function safeTaxon(value) {
 }
 
 function safeEvidenceStrength(value) {
-  // Upstream evidence counts and association categories are not a calibrated
-  // strength scale. Preserve only a conservative supporting/unknown statement;
-  // never expose a locally inferred “strong” label as source-reported fact.
   return value === 'unknown' || value == null ? 'unknown' : 'supporting';
 }
 
 function sanitizeClaim(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-  const evidenceClass = EVIDENCE_CLASSES.has(value.evidenceClass)
-    ? value.evidenceClass
-    : null;
-  const evidenceType = EVIDENCE_TYPES.has(value.evidenceType)
-    ? value.evidenceType
-    : null;
+  const evidenceClass = EVIDENCE_CLASSES.has(value.evidenceClass) ? value.evidenceClass : null;
+  const evidenceType = EVIDENCE_TYPES.has(value.evidenceType) ? value.evidenceType : null;
   const source = cleanText(value.source, 256);
   const claim = cleanText(value.claim, 2_000);
   const taxon = safeTaxon(value.taxon);
   if (!evidenceClass || !evidenceType || !source || !claim) return null;
-  // A missing or contradictory taxon can never become verified human or
-  // model-organism evidence merely because an upstream adapter labeled the
-  // class. This is a second fail-closed boundary behind the adapter itself.
   if (evidenceClass === 'human_verified' && taxon !== '9606') return null;
   if (evidenceClass === 'animal_model' && (taxon === '9606' || taxon === 'unspecified')) return null;
 
@@ -189,6 +162,11 @@ function sanitizeQuery(value) {
   };
 }
 
+function safeCount(value, max = 15) {
+  const count = Number(value);
+  return Number.isInteger(count) && count >= 0 ? Math.min(count, max) : null;
+}
+
 function sanitizeSource(value, fallbackApiVersion) {
   const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
   return {
@@ -197,6 +175,9 @@ function sanitizeSource(value, fallbackApiVersion) {
     status: SOURCE_HEALTH.has(source.status) ? source.status : 'unavailable',
     truncated: source.truncated === true,
     retrievedAt: safeDateTime(source.retrievedAt),
+    candidateLimit: safeCount(source.candidateLimit),
+    candidatesRequested: safeCount(source.candidatesRequested),
+    candidatesSkipped: safeCount(source.candidatesSkipped),
   };
 }
 
@@ -233,11 +214,67 @@ function cacheSet(key, value) {
   return value;
 }
 
-/**
- * Convert raw public-adapter results into the exact bounded API contract.
- * Numeric provider scores are intentionally absent. A candidate can gain a
- * ranked evidence class only from a complete, source-labelled claim tuple.
- */
+function boundedFetch(fetchImpl = globalThis.fetch, timeoutMs = PROVIDER_DEADLINE_MS) {
+  return (url, options = {}) => {
+    const deadline = AbortSignal.timeout(timeoutMs);
+    const signal = options.signal && typeof AbortSignal.any === 'function'
+      ? AbortSignal.any([options.signal, deadline])
+      : deadline;
+    return fetchImpl(url, { ...options, signal });
+  };
+}
+
+function timedGeneLookup(symbols, lookup = enrichGenesWithStatus, timeoutMs = PROVIDER_DEADLINE_MS) {
+  return Promise.race([
+    lookup(symbols),
+    new Promise((resolve) => setTimeout(() => resolve({
+      records: Object.fromEntries(symbols.map((symbol) => [symbol, null])),
+      status: 'unavailable',
+      retrievedAt: null,
+      error: 'gene_lookup_deadline_exceeded',
+    }), timeoutMs)),
+  ]);
+}
+
+function defaultDependencies(overrides = {}) {
+  const upstreamFetch = overrides.fetchImpl || globalThis.fetch;
+  const upstreamGeneLookup = overrides.geneLookup || enrichGenesWithStatus;
+  return {
+    ...overrides,
+    fetchImpl: boundedFetch(upstreamFetch, overrides.providerDeadlineMs || PROVIDER_DEADLINE_MS),
+    geneLookup: (symbols) => timedGeneLookup(
+      symbols,
+      upstreamGeneLookup,
+      overrides.providerDeadlineMs || PROVIDER_DEADLINE_MS,
+    ),
+  };
+}
+
+function applyOrthologCoverage(raw, symbols) {
+  const requested = normalizeSymbols(symbols).length;
+  const skipped = Math.max(0, requested - ORTHOLOG_CANDIDATE_LIMIT);
+  if (skipped === 0) return raw;
+  const sources = raw?.sources || {};
+  const monarch = sources.monarch || {};
+  return {
+    ...raw,
+    sourceStatus: raw?.sourceStatus === 'unavailable' || raw?.sourceStatus === 'unresolved_query'
+      ? raw.sourceStatus
+      : 'partial_coverage',
+    sources: {
+      ...sources,
+      monarch: {
+        ...monarch,
+        status: monarch.status === 'unavailable' ? 'unavailable' : 'partial',
+        truncated: true,
+        candidateLimit: ORTHOLOG_CANDIDATE_LIMIT,
+        candidatesRequested: requested,
+        candidatesSkipped: skipped,
+      },
+    },
+  };
+}
+
 export function sanitizeAssociationEvidence(raw, requestedSymbols = []) {
   const symbols = normalizeSymbols(requestedSymbols);
   const sourceClaims = raw?.claimsByGene && typeof raw.claimsByGene === 'object'
@@ -253,13 +290,7 @@ export function sanitizeAssociationEvidence(raw, requestedSymbols = []) {
     for (const item of input) {
       const claim = sanitizeClaim(item);
       if (!claim) continue;
-      const key = [
-        claim.source,
-        claim.recordId,
-        claim.evidenceType,
-        claim.taxon,
-        claim.claim,
-      ].join('|');
+      const key = [claim.source, claim.recordId, claim.evidenceType, claim.taxon, claim.claim].join('|');
       if (seen.has(key)) continue;
       seen.add(key);
       claims.push(claim);
@@ -288,22 +319,23 @@ export function sanitizeAssociationEvidence(raw, requestedSymbols = []) {
   };
 }
 
-/**
- * Resolve and cache one bounded evidence request. The final publication
- * contract is cached after the raw adapters complete, so repeated requests use
- * the same source-retrieval dates until both the contract and upstream caches
- * expire rather than assigning a new date to cached source records.
- */
 export async function getPublicationAssociationEvidence(reference, symbols, dependencies = {}) {
-  const key = cacheKey(reference, symbols);
+  const cleanSymbols = normalizeSymbols(symbols);
+  const key = cacheKey(reference, cleanSymbols);
   const cached = cacheGet(key);
   if (cached) return cached;
-  const raw = await getAssociationEvidence(reference, normalizeSymbols(symbols), dependencies);
-  return cacheSet(key, sanitizeAssociationEvidence(raw, symbols));
+  const raw = await getAssociationEvidence(reference, cleanSymbols, defaultDependencies(dependencies));
+  const coverageAware = applyOrthologCoverage(raw, cleanSymbols);
+  return cacheSet(key, sanitizeAssociationEvidence(coverageAware, cleanSymbols));
 }
 
 export const __test = {
+  ORTHOLOG_CANDIDATE_LIMIT,
+  PROVIDER_DEADLINE_MS,
+  applyOrthologCoverage,
+  boundedFetch,
   cleanText,
+  defaultDependencies,
   isPublicationGeneSymbol,
   safeDate,
   safeDateTime,
@@ -313,5 +345,6 @@ export const __test = {
   safeUrl,
   sanitizeClaim,
   sanitizeQuery,
+  timedGeneLookup,
   resetCache: () => cache.clear(),
 };
