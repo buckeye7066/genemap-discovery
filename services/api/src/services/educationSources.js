@@ -1,3 +1,5 @@
+import { resolveEducationTopic } from '../config/educationCatalog.js';
+
 // ─── Curated, verified authoritative references for education topics ─────────
 //
 // The "source-grounded" pillar for AI narrative output. Instead of asking the
@@ -69,13 +71,20 @@ export const TOPIC_GLOSSARY = {
 /**
  * Resolve the authoritative references for a topic. Order: the topic-specific
  * glossary entry (if any), then its category references, then the general
- * references — deduped by URL. Unknown topics still get the general references,
- * so every explanation is grounded in at least NIH/NHGRI sources.
+ * references — deduped by URL. Unknown or client-constructed topic metadata
+ * returns no sources and must never accompany provider output.
  */
-export function getSources({ topicId, category } = {}) {
+export function getSources(topic) {
+  const resolved = resolveEducationTopic(topic?.id);
+  if (
+    !resolved
+    || resolved.category !== topic?.category
+    || resolved.title !== topic?.title
+    || resolved.catalogVersion !== topic?.catalogVersion
+  ) return [];
   const ordered = [];
-  if (topicId && TOPIC_GLOSSARY[topicId]) ordered.push(TOPIC_GLOSSARY[topicId]);
-  if (category && CATEGORY_SOURCES[category]) ordered.push(...CATEGORY_SOURCES[category]);
+  if (TOPIC_GLOSSARY[resolved.id]) ordered.push(TOPIC_GLOSSARY[resolved.id]);
+  if (CATEGORY_SOURCES[resolved.category]) ordered.push(...CATEGORY_SOURCES[resolved.category]);
   ordered.push(...GENERAL_SOURCES);
 
   const seen = new Set();

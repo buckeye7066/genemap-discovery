@@ -4,6 +4,8 @@ import {
   buildGeneShareText,
   exportGeneReport,
   exportVCFReport,
+  publicationSafeExportData,
+  publicationSafeGene,
 } from '../exportUtils';
 
 const gene = {
@@ -11,6 +13,24 @@ const gene = {
   name: 'RUNX family transcription factor 1',
   chromosome: '21',
   location: '21q22.12',
+  coordinatesVerified: true,
+  profileStatus: 'available',
+  candidatePublication: {
+    contractVersion: 1,
+    status: 'available',
+    content: { candidateGenes: [{ symbol: 'RUNX1' }] },
+    reasonCode: null,
+    correlationId: 'candidate-runx1',
+    limitations: [],
+  },
+  profilePublication: {
+    contractVersion: 1,
+    status: 'available',
+    content: { summary: 'Research profile' },
+    reasonCode: null,
+    correlationId: 'profile-runx1',
+    limitations: [],
+  },
   diseases: ['Candidate leukemia label'],
   phenotypes: [{ name: 'Leukemia', hpoId: 'HP:0001909', hpoVerified: true }],
   associationClaims: [
@@ -62,6 +82,110 @@ afterEach(() => {
 });
 
 describe('gene report provenance', () => {
+  it('drops legacy generated aliases even when a terminal response leaves them populated', () => {
+    const safe = publicationSafeExportData({
+      result: 'legacy result must not be exported',
+      response: 'legacy response must not be exported',
+      publication: {
+        contractVersion: 1,
+        status: 'withheld',
+        content: null,
+        reasonCode: 'clinical_boundary',
+        correlationId: 'generic-withheld-export',
+        limitations: [],
+      },
+    });
+
+    expect(safe.result).toBeUndefined();
+    expect(safe.response).toBeUndefined();
+    expect(safe.publication.status).toBe('withheld');
+    expect(safe.publication.content).toBeNull();
+  });
+
+  it.each([
+    ['partial', 'partial content', ['Incomplete output.']],
+    ['unavailable', null, []],
+  ])('exports %s with a null reason as an invalid unavailable envelope', (status, content, limitations) => {
+    const safe = publicationSafeExportData({
+      result: 'legacy alias must not survive',
+      publication: {
+        contractVersion: 1,
+        status,
+        content,
+        reasonCode: null,
+        correlationId: `null-reason-export-${status}`,
+        limitations,
+      },
+    });
+
+    expect(safe.result).toBeUndefined();
+    expect(safe.publication).toMatchObject({
+      status: 'unavailable',
+      content: null,
+      reasonCode: 'invalid_publication_envelope',
+    });
+  });
+
+
+  it('independently strips generated aliases and forged content from non-reusable publications', () => {
+    const safe = publicationSafeGene({
+      symbol: 'SAFE1',
+      name: 'attacker generated name',
+      explanation: 'attacker generated explanation',
+      aiSummary: 'attacker generated summary',
+      keyTakeaways: ['attacker takeaway'],
+      phenotypes: [{ name: 'attacker phenotype' }],
+      profileStatus: 'withheld',
+      candidatePublication: {
+        contractVersion: 1,
+        status: 'withheld',
+        content: { candidateGenes: [{ symbol: 'LEAK1' }] },
+        reasonCode: 'clinical_boundary',
+        correlationId: 'candidate-withheld',
+        limitations: [],
+      },
+      profilePublication: {
+        contractVersion: 1,
+        status: 'unavailable',
+        content: { summary: 'LEAK2' },
+        reasonCode: 'provider_failed',
+        correlationId: 'profile-unavailable',
+        limitations: [],
+      },
+      associationClaims: gene.associationClaims,
+    });
+
+    expect(safe.symbol).toBe('SAFE1');
+    expect(safe.explanation).toBeUndefined();
+    expect(safe.aiSummary).toBeUndefined();
+    expect(safe.keyTakeaways).toBeUndefined();
+    expect(safe.phenotypes).toEqual([]);
+    expect(safe.candidatePublication.content).toBeNull();
+    expect(safe.profilePublication.content).toBeNull();
+    expect(JSON.stringify(safe)).not.toContain('LEAK1');
+    expect(JSON.stringify(safe)).not.toContain('LEAK2');
+  });
+
+  it('serializes partial-publication limitations in printable and copied artifacts', () => {
+    const partialGene = {
+      ...gene,
+      candidatePublication: {
+        ...gene.candidatePublication,
+        status: 'partial',
+        reasonCode: 'provider_truncated',
+        limitations: ['Candidate explanations may be incomplete.'],
+      },
+    };
+    const status = buildGeneReportSections(partialGene)
+      .find((section) => section.title === 'Publication Status');
+    const share = buildGeneShareText(partialGene);
+
+    expect(status.content).toContain('partial');
+    expect(status.content).toContain('Candidate explanations may be incomplete.');
+    expect(share).toContain('Candidate lead publication: partial');
+    expect(share).toContain('Candidate lead publication limitation: Candidate explanations may be incomplete.');
+  });
+
   it('renders every required provenance field and escapes untrusted content', () => {
     const sections = buildGeneReportSections(gene);
     const provenance = sections.find(section => section.title === 'Evidence and Source Provenance');
@@ -221,6 +345,15 @@ describe('gene report provenance', () => {
   it('renders non-finite expression and VCF numbers as N/A', () => {
     const sections = buildGeneReportSections({
       symbol: 'RUNX1',
+      profileStatus: 'available',
+      profilePublication: {
+        contractVersion: 1,
+        status: 'available',
+        content: { summary: 'Expression fixture' },
+        reasonCode: null,
+        correlationId: 'profile-expression-fixture',
+        limitations: [],
+      },
       expressionData: [
         { tissue: 'Bone marrow', value: Number.NaN },
         { tissue: 'Blood', value: Number.POSITIVE_INFINITY },

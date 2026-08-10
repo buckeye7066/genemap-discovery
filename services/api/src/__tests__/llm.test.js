@@ -4,7 +4,10 @@ import { __test as llmInternals } from '../routes/llm.js';
 
 // Mock the LLM service so tests do not call real OpenAI/Anthropic APIs.
 vi.mock('../services/llm.js', () => ({
-  generateExplanation: vi.fn(async (prompt, opts) => `EXPL(${prompt.length}):${opts.maxTokens}`),
+  generateExplanation: vi.fn(async (prompt, opts) => {
+    const text = `EXPL(${prompt.length}):${opts.maxTokens}`;
+    return opts.includeMetadata ? { text, completion: 'complete' } : text;
+  }),
   generateChatResponse: vi.fn(async (msgs, opts) => `CHAT(${msgs.length}):${opts.maxTokens}`),
   generateImage: vi.fn(async (prompt, opts) => ({ url: `https://img/${opts.size}` })),
 }));
@@ -125,7 +128,7 @@ describe('LLM route protection', () => {
     expect(llmInternals.clampTemperature(0.4)).toBe(0.4);
   });
 
-  it('successful free-tier /llm/invoke returns disclaimer + result', async () => {
+  it('successful free-tier /llm/invoke returns a canonical publication envelope', async () => {
     // Pre-fill learningSession so we are nowhere near the daily limit
     prisma.learningSession.count = vi.fn(async () => 0);
     prisma.licenseAssignment.findFirst = vi.fn(async () => null);
@@ -140,9 +143,15 @@ describe('LLM route protection', () => {
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body);
     expect(body.disclaimer).toMatch(/educational/i);
+    expect(body.publication).toMatchObject({
+      contractVersion: 1,
+      status: 'available',
+      reasonCode: null,
+    });
+    expect(body).not.toHaveProperty('result');
     // Server clamped maxTokens, never sent the user's giant value
-    expect(body.result).toMatch(/EXPL\(\d+\):\d+$/);
-    const reportedMax = Number(body.result.split(':')[1]);
+    expect(body.publication.content).toMatch(/EXPL\(\d+\):\d+$/);
+    const reportedMax = Number(body.publication.content.split(':')[1]);
     expect(reportedMax).toBeLessThanOrEqual(llmInternals.DEFAULT_MAX_TOKENS);
   });
 
@@ -226,7 +235,7 @@ describe('LLM route protection', () => {
     expect(stillOk.statusCode).toBe(200);
   });
 
-  it('upstream LLM failure does NOT consume usage', async () => {
+  it('maps upstream LLM failure to unavailable content and persists null-content telemetry', async () => {
     const llmService = await import('../services/llm.js');
     llmService.generateExplanation.mockImplementationOnce(async () => {
       throw new Error('upstream timeout');
@@ -239,14 +248,75 @@ describe('LLM route protection', () => {
       headers: { cookie },
       payload: invokePayload(),
     });
-    expect(res.statusCode).toBeGreaterThanOrEqual(500);
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body).toMatchObject({
+      publication: {
+        contractVersion: 1,
+        status: 'unavailable',
+        content: null,
+        reasonCode: 'provider_unavailable',
+      },
+    });
+    expect(body).not.toHaveProperty('result');
 
-    // Importantly: no learningSession row was written for the failed call.
-    expect(
-      prisma._store.learningSession.filter(
-        (s) => s.userId === 'free-user' && s.type === 'explanation',
-      ),
-    ).toHaveLength(0);
+    const charged = prisma._store.learningSession.filter(
+      (s) => s.userId === 'free-user' && s.type === 'explanation',
+    );
+    const persistedStatus = prisma._store.learningSession.filter(
+      (s) => s.userId === 'free-user' && s.type === 'publication_status',
+    );
+    expect(charged).toHaveLength(0);
+    expect(persistedStatus).toHaveLength(1);
+    expect(persistedStatus[0].content.publication).toMatchObject({
+      contractVersion: 1,
+      status: 'unavailable',
+      content: null,
+      reasonCode: 'provider_unavailable',
+    });
+    expect(JSON.stringify(persistedStatus[0].content)).not.toContain('upstream timeout');
+  });
+
+  it('maps provider truncation to a visible partial artifact', async () => {
+    const llmService = await import('../services/llm.js');
+    llmService.generateExplanation.mockResolvedValueOnce({
+      text: 'A bounded but incomplete research summary.',
+      completion: 'truncated',
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/llm/invoke',
+      headers: {
+        cookie: authCookie({ userId: 'free-user', email: 'free@example.com', role: 'user' }),
+      },
+      payload: invokePayload(),
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.publication).toMatchObject({
+      contractVersion: 1,
+      status: 'partial',
+      content: 'A bounded but incomplete research summary.',
+      reasonCode: 'provider_truncated',
+    });
+    expect(body).not.toHaveProperty('result');
+    expect(body.publication.limitations).not.toHaveLength(0);
+  });
+
+  it('rejects unsupported generation option fields', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/llm/invoke',
+      headers: {
+        cookie: authCookie({ userId: 'free-user', email: 'free@example.com', role: 'user' }),
+      },
+      payload: invokePayload({ maxTokens: 100, arbitrary: true }),
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(prisma.learningSession.count).not.toHaveBeenCalled();
   });
 
   it('premium user is not subject to the daily limit', async () => {

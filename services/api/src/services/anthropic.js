@@ -48,7 +48,19 @@ async function getClient() {
   return client;
 }
 
-export async function generateText(
+function normalizeCompletion(response) {
+  const textBlock = response.content.find((block) => block.type === 'text');
+  const completion = response.stop_reason === 'max_tokens'
+    ? 'truncated'
+    : response.stop_reason === 'refusal'
+      ? 'filtered'
+      : response.stop_reason === 'end_turn' || response.stop_reason === 'stop_sequence'
+        ? 'complete'
+        : 'failed';
+  return { text: textBlock?.text || '', completion };
+}
+
+export async function generateTextResult(
   prompt,
   { model = DEFAULT_ANTHROPIC_MODEL, maxTokens = 2000, temperature = 0.7, timeoutMs = 30_000 } = {}
 ) {
@@ -60,11 +72,14 @@ export async function generateText(
     },
     { timeout: timeoutMs }
   );
-  const textBlock = response.content.find((block) => block.type === 'text');
-  return textBlock?.text || '';
+  return normalizeCompletion(response);
 }
 
-export async function generateChatResponse(
+export async function generateText(prompt, options = {}) {
+  return (await generateTextResult(prompt, options)).text;
+}
+
+export async function generateChatResponseResult(
   messages,
   { model = DEFAULT_ANTHROPIC_MODEL, maxTokens = 2000, temperature = 0.7, timeoutMs = 30_000 } = {}
 ) {
@@ -95,6 +110,11 @@ export async function generateChatResponse(
   }
 
   const response = await anthropic.messages.create(params, { timeout: timeoutMs });
-  const textBlock = response.content.find((block) => block.type === 'text');
-  return textBlock?.text || '';
+  return normalizeCompletion(response);
 }
+
+export async function generateChatResponse(messages, options = {}) {
+  return (await generateChatResponseResult(messages, options)).text;
+}
+
+export const __test = { normalizeCompletion };

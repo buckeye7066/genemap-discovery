@@ -28,6 +28,10 @@
     "./associationClaim": {
       "types": "./dist/associationClaim.d.ts",
       "import": "./dist/associationClaim.js"
+    },
+    "./publicationStatus": {
+      "types": "./dist/publicationStatus.d.ts",
+      "import": "./dist/publicationStatus.js"
     }
   },
   "dependencies": {

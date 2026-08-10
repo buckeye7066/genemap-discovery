@@ -18,6 +18,7 @@ import type {
   LearningProgress,
   LLMOptions,
   LLMResponse,
+  PublicationTaskContent,
   PublicationTaskRequest,
   SearchHistoryEntry,
   ActivityEntry,
@@ -38,7 +39,9 @@ import type {
   UnbanOptions,
   AuthoritativeGeneRecord,
   PublicationConceptSuggestion,
+  Topic,
 } from './types.js';
+import type { PublicationArtifact } from './publicationStatus.js';
 
 /**
  * Resolve the API base URL.
@@ -487,8 +490,9 @@ export class ApiClient {
     return res.categories;
   }
   getExplanation(data: ExplanationRequest): Promise<{
-    explanation: string;
+    publication: PublicationArtifact<string>;
     topic: string;
+    topicMetadata: Topic & { category: string; catalogVersion: number };
     level: string;
     sources: EducationSource[];
     usage: unknown;
@@ -497,21 +501,19 @@ export class ApiClient {
     return this.request('/education/explain', { method: 'POST', body: JSON.stringify(data) });
   }
   generateImage(data: ImageGenerationRequest): Promise<{
-    imageUrl: string;
-    revisedPrompt?: string;
+    publication: PublicationArtifact<{ imageUrl: string; revisedPrompt: string | null }>;
     topic: string;
+    topicMetadata: Topic & { category: string; catalogVersion: number };
     level: string;
     usage: unknown;
     tier: string;
   }> {
-    // Image generation (DALL·E, plus a possible dall-e-2 fallback) is slower
-    // than a text call and can exceed the default request timeout — give it a
-    // longer budget so the browser doesn't abort a still-running generation.
-    return this.request('/education/image', { method: 'POST', body: JSON.stringify(data), timeoutMs: 90_000 });
+    return this.request('/education/image', { method: 'POST', body: JSON.stringify(data) });
   }
   generateQuiz(data: QuizRequest): Promise<{
-    questions: unknown[];
+    publication: PublicationArtifact<unknown[]>;
     topic: string;
+    topicMetadata: Topic & { category: string; catalogVersion: number };
     level: string;
     usage: unknown;
     tier: string;
@@ -519,8 +521,9 @@ export class ApiClient {
     return this.request('/education/quiz', { method: 'POST', body: JSON.stringify(data) });
   }
   chat(data: ChatRequest): Promise<{
-    response: string;
+    publication: PublicationArtifact<string>;
     role: 'assistant';
+    topicMetadata: Topic & { category: string; catalogVersion: number };
     sources: EducationSource[];
     usage: unknown;
     tier: string;
@@ -542,7 +545,7 @@ export class ApiClient {
     publicationTask: T['publicationTask'],
     taskInput: T['taskInput'],
     options: LLMOptions = {},
-  ): Promise<LLMResponse> {
+  ): Promise<LLMResponse<PublicationTaskContent<T['publicationTask']>>> {
     const { publicationTask: _legacyTask, agent: _retiredAgent, ...llmOptions } =
       options as LLMOptions & { agent?: unknown };
     return this.request('/llm/invoke', {

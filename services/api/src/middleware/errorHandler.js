@@ -18,6 +18,30 @@ function isAppError(error) {
   );
 }
 
+const NON_PUBLISHABLE_STATUSES = new Set(['withheld', 'unavailable', 'superseded']);
+
+/**
+ * Operational errors may expose only a validated non-publishable artifact.
+ * This lets clients render an honest recovery state while ensuring generated
+ * or fetched content can never leak through an error-details side channel.
+ */
+export function publicationErrorDetails(error) {
+  const publication = error?.details?.publication;
+  if (!publication || typeof publication !== 'object' || Array.isArray(publication)) return undefined;
+  if (publication.contractVersion !== 1
+    || !NON_PUBLISHABLE_STATUSES.has(publication.status)
+    || publication.content !== null
+    || typeof publication.reasonCode !== 'string'
+    || !/^[a-z0-9][a-z0-9_.-]{0,63}$/u.test(publication.reasonCode)
+    || typeof publication.correlationId !== 'string'
+    || !/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/u.test(publication.correlationId)
+    || !Array.isArray(publication.limitations)
+    || publication.limitations.some((item) => typeof item !== 'string')) {
+    return undefined;
+  }
+  return { publication };
+}
+
 /**
  * A stable route label for logs / owner email / Sentry that NEVER carries user
  * values. Prefer the route PATTERN (e.g. "/genomics/gene/:symbol"); fall back to
@@ -75,10 +99,12 @@ export function errorHandler(error, request, reply) {
   }
 
   if (isAppError(error)) {
+    const details = publicationErrorDetails(error);
     return reply.status(error.statusCode).send({
       error: error.message,
       code: error.code,
       requestId,
+      ...(details ? { details } : {}),
     });
   }
 

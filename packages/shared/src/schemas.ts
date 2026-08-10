@@ -46,6 +46,48 @@ export const userSchema = z.object({
   }).optional(),
 });
 
+export const publicationStatusSchema = z.enum([
+  'available',
+  'partial',
+  'withheld',
+  'unavailable',
+  'superseded',
+]);
+
+export const publicationArtifactSchema = <T extends z.ZodTypeAny>(contentSchema: T) => z.object({
+  contractVersion: z.literal(1),
+  status: publicationStatusSchema,
+  content: contentSchema.nullable(),
+  reasonCode: z.string().regex(/^[a-z0-9][a-z0-9_.-]{0,63}$/u).nullable(),
+  correlationId: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/u),
+  limitations: z.array(z.string().trim().min(1)),
+}).strict().superRefine((artifact, context) => {
+  const contentAllowed = artifact.status === 'available' || artifact.status === 'partial';
+  if (contentAllowed !== (artifact.content !== null)) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['content'],
+      message: contentAllowed
+        ? 'Available or partial artifacts require content.'
+        : 'Non-publishable artifacts cannot carry content.',
+    });
+  }
+  if (artifact.status === 'partial' && artifact.limitations.length === 0) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['limitations'],
+      message: 'Partial artifacts require a visible limitation.',
+    });
+  }
+  if (artifact.status !== 'available' && artifact.reasonCode === null) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['reasonCode'],
+      message: 'Non-available artifacts require a reason code.',
+    });
+  }
+});
+
 // ─── Inferred Types from Schemas ────────────────────────────────────────────
 
 export type RegisterInput = z.infer<typeof registerSchema>;

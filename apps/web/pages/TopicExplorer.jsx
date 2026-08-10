@@ -8,12 +8,15 @@ import UsageBanner from '@/components/education/UsageBanner';
 import MedicalDisclaimer from '@/components/shared/MedicalDisclaimer';
 import SourceList from '@/components/shared/SourceList';
 import { safeModelMarkdownComponents } from '@/components/shared/safeModelMarkdown';
+import PublicationState, {
+  enforcePublicationContentType,
+  publicationContent,
+} from '@/components/shared/PublicationState';
 import { apiClient } from '@genemap/shared';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Badge } from '@/components/ui/badge';
 import { ArrowLeft, BookOpen, Image, MessageSquare, HelpCircle, RefreshCw } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 
@@ -26,6 +29,9 @@ import ReactMarkdown from 'react-markdown';
  * upstream sanitizer regresses.
  */
 const ChatBubble = React.memo(function ChatBubble({ msg }) {
+  const generatedContent = msg.role === 'assistant'
+    ? publicationContent(msg.publication)
+    : null;
   return (
     <div className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-slide-up`}>
       <div className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
@@ -34,8 +40,13 @@ const ChatBubble = React.memo(function ChatBubble({ msg }) {
           : 'bg-white border border-slate-200 text-slate-700 shadow-sm'
       }`}>
         {msg.role === 'assistant' ? (
-          <div className="prose prose-sm max-w-none prose-p:my-1 prose-li:my-0">
-            <ReactMarkdown components={safeModelMarkdownComponents}>{msg.content}</ReactMarkdown>
+          <div className="space-y-2">
+            <PublicationState artifact={msg.publication} />
+            {typeof generatedContent === 'string' && (
+              <div className="prose prose-sm max-w-none prose-p:my-1 prose-li:my-0">
+                <ReactMarkdown components={safeModelMarkdownComponents}>{generatedContent}</ReactMarkdown>
+              </div>
+            )}
           </div>
         ) : (
           msg.content
@@ -55,6 +66,13 @@ const TUTOR_ACTIONS = Object.freeze([
 const EDUCATION_LEVELS = new Set([
   'elementary', 'middle_school', 'high_school', 'undergraduate', 'graduate', 'postgraduate',
 ]);
+
+function isSafeGeneratedImageUrl(value) {
+  return typeof value === 'string' && (
+    /^https:\/\/[^\s]+$/iu.test(value)
+    || /^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/u.test(value)
+  );
+}
 
 // Landing view for /topicexplorer with no ?topic — lets the user browse and
 // pick a topic without having to detour through the Learn Genetics page.
@@ -112,7 +130,7 @@ function TopicBrowser({ navigate, levelConfig }) {
               {cat.topics.map((topic) => (
                 <button
                   key={topic.id}
-                  onClick={() => navigate(`/topicexplorer?topic=${encodeURIComponent(topic.id)}&title=${encodeURIComponent(topic.title)}`)}
+                  onClick={() => navigate(`/topicexplorer?topic=${encodeURIComponent(topic.id)}`)}
                   className="text-left p-3 rounded-lg border border-slate-200 bg-white/70 hover:border-blue-300 hover:bg-blue-50/50 transition-all text-sm font-medium text-slate-700"
                 >
                   {topic.title}
@@ -132,43 +150,85 @@ export default function TopicExplorer() {
   const { level, levelConfig } = useEducationLevel();
 
   const topicId = searchParams.get('topic') || '';
-  const topicTitle = searchParams.get('title') || topicId;
 
-  const [explanation, setExplanation] = useState('');
+  const [catalogTopic, setCatalogTopic] = useState(null);
+  const [catalogLoading, setCatalogLoading] = useState(false);
+  const [topicMetadata, setTopicMetadata] = useState(null);
+  const [explanationPublication, setExplanationPublication] = useState(null);
+  const [explanationError, setExplanationError] = useState('');
   const [sources, setSources] = useState([]);
-  const [imageData, setImageData] = useState(null);
+  const [imagePublication, setImagePublication] = useState(null);
+  const [imageError, setImageError] = useState('');
   const [chatMessages, setChatMessages] = useState([]);
   const [loading, setLoading] = useState({ explanation: false, image: false, chat: false });
 
   useEffect(() => {
-    setImageData(null);
+    let active = true;
+    setCatalogTopic(null);
+    setTopicMetadata(null);
+    setImagePublication(null);
+    setImageError('');
     setChatMessages([]);
-    setExplanation('');
+    setExplanationPublication(null);
+    setExplanationError('');
     setSources([]);
+    if (!topicId) return () => { active = false; };
+
+    setCatalogLoading(true);
+    apiClient.getTopics()
+      .then((categories) => {
+        if (!active) return;
+        const match = (Array.isArray(categories) ? categories : [])
+          .flatMap((category) => (Array.isArray(category?.topics) ? category.topics : []).map((topic) => ({
+            ...topic,
+            category: category.category,
+          })))
+          .find((topic) => topic?.id === topicId);
+        if (!match) {
+          setExplanationError('This education topic is unavailable because it is not in the reviewed catalog.');
+          return;
+        }
+        setCatalogTopic(match);
+        setTopicMetadata(match);
+      })
+      .catch((error) => {
+        if (active) setExplanationError(error?.message || 'The reviewed topic catalog is unavailable.');
+      })
+      .finally(() => {
+        if (active) setCatalogLoading(false);
+      });
+    return () => { active = false; };
   }, [topicId]);
 
   useEffect(() => {
-    if (topicTitle) {
+    if (catalogTopic?.id === topicId) {
       loadExplanation();
     }
-  }, [topicTitle, level]);
+  }, [catalogTopic?.id, level]);
 
   if (!topicId) {
     return <TopicBrowser navigate={navigate} levelConfig={levelConfig} />;
   }
 
   const loadExplanation = async () => {
-    if (!topicTitle) {
-      setExplanation('Pick a topic from Learn Genetics to see an explanation.');
-      return;
-    }
+    if (!topicId || catalogTopic?.id !== topicId) return;
     setLoading(prev => ({ ...prev, explanation: true }));
+    setExplanationError('');
     try {
       const res = await apiClient.getExplanation({ topic: topicId, level: level || 'undergraduate' });
-      setExplanation(res.explanation || '');
-      setSources(Array.isArray(res.sources) ? res.sources : []);
+      const publication = enforcePublicationContentType(
+        res?.publication,
+        (content) => typeof content === 'string' && Boolean(content.trim()),
+      );
+      if (res?.topicMetadata?.id !== topicId) {
+        throw new Error('The server returned mismatched topic metadata.');
+      }
+      setExplanationPublication(publication);
+      setTopicMetadata(res?.topicMetadata || null);
+      setSources(publicationContent(publication) && Array.isArray(res.sources) ? res.sources : []);
     } catch (err) {
-      setExplanation(`Unable to load explanation: ${err.message}`);
+      setExplanationPublication(null);
+      setExplanationError(err?.message || 'Unable to load this topic.');
       setSources([]);
     } finally {
       setLoading(prev => ({ ...prev, explanation: false }));
@@ -176,22 +236,33 @@ export default function TopicExplorer() {
   };
 
   const loadImage = async () => {
-    if (!topicTitle) {
-      setImageData({ error: 'Pick a topic from Learn Genetics first, then generate an illustration.' });
-      return;
-    }
+    if (!topicId || catalogTopic?.id !== topicId) return;
     setLoading(prev => ({ ...prev, image: true }));
+    setImageError('');
     try {
       const res = await apiClient.generateImage({ topic: topicId, level: level || 'undergraduate' });
-      setImageData(res);
+      if (res?.topicMetadata?.id !== topicId) {
+        throw new Error('The server returned mismatched topic metadata.');
+      }
+      setImagePublication(enforcePublicationContentType(
+        res?.publication,
+        (content) => Boolean(
+          content
+          && typeof content === 'object'
+          && isSafeGeneratedImageUrl(content.imageUrl),
+        ),
+      ));
+      setTopicMetadata(res?.topicMetadata || null);
     } catch (err) {
-      setImageData({ error: err.message });
+      setImagePublication(null);
+      setImageError(err?.message || 'Unable to generate an illustration.');
     } finally {
       setLoading(prev => ({ ...prev, image: false }));
     }
   };
 
   const sendChat = async (interaction, label) => {
+    if (!topicId || catalogTopic?.id !== topicId) return;
     setChatMessages((previous) => [...previous, { role: 'user', content: label }]);
     setLoading(prev => ({ ...prev, chat: true }));
 
@@ -205,13 +276,28 @@ export default function TopicExplorer() {
           interaction,
         },
       });
-      setChatMessages(prev => [...prev, { role: 'assistant', content: res.response }]);
+      if (res?.topicMetadata?.id !== topicId) {
+        throw new Error('The server returned mismatched topic metadata.');
+      }
+      setTopicMetadata(res?.topicMetadata || null);
+      setChatMessages(prev => [...prev, {
+        role: 'assistant',
+        publication: enforcePublicationContentType(
+          res?.publication,
+          (content) => typeof content === 'string' && Boolean(content.trim()),
+        ),
+      }]);
     } catch (err) {
-      setChatMessages(prev => [...prev, { role: 'assistant', content: `Sorry, I encountered an error: ${err.message}` }]);
+      setChatMessages(prev => [...prev, {
+        role: 'system',
+        content: `The tutor request could not be completed: ${err?.message || 'unknown error'}`,
+      }]);
     } finally {
       setLoading(prev => ({ ...prev, chat: false }));
     }
   };
+
+  const topicTitle = topicMetadata?.title || catalogTopic?.title || 'Topic Explorer';
 
   return (
     <div className="p-4 md:p-6 max-w-5xl mx-auto space-y-6 dna-bg min-h-screen">
@@ -252,13 +338,14 @@ export default function TopicExplorer() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="text-lg">Explanation</CardTitle>
-              <Button variant="ghost" size="sm" onClick={loadExplanation} disabled={loading.explanation}>
+              <Button variant="ghost" size="sm" onClick={loadExplanation} disabled={loading.explanation || catalogLoading || !catalogTopic}>
                 <RefreshCw className={`w-4 h-4 ${loading.explanation ? 'animate-spin' : ''}`} />
               </Button>
             </CardHeader>
             <CardContent>
-              <AdaptiveExplanation content={explanation} loading={loading.explanation} level={level} />
-              {!loading.explanation && explanation && <SourceList sources={sources} />}
+              {explanationError && <p className="mb-3 text-sm text-red-700" role="alert">{explanationError}</p>}
+              <AdaptiveExplanation artifact={explanationPublication} loading={loading.explanation} level={level} />
+              {!loading.explanation && publicationContent(explanationPublication) && <SourceList sources={sources} />}
             </CardContent>
           </Card>
         </TabsContent>
@@ -267,12 +354,13 @@ export default function TopicExplorer() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="text-lg">Visual Illustration</CardTitle>
-              <Button variant="outline" size="sm" onClick={loadImage} disabled={loading.image}>
-                {imageData ? 'Regenerate' : 'Generate'} Image
+              <Button variant="outline" size="sm" onClick={loadImage} disabled={loading.image || catalogLoading || !catalogTopic}>
+                {imagePublication ? 'Regenerate' : 'Generate'} Image
               </Button>
             </CardHeader>
             <CardContent>
-              <AdaptiveImage data={imageData} loading={loading.image} level={level} topic={topicTitle} />
+              {imageError && <p className="mb-3 text-sm text-red-700" role="alert">{imageError}</p>}
+              <AdaptiveImage artifact={imagePublication} loading={loading.image} level={level} topic={topicTitle} />
             </CardContent>
           </Card>
         </TabsContent>
@@ -317,7 +405,7 @@ export default function TopicExplorer() {
                     type="button"
                     variant="outline"
                     onClick={() => sendChat(interaction, label)}
-                    disabled={loading.chat}
+                    disabled={loading.chat || catalogLoading || !catalogTopic}
                     className="h-auto min-h-11 whitespace-normal"
                   >
                     {label}
@@ -337,7 +425,8 @@ export default function TopicExplorer() {
               <p className="text-slate-600 mb-4">Test your knowledge of {topicTitle || 'this topic'} at your learning level.</p>
               <Button
                 className="bg-gradient-to-r from-purple-500 to-pink-500 text-white"
-                onClick={() => navigate(`/quizmode?topic=${encodeURIComponent(topicId)}&title=${encodeURIComponent(topicTitle)}`)}
+                disabled={catalogLoading || !catalogTopic}
+                onClick={() => navigate(`/quizmode?topic=${encodeURIComponent(topicId)}`)}
               >
                 Start Quiz
               </Button>

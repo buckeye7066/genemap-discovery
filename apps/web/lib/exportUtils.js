@@ -9,11 +9,154 @@ import {
  * Provides PDF-like HTML export, JSON export, and shareable summaries.
  */
 
+const EXPORTABLE_PUBLICATION_STATUSES = new Set(['available', 'partial']);
+const PUBLICATION_STATUSES = new Set([
+  'available',
+  'partial',
+  'withheld',
+  'unavailable',
+  'superseded',
+]);
+const CORRELATION_ID = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/u;
+const REASON_CODE = /^[a-z0-9][a-z0-9_.-]{0,63}$/u;
+
+function isCanonicalPublicationArtifactForExport(artifact) {
+  if (!artifact || typeof artifact !== 'object') return false;
+  if (artifact.contractVersion !== 1 || !PUBLICATION_STATUSES.has(artifact.status)) return false;
+  if (!Object.prototype.hasOwnProperty.call(artifact, 'content')) return false;
+  if (typeof artifact.correlationId !== 'string' || !CORRELATION_ID.test(artifact.correlationId)) return false;
+  if (artifact.reasonCode !== null && (
+    typeof artifact.reasonCode !== 'string'
+    || !REASON_CODE.test(artifact.reasonCode)
+  )) return false;
+  if (artifact.status !== 'available' && artifact.reasonCode === null) return false;
+  if (!Array.isArray(artifact.limitations) || !artifact.limitations.every((item) => (
+    typeof item === 'string'
+    && item.length > 0
+    && item === item.trim()
+  )) || new Set(artifact.limitations).size !== artifact.limitations.length) return false;
+  if (EXPORTABLE_PUBLICATION_STATUSES.has(artifact.status)) {
+    if (artifact.content === null || artifact.content === undefined) return false;
+    return artifact.status !== 'partial' || artifact.limitations.length > 0;
+  }
+  return artifact.content === null;
+}
+
+/** Export paths enforce the publication boundary independently of the UI. */
+export function isPublicationExportable(artifact) {
+  return Boolean(
+    isCanonicalPublicationArtifactForExport(artifact)
+    && EXPORTABLE_PUBLICATION_STATUSES.has(artifact.status)
+  );
+}
+
+function sanitizePublicationArtifact(artifact, seen) {
+  const canonical = isCanonicalPublicationArtifactForExport(artifact);
+  const exportable = isPublicationExportable(artifact);
+  return {
+    contractVersion: 1,
+    status: canonical ? artifact.status : 'unavailable',
+    content: exportable ? sanitizeExportValue(artifact.content, seen) : null,
+    reasonCode: !canonical
+      ? 'invalid_publication_envelope'
+      : artifact.reasonCode,
+    correlationId: typeof artifact?.correlationId === 'string' && CORRELATION_ID.test(artifact.correlationId)
+      ? artifact.correlationId
+      : 'client-invalid-publication',
+    limitations: canonical ? [...artifact.limitations] : [],
+  };
+}
+
+function looksLikePublicationArtifact(value) {
+  return Boolean(
+    value
+    && typeof value === 'object'
+    && Object.prototype.hasOwnProperty.call(value, 'status')
+    && Object.prototype.hasOwnProperty.call(value, 'content')
+    && (
+      Object.prototype.hasOwnProperty.call(value, 'contractVersion')
+      || Object.prototype.hasOwnProperty.call(value, 'correlationId')
+      || Object.prototype.hasOwnProperty.call(value, 'reasonCode')
+      || Object.prototype.hasOwnProperty.call(value, 'limitations')
+    ),
+  );
+}
+
+function sanitizeExportValue(value, seen = new WeakSet()) {
+  if (value === null || typeof value !== 'object') return value;
+  if (seen.has(value)) return '[Circular reference omitted]';
+  seen.add(value);
+  if (looksLikePublicationArtifact(value)) return sanitizePublicationArtifact(value, seen);
+  if (Array.isArray(value)) return value.map((item) => sanitizeExportValue(item, seen));
+  const sanitized = Object.fromEntries(Object.entries(value).map(([key, item]) => [
+    key,
+    sanitizeExportValue(item, seen),
+  ]));
+  if (looksLikePublicationArtifact(value.publication)) {
+    for (const legacyAlias of [
+      'result',
+      'response',
+      'explanation',
+      'questions',
+      'imageUrl',
+      'revisedPrompt',
+      'analysis',
+    ]) {
+      delete sanitized[legacyAlias];
+    }
+  }
+  return sanitized;
+}
+
+export function publicationSafeGene(gene = {}) {
+  const source = gene && typeof gene === 'object' ? gene : {};
+  const candidateReusable = isPublicationExportable(source.candidatePublication);
+  const profileReusable = isPublicationExportable(source.profilePublication)
+    && source.profileStatus === 'available';
+  const safe = sanitizeExportValue(source);
+
+  if (!candidateReusable) {
+    delete safe.explanation;
+    delete safe.description;
+    delete safe.associationType;
+    delete safe.association_type;
+    delete safe.diseases;
+    if (!safe.coordinatesVerified) {
+      delete safe.name;
+      delete safe.fullName;
+    }
+  }
+  if (!profileReusable) {
+    delete safe.aiSummary;
+    delete safe.keyTakeaways;
+    safe.phenotypes = [];
+    safe.expressionData = [];
+  }
+  if (!safe.coordinatesVerified) {
+    delete safe.chromosome;
+    delete safe.location;
+    delete safe.start;
+    delete safe.end;
+    delete safe.ensemblId;
+    delete safe.entrezId;
+    delete safe.genomeBuild;
+    delete safe.omimId;
+  }
+  return safe;
+}
+
+export function publicationSafeExportData(data) {
+  return data && typeof data === 'object' && ('symbol' in data || 'associationClaims' in data)
+    ? publicationSafeGene(data)
+    : sanitizeExportValue(data);
+}
+
 /**
  * Export data as a downloadable JSON file.
  */
 export function exportJSON(data, filename) {
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const safeData = publicationSafeExportData(data);
+  const blob = new Blob([JSON.stringify(safeData, null, 2)], { type: 'application/json' });
   downloadBlob(blob, `${filename}.json`);
 }
 
@@ -21,9 +164,14 @@ export function exportJSON(data, filename) {
  * Export data as a CSV file.
  */
 export function exportCSV(rows, headers, filename) {
+  const safeRows = rows.map((row) => (
+    row && typeof row === 'object' && ('symbol' in row || 'associationClaims' in row)
+      ? publicationSafeGene(row)
+      : publicationSafeExportData(row)
+  ));
   const csvRows = [
     headers.join(','),
-    ...rows.map(row =>
+    ...safeRows.map(row =>
       headers.map(h => {
         const val = row[h] ?? '';
         const escaped = String(val).replace(/"/g, '""');
@@ -158,12 +306,35 @@ function associationClaimContent(claim, index) {
     </div>`;
 }
 
+function publicationBoundaryContent(gene) {
+  const entries = [
+    ['Candidate lead', gene?.candidatePublication],
+    ['Generated profile', gene?.profilePublication],
+  ].filter(([, artifact]) => artifact && typeof artifact === 'object');
+  if (entries.length === 0) return null;
+
+  return entries.map(([label, artifact]) => {
+    const limitations = Array.isArray(artifact.limitations)
+      ? artifact.limitations.filter((item) => typeof item === 'string' && item.trim())
+      : [];
+    return `
+      <div class="notice">
+        <p><strong>${escapeHtml(label)} publication:</strong> ${escapeHtml(displayValue(artifact.status, 'unavailable'))}</p>
+        ${artifact.correlationId ? `<p>Correlation: ${escapeHtml(artifact.correlationId)}</p>` : ''}
+        ${artifact.reasonCode ? `<p>Reason: ${escapeHtml(artifact.reasonCode)}</p>` : ''}
+        ${limitations.length
+          ? `<p>Limitations:</p><ul>${limitations.map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ul>`
+          : ''}
+      </div>`;
+  }).join('');
+}
+
 /**
  * Build the printable gene-report sections as a pure function so provenance
  * completeness and escaping can be regression-tested without opening a window.
  */
 export function buildGeneReportSections(gene = {}) {
-  gene = gene ?? {};
+  gene = publicationSafeGene(gene);
   const sections = [];
   const claims = Array.isArray(gene.associationClaims) ? gene.associationClaims : [];
   const rankingLabel = rankingLabelFor(rankingBasisForGene(gene, claims));
@@ -182,6 +353,14 @@ export function buildGeneReportSections(gene = {}) {
       ${gene.description ? `<p>${escapeHtml(gene.description)}</p>` : ''}
     `,
   });
+
+  const publicationBoundary = publicationBoundaryContent(gene);
+  if (publicationBoundary) {
+    sections.push({
+      title: 'Publication Status',
+      content: publicationBoundary,
+    });
+  }
 
   sections.push({
     title: 'Evidence and Source Provenance',
@@ -232,10 +411,11 @@ export function buildGeneReportSections(gene = {}) {
  * Generate a gene card report.
  */
 export function exportGeneReport(gene) {
+  const safeGene = publicationSafeGene(gene);
   exportReport({
-    title: `Gene Report: ${gene?.symbol || 'Unknown gene'}`,
-    subtitle: gene?.name || gene?.fullName,
-    sections: buildGeneReportSections(gene),
+    title: `Gene Report: ${safeGene.symbol || 'Unknown gene'}`,
+    subtitle: safeGene.name || safeGene.fullName,
+    sections: buildGeneReportSections(safeGene),
   });
 }
 
@@ -284,7 +464,7 @@ export function exportVCFReport(variants, summary) {
  * Build a provenance-preserving plain-text gene summary.
  */
 export function buildGeneShareText(data = {}) {
-  data = data ?? {};
+  data = publicationSafeGene(data);
   const claims = Array.isArray(data.associationClaims) ? data.associationClaims : [];
   const lines = [
     `GeneMap Discovery - Gene: ${displayValue(data.symbol, 'Unknown gene')}`,
@@ -292,6 +472,19 @@ export function buildGeneShareText(data = {}) {
     `Location: ${displayValue([data.chromosome, data.location].filter(Boolean).join(' · '))}`,
     `Ranking: ${rankingLabelFor(rankingBasisForGene(data, claims))}`,
   ];
+
+  for (const [label, artifact] of [
+    ['Candidate lead publication', data.candidatePublication],
+    ['Generated profile publication', data.profilePublication],
+  ]) {
+    if (!artifact || typeof artifact !== 'object') continue;
+    lines.push(`${label}: ${displayValue(artifact.status, 'unavailable')}`);
+    if (artifact.correlationId) lines.push(`${label} correlation: ${artifact.correlationId}`);
+    if (artifact.reasonCode) lines.push(`${label} reason: ${artifact.reasonCode}`);
+    for (const limitation of artifact.limitations || []) {
+      lines.push(`${label} limitation: ${limitation}`);
+    }
+  }
 
   if (claims.length) {
     lines.push('Evidence and source provenance:');
@@ -334,7 +527,7 @@ export function buildGeneShareText(data = {}) {
 export async function copyShareableLink(data, type = 'gene') {
   const text = type === 'gene'
     ? buildGeneShareText(data)
-    : `GeneMap Discovery Analysis\n${JSON.stringify(data, null, 2).substring(0, 500)}`;
+    : `GeneMap Discovery Analysis\n${JSON.stringify(publicationSafeExportData(data), null, 2).substring(0, 500)}`;
 
   try {
     await navigator.clipboard.writeText(text);

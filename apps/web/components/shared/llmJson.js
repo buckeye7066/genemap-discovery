@@ -10,13 +10,46 @@
  *   2. extract the first balanced {...} / [...] block (ignoring surrounding prose),
  *   3. parse without throwing.
  *
- * @param {*} raw - the model output. May already be a parsed object (some
- *   providers return structured JSON), a string, or { result } envelope.
+ * @param {*} raw - the API response carrying a canonical publication envelope.
  * @param {*} [fallback={}] - returned when parsing fails.
  */
+const CORRELATION_ID = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/u;
+const REASON_CODE = /^[a-z0-9][a-z0-9_.-]{0,63}$/u;
+
+export function reusablePublicationArtifact(raw) {
+  const artifact = raw && typeof raw === 'object' ? raw.publication : null;
+  const limitationsAreCanonical = Array.isArray(artifact?.limitations)
+    && artifact.limitations.every((item) => (
+      typeof item === 'string'
+      && item.length > 0
+      && item === item.trim()
+    ))
+    && new Set(artifact.limitations).size === artifact.limitations.length;
+  const reasonIsCanonical = artifact?.reasonCode === null || (
+    typeof artifact?.reasonCode === 'string'
+    && REASON_CODE.test(artifact.reasonCode)
+  );
+  const canUseContent = Boolean(
+    artifact
+    && artifact.contractVersion === 1
+    && Object.prototype.hasOwnProperty.call(artifact, 'content')
+    && (artifact.status === 'available' || artifact.status === 'partial')
+    && typeof artifact.correlationId === 'string'
+    && CORRELATION_ID.test(artifact.correlationId)
+    && reasonIsCanonical
+    && (artifact.status === 'available' || artifact.reasonCode !== null)
+    && limitationsAreCanonical
+    && (artifact.status !== 'partial' || artifact.limitations.length > 0)
+    && artifact.content !== null
+    && artifact.content !== undefined,
+  );
+  return canUseContent ? artifact : null;
+}
+
 export function parseLLMJson(raw, fallback = {}) {
-  // Unwrap the { result, disclaimer } envelope invokeLLM resolves to.
-  const value = raw && typeof raw === 'object' && 'result' in raw ? raw.result : raw;
+  const artifact = reusablePublicationArtifact(raw);
+  if (!artifact) return fallback;
+  const value = artifact.content;
 
   if (value && typeof value === 'object') return value;
   if (typeof value !== 'string' || !value.trim()) return fallback;

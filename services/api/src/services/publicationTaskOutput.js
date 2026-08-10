@@ -1,3 +1,8 @@
+import {
+  createPublicationArtifact,
+  PUBLICATION_STATUSES,
+} from '@genemap/shared';
+
 const GENE_SYMBOL = /^[A-Z0-9][A-Z0-9-]{1,14}$/u;
 const TASKS = Object.freeze({
   AGGREGATE_RESEARCH: 'aggregate_genomics_research',
@@ -11,16 +16,28 @@ const RESEARCH_TASKS = new Set([
   TASKS.RESEARCH_HYPOTHESIS,
 ]);
 const ALLOWED_QUERY_TYPES = new Set(['disease', 'phenotype', 'hpo_term']);
-const PUBLICATION_BOUNDARY_MESSAGE = 'The AI response was withheld because it crossed GeneMap Discovery\'s education and non-clinical publication boundary. No model-generated clinical guidance was shown.';
-const EMPTY_RESEARCH_MESSAGE = 'No bounded research narrative was returned. Review the structured cohort fields and try again.';
-const EMPTY_LEARNING_MESSAGE = 'No bounded learning observation was returned. Refresh after additional verified learning activity.';
-const EMPTY_EDUCATION_MESSAGE = 'No bounded genetics-education response was returned. Review the selected topic and try again.';
 const WITHHELD_PROFILE_SUMMARY = 'Generated profile withheld because the response crossed GeneMap Discovery\'s non-clinical publication boundary. No clinical guidance was shown.';
 const UNAVAILABLE_PROFILE_SUMMARY = 'Generated profile unavailable. This gene remains an unverified AI-suggested candidate lead; verify relevance in cited authoritative sources.';
 
 const MEDICATION_NAME_PATTERN = '(?:aspirin|ibuprofen|acetaminophen|paracetamol|naproxen|warfarin|heparin|insulin|metformin|glipizide|semaglutide|liraglutide|atorvastatin|rosuvastatin|simvastatin|lisinopril|losartan|amlodipine|metoprolol|carvedilol|levothyroxine|methimazole|prednisone|amoxicillin|azithromycin|doxycycline|ciprofloxacin|gabapentin|pregabalin|sertraline|fluoxetine|escitalopram|omeprazole|pantoprazole|albuterol|epinephrine|naloxone|[a-z]{4,}(?:mab|nib|pril|sartan|olol|statin|cillin|cycline|azole|vir|caine))';
 
+const OBVIOUS_NONCLINICAL_IMPERATIVE_TARGET = '(?:(?:(?:one|two|three|four|five|six|seven|eight|nine|ten|\\d+)\\s+)?(?:(?:a|an|the|this|that|these|those)\\s+)?(?:(?:new|current|proposed|statistical|research|analytical|alternative|further|additional)\\s+)?(?:look|care|caution|example|examples|following|case|cases|concept|concepts|data|dataset|datasets|analysis|analyses|research|reviewing|comparing|examining|analyzing|checking|reading|validating|verifying|exploring|bias|selection|ascertainment|confounding|pipeline|workflow|iteration|simulation|model|models|server|service|process|query|queries|study|studies|experiment|experiments|calculation|calculations|comparison|comparisons|code|script|job|request|requests|method|methods|algorithm|algorithms|regression|software|tool|tools|database|databases|reference|references|equation|equations|formula|formulas|hypothesis|hypotheses|metric|metrics|result|results|evidence|field|fields|variable|variables|record|records|table|tables|figure|figures|chart|charts|sample|samples|specimen|specimens|cell|cells|culture|cultures|reagent|reagents|assay|assays|protein|proteins|cohort|cohorts|variant|variants|gene|genes|chromosome|chromosomes|dna|rna|measurement|measurements|source|sources|lesson|section|reading|learning|education|validation|verification|review|coverage|threshold|resolution|sensitivity|specificity|power))';
+const GENERIC_CLINICAL_ACTION = '(?:take|try|consume|ingest|swallow|inject|administer|prescribe|start|begin|resume|continue|stop|discontinue|increase|decrease|avoid|apply|use|undergo|schedule|screen|test|diagnose|treat|monitor|switch(?:\\s+to)?)';
+const GENERIC_CLINICAL_ACTION_GERUND = '(?:taking|trying|consuming|ingesting|swallowing|injecting|administering|prescribing|starting|beginning|resuming|continuing|stopping|discontinuing|increasing|decreasing|avoiding|applying|using|undergoing|scheduling|screening|testing|diagnosing|treating|monitoring|switching(?:\\s+to)?)';
+const GENERIC_CLINICAL_ACTION_PAST = '(?:taken|tried|consumed|ingested|swallowed|injected|administered|prescribed|started|resumed|continued|stopped|discontinued|increased|decreased|avoided|applied|used|undergone|scheduled|screened|tested|diagnosed|treated|monitored|switched\\s+to)';
+
 const CLINICAL_GUIDANCE_PATTERNS = [
+  new RegExp(`(?:^|[.!?;:,\\n]\\s*|\\b(?:and|then)\\s+)(?:(?:["'(]|\\[|\\{)\\s*)*(?:please\\s+)?(?:(?:do\\s+not|don't|never)\\s+)?${GENERIC_CLINICAL_ACTION}\\s+(?!${OBVIOUS_NONCLINICAL_IMPERATIVE_TARGET}\\b)[\\p{L}\\p{N}]`, 'iu'),
+  /(?:^|[.!?;:,\n]\s*|\b(?:and|then)\s+)(?:please\s+)?(?:get|obtain|order|request|book)\s+(?:(?:a|an|the|your)\s+)?(?:(?:genetic|diagnostic|medical|clinical|cancer|carrier)\s+)?(?:test|testing|screen|screening|scan|biopsy|exam|examination)\b/iu,
+  new RegExp(`\\b(?:you|the patient|this patient|the individual|your child|family members?)\\s+(?:(?:should|must|need(?:s)?\\s+to|ought\\s+to)\\s+|(?:are|is)\\s+(?:advised|instructed)\\s+to\\s+)${GENERIC_CLINICAL_ACTION}\\s+(?!${OBVIOUS_NONCLINICAL_IMPERATIVE_TARGET}\\b)`, 'iu'),
+  new RegExp(`\\b(?:you|the patient|this patient|the individual|your child|family members?)\\s+(?:(?:definitely|certainly|probably|likely|clearly|really)\\s+)?(?:need(?:s)?|require(?:s)?|would\\s+benefit\\s+from)\\s+(?!to\\b)(?!${OBVIOUS_NONCLINICAL_IMPERATIVE_TARGET}\\b)[\\p{L}\\p{N}]`, 'iu'),
+  new RegExp(`\\b(?:recommend(?:s|ed|ing)?|suggest(?:s|ed|ing)?|advise(?:s|d|ing)?|instruct(?:s|ed|ing)?|urge(?:s|d|ing)?)\\s+(?:(?:that\\s+)?(?:you|the patient|this patient|the individual|your child|family members?)\\s+)?(?:to\\s+)?(?:${GENERIC_CLINICAL_ACTION}|${GENERIC_CLINICAL_ACTION_GERUND})\\s+(?!${OBVIOUS_NONCLINICAL_IMPERATIVE_TARGET}\\b)`, 'iu'),
+  new RegExp(`\\b(?:recommend(?:s|ed|ing)?|suggest(?:s|ed|ing)?)\\s+(?!${OBVIOUS_NONCLINICAL_IMPERATIVE_TARGET}\\b)[\\p{L}\\p{N}]`, 'iu'),
+  new RegExp(`\\b(?!${OBVIOUS_NONCLINICAL_IMPERATIVE_TARGET}\\b)[\\p{L}][\\p{L}\\p{N}'-]{1,63}\\s+(?:is|should\\s+be|must\\s+be|needs?\\s+to\\s+be)\\s+${GENERIC_CLINICAL_ACTION_PAST}\\b`, 'iu'),
+  /\b(?:you|the patient|this patient|the individual|your child)\s+(?:(?:[\p{L}-]+|very)\s+){0,3}(?:have|has|suffer(?:s)?\s+from|test(?:s|ed)?\s+positive\s+for|are\s+positive\s+for|show(?:s)?\s+signs\s+of|meet(?:s)?\s+(?:the\s+)?criteria\s+for|are\s+diagnosed\s+with|is\s+diagnosed\s+with)\b[^.!?\n]{0,100}/iu,
+  /\b(?:you|the patient|this patient|the individual|your child)\s+(?:(?:may|might|could)\s+)?(?:carry|carries|harbor|harbors)\b[^.!?\n]{0,100}/iu,
+  /\byour\s+(?:symptoms|results|genotype|variant|variants|test|tests)\s+(?:mean|means|show|shows|indicate|indicates|confirm|confirms|prove|proves)\s+(?:(?:that\s+)?you\s+have|(?:a\s+)?diagnosis\s+of)\b/iu,
+  /\byour\s+(?:symptoms|results|genotype|variant|variants|test|tests)\s+(?:is|are)\s+(?:diagnostic\s+of|consistent\s+with|indicative\s+of)\b/iu,
   /\b(?:recommend(?:ed|ation)?|advise(?:d)?|should|must|need(?:s)? to|ought to|prescribe(?:d)?|start|stop|increase|decrease|take|avoid|undergo|administer|switch)\b[^.!?\n]{0,120}\b(?:treatment|therapy|medication|medicine|drug|screening|test|dose|dosing|dosage|surgery|procedure|clinical care|medical care)\b/iu,
   /\b(?:screening|treatment|therapy|medication|medicine|drug|test|dose|dosing|dosage|surgery|procedure|clinical care|medical care)\b[^.!?\n]{0,40}\b(?:is|are|would be|may be|should be|must be)\b[^.!?\n]{0,40}\b(?:recommended|advised|indicated|required|necessary|appropriate)\b/iu,
   /\b(?:you|your|patient|this patient|individual|family members?)\b[^.!?\n]{0,120}\b(?:personal risk|risk of|diagnos\w*|prognos\w*|treatment|therapy|medication|medicine|drug|screening|dose|dosing|clinical action)\b/iu,
@@ -35,6 +52,59 @@ const CLINICAL_GUIDANCE_PATTERNS = [
   new RegExp(`\\b${MEDICATION_NAME_PATTERN}\\b[^.!?\\n]{0,80}\\b(?:is|are|may be|should be|must be)\\b[^.!?\\n]{0,40}\\b(?:recommended|advised|indicated|prescribed|avoided)\\b`, 'iu'),
 ];
 
+const NAMED_HTML_ENTITIES = Object.freeze({
+  amp: '&',
+  apos: "'",
+  ast: '*',
+  bsol: '\\',
+  colon: ':',
+  comma: ',',
+  copy: '\u00a9',
+  dash: '-',
+  emsp: ' ',
+  ensp: ' ',
+  excl: '!',
+  gt: '>',
+  hairsp: ' ',
+  hyphen: '-',
+  lpar: '(',
+  lrm: '',
+  lsqb: '[',
+  lt: '<',
+  nbsp: ' ',
+  newline: '\n',
+  num: '#',
+  period: '.',
+  quest: '?',
+  quot: '"',
+  reg: '\u00ae',
+  rlm: '',
+  rpar: ')',
+  rsqb: ']',
+  semi: ';',
+  shy: '',
+  sol: '/',
+  tab: '\t',
+  thinsp: ' ',
+  zerowidthspace: '',
+  zwj: '',
+  zwnj: '',
+});
+
+const SAFETY_CONFUSABLES = new Map(Object.entries({
+  'Α': 'A', 'Β': 'B', 'Ε': 'E', 'Ζ': 'Z', 'Η': 'H', 'Ι': 'I', 'Κ': 'K', 'Μ': 'M', 'Ν': 'N', 'Ο': 'O', 'Ρ': 'P', 'Τ': 'T', 'Υ': 'Y', 'Χ': 'X',
+  'α': 'a', 'β': 'b', 'ε': 'e', 'ι': 'i', 'κ': 'k', 'ν': 'v', 'ο': 'o', 'ρ': 'p', 'τ': 't', 'υ': 'y', 'χ': 'x', 'ϲ': 'c',
+  'А': 'A', 'В': 'B', 'Е': 'E', 'К': 'K', 'М': 'M', 'Н': 'H', 'О': 'O', 'Р': 'P', 'С': 'C', 'Т': 'T', 'Х': 'X',
+  'а': 'a', 'е': 'e', 'і': 'i', 'ј': 'j', 'к': 'k', 'м': 'm', 'н': 'h', 'о': 'o', 'р': 'p', 'с': 'c', 'т': 't', 'х': 'x', 'у': 'y', 'һ': 'h', 'ԁ': 'd', 'ԛ': 'q', 'ӏ': 'l',
+}));
+
+const CLINICAL_SKELETON_WORDS = Object.freeze([
+  'administer', 'advised', 'avoid', 'consume', 'diagnose', 'diagnosed',
+  'dose', 'inject', 'ingest', 'medication', 'monitor', 'must', 'need',
+  'patient', 'prescribe', 'recommend', 'require', 'screen', 'should',
+  'start', 'stop', 'swallow', 'symptoms', 'take', 'test', 'treat', 'try',
+]);
+
 function isPlainObject(value) {
   return Boolean(value)
     && typeof value === 'object'
@@ -43,9 +113,127 @@ function isPlainObject(value) {
       || Object.getPrototypeOf(value) === null);
 }
 
-function replaceControlCharacters(value) {
+function decodeHtmlEntities(value, { preserveUnknownNamed = true } = {}) {
+  return value.replace(/&(#(?:x[0-9a-f]+|\d+)|[a-z][a-z0-9]+);/giu, (match, entity) => {
+    if (entity[0] !== '#') {
+      // The safety projection removes unknown names conservatively because a
+      // renderer may know more named references than this finite table. The
+      // visible-output normalizer preserves them to avoid corrupting neutral
+      // scientific notation such as an unlisted Greek entity.
+      return NAMED_HTML_ENTITIES[entity.toLowerCase()]
+        ?? (preserveUnknownNamed ? match : '');
+    }
+    const hex = entity[1]?.toLowerCase() === 'x';
+    const numeric = Number.parseInt(entity.slice(hex ? 2 : 1), hex ? 16 : 10);
+    if (!Number.isInteger(numeric) || numeric < 0 || numeric > 0x10ffff
+      || (numeric >= 0xd800 && numeric <= 0xdfff)) return ' ';
+    return String.fromCodePoint(numeric);
+  });
+}
+
+function removeInvisibleFormatCharacters(value) {
+  return value.replace(/[\p{Cf}\u034f\u061c\u180e]/gu, '');
+}
+
+function normalizeVisibleText(value) {
+  return removeInvisibleFormatCharacters(decodeHtmlEntities(value).normalize('NFKC'));
+}
+
+function stripRenderedMarkupForSafety(value, { separateFormatting = false } = {}) {
+  // HTML and Markdown inline markup do not create visible characters. Remove
+  // them without inserting a separator so T<em>ak</em>e and T**ak**e project
+  // to the same safety text the reader sees: Take.
+  const withoutHtml = value
+    .replace(/<!--[\s\S]*?-->/gu, '')
+    .replace(/<(?:[^"'<>]|"[^"]*"|'[^']*')*>/gu, '');
+  return stripUntrustedMarkupAndLinks(withoutHtml)
+    .replace(/\\([\\`*{}\[\]()#+\-.!_>~|])/gu, '$1')
+    .replace(/[`*_~]+/gu, separateFormatting ? ' ' : '')
+    .replace(/^\s{0,3}#{1,6}\s*/gmu, '')
+    .replace(/^\s*>\s?/gmu, ' ')
+    .replace(/^\s*(?:[-+*]|\d+[.)])\s+/gmu, '');
+}
+
+function semanticSafetyText(value, { separatePunctuation = false } = {}) {
+  if (typeof value !== 'string') return '';
+  const normalized = replaceControlCharacters(removeInvisibleFormatCharacters(
+    decodeHtmlEntities(value, { preserveUnknownNamed: false }).normalize('NFKD'),
+  ), { preserveLineBreaks: true });
+  const confusableMapped = Array.from(normalized, (character) => (
+    SAFETY_CONFUSABLES.get(character) ?? character
+  )).join('');
+  return stripRenderedMarkupForSafety(confusableMapped, {
+    separateFormatting: separatePunctuation,
+  })
+    .replace(/\p{M}+/gu, '')
+    .replace(/([\p{L}\p{N}])[\p{Pd}._/\\,:;|\u00b7\u2022]+(?=[\p{L}\p{N}])/gu, (
+      _match,
+      letter,
+    ) => `${letter}${separatePunctuation ? ' ' : ''}`)
+    .replace(/(\p{L})(?=\p{N})/gu, '$1 ')
+    .replace(/(\p{N})(?=\p{L})/gu, '$1 ')
+    .replace(/[\r\n\u0085\u2028\u2029]+/gu, '\n')
+    .replace(/[\p{Z}\t\f\v ]+/gu, ' ')
+    .trim();
+}
+
+function withinOneEdit(left, right) {
+  if (left === right) return true;
+  if (Math.abs(left.length - right.length) > 1) return false;
+  let leftIndex = 0;
+  let rightIndex = 0;
+  let edits = 0;
+  while (leftIndex < left.length && rightIndex < right.length) {
+    if (left[leftIndex] === right[rightIndex]) {
+      leftIndex += 1;
+      rightIndex += 1;
+      continue;
+    }
+    edits += 1;
+    if (edits > 1) return false;
+    if (left.length > right.length) leftIndex += 1;
+    else if (right.length > left.length) rightIndex += 1;
+    else {
+      leftIndex += 1;
+      rightIndex += 1;
+    }
+  }
+  if (leftIndex < left.length || rightIndex < right.length) edits += 1;
+  return edits <= 1;
+}
+
+/**
+ * UTS-39-style defense for mixed/confusable clinical keywords. The explicit
+ * skeleton map handles common Greek/Cyrillic lookalikes; for an unmapped
+ * non-Latin letter embedded in an otherwise Latin token, a one-edit comparison
+ * fails closed on safety-critical words instead of assuming the token is safe.
+ */
+function containsSuspiciousClinicalConfusable(value) {
+  if (typeof value !== 'string' || !value.trim()) return false;
+  const normalized = removeInvisibleFormatCharacters(
+    decodeHtmlEntities(value, { preserveUnknownNamed: false }).normalize('NFKD'),
+  ).replace(/\p{M}+/gu, '');
+  for (const match of normalized.matchAll(/\p{L}{2,}/gu)) {
+    const token = match[0];
+    if (!/[^\x00-\x7f]/u.test(token)) continue;
+    const skeleton = Array.from(token, (character) => {
+      const mapped = SAFETY_CONFUSABLES.get(character);
+      if (mapped) return mapped;
+      return /[A-Za-z]/u.test(character) ? character : '';
+    }).join('').toLowerCase();
+    if (skeleton.length < 3) continue;
+    if (CLINICAL_SKELETON_WORDS.some((word) => withinOneEdit(skeleton, word))) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function replaceControlCharacters(value, { preserveLineBreaks = false } = {}) {
   return Array.from(value, (character) => {
     const codePoint = character.codePointAt(0) ?? -1;
+    if (preserveLineBreaks
+      && (codePoint === 0x0a || codePoint === 0x0d || codePoint === 0x85)) return '\n';
     const isC0OrDel = codePoint <= 0x1f || codePoint === 0x7f;
     const isC1 = codePoint >= 0x80 && codePoint <= 0x9f;
     return isC0OrDel || isC1 ? ' ' : character;
@@ -58,8 +246,8 @@ function stripUntrustedMarkupAndLinks(value) {
     .replace(/\[([^\]]+)\]\s*\[[^\]]*\]/gu, '$1')
     .replace(/^\s*\[[^\]\n]{1,128}\]:\s*.*$/gmu, ' ')
     .replace(/<[^>]*>/gu, ' ')
-    .replace(/!\[([^\]]*)\]\((?:\\.|[^)])*\)/gu, '$1')
-    .replace(/\[([^\]]+)\]\((?:\\.|[^)])*\)/gu, '$1')
+    .replace(/!\[([^\]]*)\]\((?:\\.|[^()]|\([^()]*\))*\)/gu, '$1')
+    .replace(/\[([^\]]+)\]\((?:\\.|[^()]|\([^()]*\))*\)/gu, '$1')
     .replace(/\b(?:javascript|data):[^\s]+/giu, ' ')
     .replace(/\bhttps?:\/\/[^\s<>()]+/giu, '[external link removed]')
     .replace(/(^|[\s(])\/\/[A-Za-z0-9.-]+(?:\/[^\s<>()]*)?/gmu, '$1[external link removed]')
@@ -68,7 +256,7 @@ function stripUntrustedMarkupAndLinks(value) {
 
 function cleanText(value, maxLength) {
   if (typeof value !== 'string') return null;
-  const normalized = stripUntrustedMarkupAndLinks(replaceControlCharacters(value))
+  const normalized = stripUntrustedMarkupAndLinks(replaceControlCharacters(normalizeVisibleText(value)))
     .replace(/\s+/gu, ' ')
     .trim();
   if (!normalized) return null;
@@ -80,17 +268,25 @@ function removeAllowedBoundaryDisclaimers(value) {
     .replace(/\bnot\s+(?:a\s+)?diagnosis\b(?=$|[.!?;:\n])/giu, ' ')
     .replace(/\bnot\s+medical\s+advice\b(?=$|[.!?;:\n])/giu, ' ')
     .replace(/\bnot\s+(?:intended|suitable)\s+for\s+clinical\s+use\b(?=$|[.!?;:\n])/giu, ' ')
-    .replace(/\bdoes\s+not\s+(?:assess|predict|establish)\s+(?:personal\s+)?(?:risk|diagnosis|prognosis)\b(?=$|[.!?;:\n])/giu, ' ')
-    .replace(/\bdo\s+not\s+use\s+(?:it|(?:this|the)\s+(?:output|response|result|results)|these\s+results|output|response|result|results)\s+(?:medically|for\s+(?:medical\s+advice|clinical\s+use|clinical\s+decisions?|(?:diagnosis|personal(?:-|\s)risk(?:\s+prediction)?|treatment|dosing|screening)(?:\s*(?:,|and|or)\s*(?:diagnosis|personal(?:-|\s)risk(?:\s+prediction)?|treatment|dosing|screening))*(?:\s*,?\s*(?:and|or)\s+(?:other\s+)?clinical\s+decisions?)?))\b(?=$|[.!?;:\n])/giu, ' ');
+    .replace(/\bdoes\s+not\s+(?:assess|predict|establish)\s+(?:personal\s*)?(?:risk|diagnosis|prognosis)\b(?=$|[.!?;:\n])/giu, ' ')
+    .replace(/\bdo\s+not\s+use\s+(?:it|(?:this|the)\s+(?:output|response|result|results)|these\s+results|output|response|result|results)\s+(?:medically|for\s+(?:medical\s+advice|clinical\s+use|clinical\s+decisions?|(?:diagnosis|personal(?:-|\s)?risk(?:\s+prediction)?|treatment|dosing|screening)(?:\s*(?:,|and|or)\s*(?:diagnosis|personal(?:-|\s)?risk(?:\s+prediction)?|treatment|dosing|screening))*(?:\s*,?\s*(?:and|or)\s+(?:other\s+)?clinical\s+decisions?)?))\b(?=$|[.!?;:\n])/giu, ' ');
 }
 
 function containsProhibitedClinicalGuidance(value) {
   if (typeof value !== 'string' || !value.trim()) return false;
-  const policyText = removeAllowedBoundaryDisclaimers(value);
-  return CLINICAL_GUIDANCE_PATTERNS.some((pattern) => pattern.test(policyText));
+  if (containsSuspiciousClinicalConfusable(value)) return true;
+  const policyTexts = new Set([
+    semanticSafetyText(value),
+    semanticSafetyText(value, { separatePunctuation: true }),
+  ]);
+  return [...policyTexts].some((policyText) => {
+    const withoutAllowedDisclaimers = removeAllowedBoundaryDisclaimers(policyText);
+    return CLINICAL_GUIDANCE_PATTERNS.some((pattern) => pattern.test(withoutAllowedDisclaimers));
+  });
 }
 
 function cleanNonClinicalText(value, maxLength) {
+  if (containsProhibitedClinicalGuidance(value)) return null;
   const cleaned = cleanText(value, maxLength);
   if (!cleaned || containsProhibitedClinicalGuidance(cleaned)) return null;
   return cleaned;
@@ -116,7 +312,7 @@ function cleanStringArray(value, { maxItems, maxLength, nonClinical = false }) {
 
 function cleanNarrativeFormatting(value, maxLength) {
   if (typeof value !== 'string') return null;
-  const lines = value
+  const lines = normalizeVisibleText(value)
     .replace(/\r\n?/gu, '\n')
     .split('\n')
     .map((line) => stripUntrustedMarkupAndLinks(replaceControlCharacters(line))
@@ -130,11 +326,38 @@ function cleanNarrativeFormatting(value, maxLength) {
   return normalized.slice(0, maxLength);
 }
 
-function sanitizeNarrativeOutput(result, { maxLength, emptyMessage }) {
+function sanitizeNarrativeArtifact(result, {
+  maxLength,
+  correlationId,
+  emptyReasonCode,
+}) {
+  if (containsProhibitedClinicalGuidance(result)) {
+    return createPublicationArtifact({
+      status: PUBLICATION_STATUSES.WITHHELD,
+      reasonCode: 'clinical_boundary',
+      correlationId,
+    });
+  }
   const cleaned = cleanNarrativeFormatting(result, maxLength);
-  if (!cleaned) return emptyMessage;
-  if (containsProhibitedClinicalGuidance(cleaned)) return PUBLICATION_BOUNDARY_MESSAGE;
-  return cleaned;
+  if (!cleaned) {
+    return createPublicationArtifact({
+      status: PUBLICATION_STATUSES.UNAVAILABLE,
+      reasonCode: emptyReasonCode,
+      correlationId,
+    });
+  }
+  if (containsProhibitedClinicalGuidance(cleaned)) {
+    return createPublicationArtifact({
+      status: PUBLICATION_STATUSES.WITHHELD,
+      reasonCode: 'clinical_boundary',
+      correlationId,
+    });
+  }
+  return createPublicationArtifact({
+    status: PUBLICATION_STATUSES.AVAILABLE,
+    content: cleaned,
+    correlationId,
+  });
 }
 
 function parseJsonCandidate(result) {
@@ -285,7 +508,8 @@ function normalizeGeneProfile(parsed) {
   const candidateSummary = cleanText(source.summary, 4_000);
   const summaryStatus = !candidateSummary
     ? 'unavailable'
-    : containsProhibitedClinicalGuidance(candidateSummary)
+    : containsProhibitedClinicalGuidance(source.summary)
+      || containsProhibitedClinicalGuidance(candidateSummary)
       ? 'withheld'
       : 'available';
   const summary = summaryStatus === 'available'
@@ -352,11 +576,17 @@ function sanitizeCandidateTaskOutput(taskInput, result) {
  * turn a valid index into a different answer, so any invalid option rejects the
  * entire question.
  */
-export function sanitizeEducationQuizOutput(result, maxItems = 20) {
-  if (!Array.isArray(result)) return [];
-  const sanitized = [];
+function sanitizeEducationQuizItems(result, maxItems) {
+  if (!Array.isArray(result)) {
+    return { questions: [], rejectedCount: 0 };
+  }
+  const questions = [];
+  let rejectedCount = 0;
   for (const item of result) {
-    if (!isPlainObject(item) || !Array.isArray(item.options)) continue;
+    if (!isPlainObject(item) || !Array.isArray(item.options)) {
+      rejectedCount += 1;
+      continue;
+    }
     const question = cleanNonClinicalText(item.question, 1_000);
     const options = item.options.slice(0, 6).map((option) => cleanNonClinicalText(option, 500));
     const explanation = cleanNonClinicalText(item.explanation, 2_000);
@@ -369,55 +599,237 @@ export function sanitizeEducationQuizOutput(result, maxItems = 20) {
       || correctIndex < 0
       || correctIndex >= options.length
       || !explanation
-    ) continue;
-    sanitized.push({ question, options, correctIndex, explanation });
-    if (sanitized.length >= maxItems) break;
+    ) {
+      rejectedCount += 1;
+      continue;
+    }
+    questions.push({ question, options, correctIndex, explanation });
+    if (questions.length >= maxItems) break;
   }
-  return sanitized;
+  return { questions, rejectedCount };
+}
+
+export function sanitizeEducationQuizOutput(result, maxItems = 20) {
+  return sanitizeEducationQuizItems(result, maxItems).questions;
+}
+
+const PROVIDER_COMPLETIONS = new Set(['complete', 'unknown', 'truncated', 'filtered', 'failed']);
+
+function providerCompletion(result) {
+  if (isPlainObject(result) && Object.hasOwn(result, 'text')) {
+    const hasCompletionMetadata = Object.hasOwn(result, 'completion');
+    const suppliedCompletion = result.completion;
+    return {
+      text: result.text,
+      completion: typeof suppliedCompletion === 'string'
+        && PROVIDER_COMPLETIONS.has(suppliedCompletion)
+        ? suppliedCompletion
+        : hasCompletionMetadata
+          ? 'failed'
+          : 'unknown',
+    };
+  }
+  return { text: result, completion: 'unknown' };
+}
+
+function containsProhibitedClinicalGuidanceDeep(value) {
+  if (typeof value === 'string') return containsProhibitedClinicalGuidance(value);
+  if (Array.isArray(value)) {
+    return value.some((item) => containsProhibitedClinicalGuidanceDeep(item));
+  }
+  if (!isPlainObject(value)) return false;
+  return Object.values(value).some((item) => containsProhibitedClinicalGuidanceDeep(item));
+}
+
+function completionArtifact(completion, correlationId) {
+  if (completion === 'filtered') {
+    return createPublicationArtifact({
+      status: PUBLICATION_STATUSES.WITHHELD,
+      reasonCode: 'provider_filtered',
+      correlationId,
+    });
+  }
+  if (completion === 'failed') {
+    return createPublicationArtifact({
+      status: PUBLICATION_STATUSES.UNAVAILABLE,
+      reasonCode: 'provider_incomplete',
+      correlationId,
+    });
+  }
+  return null;
+}
+
+export function sanitizeEducationQuizArtifact(result, expectedItems = 5, options = {}) {
+  const correlationId = options.correlationId || 'internal-publication';
+  const requestedItems = Number.isInteger(expectedItems) && expectedItems > 0
+    ? Math.min(expectedItems, 20)
+    : 5;
+  const provider = providerCompletion(result);
+  const terminal = completionArtifact(provider.completion, correlationId);
+  if (terminal) return terminal;
+  if (provider.completion === 'truncated') {
+    return createPublicationArtifact({
+      status: PUBLICATION_STATUSES.UNAVAILABLE,
+      reasonCode: 'provider_truncated_structured_output',
+      correlationId,
+    });
+  }
+
+  const { questions, rejectedCount } = sanitizeEducationQuizItems(provider.text, requestedItems);
+  if (questions.length === 0) {
+    const crossedClinicalBoundary = containsProhibitedClinicalGuidanceDeep(provider.text);
+    return createPublicationArtifact({
+      status: crossedClinicalBoundary
+        ? PUBLICATION_STATUSES.WITHHELD
+        : PUBLICATION_STATUSES.UNAVAILABLE,
+      reasonCode: crossedClinicalBoundary
+        ? 'clinical_boundary'
+        : 'provider_malformed',
+      correlationId,
+    });
+  }
+
+  if (questions.length < requestedItems || rejectedCount > 0) {
+    return createPublicationArtifact({
+      status: PUBLICATION_STATUSES.PARTIAL,
+      content: questions,
+      reasonCode: 'items_withheld_or_missing',
+      correlationId,
+      limitations: [`Returned ${questions.length} of ${requestedItems} requested safe questions; ${rejectedCount} provider item(s) were rejected.`],
+    });
+  }
+  return createPublicationArtifact({
+    status: PUBLICATION_STATUSES.AVAILABLE,
+    content: questions,
+    correlationId,
+  });
+}
+
+export function sanitizePublicationArtifact(publicationTask, taskInput, result, options = {}) {
+  const correlationId = options.correlationId || 'internal-publication';
+  const provider = providerCompletion(result);
+  const terminal = completionArtifact(provider.completion, correlationId);
+  if (terminal) return terminal;
+
+  if (publicationTask === TASKS.CANDIDATE_GENE) {
+    if (provider.completion === 'truncated') {
+      return createPublicationArtifact({
+        status: PUBLICATION_STATUSES.UNAVAILABLE,
+        reasonCode: 'provider_truncated_structured_output',
+        correlationId,
+      });
+    }
+    const parsed = parseJsonCandidate(provider.text);
+    if (!parsed) {
+      return createPublicationArtifact({
+        status: PUBLICATION_STATUSES.UNAVAILABLE,
+        reasonCode: 'provider_malformed',
+        correlationId,
+      });
+    }
+    const content = JSON.parse(sanitizeCandidateTaskOutput(taskInput, parsed));
+    const crossedClinicalBoundary = containsProhibitedClinicalGuidanceDeep(parsed);
+    if (taskInput?.operation === 'gene_profile'
+      && content.summaryStatus === 'withheld') {
+      return createPublicationArtifact({
+        status: PUBLICATION_STATUSES.WITHHELD,
+        reasonCode: 'clinical_boundary',
+        correlationId,
+      });
+    }
+    if (taskInput?.operation === 'gene_profile'
+      && content.summaryStatus === 'unavailable') {
+      return createPublicationArtifact({
+        status: PUBLICATION_STATUSES.UNAVAILABLE,
+        reasonCode: 'profile_summary_unavailable',
+        correlationId,
+      });
+    }
+    const hasSafeCandidateContent = Array.isArray(content.candidateGenes)
+      ? content.candidateGenes.length > 0
+      : taskInput?.operation === 'gene_profile'
+        ? content.summaryStatus === 'available'
+          || content.keyTakeaways?.length > 0
+          || content.phenotypes?.length > 0
+        : true;
+    if (crossedClinicalBoundary && !hasSafeCandidateContent) {
+      return createPublicationArtifact({
+        status: PUBLICATION_STATUSES.WITHHELD,
+        reasonCode: 'clinical_boundary',
+        correlationId,
+      });
+    }
+    if (crossedClinicalBoundary) {
+      // The normalized candidate output contains only fields that passed the
+      // boundary. A partial status makes the omission visible without ever
+      // carrying the blocked provider text inside the artifact.
+      return createPublicationArtifact({
+        status: PUBLICATION_STATUSES.PARTIAL,
+        content,
+        reasonCode: 'clinical_fields_withheld',
+        correlationId,
+        limitations: ['One or more provider fields crossed the non-clinical publication boundary and were omitted.'],
+      });
+    }
+    return createPublicationArtifact({
+      status: PUBLICATION_STATUSES.AVAILABLE,
+      content,
+      correlationId,
+    });
+  }
+
+  const taskConfig = publicationTask === TASKS.GENETICS_EDUCATION
+    ? { maxLength: 8_000, emptyReasonCode: 'provider_empty' }
+    : RESEARCH_TASKS.has(publicationTask)
+      ? { maxLength: 12_000, emptyReasonCode: 'provider_empty' }
+      : publicationTask === TASKS.LEARNING_ACTIVITY
+        ? { maxLength: 3_000, emptyReasonCode: 'provider_empty' }
+        : null;
+  if (!taskConfig) {
+    return createPublicationArtifact({
+      status: PUBLICATION_STATUSES.UNAVAILABLE,
+      reasonCode: 'unsupported_publication_task',
+      correlationId,
+    });
+  }
+
+  const artifact = sanitizeNarrativeArtifact(provider.text, {
+    ...taskConfig,
+    correlationId,
+  });
+  if (provider.completion !== 'truncated' || artifact.status !== PUBLICATION_STATUSES.AVAILABLE) {
+    return artifact;
+  }
+  return createPublicationArtifact({
+    status: PUBLICATION_STATUSES.PARTIAL,
+    content: artifact.content,
+    reasonCode: 'provider_truncated',
+    correlationId,
+    limitations: ['The provider reached its output limit; the response may be incomplete.'],
+  });
 }
 
 export function sanitizePublicationTaskOutput(publicationTask, taskInput, result) {
-  if (publicationTask === TASKS.CANDIDATE_GENE) {
-    return sanitizeCandidateTaskOutput(taskInput, result);
-  }
-  if (publicationTask === TASKS.GENETICS_EDUCATION) {
-    return sanitizeNarrativeOutput(result, {
-      maxLength: 8_000,
-      emptyMessage: EMPTY_EDUCATION_MESSAGE,
-    });
-  }
-  if (RESEARCH_TASKS.has(publicationTask)) {
-    return sanitizeNarrativeOutput(result, {
-      maxLength: 12_000,
-      emptyMessage: EMPTY_RESEARCH_MESSAGE,
-    });
-  }
-  if (publicationTask === TASKS.LEARNING_ACTIVITY) {
-    return sanitizeNarrativeOutput(result, {
-      maxLength: 3_000,
-      emptyMessage: EMPTY_LEARNING_MESSAGE,
-    });
-  }
-  return typeof result === 'string' ? result : String(result ?? '');
+  return sanitizePublicationArtifact(publicationTask, taskInput, result, {
+    correlationId: 'legacy-publication-boundary',
+  });
 }
 
 export const __test = {
+  decodeHtmlEntities,
+  normalizeVisibleText,
+  semanticSafetyText,
   cleanText,
   cleanNonClinicalText,
   cleanStringArray,
   cleanNarrativeFormatting,
   containsProhibitedClinicalGuidance,
-  sanitizeNarrativeOutput,
   parseJsonCandidate,
   normalizeCandidateGene,
   normalizeCandidateGenes,
   trustedQueryClassification,
   normalizeClassification,
   normalizeGeneProfile,
-  PUBLICATION_BOUNDARY_MESSAGE,
-  EMPTY_RESEARCH_MESSAGE,
-  EMPTY_LEARNING_MESSAGE,
-  EMPTY_EDUCATION_MESSAGE,
   WITHHELD_PROFILE_SUMMARY,
   UNAVAILABLE_PROFILE_SUMMARY,
 };

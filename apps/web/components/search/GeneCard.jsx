@@ -30,6 +30,7 @@ import {
   safeExternalHttpUrl,
 } from "../../../../packages/shared/src/associationClaim.ts";
 import { Download, Copy, Printer } from "lucide-react";
+import PublicationState, { hasReusablePublicationContent } from "../shared/PublicationState";
 
 // Session-scoped set of gene views already logged, so a (re)mount doesn't
 // re-POST the same gene_view activity. Module-level on purpose: shared across
@@ -127,6 +128,17 @@ function GeneCard({ gene, rank, isSelected = false, onSelect = null }) {
     : rankingBasis === 'computational' ? Info
       : rankingBasis === 'animal_model' ? Info
         : AlertTriangle;
+  const candidateContentIsReusable = hasReusablePublicationContent(gene.candidatePublication);
+  const profileContentIsReusable = hasReusablePublicationContent(gene.profilePublication)
+    && gene.profileStatus === 'available';
+  const displayName = gene.coordinatesVerified || candidateContentIsReusable ? gene.name : null;
+  const candidateExplanation = candidateContentIsReusable ? gene.explanation : null;
+  const profilePhenotypes = profileContentIsReusable && Array.isArray(gene.phenotypes)
+    ? gene.phenotypes
+    : [];
+  const profileTakeaways = profileContentIsReusable && Array.isArray(gene.keyTakeaways)
+    ? gene.keyTakeaways
+    : [];
 
   return (
     <Card className={`shadow-md hover:shadow-lg transition-all duration-200 ${isSelected ? 'ring-2 ring-blue-500 bg-blue-50/30' : ''}`}>
@@ -148,7 +160,7 @@ function GeneCard({ gene, rank, isSelected = false, onSelect = null }) {
                 <DnaIcon className="w-5 h-5 text-blue-600" />
                 {gene.symbol}
               </CardTitle>
-              <p className="text-slate-600 text-sm">{gene.name}</p>
+              {displayName && <p className="text-slate-600 text-sm">{displayName}</p>}
             </div>
           </div>
           
@@ -193,6 +205,7 @@ function GeneCard({ gene, rank, isSelected = false, onSelect = null }) {
       </CardHeader>
 
       <CardContent>
+        <PublicationState artifact={gene.candidatePublication} className="mb-4" />
         {isExpanded && (
           <div className="mb-4 bg-gradient-to-br from-slate-50 to-blue-50 p-4 rounded-lg border border-slate-200">
             <div className="flex items-start gap-2">
@@ -208,9 +221,9 @@ function GeneCard({ gene, rank, isSelected = false, onSelect = null }) {
                     database links. AI leads are research suggestions only, not diagnosis, personal risk,
                     treatment, or calibrated evidence grades.
                   </p>
-                  {gene.explanation && (
+                  {candidateExplanation && (
                     <p className="text-xs text-slate-500 italic">
-                      {gene.explanation}
+                      {candidateExplanation}
                     </p>
                   )}
                 </div>
@@ -374,7 +387,7 @@ function GeneCard({ gene, rank, isSelected = false, onSelect = null }) {
             Candidate Phenotype Terms
           </h4>
           <div className="flex flex-wrap gap-2">
-            {gene.phenotypes?.slice(0, 5).map((phenotype, idx) => (
+            {profilePhenotypes.slice(0, 5).map((phenotype, idx) => (
               <Badge key={idx} variant="secondary" className="text-sm">
                 {phenotype.name}
                 {phenotype.hpoId && (
@@ -384,12 +397,12 @@ function GeneCard({ gene, rank, isSelected = false, onSelect = null }) {
                 )}
               </Badge>
             ))}
-            {gene.phenotypes?.length > 5 && (
+            {profilePhenotypes.length > 5 && (
               <Badge variant="outline" className="text-sm">
-                +{gene.phenotypes.length - 5} more
+                +{profilePhenotypes.length - 5} more
               </Badge>
             )}
-            {(!gene.phenotypes || gene.phenotypes.length === 0) && (
+            {profilePhenotypes.length === 0 && (
               <span className="text-sm text-slate-500 italic">
                 {gene.detailsPending
                   ? 'Loading phenotype data...'
@@ -404,17 +417,23 @@ function GeneCard({ gene, rank, isSelected = false, onSelect = null }) {
             <Lightbulb className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
             <div className="flex-1">
               <h4 className="font-medium text-blue-900 mb-2">AI Insights</h4>
+              <PublicationState artifact={gene.profilePublication} className="mb-3" />
+              {!gene.profilePublication && !gene.detailsPending && (
+                <div className="mb-3 rounded-md border border-slate-300 bg-white/70 px-3 py-2 text-xs text-slate-700" data-publication-status="unavailable">
+                  <strong>Profile publication unavailable.</strong> No generated profile content is reusable for this gene.
+                </div>
+              )}
               <p className="text-blue-800 text-sm leading-relaxed mb-3">
-                {gene.aiSummary || (gene.detailsPending
+                {(profileContentIsReusable ? gene.aiSummary : null) || (gene.detailsPending
                   ? <span className="italic text-blue-500">Generating a detailed summary for {gene.symbol}…</span>
-                  : null)}
+                  : <span className="italic text-blue-700">No reusable generated profile is available.</span>)}
               </p>
               
-              {gene.keyTakeaways && gene.keyTakeaways.length > 0 && (
+              {profileTakeaways.length > 0 && (
                 <div className="mt-3 pt-3 border-t border-blue-200">
                   <h5 className="text-xs font-semibold text-blue-900 uppercase mb-2">Key Takeaways</h5>
                   <ul className="space-y-1">
-                    {gene.keyTakeaways.map((takeaway, idx) => (
+                    {profileTakeaways.map((takeaway, idx) => (
                       <li key={idx} className="flex items-start gap-2 text-sm text-blue-800">
                         <CheckCircle className="w-3.5 h-3.5 text-blue-600 mt-0.5 flex-shrink-0" />
                         <span>{takeaway}</span>

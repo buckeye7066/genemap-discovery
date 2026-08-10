@@ -56,7 +56,14 @@ describe('education model-publication recovery switch', () => {
     });
 
     expect(response.statusCode).toBe(503);
-    expect(JSON.parse(response.payload).error).toMatch(/temporarily unavailable during safe recovery/i);
+    const body = JSON.parse(response.payload);
+    expect(body.error).toMatch(/temporarily unavailable during safe recovery/i);
+    expect(body.details?.publication).toMatchObject({
+      contractVersion: 1,
+      status: 'unavailable',
+      content: null,
+      reasonCode: 'model_publication_disabled',
+    });
     expect(prisma.learningSession.count).not.toHaveBeenCalled();
     expect(provider.generateExplanation).not.toHaveBeenCalled();
     expect(provider.generateImage).not.toHaveBeenCalled();

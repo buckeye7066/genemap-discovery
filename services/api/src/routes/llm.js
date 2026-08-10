@@ -1,9 +1,14 @@
+import {
+  canUsePublicationContent,
+  createPublicationArtifact,
+  PUBLICATION_STATUSES,
+} from '@genemap/shared';
 import { authenticate } from '../middleware/auth.js';
 import { checkEducationEntitlement, enforceUsageLimit, recordUsage } from '../middleware/entitlements.js';
 import { generateExplanation } from '../services/llm.js';
 import { withHonestyPrefix } from '../services/scientificHonesty.js';
 import { assertNoRawGenomicLLM } from '../services/genomicGuard.js';
-import { sanitizePublicationTaskOutput } from '../services/publicationTaskOutput.js';
+import { sanitizePublicationArtifact } from '../services/publicationTaskOutput.js';
 import { createAuditLog } from '../utils/audit.js';
 import { AppError, ValidationError } from '../utils/errors.js';
 import { MAX_PROMPT_CHARS } from '../config/llmLimits.js';
@@ -22,6 +27,13 @@ const STRUCTURED_LLM_TASKS = new Set([
   'candidate_gene_research',
   'research_hypothesis',
   'learning_activity_summary',
+]);
+const INVOKE_BODY_KEYS = new Set(['publicationTask', 'taskInput', 'options']);
+const GENERATION_OPTION_KEYS = new Set([
+  'publicationTask',
+  'provider',
+  'temperature',
+  'maxTokens',
 ]);
 
 const LLM_TIMEOUT_MS = Number(process.env.LLM_TIMEOUT_MS || 30_000);
@@ -53,8 +65,21 @@ export function assertModelPublicationEnabled(source = process.env) {
  * Fastify hook wrapper. It is deliberately async: a synchronous hook that
  * neither returns a promise nor calls `done` leaves the request suspended.
  */
-async function requireModelPublicationEnabled() {
-  assertModelPublicationEnabled(process.env);
+async function requireModelPublicationEnabled(request) {
+  if (isModelPublicationEnabled(process.env)) return;
+  const error = new AppError(
+    'Generated research and learning content is temporarily unavailable during safe recovery.',
+    503,
+  );
+  error.code = 'MODEL_PUBLICATION_DISABLED';
+  error.details = {
+    publication: createPublicationArtifact({
+      status: PUBLICATION_STATUSES.UNAVAILABLE,
+      reasonCode: 'model_publication_disabled',
+      correlationId: publicationCorrelationId(request),
+    }),
+  };
+  throw error;
 }
 
 function validatePrompt(prompt) {
@@ -66,19 +91,55 @@ function validatePrompt(prompt) {
   }
 }
 
+function isPlainObject(value) {
+  return Boolean(value)
+    && typeof value === 'object'
+    && !Array.isArray(value)
+    && (Object.getPrototypeOf(value) === Object.prototype
+      || Object.getPrototypeOf(value) === null);
+}
+
+function hasOnlyKeys(value, allowed) {
+  return isPlainObject(value) && Object.keys(value).every((key) => allowed.has(key));
+}
+
+function validateGenerationOptions(options) {
+  if (options == null) return;
+  if (!hasOnlyKeys(options, GENERATION_OPTION_KEYS)) {
+    throw new ValidationError('generation options contain unsupported fields');
+  }
+  if (options.provider != null && !['openai', 'anthropic'].includes(options.provider)) {
+    throw new ValidationError('provider must be openai or anthropic');
+  }
+  for (const field of ['temperature', 'maxTokens']) {
+    if (options[field] != null
+      && (typeof options[field] !== 'number' || !Number.isFinite(options[field]))) {
+      throw new ValidationError(`${field} must be a finite number`);
+    }
+  }
+}
+
 function structuredTaskRequest(body) {
-  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+  if (!hasOnlyKeys(body, INVOKE_BODY_KEYS)) {
     throw new ValidationError('a structured publication task is required');
   }
+  validateGenerationOptions(body.options);
   if (hasRawGenerationInput(body)) {
     throw new ValidationError('raw prompt, messages, context, and topic fields are not accepted');
   }
   const topLevelTask = typeof body.publicationTask === 'string'
-    ? body.publicationTask.trim()
+    ? body.publicationTask
     : '';
   const optionTask = typeof body.options?.publicationTask === 'string'
-    ? body.options.publicationTask.trim()
+    ? body.options.publicationTask
     : '';
+  if ((body.publicationTask != null && typeof body.publicationTask !== 'string')
+    || (body.options?.publicationTask != null
+      && typeof body.options.publicationTask !== 'string')
+    || topLevelTask !== topLevelTask.trim()
+    || optionTask !== optionTask.trim()) {
+    throw new ValidationError('publication task identifiers must be exact canonical values');
+  }
   if (topLevelTask && optionTask && topLevelTask !== optionTask) {
     throw new ValidationError('conflicting publication tasks are not accepted');
   }
@@ -119,7 +180,7 @@ function structuredInvocation(body, resolvedReferences = {}) {
  */
 export function prepareStructuredInvocation(dependencies = {}) {
   return async function preparePublicationInvocation(request) {
-    const preliminary = structuredTaskRequest(request.body);
+    const preliminary = request.publicationPreliminary || structuredTaskRequest(request.body);
     const resolvedReferences = await resolvePublicationTaskReferences(
       preliminary.publicationTask,
       preliminary.taskInput,
@@ -127,6 +188,10 @@ export function prepareStructuredInvocation(dependencies = {}) {
     );
     request.publicationInvocation = structuredInvocation(request.body, resolvedReferences);
   };
+}
+
+async function prepareStructuredRequest(request) {
+  request.publicationPreliminary = structuredTaskRequest(request.body);
 }
 
 function clampTokens(requested, isPremium) {
@@ -144,6 +209,28 @@ function clampTemperature(requested) {
   return Math.max(0, Math.min(2, requested));
 }
 
+function publicationCorrelationId(request) {
+  const requestId = String(request.id || 'request')
+    .replace(/[^A-Za-z0-9_.:-]/gu, '-')
+    .slice(0, 96) || 'request';
+  return `${requestId}:llm-invoke`;
+}
+
+function providerFailureReason(error) {
+  if (error?.code === 'LLM_PROVIDER_TIMEOUT') return 'provider_timeout';
+  if (error?.code === 'LLM_PROVIDER_CONNECTION') return 'provider_connection';
+  if (error?.code === 'LLM_PROVIDER_ERROR') return 'provider_error';
+  return 'provider_unavailable';
+}
+
+function unavailablePublication(request, error) {
+  return createPublicationArtifact({
+    status: PUBLICATION_STATUSES.UNAVAILABLE,
+    reasonCode: providerFailureReason(error),
+    correlationId: publicationCorrelationId(request),
+  });
+}
+
 export default async function llmRoutes(fastify, options = {}) {
   const prisma = fastify.prisma;
   const accessGuards = [
@@ -153,6 +240,7 @@ export default async function llmRoutes(fastify, options = {}) {
   ];
   const invokeGuards = [
     ...accessGuards,
+    prepareStructuredRequest,
     enforceUsageLimit,
     prepareStructuredInvocation(options.publicationResolverDependencies || {}),
   ];
@@ -170,24 +258,37 @@ export default async function llmRoutes(fastify, options = {}) {
     const maxTokens = clampTokens(generationOptions.maxTokens, isPremium);
     const temperature = clampTemperature(generationOptions.temperature);
 
-    const result = await generateExplanation(withHonestyPrefix(prompt), {
-      provider: generationOptions.provider,
-      model: generationOptions.provider ? undefined : INVOKE_TEXT_MODEL,
-      maxTokens,
-      temperature,
-      timeoutMs: LLM_TIMEOUT_MS,
-      allowGenomic,
-    });
-    const safeResult = sanitizePublicationTaskOutput(
-      publicationTask,
-      taskInput,
-      result,
-    );
+    let publication;
+    try {
+      const providerResult = await generateExplanation(withHonestyPrefix(prompt), {
+        provider: generationOptions.provider,
+        model: generationOptions.provider ? undefined : INVOKE_TEXT_MODEL,
+        maxTokens,
+        temperature,
+        timeoutMs: LLM_TIMEOUT_MS,
+        allowGenomic,
+        includeMetadata: true,
+      });
+      publication = sanitizePublicationArtifact(
+        publicationTask,
+        taskInput,
+        providerResult,
+        { correlationId: publicationCorrelationId(request) },
+      );
+    } catch (error) {
+      request.log.warn({ code: error?.code, publicationTask }, 'publication provider failed');
+      publication = unavailablePublication(request, error);
+    }
 
-    await recordUsage(prisma, request.user.userId, 'explanation', {
+    const publicationHasContent = canUsePublicationContent(publication);
+    const sessionType = publicationHasContent ? 'explanation' : 'publication_status';
+    await recordUsage(prisma, request.user.userId, sessionType, {
       maxTokens,
       provider: generationOptions.provider || null,
       publicationTask,
+      publication,
+      publicationStatus: publication.status,
+      publicationReasonCode: publication.reasonCode,
     });
 
     await createAuditLog(prisma, {
@@ -199,11 +300,13 @@ export default async function llmRoutes(fastify, options = {}) {
         taskInputVersion: taskInput.version,
         maxTokens,
         provider: generationOptions.provider || null,
+        publicationStatus: publication.status,
+        publicationReasonCode: publication.reasonCode,
       },
     });
 
     return {
-      result: safeResult,
+      publication,
       disclaimer: 'For educational purposes only. Not medical advice.',
     };
   });
@@ -230,8 +333,10 @@ export const __test = {
   clampTokens,
   clampTemperature,
   validatePrompt,
+  validateGenerationOptions,
   structuredInvocation,
   structuredTaskRequest,
+  prepareStructuredRequest,
   ABSOLUTE_MAX_TOKENS,
   DEFAULT_MAX_TOKENS,
   PREMIUM_MAX_TOKENS,

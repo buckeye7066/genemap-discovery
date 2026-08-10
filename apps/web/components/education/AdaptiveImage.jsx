@@ -1,7 +1,8 @@
 import React from 'react';
 import { Image, AlertCircle, Sparkles } from 'lucide-react';
+import PublicationState, { publicationContent } from '@/components/shared/PublicationState';
 
-export default function AdaptiveImage({ data, loading, level, topic }) {
+export default function AdaptiveImage({ artifact, loading, level, topic }) {
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center py-20 bg-gradient-to-b from-slate-50 to-white rounded-xl border border-slate-100">
@@ -15,7 +16,7 @@ export default function AdaptiveImage({ data, loading, level, topic }) {
     );
   }
 
-  if (!data) {
+  if (!artifact) {
     return (
       <div className="flex flex-col items-center justify-center py-20 bg-gradient-to-b from-slate-50/50 to-white rounded-xl border border-dashed border-slate-200">
         <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center mb-4">
@@ -27,17 +28,24 @@ export default function AdaptiveImage({ data, loading, level, topic }) {
     );
   }
 
-  if (data.error) {
+  const data = publicationContent(artifact);
+  if (!data || typeof data !== 'object' || typeof data.imageUrl !== 'string' || !data.imageUrl) {
     return (
-      <div className="flex flex-col items-center justify-center py-14 bg-red-50 rounded-xl border border-red-100">
-        <AlertCircle className="w-10 h-10 text-red-400 mb-3" />
-        <p className="text-red-600 text-sm font-medium">{data.error}</p>
+      <div className="space-y-3">
+        <PublicationState artifact={artifact} />
+        {!artifact?.status && (
+          <div className="flex flex-col items-center justify-center py-14 bg-red-50 rounded-xl border border-red-100">
+            <AlertCircle className="w-10 h-10 text-red-400 mb-3" />
+            <p className="text-red-600 text-sm font-medium">No reusable image was returned.</p>
+          </div>
+        )}
       </div>
     );
   }
 
   return (
     <div className="space-y-3 animate-fade-in">
+      <PublicationState artifact={artifact} />
       <div className="rounded-xl overflow-hidden border border-slate-200 bg-white shadow-sm">
         <img
           src={data.imageUrl}

@@ -31,6 +31,10 @@ import {
   BookOpen,
 } from "lucide-react";
 import OnboardingTour from "../components/dashboard/OnboardingTour";
+import PublicationState, {
+  enforcePublicationContentType,
+  publicationContent,
+} from "../components/shared/PublicationState";
 
 const insightMarkdownComponents = Object.freeze({
   p: ({ children }) => <p className="mb-3">{children}</p>,
@@ -91,8 +95,10 @@ export default function Dashboard() {
           recentConcepts,
         },
       );
-      const text = typeof response?.result === 'string' ? response.result.trim() : '';
-      setResearchSummary(text || null);
+      setResearchSummary(enforcePublicationContentType(
+        response?.publication,
+        (content) => typeof content === 'string' && Boolean(content.trim()),
+      ));
     } catch (error) {
       log.debug('Research activity summary unavailable:', error);
       setResearchSummary(null);
@@ -176,6 +182,7 @@ export default function Dashboard() {
       index === 0
       || (search.query || '').toLowerCase() !== (rows[index - 1].query || '').toLowerCase()
     ));
+  const researchSummaryContent = publicationContent(researchSummary);
 
   if (isLoading) {
     return (
@@ -416,10 +423,13 @@ export default function Dashboard() {
                     Research Activity Summary
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="text-sm leading-relaxed text-slate-800">
-                  <ReactMarkdown components={insightMarkdownComponents}>
-                    {researchSummary}
-                  </ReactMarkdown>
+                <CardContent className="space-y-3 text-sm leading-relaxed text-slate-800">
+                  <PublicationState artifact={researchSummary} />
+                  {typeof researchSummaryContent === 'string' && (
+                    <ReactMarkdown components={insightMarkdownComponents}>
+                      {researchSummaryContent}
+                    </ReactMarkdown>
+                  )}
                 </CardContent>
               </Card>
             )}

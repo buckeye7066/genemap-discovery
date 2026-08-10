@@ -195,6 +195,11 @@ function sanitizeProviderError(error, host, attempts) {
   const status = error?.status ?? error?.statusCode;
   const statusText = typeof status === 'number' ? ` HTTP ${status}` : '';
   const sanitized = new Error(`LLM provider ${host} failed${statusText} after ${attempts} attempt(s)`);
+  sanitized.code = isTimeoutError(error)
+    ? 'LLM_PROVIDER_TIMEOUT'
+    : isConnectionResetError(error)
+      ? 'LLM_PROVIDER_CONNECTION'
+      : 'LLM_PROVIDER_ERROR';
   // Preserve the status so callers can distinguish a permanent config problem
   // (e.g. 400/403/404 model-access) from a transient outage without seeing the
   // raw upstream details.
@@ -235,26 +240,38 @@ export async function withProviderRetry(operation, {
 
 export async function generateExplanation(
   prompt,
-  { provider, model, maxTokens = 2000, temperature = 0.7, timeoutMs = DEFAULT_TIMEOUT_MS, allowGenomic = false } = {}
+  { provider, model, maxTokens = 2000, temperature = 0.7, timeoutMs = DEFAULT_TIMEOUT_MS, allowGenomic = false, includeMetadata = false } = {}
 ) {
   assertProviderPayloadAllowed(prompt, allowGenomic);
   const service = getTextProvider(provider);
-  return withProviderRetry(
-    () => service.generateText(prompt, { model, maxTokens, temperature, timeoutMs }),
+  const result = await withProviderRetry(
+    () => service.generateTextResult
+      ? service.generateTextResult(prompt, { model, maxTokens, temperature, timeoutMs })
+      : service.generateText(prompt, { model, maxTokens, temperature, timeoutMs }),
     { provider }
   );
+  const normalized = typeof result === 'string'
+    ? { text: result, completion: 'unknown' }
+    : result;
+  return includeMetadata ? normalized : normalized.text;
 }
 
 export async function generateChatResponse(
   messages,
-  { provider, model, maxTokens = 2000, temperature = 0.7, timeoutMs = DEFAULT_TIMEOUT_MS, allowGenomic = false } = {}
+  { provider, model, maxTokens = 2000, temperature = 0.7, timeoutMs = DEFAULT_TIMEOUT_MS, allowGenomic = false, includeMetadata = false } = {}
 ) {
   assertProviderPayloadAllowed(messages, allowGenomic);
   const service = getTextProvider(provider);
-  return withProviderRetry(
-    () => service.generateChatResponse(messages, { model, maxTokens, temperature, timeoutMs }),
+  const result = await withProviderRetry(
+    () => service.generateChatResponseResult
+      ? service.generateChatResponseResult(messages, { model, maxTokens, temperature, timeoutMs })
+      : service.generateChatResponse(messages, { model, maxTokens, temperature, timeoutMs }),
     { provider }
   );
+  const normalized = typeof result === 'string'
+    ? { text: result, completion: 'unknown' }
+    : result;
+  return includeMetadata ? normalized : normalized.text;
 }
 
 export async function generateImage(
@@ -268,19 +285,25 @@ export async function generateImage(
   );
 }
 
-export async function generateQuiz(prompt, { provider, model, maxTokens = 3000, timeoutMs = DEFAULT_TIMEOUT_MS, allowGenomic = false } = {}) {
+export async function generateQuiz(prompt, { provider, model, maxTokens = 3000, timeoutMs = DEFAULT_TIMEOUT_MS, allowGenomic = false, includeMetadata = false } = {}) {
   assertProviderPayloadAllowed(prompt, allowGenomic);
   const service = getTextProvider(provider);
-  const raw = await withProviderRetry(
-    () => service.generateText(prompt, { model, maxTokens, temperature: 0.5, timeoutMs }),
+  const result = await withProviderRetry(
+    () => service.generateTextResult
+      ? service.generateTextResult(prompt, { model, maxTokens, temperature: 0.5, timeoutMs })
+      : service.generateText(prompt, { model, maxTokens, temperature: 0.5, timeoutMs }),
     { provider }
   );
+  const normalized = typeof result === 'string'
+    ? { text: result, completion: 'unknown' }
+    : result;
 
   // A quiz must be a non-empty array of question objects. If the model returns
   // malformed JSON, fall back to the raw text so the caller can surface a
   // formatting error rather than crash mid-parse.
-  return parseJsonFromLLM(raw, {
-    fallback: raw,
+  const parsed = parseJsonFromLLM(normalized.text, {
+    fallback: normalized.text,
     validate: (v) => Array.isArray(v) && v.length > 0,
   });
+  return includeMetadata ? { ...normalized, text: parsed, rawText: normalized.text } : parsed;
 }

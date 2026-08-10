@@ -81,7 +81,14 @@ describe('model publication recovery switch', () => {
     });
 
     expect(response.statusCode).toBe(503);
-    expect(JSON.parse(response.body).error).toMatch(/temporarily unavailable/i);
+    const body = JSON.parse(response.body);
+    expect(body.error).toMatch(/temporarily unavailable/i);
+    expect(body.details?.publication).toMatchObject({
+      contractVersion: 1,
+      status: 'unavailable',
+      content: null,
+      reasonCode: 'model_publication_disabled',
+    });
     expect(generateExplanation).not.toHaveBeenCalled();
     expect(prisma._store.learningSession).toHaveLength(0);
   });

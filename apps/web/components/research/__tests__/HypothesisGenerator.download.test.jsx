@@ -24,7 +24,16 @@ describe('HypothesisGenerator downloadable artifact', () => {
   beforeEach(() => {
     capturedBlob = null;
     vi.clearAllMocks();
-    apiClient.invokePublicationTask.mockResolvedValue({ result: '## Bounded result\nVerify sources.' });
+    apiClient.invokePublicationTask.mockResolvedValue({
+      publication: {
+        contractVersion: 1,
+        status: 'available',
+        content: '## Bounded result\nVerify sources.',
+        reasonCode: null,
+        correlationId: 'hypothesis-test-1',
+        limitations: [],
+      },
+    });
     vi.stubGlobal('URL', {
       ...URL,
       createObjectURL: vi.fn((blob) => {
@@ -57,7 +66,55 @@ describe('HypothesisGenerator downloadable artifact', () => {
     expect(markdown).toContain('Focus: early-onset symptoms (phenotype; phenotype:early-onset-symptoms; genemap_curated@1)');
     expect(markdown).toContain('Objective: identify_variants');
     expect(markdown).toContain('Modalities: wes, phenotype');
+    expect(markdown).toContain('Publication status: available');
+    expect(markdown).toContain('Publication correlation: hypothesis-test-1');
     expect(markdown).toContain('## Bounded result');
     expect(markdown).toContain('Education and exploratory research only');
+  });
+
+  it('serializes visible limitations for a partial publication', async () => {
+    apiClient.invokePublicationTask.mockResolvedValueOnce({
+      publication: {
+        contractVersion: 1,
+        status: 'partial',
+        content: '## Partial bounded result',
+        reasonCode: 'provider_truncated',
+        correlationId: 'hypothesis-test-partial',
+        limitations: ['The provider reached its output limit.'],
+      },
+    });
+    render(<HypothesisGenerator />);
+
+    fireEvent.click(screen.getByRole('button', { name: /generate research hypotheses/i }));
+    await screen.findByText(/partial publication/i);
+    expect(screen.getByText(/provider reached its output limit/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /download markdown/i }));
+
+    const markdown = await readBlobAsText(capturedBlob);
+    expect(markdown).toContain('Publication status: partial');
+    expect(markdown).toContain('Publication reason: provider_truncated');
+    expect(markdown).toContain('- The provider reached its output limit.');
+  });
+
+  it('does not render or download withheld generated content', async () => {
+    apiClient.invokePublicationTask.mockResolvedValueOnce({
+      result: 'legacy alias must not be displayed',
+      publication: {
+        contractVersion: 1,
+        status: 'withheld',
+        content: null,
+        reasonCode: 'clinical_boundary',
+        correlationId: 'hypothesis-test-withheld',
+        limitations: [],
+      },
+    });
+    render(<HypothesisGenerator />);
+
+    fireEvent.click(screen.getByRole('button', { name: /generate research hypotheses/i }));
+    await screen.findByText(/publication withheld/i);
+
+    expect(screen.queryByText(/legacy alias must not be displayed/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /download markdown/i })).not.toBeInTheDocument();
+    expect(capturedBlob).toBeNull();
   });
 });

@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { GitCompare, X, Dna, MapPin, Info } from "lucide-react";
+import PublicationState, { hasReusablePublicationContent } from "../shared/PublicationState";
 
 function normalizeText(value) {
   return typeof value === "string" ? value.trim() : "";
@@ -44,22 +45,29 @@ function intersection(lists) {
 
 export default function GeneComparison({ genes = [], onClose }) {
   const comparison = useMemo(() => {
-    const rows = genes.map((gene) => ({
-      gene,
-      symbol: geneSymbol(gene),
-      name: normalizeText(gene?.name),
-      score: gene?.score,
-      associationType: normalizeText(gene?.associationType || gene?.association_type),
-      location: formatLocation(gene),
-      phenotypes: phenotypeNames(gene),
-      sources: sourceNames(gene),
-      explanation: normalizeText(gene?.explanation || gene?.aiSummary),
-    }));
+    const rows = genes.map((gene) => {
+      const candidateReusable = hasReusablePublicationContent(gene?.candidatePublication);
+      const profileReusable = hasReusablePublicationContent(gene?.profilePublication)
+        && gene?.profileStatus === 'available';
+      return {
+        gene,
+        symbol: geneSymbol(gene),
+        name: gene?.coordinatesVerified || candidateReusable ? normalizeText(gene?.name) : '',
+        score: gene?.score,
+        associationType: candidateReusable
+          ? normalizeText(gene?.associationType || gene?.association_type)
+          : '',
+        location: gene?.coordinatesVerified ? formatLocation(gene) : 'Not listed',
+        phenotypes: profileReusable ? phenotypeNames(gene) : [],
+        sources: sourceNames(gene),
+        explanation: (candidateReusable ? normalizeText(gene?.explanation) : '')
+          || (profileReusable ? normalizeText(gene?.aiSummary) : ''),
+      };
+    });
 
     const scoredRows = rows.filter((row) => typeof row.score === "number");
     const phenotypeSets = rows
-      .map((row) => new Set(row.phenotypes.map((item) => item.toLowerCase())))
-      .filter((set) => set.size > 0);
+      .map((row) => new Set(row.phenotypes.map((item) => item.toLowerCase())));
     const sharedPhenotypeKeys = intersection(phenotypeSets);
     const sharedPhenotypes = sharedPhenotypeKeys
       .map((key) => rows.flatMap((row) => row.phenotypes).find((item) => item.toLowerCase() === key))
@@ -238,6 +246,18 @@ export default function GeneComparison({ genes = [], onClose }) {
               {comparison.rows.map((row) => (
                 <div key={row.symbol} className="rounded-md bg-slate-50 p-3">
                   <div className="font-semibold text-slate-900">{row.symbol}</div>
+                  {row.gene?.candidatePublication && (
+                    <div className="mt-2">
+                      <p className="mb-1 text-xs font-medium text-slate-600">Candidate publication</p>
+                      <PublicationState artifact={row.gene.candidatePublication} showAvailable />
+                    </div>
+                  )}
+                  {row.gene?.profilePublication && (
+                    <div className="mt-2">
+                      <p className="mb-1 text-xs font-medium text-slate-600">Profile publication</p>
+                      <PublicationState artifact={row.gene.profilePublication} showAvailable />
+                    </div>
+                  )}
                   <p className="text-sm text-slate-700 mt-1">
                     {row.explanation || "No evidence note was loaded for this gene."}
                   </p>

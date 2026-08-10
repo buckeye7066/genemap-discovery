@@ -1,4 +1,9 @@
 import { z } from 'zod';
+import {
+  canUsePublicationContent,
+  createPublicationArtifact,
+  PUBLICATION_STATUSES,
+} from '@genemap/shared';
 import { authenticate } from '../middleware/auth.js';
 import { checkEducationEntitlement, enforceUsageLimit } from '../middleware/entitlements.js';
 import * as llm from '../services/llm.js';
@@ -10,68 +15,58 @@ import {
 import { getSources } from '../services/educationSources.js';
 import { assertNoRawGenomicLLM } from '../services/genomicGuard.js';
 import {
-  sanitizeEducationQuizOutput,
-  sanitizePublicationTaskOutput,
+  sanitizeEducationQuizArtifact,
+  sanitizePublicationArtifact,
 } from '../services/publicationTaskOutput.js';
 import { AppError } from '../utils/errors.js';
-import { TOPICS_CATALOG } from '../config/educationCatalog.js';
+import {
+  resolveEducationTopic,
+  TOPICS_CATALOG,
+} from '../config/educationCatalog.js';
 import { composePublicationPrompt } from '../config/publicationTaskContracts.js';
 import { assertModelPublicationEnabled } from './llm.js';
 
-const TOPIC_INDEX = new Map();
-for (const { category, topics } of TOPICS_CATALOG) {
-  for (const t of topics) {
-    const meta = { id: t.id, category };
-    TOPIC_INDEX.set(t.id.toLowerCase(), meta);
-    TOPIC_INDEX.set(t.title.trim().toLowerCase(), meta);
-  }
-}
-
-function sourcesForTopic(topic) {
-  const meta = TOPIC_INDEX.get(String(topic ?? '').trim().toLowerCase());
-  return getSources({ topicId: meta?.id, category: meta?.category });
-}
-
-const DEFAULT_LEVEL = 'undergraduate';
+const EDUCATION_LEVELS = [
+  'elementary',
+  'middle_school',
+  'high_school',
+  'undergraduate',
+  'graduate',
+  'postgraduate',
+];
 const EDU_TEXT_PROVIDER = process.env.LLM_TEXT_PROVIDER || 'openai';
 const EDU_TEXT_MODEL = process.env.LLM_EDU_TEXT_MODEL
   || (EDU_TEXT_PROVIDER === 'openai' || EDU_TEXT_PROVIDER === 'gpt' ? 'gpt-4o-mini' : undefined);
 const EDU_TIMEOUT_MS = Number(process.env.LLM_EDU_TIMEOUT_MS || 24_000);
 
-const levelField = z.preprocess(
-  (v) => (typeof v === 'string' && v.trim() ? v.trim() : DEFAULT_LEVEL),
-  z.string().min(1)
-);
+const levelField = z.enum(EDUCATION_LEVELS);
+const topicField = z.string()
+  .min(1)
+  .max(64)
+  .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/u);
 
 const explainSchema = z.object({
-  topic: z.string().min(1).max(500),
+  topic: topicField,
   level: levelField,
 }).strict();
 
 const imageSchema = z.object({
-  topic: z.string().min(1).max(500),
+  topic: topicField,
   level: levelField,
-});
+}).strict();
 
 const quizSchema = z.object({
-  topic: z.string().min(1).max(500),
+  topic: topicField,
   level: levelField,
-  questionCount: z.number().min(1).max(20).optional(),
-});
+  questionCount: z.number().int().min(1).max(20).optional(),
+}).strict();
 
 const chatSchema = z.object({
   publicationTask: z.literal('genetics_education'),
   taskInput: z.object({
     version: z.literal(1),
-    topic: z.string().min(1).max(200),
-    level: z.enum([
-      'elementary',
-      'middle_school',
-      'high_school',
-      'undergraduate',
-      'graduate',
-      'postgraduate',
-    ]),
+    topic: topicField,
+    level: z.enum(EDUCATION_LEVELS),
     interaction: z.enum([
       'explain_another_way',
       'give_example',
@@ -82,10 +77,10 @@ const chatSchema = z.object({
 }).strict();
 
 const progressSchema = z.object({
-  topicId: z.string().min(1).max(200),
+  topicId: topicField,
   score: z.coerce.number().int().min(0).max(1_000_000),
   totalQuestions: z.coerce.number().int().min(0).max(1_000_000).optional().default(0),
-});
+}).strict();
 
 const LEVEL_PROMPTS = {
   elementary: 'Explain like you are talking to a 7-year-old. Use very simple words, fun comparisons to everyday things. Avoid all scientific jargon. Keep sentences short and fun.',
@@ -96,21 +91,155 @@ const LEVEL_PROMPTS = {
   postgraduate: 'Explain at a postdoctoral / principal investigator level. Assume deep familiarity with genetics. Focus on cutting-edge research and unresolved questions.',
 };
 
+function canonicalTopic(topicId) {
+  const topic = resolveEducationTopic(topicId);
+  if (!topic) {
+    throw new AppError('A canonical genetics education topic identifier is required.', 400);
+  }
+  return topic;
+}
+
+function topicMetadata(topic) {
+  return {
+    id: topic.id,
+    title: topic.title,
+    description: topic.description,
+    category: topic.category,
+    catalogVersion: topic.catalogVersion,
+  };
+}
+
+function publicationCorrelationId(request, surface) {
+  const requestId = String(request.id || 'request')
+    .replace(/[^A-Za-z0-9_.:-]/gu, '-')
+    .slice(0, 96) || 'request';
+  return `${requestId}:${surface}`;
+}
+
+function unavailablePublication(request, surface, reasonCode = 'provider_unavailable') {
+  return createPublicationArtifact({
+    status: PUBLICATION_STATUSES.UNAVAILABLE,
+    reasonCode,
+    correlationId: publicationCorrelationId(request, surface),
+  });
+}
+
+function providerFailureReason(error) {
+  if (error?.code === 'LLM_PROVIDER_TIMEOUT') return 'provider_timeout';
+  if (error?.code === 'LLM_PROVIDER_CONNECTION') return 'provider_connection';
+  if (error?.code === 'LLM_PROVIDER_ERROR') return 'provider_error';
+  return 'provider_unavailable';
+}
+
+async function persistPublicationSession(prisma, request, {
+  topic,
+  level,
+  type,
+  publication,
+  metadata = {},
+}) {
+  if (!request.user?.userId) return;
+  const sessionType = canUsePublicationContent(publication) ? type : `${type}_status`;
+  try {
+    await prisma.learningSession.create({
+      data: {
+        userId: request.user.userId,
+        topic: topic.id,
+        level,
+        type: sessionType,
+        content: { publication, ...metadata },
+      },
+    });
+  } catch {
+    request.log.warn(
+      { type: sessionType },
+      'education publication session persistence failed',
+    );
+  }
+}
+
+function replayPublication(session, index) {
+  const stored = session?.content?.publication;
+  if (stored?.contractVersion === 1 && typeof stored.status === 'string') {
+    try {
+      return createPublicationArtifact({
+        status: stored.status,
+        content: stored.content,
+        reasonCode: stored.reasonCode,
+        correlationId: stored.correlationId,
+        limitations: stored.limitations,
+      });
+    } catch {
+      // Invalid or incomplete stored envelopes are legacy data, not publishable content.
+    }
+  }
+  const sessionId = String(session?.id || index)
+    .replace(/[^A-Za-z0-9_.:-]/gu, '-')
+    .slice(0, 96) || String(index);
+  return createPublicationArtifact({
+    status: PUBLICATION_STATUSES.SUPERSEDED,
+    reasonCode: 'legacy_status_missing',
+    correlationId: `learning-session:${sessionId}`,
+  });
+}
+
 /**
  * The emergency recovery switch applies before quota accounting and before any
  * provider-facing education call. This keeps `/education/*` consistent with
  * `/llm/invoke` during an incident or rollback.
  */
-async function requireModelPublicationEnabled() {
-  assertModelPublicationEnabled(process.env);
+async function requireModelPublicationEnabled(request) {
+  try {
+    assertModelPublicationEnabled(process.env);
+  } catch (error) {
+    error.code = 'MODEL_PUBLICATION_DISABLED';
+    error.details = {
+      publication: createPublicationArtifact({
+        status: PUBLICATION_STATUSES.UNAVAILABLE,
+        reasonCode: 'model_publication_disabled',
+        correlationId: publicationCorrelationId(request, 'education-recovery'),
+      }),
+    };
+    throw error;
+  }
 }
 
-const modelRoutePreHandlers = [
-  authenticate,
-  checkEducationEntitlement,
-  requireModelPublicationEnabled,
-  enforceUsageLimit,
-];
+function prepareEducationRequest(schema) {
+  return async function validateAndResolveEducationRequest(request) {
+    const parsed = schema.parse(request.body);
+    request.educationInput = {
+      ...parsed,
+      topic: canonicalTopic(parsed.topic),
+    };
+  };
+}
+
+async function prepareTutorRequest(request) {
+  const parsed = chatSchema.parse(request.body);
+  request.educationInput = {
+    ...parsed,
+    topic: canonicalTopic(parsed.taskInput.topic),
+  };
+}
+
+function modelRoutePreHandlers(prepareRequest) {
+  return [
+    authenticate,
+    checkEducationEntitlement,
+    requireModelPublicationEnabled,
+    prepareRequest,
+    enforceUsageLimit,
+  ];
+}
+
+function disabledImagePreHandlers(prepareRequest) {
+  return [
+    authenticate,
+    checkEducationEntitlement,
+    requireModelPublicationEnabled,
+    prepareRequest,
+  ];
+}
 
 export default async function educationRoutes(fastify) {
   const prisma = fastify.prisma;
@@ -120,14 +249,20 @@ export default async function educationRoutes(fastify) {
     return { categories: TOPICS_CATALOG };
   });
 
-  fastify.post('/explain', { preHandler: modelRoutePreHandlers }, async (request) => {
-    const { topic, level } = explainSchema.parse(request.body);
-    const allowGenomic = await assertNoRawGenomicLLM(prisma, request.user?.userId, topic);
+  fastify.post('/explain', {
+    preHandler: modelRoutePreHandlers(prepareEducationRequest(explainSchema)),
+  }, async (request) => {
+    const { topic, level } = request.educationInput;
+    const allowGenomic = await assertNoRawGenomicLLM(
+      prisma,
+      request.user?.userId,
+      topic.title,
+    );
 
-    const levelPrompt = LEVEL_PROMPTS[level] || LEVEL_PROMPTS.undergraduate;
+    const levelPrompt = LEVEL_PROMPTS[level];
     const prompt = [
       `You are a genetics educator. ${levelPrompt}`,
-      `\nTopic to explain: ${topic}`,
+      `\nCatalog topic to explain: ${topic.title} (${topic.id}, catalog v${topic.catalogVersion})`,
       '\nStructure your response with these sections:',
       '## The Big Picture',
       'A high-level overview.',
@@ -139,104 +274,88 @@ export default async function educationRoutes(fastify) {
       '3-5 bullet points summarizing the essentials.',
     ].join('\n');
 
-    const rawExplanation = await llm.generateExplanation(withHonestyPrefix(prompt), {
-      model: EDU_TEXT_MODEL,
-      maxTokens: 1400,
-      timeoutMs: EDU_TIMEOUT_MS,
-      allowGenomic,
-    });
-    const explanation = sanitizePublicationTaskOutput(
-      'genetics_education',
-      { surface: 'explanation', topic, level },
-      rawExplanation,
-    );
-
-    if (request.user?.userId) {
-      try {
-        await prisma.learningSession.create({
-          data: {
-            userId: request.user.userId,
-            topic,
-            level,
-            type: 'explanation',
-            content: { explanation: explanation.substring(0, 500) },
-          },
-        });
-      } catch {
-        // Non-critical logging
-      }
-    }
-
-    return {
-      explanation,
-      topic,
-      level,
-      sources: sourcesForTopic(topic),
-      usage: request.usageInfo || null,
-      tier: request.entitlements?.tier || 'free',
-    };
-  });
-
-  fastify.post('/image', { preHandler: modelRoutePreHandlers }, async (request) => {
-    const { topic, level } = imageSchema.parse(request.body);
-    const allowGenomic = await assertNoRawGenomicLLM(prisma, request.user?.userId, topic);
-
-    const styleMap = {
-      elementary: 'Friendly cartoon-style educational illustration with bright colors, large labels, and cute characters. Children\'s science book style.',
-      middle_school: 'Clean, colorful educational diagram for a middle school science textbook. Clear labels, moderate detail.',
-      high_school: 'Detailed scientific diagram in textbook style. Proper labels, accurate structures, color coding.',
-      undergraduate: 'University-level scientific figure. Molecular detail, proper nomenclature, pathway arrows.',
-      graduate: 'Publication-quality scientific figure with detailed molecular representations and annotations.',
-      postgraduate: 'Journal-quality figure with maximum detail, structural biology representations, multi-panel layout.',
-    };
-
-    const style = styleMap[level] || styleMap.undergraduate;
-    const imagePrompt = `Create an educational genetics illustration about: ${topic}. ${style} The image should be clear, accurate, and educational. Do not include any text or labels in the image.`;
-
-    let result;
+    let publication;
     try {
-      result = await llm.generateImage(imagePrompt, { timeoutMs: 40_000, allowGenomic });
-    } catch (err) {
-      request.log.warn({ err: err?.message, status: err?.status }, 'education image generation failed');
-      const isConfig = err?.status === 400 || err?.status === 403 || err?.status === 404;
-      throw new AppError(
-        isConfig
-          ? 'Image generation isn\'t enabled on this server — the configured AI key has no access to an image model. (Other AI features still work.)'
-          : 'Image generation is temporarily unavailable. Please try again in a moment.',
-        isConfig ? 501 : 503
+      const providerResult = await llm.generateExplanation(withHonestyPrefix(prompt), {
+        model: EDU_TEXT_MODEL,
+        maxTokens: 1400,
+        timeoutMs: EDU_TIMEOUT_MS,
+        allowGenomic,
+        includeMetadata: true,
+      });
+      publication = sanitizePublicationArtifact(
+        'genetics_education',
+        { surface: 'explanation', topic: topic.id, level },
+        providerResult,
+        { correlationId: publicationCorrelationId(request, 'education-explanation') },
+      );
+    } catch (error) {
+      request.log.warn({ code: error?.code }, 'education explanation provider failed');
+      publication = unavailablePublication(
+        request,
+        'education-explanation',
+        providerFailureReason(error),
       );
     }
-    if (!result?.url) {
-      throw new AppError('The image could not be generated for this topic. Please try a different topic.', 502);
-    }
 
-    const revisedPrompt = sanitizePublicationTaskOutput(
-      'genetics_education',
-      { surface: 'image_revised_prompt', topic, level },
-      result.revisedPrompt || '',
-    );
-    if (request.user?.userId) {
-      try {
-        await prisma.learningSession.create({
-          data: { userId: request.user.userId, topic, level, type: 'image', content: { revisedPrompt } },
-        });
-      } catch { /* non-critical */ }
-    }
-    return {
-      imageUrl: result.url,
-      revisedPrompt,
+    await persistPublicationSession(prisma, request, {
       topic,
+      level,
+      type: 'explanation',
+      publication,
+    });
+
+    return {
+      publication,
+      topic: topic.id,
+      topicMetadata: topicMetadata(topic),
+      level,
+      sources: getSources(topic),
+      usage: request.usageInfo || null,
+      tier: request.entitlements?.tier || 'free',
+    };
+  });
+
+  fastify.post('/image', {
+    preHandler: disabledImagePreHandlers(prepareEducationRequest(imageSchema)),
+  }, async (request) => {
+    const { topic, level } = request.educationInput;
+    // Pixel output is not publishable until it has a reviewed OCR/moderation
+    // boundary. A safe prompt and revised-prompt text do not prove that the
+    // rendered image lacks medication or diagnostic instructions.
+    const publication = unavailablePublication(
+      request,
+      'education-image',
+      'image_output_verification_unavailable',
+    );
+    await persistPublicationSession(prisma, request, {
+      topic,
+      level,
+      type: 'image',
+      publication,
+    });
+
+    return {
+      publication,
+      topic: topic.id,
+      topicMetadata: topicMetadata(topic),
       level,
       usage: request.usageInfo || null,
       tier: request.entitlements?.tier || 'free',
     };
   });
 
-  fastify.post('/quiz', { preHandler: modelRoutePreHandlers }, async (request) => {
-    const { topic, level, questionCount = 5 } = quizSchema.parse(request.body);
-    const allowGenomic = await assertNoRawGenomicLLM(prisma, request.user?.userId, topic);
+  fastify.post('/quiz', {
+    preHandler: modelRoutePreHandlers(prepareEducationRequest(quizSchema)),
+  }, async (request) => {
+    const { topic, level, questionCount = 5 } = request.educationInput;
+    const allowGenomic = await assertNoRawGenomicLLM(
+      prisma,
+      request.user?.userId,
+      topic.title,
+    );
 
-    const levelPrompt = LEVEL_PROMPTS[level] || LEVEL_PROMPTS.undergraduate;
+    const levelPrompt = LEVEL_PROMPTS[level];
     const difficultyMap = {
       elementary: 'very easy, multiple choice with 3 options, simple language',
       middle_school: 'easy to moderate, multiple choice with 4 options',
@@ -245,52 +364,62 @@ export default async function educationRoutes(fastify) {
       graduate: 'challenging, multiple choice with 4 options, requires synthesis',
       postgraduate: 'expert-level, multiple choice with 4 options',
     };
-    const difficulty = difficultyMap[level] || difficultyMap.undergraduate;
+    const difficulty = difficultyMap[level];
 
     const prompt = [
       `You are creating a genetics quiz. ${levelPrompt}`,
-      `\nTopic: ${topic}`,
+      `\nCatalog topic: ${topic.title} (${topic.id}, catalog v${topic.catalogVersion})`,
       `Difficulty: ${difficulty}`,
       `Number of questions: ${questionCount}`,
       '\nReturn ONLY a JSON array (no markdown fences, no other text) with this structure:',
       '[{"question": "...", "options": ["A", "B", "C", "D"], "correctIndex": 0, "explanation": "..."}]',
     ].join('\n');
 
-    const rawQuestions = await llm.generateQuiz(withHonestyPrefix(prompt, QUIZ_HONESTY_NOTE), {
-      model: EDU_TEXT_MODEL,
-      maxTokens: 1800,
-      timeoutMs: EDU_TIMEOUT_MS,
-      allowGenomic,
-    });
-    const questions = sanitizeEducationQuizOutput(rawQuestions, questionCount);
-    if (questions.length === 0) {
-      throw new AppError('The quiz could not be generated in a safe, usable format. Please try again.', 502);
+    let publication;
+    try {
+      const providerResult = await llm.generateQuiz(withHonestyPrefix(prompt, QUIZ_HONESTY_NOTE), {
+        model: EDU_TEXT_MODEL,
+        maxTokens: 1800,
+        timeoutMs: EDU_TIMEOUT_MS,
+        allowGenomic,
+        includeMetadata: true,
+      });
+      publication = sanitizeEducationQuizArtifact(providerResult, questionCount, {
+        correlationId: publicationCorrelationId(request, 'education-quiz'),
+      });
+    } catch (error) {
+      request.log.warn({ code: error?.code }, 'education quiz provider failed');
+      publication = unavailablePublication(request, 'education-quiz', providerFailureReason(error));
     }
-    if (request.user?.userId) {
-      try {
-        await prisma.learningSession.create({
-          data: { userId: request.user.userId, topic, level, type: 'quiz', content: { questionCount: questions.length } },
-        });
-      } catch { /* non-critical */ }
-    }
-    return {
-      questions,
+    await persistPublicationSession(prisma, request, {
       topic,
+      level,
+      type: 'quiz',
+      publication,
+      metadata: { requestedQuestionCount: questionCount },
+    });
+
+    return {
+      publication,
+      topic: topic.id,
+      topicMetadata: topicMetadata(topic),
       level,
       usage: request.usageInfo || null,
       tier: request.entitlements?.tier || 'free',
     };
   });
 
-  fastify.post('/chat', { preHandler: modelRoutePreHandlers }, async (request) => {
-    const { publicationTask, taskInput } = chatSchema.parse(request.body);
+  fastify.post('/chat', {
+    preHandler: modelRoutePreHandlers(prepareTutorRequest),
+  }, async (request) => {
+    const { publicationTask, taskInput, topic } = request.educationInput;
     const composed = composePublicationPrompt(publicationTask, taskInput, {
       routePath: '/education/chat',
     });
     if (!composed.ok) {
       throw new AppError(composed.reason || 'The guided tutor request is invalid.', 400);
     }
-    const { topic, level } = composed.value;
+    const { level } = composed.value;
 
     const allowGenomic = await assertNoRawGenomicLLM(
       prisma,
@@ -298,40 +427,49 @@ export default async function educationRoutes(fastify) {
       composed.prompt,
     );
 
-    const levelPrompt = LEVEL_PROMPTS[level] || LEVEL_PROMPTS.undergraduate;
+    const levelPrompt = LEVEL_PROMPTS[level];
     const systemMessage = honestySystemMessage(
       `You are a friendly genetics tutor. ${levelPrompt} Be encouraging, ask follow-up questions to check understanding, and provide examples when helpful. If the student seems confused, try a different approach or analogy.`,
     );
 
     const fullMessages = [systemMessage, { role: 'user', content: composed.prompt }];
-    const rawResponse = await llm.generateChatResponse(fullMessages, {
-      timeoutMs: EDU_TIMEOUT_MS,
-      allowGenomic,
-    });
-    const response = sanitizePublicationTaskOutput(
-      'genetics_education',
-      { surface: 'guided_tutor', topic, level, interaction: taskInput.interaction },
-      rawResponse,
-    );
-    if (request.user?.userId) {
-      try {
-        await prisma.learningSession.create({
-          data: {
-            userId: request.user.userId,
-            topic,
-            level,
-            type: 'chat',
-            content: { interaction: taskInput.interaction, taskInputVersion: taskInput.version },
-          },
-        });
-      } catch { /* non-critical */ }
+    let publication;
+    try {
+      const providerResult = await llm.generateChatResponse(fullMessages, {
+        timeoutMs: EDU_TIMEOUT_MS,
+        allowGenomic,
+        includeMetadata: true,
+      });
+      publication = sanitizePublicationArtifact(
+        'genetics_education',
+        {
+          surface: 'guided_tutor',
+          topic: topic.id,
+          level,
+          interaction: taskInput.interaction,
+        },
+        providerResult,
+        { correlationId: publicationCorrelationId(request, 'education-chat') },
+      );
+    } catch (error) {
+      request.log.warn({ code: error?.code }, 'education chat provider failed');
+      publication = unavailablePublication(request, 'education-chat', providerFailureReason(error));
     }
-    const sources = sourcesForTopic(topic);
-
+    await persistPublicationSession(prisma, request, {
+      topic,
+      level,
+      type: 'chat',
+      publication,
+      metadata: {
+        interaction: taskInput.interaction,
+        taskInputVersion: taskInput.version,
+      },
+    });
     return {
-      response,
+      publication,
       role: 'assistant',
-      sources,
+      topicMetadata: topicMetadata(topic),
+      sources: getSources(topic),
       usage: request.usageInfo || null,
       tier: request.entitlements?.tier || 'free',
     };
@@ -349,14 +487,21 @@ export default async function educationRoutes(fastify) {
       }),
     ]);
 
-    return { sessions, progress };
+    return {
+      sessions: sessions.map((session, index) => ({
+        ...session,
+        content: { publication: replayPublication(session, index) },
+      })),
+      progress,
+    };
   });
 
   fastify.post('/progress', { preHandler: authenticate }, async (request) => {
     const { topicId, score, totalQuestions } = progressSchema.parse(request.body);
+    const topic = canonicalTopic(topicId);
 
     const existing = await prisma.learningProgress.findFirst({
-      where: { userId: request.user.userId, topicId },
+      where: { userId: request.user.userId, topicId: topic.id },
     });
 
     if (existing) {
@@ -373,7 +518,7 @@ export default async function educationRoutes(fastify) {
     return prisma.learningProgress.create({
       data: {
         userId: request.user.userId,
-        topicId,
+        topicId: topic.id,
         bestScore: score,
         totalQuestions,
         attempts: 1,

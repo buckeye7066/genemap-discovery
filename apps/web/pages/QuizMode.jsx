@@ -8,6 +8,27 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { ArrowLeft, CheckCircle2, XCircle, Trophy, RefreshCw, ArrowRight, HelpCircle, Sparkles } from 'lucide-react';
 import MedicalDisclaimer from '@/components/shared/MedicalDisclaimer';
+import PublicationState, {
+  enforcePublicationContentType,
+  publicationContent,
+} from '@/components/shared/PublicationState';
+
+function isReusableQuiz(content) {
+  return Array.isArray(content) && content.length > 0 && content.every((item) => (
+    item
+    && typeof item === 'object'
+    && typeof item.question === 'string'
+    && item.question.trim()
+    && Array.isArray(item.options)
+    && item.options.length >= 2
+    && item.options.every((option) => typeof option === 'string' && option.trim())
+    && Number.isInteger(item.correctIndex)
+    && item.correctIndex >= 0
+    && item.correctIndex < item.options.length
+    && typeof item.explanation === 'string'
+    && item.explanation.trim()
+  ));
+}
 
 // Shown when the user reaches /quizmode without choosing a topic (e.g. the
 // sidebar "Take a Quiz" link). Without this, the page silently defaulted to a
@@ -97,8 +118,10 @@ export default function QuizMode() {
 
   const topicParam = searchParams.get('topic');
   const topicId = topicParam || 'what-is-dna';
-  const topicTitle = searchParams.get('title') || 'Genetics';
 
+  const [catalogTopic, setCatalogTopic] = useState(null);
+  const [topicMetadata, setTopicMetadata] = useState(null);
+  const [quizPublication, setQuizPublication] = useState(null);
   const [questions, setQuestions] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState(null);
@@ -111,23 +134,64 @@ export default function QuizMode() {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    if (topicParam) loadQuiz();
-  }, [topicParam, topicTitle, level]);
+    let active = true;
+    setCatalogTopic(null);
+    setTopicMetadata(null);
+    setQuizPublication(null);
+    setQuestions([]);
+    setError(null);
+    if (!topicParam) {
+      setLoading(false);
+      return () => { active = false; };
+    }
+
+    setLoading(true);
+    apiClient.getTopics()
+      .then((categories) => {
+        if (!active) return;
+        const match = (Array.isArray(categories) ? categories : [])
+          .flatMap((category) => (Array.isArray(category?.topics) ? category.topics : []).map((topic) => ({
+            ...topic,
+            category: category.category,
+          })))
+          .find((topic) => topic?.id === topicId);
+        if (!match) {
+          setError('This education topic is unavailable because it is not in the reviewed catalog.');
+          setLoading(false);
+          return;
+        }
+        setCatalogTopic(match);
+        setTopicMetadata(match);
+      })
+      .catch((catalogError) => {
+        if (!active) return;
+        setError(catalogError?.message || 'The reviewed topic catalog is unavailable.');
+        setLoading(false);
+      });
+    return () => { active = false; };
+  }, [topicParam]);
+
+  useEffect(() => {
+    if (catalogTopic?.id === topicId) loadQuiz();
+  }, [catalogTopic?.id, level]);
 
   if (!topicParam) {
     return (
       <QuizTopicPicker
         levelConfig={levelConfig}
         onSelect={(topic) =>
-          navigate(`/quizmode?topic=${encodeURIComponent(topic.id)}&title=${encodeURIComponent(topic.title)}`)
+          navigate(`/quizmode?topic=${encodeURIComponent(topic.id)}`)
         }
       />
     );
   }
 
   const loadQuiz = async () => {
+    if (!topicParam || catalogTopic?.id !== topicId) return;
     setLoading(true);
     setError(null);
+    setQuizPublication(null);
+    setTopicMetadata(null);
     setQuestions([]);
     setCurrentIndex(0);
     setSelectedAnswer(null);
@@ -136,15 +200,18 @@ export default function QuizMode() {
     setFinished(false);
 
     try {
-      // The URL title is display-only. Generation uses the catalog id, which
-      // the server validates against its immutable education catalog.
       const res = await apiClient.generateQuiz({ topic: topicId, level: level || 'undergraduate', questionCount: 5 });
-      const q = Array.isArray(res.questions) ? res.questions : [];
-      if (q.length === 0) {
-        setError('Could not generate quiz questions. Please try again.');
-      } else {
-        setQuestions(q);
+      if (res?.topicMetadata?.id !== topicId) {
+        throw new Error('The server returned mismatched topic metadata.');
       }
+      const publication = enforcePublicationContentType(
+        res?.publication,
+        isReusableQuiz,
+      );
+      const content = publicationContent(publication);
+      setQuizPublication(publication);
+      setTopicMetadata(res?.topicMetadata || null);
+      setQuestions(Array.isArray(content) ? content : []);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -167,7 +234,7 @@ export default function QuizMode() {
       try {
         await apiClient.updateLearningProgress({
           topicId,
-          score: score + (selectedAnswer === questions[currentIndex]?.correctIndex ? 1 : 0),
+          score,
           totalQuestions: questions.length,
         });
       } catch {
@@ -182,6 +249,7 @@ export default function QuizMode() {
 
   const current = questions[currentIndex];
   const progressPercent = questions.length > 0 ? ((currentIndex + (showResult ? 1 : 0)) / questions.length) * 100 : 0;
+  const topicTitle = topicMetadata?.title || catalogTopic?.title || 'Genetics topic';
 
   if (loading) {
     return (
@@ -202,8 +270,30 @@ export default function QuizMode() {
           <CardContent className="p-6 text-center">
             <XCircle className="w-12 h-12 text-red-400 mx-auto mb-3" />
             <h3 className="text-lg font-semibold mb-2">Quiz Error</h3>
-            <p className="text-slate-600 mb-4">{error}</p>
+            <p className="text-slate-600 mb-4" role="alert">{error}</p>
             <div className="flex gap-3 justify-center">
+              <Button variant="outline" onClick={() => navigate(-1)}>Go Back</Button>
+              {catalogTopic && <Button onClick={loadQuiz}>Try Again</Button>}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (questions.length === 0) {
+    return (
+      <div className="p-6 max-w-2xl mx-auto dna-bg min-h-screen">
+        <Card>
+          <CardHeader>
+            <CardTitle>{topicTitle} Quiz</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <PublicationState artifact={quizPublication} />
+            {!quizPublication && (
+              <p className="text-sm text-slate-600">No reusable quiz publication was returned.</p>
+            )}
+            <div className="flex gap-3">
               <Button variant="outline" onClick={() => navigate(-1)}>Go Back</Button>
               <Button onClick={loadQuiz}>Try Again</Button>
             </div>
@@ -238,6 +328,7 @@ export default function QuizMode() {
             </div>
           </div>
           <CardContent className="p-6">
+            <PublicationState artifact={quizPublication} className="mb-4" />
             <h3 className="font-semibold text-center mb-5 text-slate-700">{topicTitle} Quiz Results</h3>
             <div className="flex gap-3 justify-center">
               <Button variant="outline" onClick={() => navigate('/learngenetics')} className="h-10">
@@ -271,6 +362,8 @@ export default function QuizMode() {
       <Progress value={progressPercent} className="h-2 animate-slide-up delay-100" />
 
       <MedicalDisclaimer variant="education" compact />
+
+      <PublicationState artifact={quizPublication} />
 
       {current && (
         <Card className="animate-slide-up delay-200 shadow-sm overflow-hidden">

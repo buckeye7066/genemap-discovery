@@ -14,10 +14,8 @@ import {
 import { log } from "../shared/logger";
 import { getErrorMessage } from "../shared/errorUtils";
 import { GENE_ENRICHMENT_CONCURRENCY } from "../shared/constants";
-import { parseLLMJson } from "../shared/llmJson";
+import { parseLLMJson, reusablePublicationArtifact } from "../shared/llmJson";
 import { resolvePublicationSearchReference } from "@/lib/publicationConceptCatalog";
-
-const UNAVAILABLE_PROFILE_SUMMARY = 'Generated profile unavailable. This gene remains an unverified AI-suggested candidate lead; verify relevance in cited authoritative sources.';
 
 function adapterDate(value) {
   if (typeof value !== 'string' || !value.trim()) return null;
@@ -72,11 +70,11 @@ export class PhenotypeSearchService {
         this.analyzeAndFindCandidates(queryReference),
       ]);
       const effectivePremium = isPremium || isAdmin;
-      let { analysis, candidateGenes } = fused;
+      let { analysis, candidateGenes, publication } = fused;
 
       // A sparse but syntactically valid response receives one bounded fallback
       // through the same immutable reference, never through model-generated text.
-      if (!candidateGenes.length) {
+      if (!candidateGenes.length && reusablePublicationArtifact({ publication })) {
         analysis = await this.analyzePhenotype(queryReference);
         candidateGenes = await this.findCandidateGenes(
           analysis,
@@ -102,6 +100,7 @@ export class PhenotypeSearchService {
         this.applyAuthoritativeData(
           candidateGenes.map((gene) => ({
             ...gene,
+            candidatePublication: gene.candidatePublication || publication,
             sources: ['AI-suggested'],
             phenotypes: [],
             detailsPending: true,
@@ -119,6 +118,7 @@ export class PhenotypeSearchService {
         hpoTerms: [],
         queryType: analysis.queryType || 'phenotype',
         userPreferences,
+        publication,
         enriched: false,
       };
     } catch (error) {
@@ -157,6 +157,7 @@ export class PhenotypeSearchService {
         hpoTerms: [],
       },
       candidateGenes,
+      publication: response?.publication || null,
     };
   }
 
@@ -187,8 +188,9 @@ export class PhenotypeSearchService {
           (base.candidateGenes || []).map((gene) => ({
             ...gene,
             detailsPending: false,
-            aiSummary: UNAVAILABLE_PROFILE_SUMMARY,
+            aiSummary: null,
             profileStatus: 'unavailable',
+            profilePublication: null,
             keyTakeaways: [],
             phenotypes: [],
           })),
@@ -415,7 +417,10 @@ export class PhenotypeSearchService {
         audience: 'researcher',
       },
     );
-    return parseLLMJson(response, {});
+    return {
+      ...parseLLMJson(response, {}),
+      publication: response?.publication || null,
+    };
   }
 
   static async findCandidateGenes(_phenotypeAnalysis, _isPremium, queryReference) {
@@ -431,7 +436,9 @@ export class PhenotypeSearchService {
     );
     const parsed = parseLLMJson(response, { candidateGenes: [] });
     const result = Array.isArray(parsed) ? { candidateGenes: parsed } : parsed;
-    return (result?.candidateGenes || []).filter((gene) => gene && gene.symbol);
+    return (result?.candidateGenes || [])
+      .filter((gene) => gene && gene.symbol)
+      .map((gene) => ({ ...gene, candidatePublication: response?.publication || null }));
   }
 
   static usesDiseaseCandidatePrompt(phenotypeAnalysis, queryReference) {
@@ -470,8 +477,9 @@ export class PhenotypeSearchService {
           return {
             ...gene,
             phenotypes: [],
-            aiSummary: UNAVAILABLE_PROFILE_SUMMARY,
+            aiSummary: null,
             profileStatus: 'unavailable',
+            profilePublication: null,
             keyTakeaways: [],
             furtherReading: this.deterministicFurtherReading(gene.symbol),
             expressionData: [],
@@ -489,8 +497,9 @@ export class PhenotypeSearchService {
     if (!gene.coordinatesVerified || !verifiedIdentifier) {
       return {
         phenotypes: [],
-        aiSummary: `${gene.symbol} is an AI-suggested candidate lead. Authoritative gene-identifier verification was unavailable, so no additional model profile was generated.`,
+        aiSummary: null,
         profileStatus: 'unavailable',
+        profilePublication: null,
         keyTakeaways: [],
         expressionData: [],
         furtherReading: this.deterministicFurtherReading(gene.symbol),
@@ -508,14 +517,36 @@ export class PhenotypeSearchService {
       { maxTokens: 2048 },
     );
     const parsed = parseLLMJson(response, {});
-    const summary = typeof parsed.summary === 'string' && parsed.summary.trim()
-      ? parsed.summary
-      : UNAVAILABLE_PROFILE_SUMMARY;
+    const topLevelStatus = response?.publication?.status;
+    const summaryStatus = ['withheld', 'unavailable', 'superseded'].includes(topLevelStatus)
+      ? topLevelStatus
+      : parsed.summaryStatus === 'available'
+      ? 'available'
+      : parsed.summaryStatus === 'withheld'
+        ? 'withheld'
+        : 'unavailable';
+    const reusableArtifact = reusablePublicationArtifact(response);
+    const profilePublication = reusableArtifact && summaryStatus !== 'available'
+      ? {
+          ...reusableArtifact,
+          status: summaryStatus,
+          content: null,
+          reasonCode: `profile_${summaryStatus}`,
+        }
+      : response?.publication || null;
+    const summary = summaryStatus === 'available' && typeof parsed.summary === 'string'
+      ? parsed.summary.trim()
+      : null;
     return {
-      phenotypes: Array.isArray(parsed.phenotypes) ? parsed.phenotypes : [],
+      phenotypes: summaryStatus === 'available' && Array.isArray(parsed.phenotypes)
+        ? parsed.phenotypes
+        : [],
       aiSummary: summary,
-      profileStatus: parsed.summaryStatus || 'unavailable',
-      keyTakeaways: Array.isArray(parsed.keyTakeaways) ? parsed.keyTakeaways : [],
+      profileStatus: summaryStatus,
+      profilePublication,
+      keyTakeaways: summaryStatus === 'available' && Array.isArray(parsed.keyTakeaways)
+        ? parsed.keyTakeaways
+        : [],
       expressionData: [],
       furtherReading: this.deterministicFurtherReading(gene.symbol),
     };
