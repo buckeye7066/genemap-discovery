@@ -21,6 +21,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
@@ -53,37 +54,3 @@ jobs:
           CI: 'true'
           PLAYWRIGHT_LOCAL_PREVIEW: '1'
           PLAYWRIGHT_BASE_URL: http://127.0.0.1:4173
-
-  apply-final-review-fixes:
-    if: >-
-      github.event_name == 'pull_request' &&
-      github.event.pull_request.number == 127 &&
-      github.event.pull_request.head.repo.full_name == github.repository &&
-      github.event.pull_request.head.ref == 'chatgpt/production-ready/genemap-discovery'
-    permissions:
-      contents: write
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-          fetch-depth: 0
-      - name: Apply exact final review-fix packet
-        shell: bash
-        run: |
-          set -euo pipefail
-          echo '9f20bf9116ea2a8c225dc5dbe079ea6e4b764002bf131fe1554407b724ec1209  .release/review-fix.patch.gz.b64' | sha256sum --check --strict
-          base64 --decode .release/review-fix.patch.gz.b64 | gzip --decompress > /tmp/review-fix.patch
-          echo '26d428ab85aff44396e54bac6bfe872da0ac5dff652e03fbec3b0b36994f2918  /tmp/review-fix.patch' | sha256sum --check --strict
-          patch --batch --forward -p1 < /tmp/review-fix.patch
-          rm .release/review-fix.patch.gz.b64
-          git config user.name 'ChatGPT release executor'
-          git config user.email 'actions@users.noreply.github.com'
-          git add -A
-          if git diff --cached --name-only | grep -q '^.github/workflows/'; then
-            echo 'Refusing to push workflow changes with the Actions token.' >&2
-            exit 1
-          fi
-          git diff --cached --check
-          git commit -m 'fix(release): close deletion-ledger and provenance review findings'
-          git push origin HEAD:${{ github.head_ref }}
