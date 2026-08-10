@@ -169,15 +169,18 @@ function safeCount(value, max = 15) {
 
 function sanitizeSource(value, fallbackApiVersion) {
   const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  const candidateLimit = safeCount(source.candidateLimit);
+  const candidatesRequested = safeCount(source.candidatesRequested);
+  const candidatesSkipped = safeCount(source.candidatesSkipped);
   return {
     apiVersion: cleanText(source.apiVersion, 64) || fallbackApiVersion,
     releaseVersion: safeReleaseVersion(source.releaseVersion),
     status: SOURCE_HEALTH.has(source.status) ? source.status : 'unavailable',
     truncated: source.truncated === true,
     retrievedAt: safeDateTime(source.retrievedAt),
-    candidateLimit: safeCount(source.candidateLimit),
-    candidatesRequested: safeCount(source.candidatesRequested),
-    candidatesSkipped: safeCount(source.candidatesSkipped),
+    ...(candidateLimit != null ? { candidateLimit } : {}),
+    ...(candidatesRequested != null ? { candidatesRequested } : {}),
+    ...(candidatesSkipped != null ? { candidatesSkipped } : {}),
   };
 }
 
