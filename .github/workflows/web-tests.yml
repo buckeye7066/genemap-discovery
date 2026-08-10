@@ -53,37 +53,3 @@ jobs:
           CI: 'true'
           PLAYWRIGHT_LOCAL_PREVIEW: '1'
           PLAYWRIGHT_BASE_URL: http://127.0.0.1:4173
-
-  apply-source-status-fix:
-    if: >-
-      github.event_name == 'pull_request' &&
-      github.event.pull_request.number == 127 &&
-      github.event.pull_request.head.repo.full_name == github.repository &&
-      github.event.pull_request.head.ref == 'chatgpt/production-ready/genemap-discovery'
-    permissions:
-      contents: write
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-          fetch-depth: 0
-      - name: Apply exact source-status correction
-        shell: bash
-        run: |
-          set -euo pipefail
-          echo '8a75a7080402080d92aae755f81c49f9abef9962b254cf9cc853765fe13fe7c8  .release/source-status-fix.patch.gz.b64' | sha256sum --check --strict
-          base64 --decode .release/source-status-fix.patch.gz.b64 | gzip --decompress > /tmp/source-status-fix.patch
-          echo 'b7f223b5a8a2dedfcebcbef3f3031ebb3222ea429437255e161e3972b098fea4  /tmp/source-status-fix.patch' | sha256sum --check --strict
-          patch --batch --forward -p1 < /tmp/source-status-fix.patch
-          rm .release/source-status-fix.patch.gz.b64
-          git config user.name 'ChatGPT release executor'
-          git config user.email 'actions@users.noreply.github.com'
-          git add -A
-          if git diff --cached --name-only | grep -q '^.github/workflows/'; then
-            echo 'Refusing to push workflow changes with the Actions token.' >&2
-            exit 1
-          fi
-          git diff --cached --check
-          git commit -m 'fix(science): retain partial coverage when identity lookup fails'
-          git push origin HEAD:${{ github.head_ref }}
