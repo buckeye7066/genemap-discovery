@@ -1,0 +1,29 @@
+name: Export exact GeneMap source
+
+on:
+  push:
+    branches:
+      - chatgpt/production-ready/genemap-discovery
+    paths:
+      - .github/workflows/export-exact-head.yml
+
+permissions:
+  contents: read
+
+jobs:
+  export-source:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out exact commit
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Create immutable source archive
+        run: git archive --format=tar.gz --output="genemap-source-${GITHUB_SHA}.tar.gz" HEAD
+      - name: Upload exact source archive
+        uses: actions/upload-artifact@v6
+        with:
+          name: genemap-exact-source-${{ github.sha }}
+          path: genemap-source-${{ github.sha }}.tar.gz
+          if-no-files-found: error
+          retention-days: 1
