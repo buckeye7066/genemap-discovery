@@ -7,7 +7,7 @@ import { ShieldCheck, ArrowLeft } from "lucide-react";
  * published data flows and the fail-closed boundary around personal clinical
  * and genomic information. Have counsel review before commercial reliance.
  */
-const UPDATED = "August 9, 2026";
+const UPDATED = "August 10, 2026";
 const CONTACT = "dr.johnwhite@axiombiolabs.org";
 
 function Section({ title, children }) {
@@ -79,6 +79,13 @@ export default function PrivacyPolicy() {
                 handle full card details.
               </li>
               <li>
+                <strong>Account-deletion tombstones:</strong> after permanent deletion is authorized, a
+                restore-independent ledger may retain a keyed one-way account identifier, deletion receipt,
+                authorization time, release identity, and completed billing-cleanup counts. It does not
+                receive the raw email, name, profile, searches, research content, or medical information.
+                The tombstone exists to stop an older database backup from resurrecting a deleted account.
+              </li>
+              <li>
                 <strong>Legacy data:</strong> earlier releases may have stored medical-record or
                 AI-conversation records. Encrypted legacy columns may remain in the hosted database, but the
                 public generation routes do not use them. You may request their export or deletion.
@@ -148,6 +155,12 @@ export default function PrivacyPolicy() {
                 identifiers, supplied contact fields, subscription status, and webhook event identifiers.
               </li>
               <li>
+                <strong>Independent account-deletion ledger:</strong> when configured, receives only the
+                bounded deletion-tombstone fields described above. The production operator, region,
+                retention, deletion policy, key custody, and executed agreement must be recorded in the
+                processor register before public production reliance.
+              </li>
+              <li>
                 <strong>Resend:</strong> the email integration remains installed but is not invoked by the
                 current publication build. First-login identity and error-report emails are disabled.
                 Any future service-email flow requires a new purpose, field, and retention review.
@@ -166,12 +179,12 @@ export default function PrivacyPolicy() {
                 <strong>NLM Clinical Tables, Monarch Initiative, MyGene.info, and Open Targets:</strong>
                 active scientific lookup services receive phenotype search text or exact HPO identifiers,
                 disease search text or exact MONDO identifiers, human-gene symbols and fixed requested
-                fields, or an exact MONDO-derived disease identifier plus a bounded candidate-symbol set for
-                target-association lookup. These requests originate from the API but may remain user-linked
-                within GeneMap. Open Targets results are displayed only as computed research-comparison
-                signals, never as clinical conclusions. These services are lookup and follow-up sources, not
-                automatic verification of an AI-generated claim, and are not represented here as contracted
-                processors.
+                fields, or an exact MONDO-derived disease identifier for target-association lookup. GeneMap
+                uses the bounded candidate-symbol set locally to select returned Open Targets rows. These
+                requests originate from the API but may remain user-linked within GeneMap. Open Targets
+                results are displayed only as computed research-comparison signals, never as clinical
+                conclusions. These services are lookup and follow-up sources, not automatic verification
+                of an AI-generated claim, and are not represented here as contracted processors.
               </li>
             </ul>
             <p>
@@ -196,11 +209,12 @@ export default function PrivacyPolicy() {
             <p>
               We retain account and application data while needed to operate the service and for support,
               security, billing, or legal purposes. Fixed retention schedules for hosting logs, backups,
-              model-provider records, hosting logs, any future service email, and rate-limit data have not
-              yet been fully documented. A deletion request may be subject to billing or legal-retention exceptions, and
-              deletion propagation to provider logs and backups has not yet been verified. We therefore do
-              not promise that deleting an application record immediately removes every provider or backup
-              copy.
+              model-provider records, any future service email, rate-limit data, and deletion-ledger
+              tombstones have not yet been fully documented. A deletion request may be subject to billing or
+              legal-retention exceptions, and deletion propagation to provider logs and backups has not yet
+              been verified. The independent tombstone is deliberately retained outside the application
+              database so a restored backup can be reconciled before service exposure. We therefore do not
+              promise that deleting an application record immediately removes every provider or backup copy.
             </p>
           </Section>
 
@@ -228,4 +242,3 @@ export default function PrivacyPolicy() {
     </div>
   );
 }
-
