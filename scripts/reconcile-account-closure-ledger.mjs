@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+import { realpathSync } from 'node:fs';
+import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PrismaClient } from '@prisma/client';
 import { createAccountClosureLedger } from '../services/api/src/services/accountClosureLedger.js';
@@ -6,12 +8,37 @@ import { finalizeAuthorizedDatabaseDeletion } from '../services/api/src/services
 
 const REQUIRED_ACK = 'I CONFIRM THIS RESTORED DATABASE IS QUARANTINED';
 
-export function matchingTombstone(user, tombstones, hashIdentity) {
-  if (typeof hashIdentity !== 'function') {
-    throw new TypeError('hashIdentity is required for restore reconciliation');
+function hashCandidates(userId, ledgerOrHashIdentity) {
+  if (typeof ledgerOrHashIdentity === 'function') {
+    return [{ identityKeyId: null, userIdHash: ledgerOrHashIdentity(userId) }];
   }
-  const idHash = hashIdentity(user.id);
-  return tombstones.find((tombstone) => tombstone.userIdHash === idHash) || null;
+  if (typeof ledgerOrHashIdentity?.hashIdentityCandidates === 'function') {
+    return ledgerOrHashIdentity.hashIdentityCandidates(userId);
+  }
+  throw new TypeError('ledger.hashIdentityCandidates or hashIdentity is required for restore reconciliation');
+}
+
+export function matchingTombstone(user, tombstones, ledgerOrHashIdentity) {
+  const candidates = hashCandidates(user.id, ledgerOrHashIdentity);
+  return tombstones.find((tombstone) => {
+    if (typeof tombstone.identityKeyId === 'string') {
+      return candidates.some((candidate) => (
+        candidate.identityKeyId === tombstone.identityKeyId
+        && candidate.userIdHash === tombstone.userIdHash
+      ));
+    }
+    // Legacy version-1 tombstones have no key ID. Match against every retained
+    // historical candidate, including the migration-only transport-secret hash.
+    return candidates.some((candidate) => candidate.userIdHash === tombstone.userIdHash);
+  }) || null;
+}
+
+export function unknownIdentityKeyIds(tombstones, ledger) {
+  const known = new Set(Array.isArray(ledger?.identityKeyIds) ? ledger.identityKeyIds : []);
+  return [...new Set((tombstones || [])
+    .filter((tombstone) => tombstone?.version === 2 && typeof tombstone.identityKeyId === 'string')
+    .map((tombstone) => tombstone.identityKeyId)
+    .filter((identityKeyId) => !known.has(identityKeyId)))];
 }
 
 export async function reconcileRestoredDatabase({
@@ -22,7 +49,11 @@ export async function reconcileRestoredDatabase({
   const tombstones = await ledger.listTombstones();
   let scanned = 0;
   let deleted = 0;
-  const blockers = [];
+  const blockers = unknownIdentityKeyIds(tombstones, ledger).map((identityKeyId) => ({
+    identityKeyId,
+    code: 'ACCOUNT_DELETE_LEDGER_IDENTITY_KEY_UNKNOWN',
+    message: `The restored service cannot be exposed because deletion tombstones use unavailable identity key ${identityKeyId}. Restore that retired key and rerun reconciliation.`,
+  }));
 
   // Keyset pagination is required because this loop deletes matching users.
   // Offset pagination would skip rows after every deletion as the remaining
@@ -39,7 +70,7 @@ export async function reconcileRestoredDatabase({
     lastSeenId = users.at(-1).id;
 
     for (const user of users) {
-      const tombstone = matchingTombstone(user, tombstones, ledger.hashIdentity);
+      const tombstone = matchingTombstone(user, tombstones, ledger);
       if (!tombstone) continue;
       try {
         await finalizeAuthorizedDatabaseDeletion({
@@ -50,8 +81,11 @@ export async function reconcileRestoredDatabase({
         });
         deleted += 1;
       } catch (error) {
+        const currentHash = typeof ledger.hashIdentity === 'function'
+          ? ledger.hashIdentity(user.id)
+          : hashCandidates(user.id, ledger)[0]?.userIdHash;
         blockers.push({
-          userIdHash: ledger.hashIdentity(user.id),
+          userIdHash: currentHash || null,
           receiptId: tombstone.receiptId,
           code: error?.code || 'RESTORE_RECONCILIATION_FAILED',
           message: error?.message || String(error),
@@ -69,6 +103,15 @@ export async function reconcileRestoredDatabase({
     blockers,
     safeToExpose: blockers.length === 0,
   };
+}
+
+export function isEntrypoint(metaUrl, argvPath) {
+  if (!argvPath) return false;
+  try {
+    return realpathSync(fileURLToPath(metaUrl)) === realpathSync(path.resolve(argvPath));
+  } catch {
+    return false;
+  }
 }
 
 async function main() {
@@ -94,7 +137,7 @@ async function main() {
   }
 }
 
-if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+if (isEntrypoint(import.meta.url, process.argv[1])) {
   main().catch((error) => {
     console.error(`[account-closure-ledger] ${error?.message || error}`);
     process.exitCode = 1;
