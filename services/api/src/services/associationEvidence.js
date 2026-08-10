@@ -822,13 +822,21 @@ export async function getAssociationEvidence(reference, symbols, dependencies = 
     ...orthologResults.map((result) => result.retrievedAt),
   ].filter(Boolean).sort().at(-1) || null;
 
-  // MyGene resolves candidate identity but does not establish a gene-query
-  // association. Keep its health visible in `sources`, but do not let an
-  // identity lookup turn failed association providers into `partial_coverage`.
+  // MyGene resolves candidate identity rather than a gene-query association.
+  // Association-provider failure remains `unavailable`; however, when at least
+  // one association provider answered, an unavailable or truncated identity
+  // lookup makes candidate matching incomplete and must remain partial coverage.
   const relevantSources = [
     { applicable: true, ok: monarchOk, truncated: monarchTruncated },
     { applicable: openTargets.applicable, ok: openTargets.ok, truncated: openTargets.truncated },
   ];
+  const associationSourceStatus = overallSourceStatus({ claimCount, relevantSources });
+  const identityIncomplete = !geneIdentity.ok || geneIdentity.partial === true;
+  const sourceStatus = associationSourceStatus === 'unavailable'
+    ? 'unavailable'
+    : identityIncomplete
+      ? 'partial_coverage'
+      : associationSourceStatus;
 
   return {
     query,
@@ -857,7 +865,7 @@ export async function getAssociationEvidence(reference, symbols, dependencies = 
         retrievedAt: openTargets.retrievedAt,
       },
     },
-    sourceStatus: overallSourceStatus({ claimCount, relevantSources }),
+    sourceStatus,
   };
 }
 
