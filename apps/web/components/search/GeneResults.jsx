@@ -82,12 +82,54 @@ function summarizeEvidence(genes) {
   for (const gene of genes || []) {
     const partition = gene.evidencePartition || partitionClaimsBySpecies(gene.associationClaims || []);
     // Count only genuine association evidence (exclude identity/ontology/follow-up and AI leads)
-    if ((partition.human || []).some((c) => claimSortKey(c) > 0)) counts.human += 1;
-    if ((partition.animal || []).some((c) => claimSortKey(c) > 0)) counts.animal += 1;
-    if ((partition.computational || []).some((c) => claimSortKey(c) > 0)) counts.computational += 1;
+    if ((partition.human || []).some((claim) => claimSortKey(claim) > 0)) counts.human += 1;
+    if ((partition.animal || []).some((claim) => claimSortKey(claim) > 0)) counts.animal += 1;
+    if ((partition.computational || []).some((claim) => claimSortKey(claim) > 0)) counts.computational += 1;
     if (partition.aiLeads?.length) counts.aiLead += 1;
   }
   return counts;
+}
+
+function geneMatchesEvidenceBasis(gene, evidenceBasis = 'all') {
+  if (!evidenceBasis || evidenceBasis === 'all') return true;
+  const claims = Array.isArray(gene?.associationClaims) ? gene.associationClaims : [];
+  const partition = gene?.evidencePartition || partitionClaimsBySpecies(claims);
+  const hasHuman = (partition.human || []).some((claim) => claimSortKey(claim) > 0);
+  const hasAnimal = (partition.animal || []).some((claim) => claimSortKey(claim) > 0);
+  const hasComputational = (partition.computational || []).some((claim) => claimSortKey(claim) > 0);
+
+  if (evidenceBasis === 'human') return hasHuman;
+  if (evidenceBasis === 'animal') return hasAnimal;
+  if (evidenceBasis === 'computational') return hasComputational;
+  if (evidenceBasis === 'unverified') return !hasHuman && !hasAnimal && !hasComputational;
+  return true;
+}
+
+function geneMatchesFilters(gene, filters = {}) {
+  if (filters.symbol && !gene.symbol?.toLowerCase().includes(filters.symbol.toLowerCase())) {
+    return false;
+  }
+
+  if (filters.name && !gene.name?.toLowerCase().includes(filters.name.toLowerCase())) {
+    return false;
+  }
+
+  if (filters.chromosome && filters.chromosome !== "All") {
+    const geneChromosome = gene.genomic_pos?.chr?.toString() || gene.chromosome?.toString() || "";
+    if (geneChromosome !== filters.chromosome) return false;
+  }
+
+  if (filters.phenotype) {
+    if (!Array.isArray(gene.phenotypes)) return false;
+    const needle = filters.phenotype.toLowerCase();
+    const phenotypeMatch = gene.phenotypes.some((phenotype) => {
+      const label = typeof phenotype === 'string' ? phenotype : phenotype?.name;
+      return label?.toLowerCase().includes(needle);
+    });
+    if (!phenotypeMatch) return false;
+  }
+
+  return geneMatchesEvidenceBasis(gene, filters.evidenceBasis);
 }
 
 export default function GeneResults({
@@ -102,7 +144,7 @@ export default function GeneResults({
     name: "",
     chromosome: "All",
     phenotype: "",
-    minScore: 0
+    evidenceBasis: "all",
   });
   const [evidenceState, setEvidenceState] = useState({
     status: 'idle',
@@ -110,7 +152,7 @@ export default function GeneResults({
   });
 
   const selectedSymbolSet = useMemo(
-    () => new Set(selectedGenes.map(g => g.symbol)),
+    () => new Set(selectedGenes.map((gene) => gene.symbol)),
     [selectedGenes]
   );
 
@@ -172,51 +214,10 @@ export default function GeneResults({
     }));
   }, [evidenceState.result?.sources]);
 
-  // Apply filters to gene results
-  const filteredGenes = useMemo(() => {
-    return evidenceGenes.filter((gene) => {
-      // Symbol filter
-      if (filters.symbol && !gene.symbol?.toLowerCase().includes(filters.symbol.toLowerCase())) {
-        return false;
-      }
-
-      // Name filter
-      if (filters.name && !gene.name?.toLowerCase().includes(filters.name.toLowerCase())) {
-        return false;
-      }
-
-      // Chromosome filter
-      if (filters.chromosome && filters.chromosome !== "All") {
-        const geneChromosome = gene.genomic_pos?.chr?.toString() || gene.chromosome?.toString() || "";
-        if (geneChromosome !== filters.chromosome) {
-          return false;
-        }
-      }
-
-      // Phenotype filter. phenotypes is an array of { name, hpoId } OBJECTS, so
-      // calling .toLowerCase() directly on each element threw a TypeError and
-      // crashed the whole results panel the moment a phenotype filter was used.
-      if (filters.phenotype && Array.isArray(gene.phenotypes)) {
-        const needle = filters.phenotype.toLowerCase();
-        const phenotypeMatch = gene.phenotypes.some((p) => {
-          const label = typeof p === 'string' ? p : p?.name;
-          return label?.toLowerCase().includes(needle);
-        });
-        if (!phenotypeMatch) {
-          return false;
-        }
-      }
-
-      // Confidence score filter
-      if (filters.minScore > 0 && gene.confidence_score) {
-        if (gene.confidence_score < filters.minScore) {
-          return false;
-        }
-      }
-
-      return true;
-    });
-  }, [evidenceGenes, filters]);
+  const filteredGenes = useMemo(
+    () => evidenceGenes.filter((gene) => geneMatchesFilters(gene, filters)),
+    [evidenceGenes, filters],
+  );
 
   const handleClearFilters = () => {
     setFilters({
@@ -224,7 +225,7 @@ export default function GeneResults({
       name: "",
       chromosome: "All",
       phenotype: "",
-      minScore: 0
+      evidenceBasis: "all",
     });
   };
 
@@ -383,6 +384,8 @@ export default function GeneResults({
 
 export const __test = {
   claimKey,
+  geneMatchesEvidenceBasis,
+  geneMatchesFilters,
   mergeAssociationEvidence,
   queryReferenceForResults,
   summarizeEvidence,
