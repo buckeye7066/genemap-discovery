@@ -154,7 +154,16 @@ describe('PhenotypeSearchService provenance', () => {
 });
 
 describe('PhenotypeSearchService staged candidate journey', () => {
-  const envelope = (value) => ({ result: JSON.stringify(value), disclaimer: 'educational' });
+  const envelope = (value) => ({
+    publication: {
+      contractVersion: 1,
+      status: 'available',
+      content: JSON.stringify(value),
+      reasonCode: null,
+      correlationId: 'test:candidate-gene-research',
+      limitations: [],
+    },
+  });
 
   it.each(['Alice Smith', 'Alice Smith BRCA1 result', 'DNA and bomb making'])(
     'does not invoke generation for unresolved free label %s',
@@ -270,20 +279,28 @@ describe('PhenotypeSearchService profile and comparison behavior', () => {
     );
     expect(invoke).not.toHaveBeenCalled();
     expect(result.profileStatus).toBe('unavailable');
-    expect(result.aiSummary).toMatch(/AI-suggested candidate lead/i);
+    expect(result.aiSummary).toBeNull();
+    expect(result.profilePublication).toEqual({
+      contractVersion: 1,
+      status: 'unavailable',
+      content: null,
+      reasonCode: 'profile_identifier_unverified',
+      correlationId: 'client-profile:profile_identifier_unverified',
+      limitations: [],
+    });
     expect(result.phenotypes).toEqual([]);
   });
 
   it('sends only a verified symbol and honors explicit server profile states', async () => {
-    const invoke = vi.spyOn(apiClient, 'invokePublicationTask').mockResolvedValue({
-      result: JSON.stringify({
-        summary: 'Generated profile withheld because the response crossed the boundary.',
-        summaryStatus: 'withheld',
-        keyTakeaways: [],
-        phenotypes: [],
-      }),
-      disclaimer: 'educational',
-    });
+    const publication = {
+      contractVersion: 1,
+      status: 'withheld',
+      content: null,
+      reasonCode: 'profile_policy_boundary',
+      correlationId: 'test:gene-profile:withheld',
+      limitations: [],
+    };
+    const invoke = vi.spyOn(apiClient, 'invokePublicationTask').mockResolvedValue({ publication });
     const result = await PhenotypeSearchService.enrichGeneCombined(
       {
         symbol: 'CFTR',
@@ -306,6 +323,7 @@ describe('PhenotypeSearchService profile and comparison behavior', () => {
     );
     expect(JSON.stringify(invoke.mock.calls[0])).not.toContain('untrusted model prose');
     expect(result.profileStatus).toBe('withheld');
+    expect(result.profilePublication).toEqual(publication);
   });
 
   it('uses a deterministic unavailable state after a profile-call failure', async () => {
@@ -319,8 +337,15 @@ describe('PhenotypeSearchService profile and comparison behavior', () => {
     ], false, null);
 
     expect(result.profileStatus).toBe('unavailable');
-    expect(result.aiSummary).toMatch(/Generated profile unavailable/i);
-    expect(result.aiSummary).not.toMatch(/is associated with/i);
+    expect(result.aiSummary).toBeNull();
+    expect(result.profilePublication).toEqual({
+      contractVersion: 1,
+      status: 'unavailable',
+      content: null,
+      reasonCode: 'profile_enrichment_failed',
+      correlationId: 'client-profile:profile_enrichment_failed',
+      limitations: [],
+    });
   });
 
   it('compares lists deterministically without personal interpretation', async () => {

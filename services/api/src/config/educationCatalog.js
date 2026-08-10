@@ -1,4 +1,6 @@
 /** Curated public genetics-learning topics shared by routing and policy tests. */
+import { EDUCATION_TOPIC_IDS } from '@genemap/shared';
+
 export const EDUCATION_CATALOG_VERSION = 1;
 
 export const TOPICS_CATALOG = Object.freeze([
@@ -85,6 +87,12 @@ for (const { category, topics } of TOPICS_CATALOG) {
       catalogVersion: EDUCATION_CATALOG_VERSION,
     }));
   }
+}
+
+const SHARED_TOPIC_IDS = new Set(EDUCATION_TOPIC_IDS);
+if (TOPIC_BY_ID.size !== SHARED_TOPIC_IDS.size
+  || [...TOPIC_BY_ID.keys()].some((id) => !SHARED_TOPIC_IDS.has(id))) {
+  throw new Error('The server education catalog must exactly match the shared topic identifiers.');
 }
 
 /**

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useEducationLevel } from '@/lib/EducationLevelContext';
 import AdaptiveExplanation from '@/components/education/AdaptiveExplanation';
@@ -150,6 +150,22 @@ export default function TopicExplorer() {
   const { level, levelConfig } = useEducationLevel();
 
   const topicId = searchParams.get('topic') || '';
+  const publicationLevel = EDUCATION_LEVELS.has(level) ? level : 'undergraduate';
+  const publicationRequestScope = `${topicId}\u0000${publicationLevel}`;
+  const publicationRequestRef = useRef({
+    scope: publicationRequestScope,
+    explanation: 0,
+    image: 0,
+    chat: 0,
+  });
+  if (publicationRequestRef.current.scope !== publicationRequestScope) {
+    publicationRequestRef.current = {
+      scope: publicationRequestScope,
+      explanation: publicationRequestRef.current.explanation + 1,
+      image: publicationRequestRef.current.image + 1,
+      chat: publicationRequestRef.current.chat + 1,
+    };
+  }
 
   const [catalogTopic, setCatalogTopic] = useState(null);
   const [catalogLoading, setCatalogLoading] = useState(false);
@@ -161,17 +177,23 @@ export default function TopicExplorer() {
   const [imageError, setImageError] = useState('');
   const [chatMessages, setChatMessages] = useState([]);
   const [loading, setLoading] = useState({ explanation: false, image: false, chat: false });
+  const [publicationStateScope, setPublicationStateScope] = useState(publicationRequestScope);
+
+  useEffect(() => {
+    setPublicationStateScope(publicationRequestScope);
+    setExplanationPublication(null);
+    setExplanationError('');
+    setSources([]);
+    setImagePublication(null);
+    setImageError('');
+    setChatMessages([]);
+    setLoading({ explanation: false, image: false, chat: false });
+  }, [publicationRequestScope]);
 
   useEffect(() => {
     let active = true;
     setCatalogTopic(null);
     setTopicMetadata(null);
-    setImagePublication(null);
-    setImageError('');
-    setChatMessages([]);
-    setExplanationPublication(null);
-    setExplanationError('');
-    setSources([]);
     if (!topicId) return () => { active = false; };
 
     setCatalogLoading(true);
@@ -204,7 +226,7 @@ export default function TopicExplorer() {
     if (catalogTopic?.id === topicId) {
       loadExplanation();
     }
-  }, [catalogTopic?.id, level]);
+  }, [catalogTopic?.id, publicationRequestScope]);
 
   if (!topicId) {
     return <TopicBrowser navigate={navigate} levelConfig={levelConfig} />;
@@ -212,10 +234,17 @@ export default function TopicExplorer() {
 
   const loadExplanation = async () => {
     if (!topicId || catalogTopic?.id !== topicId) return;
+    const requestSequence = publicationRequestRef.current.explanation + 1;
+    publicationRequestRef.current.explanation = requestSequence;
+    const isCurrentRequest = () => (
+      publicationRequestRef.current.scope === publicationRequestScope
+      && publicationRequestRef.current.explanation === requestSequence
+    );
     setLoading(prev => ({ ...prev, explanation: true }));
     setExplanationError('');
     try {
-      const res = await apiClient.getExplanation({ topic: topicId, level: level || 'undergraduate' });
+      const res = await apiClient.getExplanation({ topic: topicId, level: publicationLevel });
+      if (!isCurrentRequest()) return;
       const publication = enforcePublicationContentType(
         res?.publication,
         (content) => typeof content === 'string' && Boolean(content.trim()),
@@ -227,20 +256,31 @@ export default function TopicExplorer() {
       setTopicMetadata(res?.topicMetadata || null);
       setSources(publicationContent(publication) && Array.isArray(res.sources) ? res.sources : []);
     } catch (err) {
-      setExplanationPublication(null);
-      setExplanationError(err?.message || 'Unable to load this topic.');
-      setSources([]);
+      if (isCurrentRequest()) {
+        setExplanationPublication(null);
+        setExplanationError(err?.message || 'Unable to load this topic.');
+        setSources([]);
+      }
     } finally {
-      setLoading(prev => ({ ...prev, explanation: false }));
+      if (isCurrentRequest()) {
+        setLoading(prev => ({ ...prev, explanation: false }));
+      }
     }
   };
 
   const loadImage = async () => {
     if (!topicId || catalogTopic?.id !== topicId) return;
+    const requestSequence = publicationRequestRef.current.image + 1;
+    publicationRequestRef.current.image = requestSequence;
+    const isCurrentRequest = () => (
+      publicationRequestRef.current.scope === publicationRequestScope
+      && publicationRequestRef.current.image === requestSequence
+    );
     setLoading(prev => ({ ...prev, image: true }));
     setImageError('');
     try {
-      const res = await apiClient.generateImage({ topic: topicId, level: level || 'undergraduate' });
+      const res = await apiClient.generateImage({ topic: topicId, level: publicationLevel });
+      if (!isCurrentRequest()) return;
       if (res?.topicMetadata?.id !== topicId) {
         throw new Error('The server returned mismatched topic metadata.');
       }
@@ -249,20 +289,32 @@ export default function TopicExplorer() {
         (content) => Boolean(
           content
           && typeof content === 'object'
-          && isSafeGeneratedImageUrl(content.imageUrl),
+          && isSafeGeneratedImageUrl(content.imageUrl)
+          && Object.prototype.hasOwnProperty.call(content, 'revisedPrompt')
+          && (content.revisedPrompt === null || typeof content.revisedPrompt === 'string'),
         ),
       ));
       setTopicMetadata(res?.topicMetadata || null);
     } catch (err) {
-      setImagePublication(null);
-      setImageError(err?.message || 'Unable to generate an illustration.');
+      if (isCurrentRequest()) {
+        setImagePublication(null);
+        setImageError(err?.message || 'Unable to generate an illustration.');
+      }
     } finally {
-      setLoading(prev => ({ ...prev, image: false }));
+      if (isCurrentRequest()) {
+        setLoading(prev => ({ ...prev, image: false }));
+      }
     }
   };
 
   const sendChat = async (interaction, label) => {
     if (!topicId || catalogTopic?.id !== topicId) return;
+    const requestSequence = publicationRequestRef.current.chat + 1;
+    publicationRequestRef.current.chat = requestSequence;
+    const isCurrentRequest = () => (
+      publicationRequestRef.current.scope === publicationRequestScope
+      && publicationRequestRef.current.chat === requestSequence
+    );
     setChatMessages((previous) => [...previous, { role: 'user', content: label }]);
     setLoading(prev => ({ ...prev, chat: true }));
 
@@ -272,10 +324,11 @@ export default function TopicExplorer() {
         taskInput: {
           version: 1,
           topic: topicId,
-          level: EDUCATION_LEVELS.has(level) ? level : 'undergraduate',
+          level: publicationLevel,
           interaction,
         },
       });
+      if (!isCurrentRequest()) return;
       if (res?.topicMetadata?.id !== topicId) {
         throw new Error('The server returned mismatched topic metadata.');
       }
@@ -288,16 +341,32 @@ export default function TopicExplorer() {
         ),
       }]);
     } catch (err) {
-      setChatMessages(prev => [...prev, {
-        role: 'system',
-        content: `The tutor request could not be completed: ${err?.message || 'unknown error'}`,
-      }]);
+      if (isCurrentRequest()) {
+        setChatMessages(prev => [...prev, {
+          role: 'system',
+          content: `The tutor request could not be completed: ${err?.message || 'unknown error'}`,
+        }]);
+      }
     } finally {
-      setLoading(prev => ({ ...prev, chat: false }));
+      if (isCurrentRequest()) {
+        setLoading(prev => ({ ...prev, chat: false }));
+      }
     }
   };
 
-  const topicTitle = topicMetadata?.title || catalogTopic?.title || 'Topic Explorer';
+  const publicationScopeIsCurrent = publicationStateScope === publicationRequestScope;
+  const visibleExplanationPublication = publicationScopeIsCurrent ? explanationPublication : null;
+  const visibleExplanationError = publicationScopeIsCurrent ? explanationError : '';
+  const visibleSources = publicationScopeIsCurrent ? sources : [];
+  const visibleImagePublication = publicationScopeIsCurrent ? imagePublication : null;
+  const visibleImageError = publicationScopeIsCurrent ? imageError : '';
+  const visibleChatMessages = publicationScopeIsCurrent ? chatMessages : [];
+  const visibleLoading = publicationScopeIsCurrent
+    ? loading
+    : { explanation: true, image: true, chat: true };
+  const visibleTopicMetadata = publicationScopeIsCurrent ? topicMetadata : null;
+  const visibleCatalogTopic = catalogTopic?.id === topicId ? catalogTopic : null;
+  const topicTitle = visibleTopicMetadata?.title || visibleCatalogTopic?.title || 'Topic Explorer';
 
   return (
     <div className="p-4 md:p-6 max-w-5xl mx-auto space-y-6 dna-bg min-h-screen">
@@ -338,14 +407,14 @@ export default function TopicExplorer() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="text-lg">Explanation</CardTitle>
-              <Button variant="ghost" size="sm" onClick={loadExplanation} disabled={loading.explanation || catalogLoading || !catalogTopic}>
-                <RefreshCw className={`w-4 h-4 ${loading.explanation ? 'animate-spin' : ''}`} />
+              <Button variant="ghost" size="sm" onClick={loadExplanation} disabled={visibleLoading.explanation || catalogLoading || !visibleCatalogTopic}>
+                <RefreshCw className={`w-4 h-4 ${visibleLoading.explanation ? 'animate-spin' : ''}`} />
               </Button>
             </CardHeader>
             <CardContent>
-              {explanationError && <p className="mb-3 text-sm text-red-700" role="alert">{explanationError}</p>}
-              <AdaptiveExplanation artifact={explanationPublication} loading={loading.explanation} level={level} />
-              {!loading.explanation && publicationContent(explanationPublication) && <SourceList sources={sources} />}
+              {visibleExplanationError && <p className="mb-3 text-sm text-red-700" role="alert">{visibleExplanationError}</p>}
+              <AdaptiveExplanation artifact={visibleExplanationPublication} loading={visibleLoading.explanation} level={level} />
+              {!visibleLoading.explanation && publicationContent(visibleExplanationPublication) && <SourceList sources={visibleSources} />}
             </CardContent>
           </Card>
         </TabsContent>
@@ -354,13 +423,13 @@ export default function TopicExplorer() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="text-lg">Visual Illustration</CardTitle>
-              <Button variant="outline" size="sm" onClick={loadImage} disabled={loading.image || catalogLoading || !catalogTopic}>
-                {imagePublication ? 'Regenerate' : 'Generate'} Image
+              <Button variant="outline" size="sm" onClick={loadImage} disabled={visibleLoading.image || catalogLoading || !visibleCatalogTopic}>
+                {visibleImagePublication ? 'Regenerate' : 'Generate'} Image
               </Button>
             </CardHeader>
             <CardContent>
-              {imageError && <p className="mb-3 text-sm text-red-700" role="alert">{imageError}</p>}
-              <AdaptiveImage artifact={imagePublication} loading={loading.image} level={level} topic={topicTitle} />
+              {visibleImageError && <p className="mb-3 text-sm text-red-700" role="alert">{visibleImageError}</p>}
+              <AdaptiveImage artifact={visibleImagePublication} loading={visibleLoading.image} level={level} topic={topicTitle} />
             </CardContent>
           </Card>
         </TabsContent>
@@ -376,17 +445,17 @@ export default function TopicExplorer() {
             </CardHeader>
             <CardContent className="space-y-4 p-4">
               <div className="h-80 overflow-y-auto space-y-3 p-3 bg-gradient-to-b from-slate-50/50 to-white rounded-lg scrollbar-thin">
-                {chatMessages.length === 0 && (
+                {visibleChatMessages.length === 0 && (
                   <div className="text-center py-12">
                     <MessageSquare className="w-10 h-10 text-slate-300 mx-auto mb-3" />
                     <p className="text-slate-500 font-medium">Explore {topicTitle} with a guided tutor action.</p>
                     <p className="text-sm text-slate-400 mt-1">The server composes a general genetics-education prompt.</p>
                   </div>
                 )}
-                {chatMessages.map((msg, i) => (
+                {visibleChatMessages.map((msg, i) => (
                   <ChatBubble key={i} msg={msg} />
                 ))}
-                {loading.chat && (
+                {visibleLoading.chat && (
                   <div className="flex justify-start animate-fade-in">
                     <div className="bg-white border border-slate-200 rounded-2xl px-4 py-3 shadow-sm">
                       <div className="flex gap-1.5">
@@ -405,14 +474,14 @@ export default function TopicExplorer() {
                     type="button"
                     variant="outline"
                     onClick={() => sendChat(interaction, label)}
-                    disabled={loading.chat || catalogLoading || !catalogTopic}
+                    disabled={visibleLoading.chat || catalogLoading || !visibleCatalogTopic}
                     className="h-auto min-h-11 whitespace-normal"
                   >
                     {label}
                   </Button>
                 ))}
               </div>
-              <SourceList sources={sources} title="References for this topic" />
+              <SourceList sources={visibleSources} title="References for this topic" />
             </CardContent>
           </Card>
         </TabsContent>
@@ -425,7 +494,7 @@ export default function TopicExplorer() {
               <p className="text-slate-600 mb-4">Test your knowledge of {topicTitle || 'this topic'} at your learning level.</p>
               <Button
                 className="bg-gradient-to-r from-purple-500 to-pink-500 text-white"
-                disabled={catalogLoading || !catalogTopic}
+                disabled={catalogLoading || !visibleCatalogTopic}
                 onClick={() => navigate(`/quizmode?topic=${encodeURIComponent(topicId)}`)}
               >
                 Start Quiz

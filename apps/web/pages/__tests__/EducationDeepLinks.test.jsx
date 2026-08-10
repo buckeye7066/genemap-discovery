@@ -154,5 +154,6 @@ describe('education deep-link catalog boundary', () => {
       score: 2,
       totalQuestions: 2,
     }));
+    expect(apiClient.updateLearningProgress).toHaveBeenCalledTimes(1);
   });
 });

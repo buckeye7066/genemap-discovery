@@ -27,6 +27,63 @@ export interface CreatePublicationArtifactInput<T> {
 
 const REASON_CODE = /^[a-z0-9][a-z0-9_.-]{0,63}$/u;
 const CORRELATION_ID = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/u;
+const PUBLICATION_ARTIFACT_KEYS = Object.freeze([
+  'content',
+  'contractVersion',
+  'correlationId',
+  'limitations',
+  'reasonCode',
+  'status',
+]);
+
+export function isCanonicalPublicationArtifact<T = unknown>(
+  artifact: unknown,
+): artifact is PublicationArtifact<T> {
+  if (!artifact || typeof artifact !== 'object' || Array.isArray(artifact)) return false;
+  const keys = Object.keys(artifact).sort();
+  if (
+    keys.length !== PUBLICATION_ARTIFACT_KEYS.length
+    || keys.some((key, index) => key !== PUBLICATION_ARTIFACT_KEYS[index])
+  ) return false;
+  const candidate = artifact as Partial<PublicationArtifact<T>>;
+  if (
+    candidate.contractVersion !== 1
+    || !Object.values(PUBLICATION_STATUSES).includes(candidate.status as PublicationStatus)
+    || !Object.prototype.hasOwnProperty.call(candidate, 'content')
+  ) return false;
+  if (
+    typeof candidate.correlationId !== 'string'
+    || !CORRELATION_ID.test(candidate.correlationId)
+  ) return false;
+  if (
+    candidate.reasonCode !== null
+    && (
+      typeof candidate.reasonCode !== 'string'
+      || !REASON_CODE.test(candidate.reasonCode)
+    )
+  ) return false;
+  if (candidate.status !== PUBLICATION_STATUSES.AVAILABLE && candidate.reasonCode === null) {
+    return false;
+  }
+  if (
+    !Array.isArray(candidate.limitations)
+    || !candidate.limitations.every((item) => (
+      typeof item === 'string'
+      && item.length > 0
+      && item === item.trim()
+    ))
+    || new Set(candidate.limitations).size !== candidate.limitations.length
+  ) return false;
+
+  const contentAllowed = candidate.status === PUBLICATION_STATUSES.AVAILABLE
+    || candidate.status === PUBLICATION_STATUSES.PARTIAL;
+  if (contentAllowed) {
+    if (candidate.content === null || candidate.content === undefined) return false;
+    return candidate.status !== PUBLICATION_STATUSES.PARTIAL
+      || candidate.limitations.length > 0;
+  }
+  return candidate.content === null;
+}
 
 export function createPublicationArtifact<T>(
   input: CreatePublicationArtifactInput<T>,
@@ -73,7 +130,7 @@ export function canUsePublicationContent<T>(
   artifact: PublicationArtifact<T> | null | undefined,
 ): artifact is PublicationArtifact<T> & { content: T } {
   return Boolean(
-    artifact
+    isCanonicalPublicationArtifact<T>(artifact)
     && (artifact.status === PUBLICATION_STATUSES.AVAILABLE
       || artifact.status === PUBLICATION_STATUSES.PARTIAL)
     && artifact.content != null,

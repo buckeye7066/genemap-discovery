@@ -45,6 +45,9 @@ describe('genetics education publication boundary', () => {
     'We recommend you switch to Zorblax.',
     'I recommend taking Zorblax.',
     'I recommend Zorblax.',
+    'Tylenol is recommended.',
+    'Zorblax is recommended.',
+    'Zorblax may help your symptoms.',
     'You may have Zorblax syndrome.',
     'Your results indicate that you have Zorblax syndrome.',
     'Your results are consistent with Zorblax syndrome.',
@@ -78,6 +81,13 @@ describe('genetics education publication boundary', () => {
     '\u03a4a\u03bae Tylenol.',
     'take5mg.',
     'take-5mg.',
+    'You should T&Ascr;ke Zorblax.',
+    'You ѕһоսӏԁ take Zorblax.',
+    'ᴛᴀᴋᴇ Zorblax.',
+    'ꜱᴛᴏᴘ Zorblax.',
+    'You should t a k e Zorblax.',
+    'You should t&nbsp;a&nbsp;k&nbsp;e Zorblax.',
+    'You should ta\nke Zorblax.',
   ])('withholds a rendered-semantic boundary bypass: %s', (raw) => {
     expect(__test.containsProhibitedClinicalGuidance(raw)).toBe(true);
     expect(sanitizeEducation(raw)).toMatchObject({
@@ -98,6 +108,20 @@ describe('genetics education publication boundary', () => {
     'Try Zorblax for the symptoms.',
     'You need Zorblax.',
     'You sһould take Zorblax.',
+    'You should drink Zorblax twice daily.',
+    'You should chew one Zorblax tablet.',
+    'You should inhale two puffs of Zorblax twice daily.',
+    'You should rub Zorblax on your skin twice daily.',
+    'You should taper Zorblax over one week.',
+    'You should skip Zorblax tonight.',
+    'Patients should rec**eive** chemotherapy.',
+    'Give the patient metformin.',
+    'Manage symptoms with chemotherapy.',
+    'Initiate Zorblax therapy.',
+    'The findings are diagn&#111;stic of cystic fibrosis.',
+    'Your results confirm cystic fibrosis.',
+    'Your test is positive for cystic fibrosis.',
+    'The patient is positive for cystic fibrosis.',
   ])('withholds generic diagnostic or treatment directives: %s', (raw) => {
     expect(__test.containsProhibitedClinicalGuidance(raw)).toBe(true);
     expect(sanitizeEducation(raw)).toMatchObject({
@@ -119,6 +143,10 @@ describe('genetics education publication boundary', () => {
     'Stop the simulation after the convergence check.',
     'Apply the method to the deidentified cohort.',
     'Switch models during sensitivity analysis.',
+    'Receive the dataset from the reviewed repository.',
+    'Give the model additional aggregate data.',
+    'Manage the dataset with version control.',
+    'Initiate the simulation after validation.',
     'Take this example as a conceptual model.',
     'For aggregate comparison, use regression.',
     'I recommend further research and source verification.',
@@ -177,6 +205,63 @@ describe('genetics education publication boundary', () => {
     expect(result.content).toHaveLength(1);
     expect(JSON.stringify(result.content)).not.toMatch(/Zorblax|medication daily/i);
     expect(result.limitations).toHaveLength(1);
+  });
+
+  it.each([
+    'genetics_education',
+    'research_hypothesis',
+    'aggregate_genomics_research',
+    'learning_activity_summary',
+  ])('withholds rendered treatment and diagnostic conclusions for %s', (task) => {
+    for (const blocked of [
+      'Patients should rec**eive** chemotherapy.',
+      'The findings are diagn&#111;stic of cystic fibrosis.',
+    ]) {
+      expect(sanitizePublicationArtifact(task, {}, blocked, {
+        correlationId: `cross-task-${task}`,
+      })).toMatchObject({
+        status: 'withheld',
+        content: null,
+        reasonCode: 'clinical_boundary',
+      });
+    }
+  });
+
+  it('removes the same directives from quiz and candidate-gene fields', () => {
+    const quiz = sanitizeEducationQuizArtifact([
+      {
+        question: 'Which molecule stores hereditary information?',
+        options: ['DNA', 'Water'],
+        correctIndex: 0,
+        explanation: 'DNA stores hereditary information.',
+      },
+      {
+        question: 'Which intervention is next?',
+        options: ['Chemotherapy', 'Observation'],
+        correctIndex: 0,
+        explanation: 'Patients should rec**eive** chemotherapy.',
+      },
+    ], 2, { correlationId: 'quiz-receive-boundary' });
+    expect(quiz).toMatchObject({ status: 'partial', reasonCode: 'items_withheld_or_missing' });
+    expect(JSON.stringify(quiz)).not.toContain('rec**eive**');
+
+    const candidates = sanitizePublicationArtifact(
+      'candidate_gene_research',
+      { operation: 'suggest_candidates' },
+      {
+        candidateGenes: [{
+          symbol: 'CFTR',
+          explanation: 'The findings are diagn&#111;stic of cystic fibrosis.',
+        }],
+      },
+      { correlationId: 'candidate-diagnostic-boundary' },
+    );
+    expect(candidates).toMatchObject({
+      status: 'partial',
+      reasonCode: 'clinical_fields_withheld',
+    });
+    expect(candidates.content.candidateGenes).toEqual([{ symbol: 'CFTR' }]);
+    expect(JSON.stringify(candidates)).not.toContain('diagn&#111;stic');
   });
 
   it.each([
@@ -249,6 +334,46 @@ describe('genetics education publication boundary', () => {
       content: null,
       reasonCode: 'provider_incomplete',
     });
+  });
+
+  it.each([
+    ['filtered', 'withheld', 'provider_filtered'],
+    ['failed', 'unavailable', 'provider_incomplete'],
+    ['truncated', 'unavailable', 'provider_truncated_structured_output'],
+  ])('honors structured completion %s without requiring a text wrapper', (
+    completion,
+    expectedStatus,
+    expectedReason,
+  ) => {
+    const result = sanitizePublicationArtifact(
+      'candidate_gene_research',
+      { operation: 'suggest_candidates' },
+      { completion, candidateGenes: [{ symbol: 'CFTR' }] },
+      { correlationId: `structured-${completion}-test` },
+    );
+
+    expect(result).toMatchObject({
+      status: expectedStatus,
+      content: null,
+      reasonCode: expectedReason,
+    });
+    expect(JSON.stringify(result)).not.toContain('CFTR');
+  });
+
+  it('retains complete direct structured output after consuming its completion metadata', () => {
+    const result = sanitizePublicationArtifact(
+      'candidate_gene_research',
+      { operation: 'suggest_candidates' },
+      { completion: 'complete', candidateGenes: [{ symbol: 'CFTR' }] },
+      { correlationId: 'structured-complete-test' },
+    );
+
+    expect(result).toMatchObject({
+      status: 'available',
+      content: { candidateGenes: [{ symbol: 'CFTR' }] },
+      reasonCode: null,
+    });
+    expect(result.content).not.toHaveProperty('completion');
   });
 
   it('never includes blocked text in a withheld artifact, including when truncated', () => {

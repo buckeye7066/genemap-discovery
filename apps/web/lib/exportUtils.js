@@ -3,6 +3,7 @@ import {
   deriveRankingBasisFromClaims,
   safeExternalHttpUrl,
 } from '../../../packages/shared/src/associationClaim.js';
+import { isCanonicalPublicationArtifact } from '@genemap/shared/publicationStatus';
 
 /**
  * Export utilities for GeneMap Discovery
@@ -10,53 +11,23 @@ import {
  */
 
 const EXPORTABLE_PUBLICATION_STATUSES = new Set(['available', 'partial']);
-const PUBLICATION_STATUSES = new Set([
-  'available',
-  'partial',
-  'withheld',
-  'unavailable',
-  'superseded',
-]);
 const CORRELATION_ID = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/u;
-const REASON_CODE = /^[a-z0-9][a-z0-9_.-]{0,63}$/u;
-
-function isCanonicalPublicationArtifactForExport(artifact) {
-  if (!artifact || typeof artifact !== 'object') return false;
-  if (artifact.contractVersion !== 1 || !PUBLICATION_STATUSES.has(artifact.status)) return false;
-  if (!Object.prototype.hasOwnProperty.call(artifact, 'content')) return false;
-  if (typeof artifact.correlationId !== 'string' || !CORRELATION_ID.test(artifact.correlationId)) return false;
-  if (artifact.reasonCode !== null && (
-    typeof artifact.reasonCode !== 'string'
-    || !REASON_CODE.test(artifact.reasonCode)
-  )) return false;
-  if (artifact.status !== 'available' && artifact.reasonCode === null) return false;
-  if (!Array.isArray(artifact.limitations) || !artifact.limitations.every((item) => (
-    typeof item === 'string'
-    && item.length > 0
-    && item === item.trim()
-  )) || new Set(artifact.limitations).size !== artifact.limitations.length) return false;
-  if (EXPORTABLE_PUBLICATION_STATUSES.has(artifact.status)) {
-    if (artifact.content === null || artifact.content === undefined) return false;
-    return artifact.status !== 'partial' || artifact.limitations.length > 0;
-  }
-  return artifact.content === null;
-}
 
 /** Export paths enforce the publication boundary independently of the UI. */
 export function isPublicationExportable(artifact) {
   return Boolean(
-    isCanonicalPublicationArtifactForExport(artifact)
+    isCanonicalPublicationArtifact(artifact)
     && EXPORTABLE_PUBLICATION_STATUSES.has(artifact.status)
   );
 }
 
-function sanitizePublicationArtifact(artifact, seen) {
-  const canonical = isCanonicalPublicationArtifactForExport(artifact);
+function sanitizePublicationArtifact(artifact, ancestors) {
+  const canonical = isCanonicalPublicationArtifact(artifact);
   const exportable = isPublicationExportable(artifact);
   return {
     contractVersion: 1,
     status: canonical ? artifact.status : 'unavailable',
-    content: exportable ? sanitizeExportValue(artifact.content, seen) : null,
+    content: exportable ? sanitizeExportValue(artifact.content, ancestors, false) : null,
     reasonCode: !canonical
       ? 'invalid_publication_envelope'
       : artifact.reasonCode,
@@ -82,38 +53,64 @@ function looksLikePublicationArtifact(value) {
   );
 }
 
-function sanitizeExportValue(value, seen = new WeakSet()) {
-  if (value === null || typeof value !== 'object') return value;
-  if (seen.has(value)) return '[Circular reference omitted]';
-  seen.add(value);
-  if (looksLikePublicationArtifact(value)) return sanitizePublicationArtifact(value, seen);
-  if (Array.isArray(value)) return value.map((item) => sanitizeExportValue(item, seen));
-  const sanitized = Object.fromEntries(Object.entries(value).map(([key, item]) => [
-    key,
-    sanitizeExportValue(item, seen),
-  ]));
-  if (looksLikePublicationArtifact(value.publication)) {
-    for (const legacyAlias of [
-      'result',
-      'response',
-      'explanation',
-      'questions',
-      'imageUrl',
-      'revisedPrompt',
-      'analysis',
-    ]) {
-      delete sanitized[legacyAlias];
-    }
+function sanitizeGeneCollection(genes, ancestors) {
+  if (ancestors.has(genes)) return '[Circular reference omitted]';
+  ancestors.add(genes);
+  try {
+    return genes.map((gene) => (
+      gene && typeof gene === 'object' && !Array.isArray(gene) && !ancestors.has(gene)
+        ? sanitizePublicationSafeGene(gene, ancestors)
+        : sanitizeExportValue(gene, ancestors, true)
+    ));
+  } finally {
+    ancestors.delete(genes);
   }
-  return sanitized;
 }
 
-export function publicationSafeGene(gene = {}) {
-  const source = gene && typeof gene === 'object' ? gene : {};
+function sanitizeExportValue(value, ancestors = new WeakSet(), applyGeneCollectionPolicy = false) {
+  if (value === null || typeof value !== 'object') return value;
+  if (ancestors.has(value)) return '[Circular reference omitted]';
+  ancestors.add(value);
+  try {
+    if (looksLikePublicationArtifact(value)) {
+      return sanitizePublicationArtifact(value, ancestors);
+    }
+    if (Array.isArray(value)) {
+      return value.map((item) => sanitizeExportValue(item, ancestors, applyGeneCollectionPolicy));
+    }
+    const sanitized = Object.fromEntries(Object.entries(value).map(([key, item]) => [
+      key,
+      applyGeneCollectionPolicy && key === 'genes' && Array.isArray(item)
+        ? sanitizeGeneCollection(item, ancestors)
+        : sanitizeExportValue(item, ancestors, applyGeneCollectionPolicy),
+    ]));
+    if (looksLikePublicationArtifact(value.publication)) {
+      for (const legacyAlias of [
+        'result',
+        'response',
+        'explanation',
+        'questions',
+        'imageUrl',
+        'revisedPrompt',
+        'analysis',
+      ]) {
+        delete sanitized[legacyAlias];
+      }
+    }
+    return sanitized;
+  } finally {
+    ancestors.delete(value);
+  }
+}
+
+function sanitizePublicationSafeGene(gene, ancestors) {
+  const source = /** @type {Record<string, unknown>} */ (
+    gene && typeof gene === 'object' ? gene : {}
+  );
   const candidateReusable = isPublicationExportable(source.candidatePublication);
   const profileReusable = isPublicationExportable(source.profilePublication)
     && source.profileStatus === 'available';
-  const safe = sanitizeExportValue(source);
+  const safe = sanitizeExportValue(source, ancestors, true);
 
   if (!candidateReusable) {
     delete safe.explanation;
@@ -145,10 +142,14 @@ export function publicationSafeGene(gene = {}) {
   return safe;
 }
 
+export function publicationSafeGene(gene = {}) {
+  return sanitizePublicationSafeGene(gene, new WeakSet());
+}
+
 export function publicationSafeExportData(data) {
   return data && typeof data === 'object' && ('symbol' in data || 'associationClaims' in data)
     ? publicationSafeGene(data)
-    : sanitizeExportValue(data);
+    : sanitizeExportValue(data, new WeakSet(), true);
 }
 
 /**

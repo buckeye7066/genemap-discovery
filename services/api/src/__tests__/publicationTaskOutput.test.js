@@ -37,7 +37,21 @@ function sanitize(operation, result, query = DISEASE_QUERY) {
   const taskInput = operation === 'gene_profile'
     ? { operation }
     : { operation, query };
-  return JSON.parse(sanitizePublicationTaskOutput(TASK, taskInput, result));
+  return sanitizePublicationTaskOutput(TASK, taskInput, result);
+}
+
+function expectPublication(publication, {
+  status = 'available',
+  reasonCode = status === 'available' ? null : undefined,
+} = {}) {
+  expect(publication).toMatchObject({
+    contractVersion: 1,
+    status,
+    correlationId: 'legacy-publication-boundary',
+  });
+  if (reasonCode !== undefined) expect(publication.reasonCode).toBe(reasonCode);
+  if (status === 'available') expect(publication.limitations).toEqual([]);
+  return publication.content;
 }
 
 describe('sanitizePublicationTaskOutput', () => {
@@ -58,7 +72,7 @@ describe('sanitizePublicationTaskOutput', () => {
       null,
     );
 
-    const result = sanitize('classify_and_suggest', `
+    const publication = sanitize('classify_and_suggest', `
       Here is the requested JSON:
       \`\`\`json
       ${JSON.stringify({
@@ -76,6 +90,7 @@ describe('sanitizePublicationTaskOutput', () => {
       \`\`\`
     `);
 
+    const result = expectPublication(publication);
     expect(result.queryType).toBe('disease');
     expect(result.isDisease).toBe(true);
     expect(result.isHPOTerm).toBe(false);
@@ -104,7 +119,7 @@ describe('sanitizePublicationTaskOutput', () => {
   });
 
   it('drops clinical guidance embedded in candidate explanations', () => {
-    const result = sanitize('suggest_candidates', {
+    const publication = sanitize('suggest_candidates', {
       candidateGenes: [
         {
           symbol: 'CFTR',
@@ -118,6 +133,11 @@ describe('sanitizePublicationTaskOutput', () => {
       ],
     });
 
+    const result = expectPublication(publication, {
+      status: 'partial',
+      reasonCode: 'clinical_fields_withheld',
+    });
+    expect(publication.limitations).toHaveLength(1);
     expect(result.candidateGenes).toEqual([
       { symbol: 'CFTR', name: 'CFTR' },
       { symbol: 'RUNX1', explanation: 'An exploratory candidate for source verification.' },
@@ -125,7 +145,7 @@ describe('sanitizePublicationTaskOutput', () => {
   });
 
   it('drops clinical guidance embedded in candidate names and classification synonyms', () => {
-    const result = sanitize('classify_and_suggest', {
+    const publication = sanitize('classify_and_suggest', {
       queryType: 'disease',
       isDisease: true,
       synonyms: ['CF', 'Patients should take medication.'],
@@ -138,6 +158,11 @@ describe('sanitizePublicationTaskOutput', () => {
       ],
     });
 
+    const result = expectPublication(publication, {
+      status: 'partial',
+      reasonCode: 'clinical_fields_withheld',
+    });
+    expect(publication.limitations).toHaveLength(1);
     expect(result.synonyms).toEqual(['CF']);
     expect(result.candidateGenes).toEqual([
       { symbol: 'CFTR', explanation: 'An exploratory candidate for source verification.' },
@@ -145,58 +170,66 @@ describe('sanitizePublicationTaskOutput', () => {
   });
 
   it('derives classification from trusted curated and ontology references', () => {
-    const phenotype = sanitize('classify', {
+    const phenotypePublication = sanitize('classify', {
       queryType: 'disease',
       isDisease: true,
       diseaseName: 'Wrong model label',
       isHPOTerm: true,
+      mainFeatures: ['A source-verification feature'],
     }, PHENOTYPE_QUERY);
+    const phenotype = expectPublication(phenotypePublication);
     expect(phenotype).toEqual({
       queryType: 'phenotype',
       isDisease: false,
       isHPOTerm: false,
-      mainFeatures: [],
+      mainFeatures: ['A source-verification feature'],
       synonyms: [],
       hpoTerms: [],
     });
 
-    const hpo = sanitize('classify', {
+    const hpoPublication = sanitize('classify', {
       queryType: 'disease',
       isDisease: true,
       diseaseName: 'Wrong model label',
       isHPOTerm: false,
+      mainFeatures: ['An ontology-review feature'],
     }, HPO_QUERY);
+    const hpo = expectPublication(hpoPublication);
     expect(hpo).toEqual({
       queryType: 'hpo_term',
       isDisease: false,
       isHPOTerm: true,
-      mainFeatures: [],
+      mainFeatures: ['An ontology-review feature'],
       synonyms: [],
       hpoTerms: [],
     });
   });
 
   it('accepts an array for suggest_candidates and fails closed on malformed output', () => {
-    expect(sanitize('suggest_candidates', [
+    const arrayPublication = sanitize('suggest_candidates', [
       { symbol: 'runx1' },
       { symbol: 'NOT A SYMBOL' },
       { symbol: 'RUNX1' },
-    ])).toEqual({ candidateGenes: [{ symbol: 'RUNX1' }] });
-
-    expect(sanitize('suggest_candidates', 'not json at all')).toEqual({ candidateGenes: [] });
-    expect(sanitize('classify_and_suggest', '{broken', PHENOTYPE_QUERY)).toEqual({
-      queryType: 'phenotype',
-      isDisease: false,
-      isHPOTerm: false,
-      mainFeatures: [],
-      synonyms: [],
-      hpoTerms: [],
-      candidateGenes: [],
+    ]);
+    expect(expectPublication(arrayPublication)).toEqual({
+      candidateGenes: [{ symbol: 'RUNX1' }],
     });
+
+    for (const publication of [
+      sanitize('suggest_candidates', 'not json at all'),
+      sanitize('classify_and_suggest', '{broken', PHENOTYPE_QUERY),
+    ]) {
+      expectPublication(publication, {
+        status: 'unavailable',
+        reasonCode: 'provider_malformed',
+      });
+      expect(publication.content).toBeNull();
+      expect(publication.limitations).toEqual([]);
+    }
   });
 
   it('reduces safe gene-profile output to bounded non-clinical text and phenotype names only', () => {
-    const result = sanitize('gene_profile', {
+    const publication = sanitize('gene_profile', {
       summary: 'This is not a diagnosis. Exploratory\nsummary\u0000with boundaries.',
       keyTakeaways: [
         'First point',
@@ -218,6 +251,11 @@ describe('sanitizePublicationTaskOutput', () => {
       treatmentData: ['not publishable'],
     });
 
+    const result = expectPublication(publication, {
+      status: 'partial',
+      reasonCode: 'clinical_fields_withheld',
+    });
+    expect(publication.limitations).toHaveLength(1);
     expect(result.summary).toBe('This is not a diagnosis. Exploratory summary with boundaries.');
     expect(result.summaryStatus).toBe('available');
     expect(result.keyTakeaways).toHaveLength(12);
@@ -228,43 +266,68 @@ describe('sanitizePublicationTaskOutput', () => {
   });
 
   it('returns an explicit safe withheld profile instead of allowing a client-side association fallback', () => {
-    const result = sanitize('gene_profile', {
+    const publication = sanitize('gene_profile', {
       summary: 'The patient should begin treatment and take 10 mg daily.',
       keyTakeaways: ['Screening is recommended for this patient.', 'Verify source records.'],
       phenotypes: [],
     });
 
-    expect(result.summaryStatus).toBe('withheld');
-    expect(result.summary).toBe(__test.WITHHELD_PROFILE_SUMMARY);
-    expect(result.summary).not.toMatch(/associated with|treatment|10 mg daily/i);
-    expect(result.keyTakeaways).toEqual(['Verify source records.']);
+    expectPublication(publication, {
+      status: 'withheld',
+      reasonCode: 'clinical_boundary',
+    });
+    expect(publication.content).toBeNull();
+    expect(publication.limitations).toEqual([]);
+    expect(JSON.stringify(publication)).not.toMatch(/associated with|treatment|10 mg daily/i);
   });
 
-  it('returns a deterministic unavailable profile for invalid or missing model output', () => {
-    expect(sanitize('gene_profile', null)).toEqual({
-      summary: __test.UNAVAILABLE_PROFILE_SUMMARY,
-      summaryStatus: 'unavailable',
-      keyTakeaways: [],
-      phenotypes: [],
+  it('returns truthful terminal or partial artifacts for empty structured output', () => {
+    const malformed = sanitize('gene_profile', null);
+    expectPublication(malformed, {
+      status: 'unavailable',
+      reasonCode: 'provider_malformed',
     });
-    expect(sanitize('classify', [], PHENOTYPE_QUERY)).toEqual({
-      queryType: 'phenotype',
-      isDisease: false,
-      isHPOTerm: false,
-      mainFeatures: [],
-      synonyms: [],
-      hpoTerms: [],
+    expect(malformed.content).toBeNull();
+
+    const missingSummary = sanitize('gene_profile', []);
+    expectPublication(missingSummary, {
+      status: 'unavailable',
+      reasonCode: 'profile_summary_unavailable',
     });
+    expect(missingSummary.content).toBeNull();
+
+    const classification = sanitize('classify', [], PHENOTYPE_QUERY);
+    expectPublication(classification, {
+      status: 'unavailable',
+      reasonCode: 'provider_empty',
+    });
+    expect(classification.content).toBeNull();
+
+    const suggestions = sanitize('suggest_candidates', { candidateGenes: [] });
+    expectPublication(suggestions, {
+      status: 'unavailable',
+      reasonCode: 'provider_empty',
+    });
+    expect(suggestions.content).toBeNull();
+
+    const fused = sanitize('classify_and_suggest', { candidateGenes: [] }, PHENOTYPE_QUERY);
+    const fusedContent = expectPublication(fused, {
+      status: 'partial',
+      reasonCode: 'candidate_leads_missing',
+    });
+    expect(fusedContent.candidateGenes).toEqual([]);
+    expect(fused.limitations).toHaveLength(1);
   });
 
   it('normalizes every published research narrative instead of passing provider prose through', () => {
-    const raw = '# Cohort hypothesis\n<script>alert(1)</script>\nReview [the source](https://untrusted.example) and https://other.example/path.\u0085\n\n\nUse deidentified aggregate data.';
-    const result = sanitizePublicationTaskOutput(RESEARCH_TASK, {}, raw);
+    const raw = '# Cohort hypothesis\n<script>alert(1)</script>\nReview [the source](https://untrusted.example) and https://other.example/path.\u0085\n\n\nAnalyze deidentified aggregate data.';
+    const publication = sanitizePublicationTaskOutput(RESEARCH_TASK, {}, raw);
+    const result = expectPublication(publication);
 
     expect(result).toContain('# Cohort hypothesis');
     expect(result).toContain('the source');
     expect(result).toContain('[external link removed]');
-    expect(result).toContain('Use deidentified aggregate data.');
+    expect(result).toContain('Analyze deidentified aggregate data.');
     expect(result).not.toContain('<script>');
     expect(result).not.toContain('https://');
     expect(result).not.toContain('\u0085');
@@ -280,7 +343,8 @@ describe('sanitizePublicationTaskOutput', () => {
       'Also inspect //another.example/path.',
     ].join('\n');
 
-    const result = sanitizePublicationTaskOutput(RESEARCH_TASK, {}, raw);
+    const publication = sanitizePublicationTaskOutput(RESEARCH_TASK, {}, raw);
+    const result = expectPublication(publication);
 
     expect(result).toContain('Review the source and tracking pixel.');
     expect(result).toContain('[external link removed]');
@@ -293,48 +357,82 @@ describe('sanitizePublicationTaskOutput', () => {
 
   it('withholds clinical guidance from research and learning publication tasks', () => {
     const clinical = 'The patient should begin treatment and take 5 mg daily.';
-    expect(sanitizePublicationTaskOutput(RESEARCH_TASK, {}, clinical))
-      .toBe(__test.PUBLICATION_BOUNDARY_MESSAGE);
-    expect(sanitizePublicationTaskOutput(AGGREGATE_TASK, {}, clinical))
-      .toBe(__test.PUBLICATION_BOUNDARY_MESSAGE);
-    expect(sanitizePublicationTaskOutput(LEARNING_TASK, {}, 'You should consult your physician for screening.'))
-      .toBe(__test.PUBLICATION_BOUNDARY_MESSAGE);
+    for (const publication of [
+      sanitizePublicationTaskOutput(RESEARCH_TASK, {}, clinical),
+      sanitizePublicationTaskOutput(AGGREGATE_TASK, {}, clinical),
+      sanitizePublicationTaskOutput(
+        LEARNING_TASK,
+        {},
+        'You should consult your physician for screening.',
+      ),
+    ]) {
+      expectPublication(publication, {
+        status: 'withheld',
+        reasonCode: 'clinical_boundary',
+      });
+      expect(publication.content).toBeNull();
+      expect(publication.limitations).toEqual([]);
+    }
   });
 
   it('does not let a disclaimer consume a following semicolon-separated instruction', () => {
     const disguisedClinical = 'Do not use this output for diagnosis; take 5 mg daily.';
 
     expect(__test.containsProhibitedClinicalGuidance(disguisedClinical)).toBe(true);
-    expect(sanitizePublicationTaskOutput(RESEARCH_TASK, {}, disguisedClinical))
-      .toBe(__test.PUBLICATION_BOUNDARY_MESSAGE);
+    const publication = sanitizePublicationTaskOutput(RESEARCH_TASK, {}, disguisedClinical);
+    expectPublication(publication, {
+      status: 'withheld',
+      reasonCode: 'clinical_boundary',
+    });
+    expect(publication.content).toBeNull();
   });
 
   it('allows complete known non-clinical boundary disclaimers and caps narrative output', () => {
-    const safe = sanitizePublicationTaskOutput(
+    const safePublication = sanitizePublicationTaskOutput(
       LEARNING_TASK,
       {},
       `This is not medical advice. Compare aggregate patterns only. ${'A'.repeat(4_000)}`,
     );
-    expect(safe).not.toBe(__test.PUBLICATION_BOUNDARY_MESSAGE);
+    const safe = expectPublication(safePublication);
     expect(safe).toContain('This is not medical advice.');
     expect(safe.length).toBeLessThanOrEqual(3_000);
 
     const completeBoundary = 'Do not use this output for diagnosis, personal-risk prediction, treatment, dosing, screening, or other clinical decisions. Compare aggregate patterns only.';
-    expect(sanitizePublicationTaskOutput(RESEARCH_TASK, {}, completeBoundary))
-      .toBe(completeBoundary);
+    const completePublication = sanitizePublicationTaskOutput(
+      RESEARCH_TASK,
+      {},
+      completeBoundary,
+    );
+    expect(expectPublication(completePublication)).toBe(completeBoundary);
   });
 
-  it('returns task-specific empty messages for missing published narratives', () => {
-    expect(sanitizePublicationTaskOutput(RESEARCH_TASK, {}, null))
-      .toBe(__test.EMPTY_RESEARCH_MESSAGE);
-    expect(sanitizePublicationTaskOutput(LEARNING_TASK, {}, null))
-      .toBe(__test.EMPTY_LEARNING_MESSAGE);
+  it('returns canonical unavailable artifacts for missing published narratives', () => {
+    for (const publication of [
+      sanitizePublicationTaskOutput(RESEARCH_TASK, {}, null),
+      sanitizePublicationTaskOutput(LEARNING_TASK, {}, null),
+    ]) {
+      expectPublication(publication, {
+        status: 'unavailable',
+        reasonCode: 'provider_empty',
+      });
+      expect(publication.content).toBeNull();
+      expect(publication.limitations).toEqual([]);
+    }
   });
 
-  it('keeps backward compatibility only for unknown non-published tasks', () => {
+  it('fails closed for an unknown non-published task', () => {
     const original = '{"internal":"aggregate"}';
-    expect(sanitizePublicationTaskOutput('internal_non_published_task', {}, original)).toBe(original);
-    expect(sanitizePublicationTaskOutput('internal_non_published_task', {}, null)).toBe('');
+    for (const publication of [
+      sanitizePublicationTaskOutput('internal_non_published_task', {}, original),
+      sanitizePublicationTaskOutput('internal_non_published_task', {}, null),
+    ]) {
+      expectPublication(publication, {
+        status: 'unavailable',
+        reasonCode: 'unsupported_publication_task',
+      });
+      expect(publication.content).toBeNull();
+      expect(publication.limitations).toEqual([]);
+    }
   });
 
   it('caps individual text fields without retaining C0, DEL, or C1 controls', () => {

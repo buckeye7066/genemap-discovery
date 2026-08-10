@@ -1,6 +1,11 @@
 import * as openaiService from './openai.js';
 import * as anthropicService from './anthropic.js';
 import { looksLikeRawGenomicContent } from './genomicGuard.js';
+import {
+  QUIZ_HONESTY_NOTE,
+  withHonestyPrefix,
+  withHonestySystem,
+} from './scientificHonesty.js';
 import { ValidationError } from '../utils/errors.js';
 
 const TEXT_PROVIDER = process.env.LLM_TEXT_PROVIDER || 'openai';
@@ -243,11 +248,12 @@ export async function generateExplanation(
   { provider, model, maxTokens = 2000, temperature = 0.7, timeoutMs = DEFAULT_TIMEOUT_MS, allowGenomic = false, includeMetadata = false } = {}
 ) {
   assertProviderPayloadAllowed(prompt, allowGenomic);
+  const protectedPrompt = withHonestyPrefix(prompt);
   const service = getTextProvider(provider);
   const result = await withProviderRetry(
     () => service.generateTextResult
-      ? service.generateTextResult(prompt, { model, maxTokens, temperature, timeoutMs })
-      : service.generateText(prompt, { model, maxTokens, temperature, timeoutMs }),
+      ? service.generateTextResult(protectedPrompt, { model, maxTokens, temperature, timeoutMs })
+      : service.generateText(protectedPrompt, { model, maxTokens, temperature, timeoutMs }),
     { provider }
   );
   const normalized = typeof result === 'string'
@@ -258,14 +264,25 @@ export async function generateExplanation(
 
 export async function generateChatResponse(
   messages,
-  { provider, model, maxTokens = 2000, temperature = 0.7, timeoutMs = DEFAULT_TIMEOUT_MS, allowGenomic = false, includeMetadata = false } = {}
+  { provider, model, maxTokens = 2000, temperature = 0.7, timeoutMs = DEFAULT_TIMEOUT_MS, allowGenomic = false, includeMetadata = false, honestyPersona = '' } = {}
 ) {
   assertProviderPayloadAllowed(messages, allowGenomic);
+  const protectedMessages = withHonestySystem(messages, honestyPersona);
   const service = getTextProvider(provider);
   const result = await withProviderRetry(
     () => service.generateChatResponseResult
-      ? service.generateChatResponseResult(messages, { model, maxTokens, temperature, timeoutMs })
-      : service.generateChatResponse(messages, { model, maxTokens, temperature, timeoutMs }),
+      ? service.generateChatResponseResult(protectedMessages, {
+        model,
+        maxTokens,
+        temperature,
+        timeoutMs,
+      })
+      : service.generateChatResponse(protectedMessages, {
+        model,
+        maxTokens,
+        temperature,
+        timeoutMs,
+      }),
     { provider }
   );
   const normalized = typeof result === 'string'
@@ -287,11 +304,22 @@ export async function generateImage(
 
 export async function generateQuiz(prompt, { provider, model, maxTokens = 3000, timeoutMs = DEFAULT_TIMEOUT_MS, allowGenomic = false, includeMetadata = false } = {}) {
   assertProviderPayloadAllowed(prompt, allowGenomic);
+  const protectedPrompt = withHonestyPrefix(prompt, QUIZ_HONESTY_NOTE);
   const service = getTextProvider(provider);
   const result = await withProviderRetry(
     () => service.generateTextResult
-      ? service.generateTextResult(prompt, { model, maxTokens, temperature: 0.5, timeoutMs })
-      : service.generateText(prompt, { model, maxTokens, temperature: 0.5, timeoutMs }),
+      ? service.generateTextResult(protectedPrompt, {
+        model,
+        maxTokens,
+        temperature: 0.5,
+        timeoutMs,
+      })
+      : service.generateText(protectedPrompt, {
+        model,
+        maxTokens,
+        temperature: 0.5,
+        timeoutMs,
+      }),
     { provider }
   );
   const normalized = typeof result === 'string'

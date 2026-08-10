@@ -1,4 +1,5 @@
 import { ZodError } from 'zod';
+import { isCanonicalPublicationArtifact } from '@genemap/shared/publicationStatus';
 import { AppError, sanitizeError } from '../utils/errors.js';
 
 /**
@@ -27,19 +28,22 @@ const NON_PUBLISHABLE_STATUSES = new Set(['withheld', 'unavailable', 'superseded
  */
 export function publicationErrorDetails(error) {
   const publication = error?.details?.publication;
-  if (!publication || typeof publication !== 'object' || Array.isArray(publication)) return undefined;
-  if (publication.contractVersion !== 1
-    || !NON_PUBLISHABLE_STATUSES.has(publication.status)
-    || publication.content !== null
-    || typeof publication.reasonCode !== 'string'
-    || !/^[a-z0-9][a-z0-9_.-]{0,63}$/u.test(publication.reasonCode)
-    || typeof publication.correlationId !== 'string'
-    || !/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/u.test(publication.correlationId)
-    || !Array.isArray(publication.limitations)
-    || publication.limitations.some((item) => typeof item !== 'string')) {
+  if (!publication || typeof publication !== 'object' || Array.isArray(publication)) {
     return undefined;
   }
-  return { publication };
+  const projected = {
+    contractVersion: publication.contractVersion,
+    status: publication.status,
+    content: publication.content,
+    reasonCode: publication.reasonCode,
+    correlationId: publication.correlationId,
+    limitations: Array.isArray(publication.limitations)
+      ? [...publication.limitations]
+      : publication.limitations,
+  };
+  if (!isCanonicalPublicationArtifact(projected)
+    || !NON_PUBLISHABLE_STATUSES.has(projected.status)) return undefined;
+  return { publication: projected };
 }
 
 /**

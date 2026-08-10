@@ -1,0 +1,134 @@
+import React from 'react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { apiClient } from '@genemap/shared';
+import Dashboard from '../Dashboard';
+
+const authState = vi.hoisted(() => ({
+  user: {
+    id: 'alice-id',
+    email: 'alice@example.test',
+    fullName: 'Alice Example',
+    education_level: 'undergraduate',
+    demographicsCollected: true,
+  },
+}));
+
+vi.mock('@genemap/shared', () => ({
+  apiClient: {
+    getUserActivity: vi.fn(),
+    getSearchHistory: vi.fn(),
+    getProjects: vi.fn(),
+    getGeneSets: vi.fn(),
+    invokePublicationTask: vi.fn(),
+  },
+}));
+vi.mock('../../lib/AuthContext', () => ({ useAuth: () => ({ user: authState.user }) }));
+vi.mock('../../lib/searchHistory', () => ({ normalizeSearchHistoryEntry: (entry) => entry }));
+vi.mock('../../lib/publicationConceptCatalog', () => ({
+  publicationHistoryReplay: () => null,
+  publicationReferenceFromHistory: () => null,
+}));
+vi.mock('../../components/shared/logger', () => ({
+  log: { debug: vi.fn(), error: vi.fn() },
+}));
+vi.mock('../../components/shared/constants', () => ({
+  DASHBOARD_REFRESH_INTERVAL_MS: 60_000,
+}));
+vi.mock('../../components/shared/safeModelMarkdown', () => ({
+  safeModelMarkdownComponents: {},
+}));
+vi.mock('../../components/dashboard/OnboardingTour', () => ({ default: () => null }));
+vi.mock('@/utils', () => ({
+  cn: (...values) => values.filter(Boolean).join(' '),
+  createPageUrl: (name) => `/${String(name).toLowerCase()}`,
+}));
+
+function deferred() {
+  let resolve;
+  const promise = new Promise((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}
+
+function summaryResponse(content, correlationId) {
+  return {
+    publication: {
+      contractVersion: 1,
+      status: 'available',
+      content,
+      reasonCode: null,
+      correlationId,
+      limitations: [],
+    },
+  };
+}
+
+function dashboardElement() {
+  return (
+    <MemoryRouter>
+      <Dashboard />
+    </MemoryRouter>
+  );
+}
+
+describe('Dashboard research summary identity boundary', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    authState.user = {
+      id: 'alice-id',
+      email: 'alice@example.test',
+      fullName: 'Alice Example',
+      education_level: 'undergraduate',
+      demographicsCollected: true,
+    };
+    apiClient.getUserActivity
+      .mockResolvedValueOnce([{ id: 'a1', activityType: 'gene_view', entityId: 'CFTR' }])
+      .mockResolvedValueOnce([{ id: 'a2', activityType: 'gene_view', entityId: 'BRCA1' }])
+      .mockResolvedValueOnce([{ id: 'b1', activityType: 'gene_view', entityId: 'RUNX1' }]);
+    apiClient.getSearchHistory.mockResolvedValue([]);
+    apiClient.getProjects.mockResolvedValue([]);
+    apiClient.getGeneSets.mockResolvedValue([]);
+  });
+
+  it('hides the prior identity synchronously and ignores its later refresh completion', async () => {
+    const staleAliceRefresh = deferred();
+    const currentBobSummary = deferred();
+    apiClient.invokePublicationTask
+      .mockResolvedValueOnce(summaryResponse('Alice current summary.', 'summary:alice-current'))
+      .mockImplementationOnce(() => staleAliceRefresh.promise)
+      .mockImplementationOnce(() => currentBobSummary.promise);
+
+    const { rerender } = render(dashboardElement());
+    expect(await screen.findByText('Alice current summary.')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /^refresh$/i }));
+    await waitFor(() => expect(apiClient.invokePublicationTask).toHaveBeenCalledTimes(2));
+
+    authState.user = {
+      id: 'bob-id',
+      email: 'bob@example.test',
+      fullName: 'Bob Example',
+      education_level: 'graduate',
+      demographicsCollected: true,
+    };
+    rerender(dashboardElement());
+    expect(screen.queryByText('Alice current summary.')).toBeNull();
+    await waitFor(() => expect(apiClient.invokePublicationTask).toHaveBeenCalledTimes(3));
+
+    await act(async () => {
+      currentBobSummary.resolve(summaryResponse('Bob current summary.', 'summary:bob-current'));
+      await currentBobSummary.promise;
+    });
+    expect(await screen.findByText('Bob current summary.')).toBeInTheDocument();
+
+    await act(async () => {
+      staleAliceRefresh.resolve(summaryResponse('Alice stale refresh.', 'summary:alice-stale'));
+      await staleAliceRefresh.promise;
+    });
+    expect(screen.getByText('Bob current summary.')).toBeInTheDocument();
+    expect(screen.queryByText(/alice stale refresh/i)).toBeNull();
+  });
+});

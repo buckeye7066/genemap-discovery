@@ -11,6 +11,7 @@ import {
   rankGenesByProvenance,
   stripLlmSelfScores,
 } from "../../../../packages/shared/src/associationClaim.ts";
+import { createPublicationArtifact } from "@genemap/shared/publicationStatus";
 import { log } from "../shared/logger";
 import { getErrorMessage } from "../shared/errorUtils";
 import { GENE_ENRICHMENT_CONCURRENCY } from "../shared/constants";
@@ -21,6 +22,14 @@ function adapterDate(value) {
   if (typeof value !== 'string' || !value.trim()) return null;
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString().slice(0, 10);
+}
+
+function unavailableProfilePublication(reasonCode) {
+  return createPublicationArtifact({
+    status: 'unavailable',
+    reasonCode,
+    correlationId: `client-profile:${reasonCode}`,
+  });
 }
 
 export class PhenotypeSearchService {
@@ -190,7 +199,7 @@ export class PhenotypeSearchService {
             detailsPending: false,
             aiSummary: null,
             profileStatus: 'unavailable',
-            profilePublication: null,
+            profilePublication: unavailableProfilePublication('profile_enrichment_failed'),
             keyTakeaways: [],
             phenotypes: [],
           })),
@@ -479,7 +488,7 @@ export class PhenotypeSearchService {
             phenotypes: [],
             aiSummary: null,
             profileStatus: 'unavailable',
-            profilePublication: null,
+            profilePublication: unavailableProfilePublication('profile_enrichment_failed'),
             keyTakeaways: [],
             furtherReading: this.deterministicFurtherReading(gene.symbol),
             expressionData: [],
@@ -499,7 +508,7 @@ export class PhenotypeSearchService {
         phenotypes: [],
         aiSummary: null,
         profileStatus: 'unavailable',
-        profilePublication: null,
+        profilePublication: unavailableProfilePublication('profile_identifier_unverified'),
         keyTakeaways: [],
         expressionData: [],
         furtherReading: this.deterministicFurtherReading(gene.symbol),

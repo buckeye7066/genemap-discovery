@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { apiClient } from "@genemap/shared";
 import { Link, useNavigate } from "react-router-dom";
@@ -45,9 +45,26 @@ const insightMarkdownComponents = Object.freeze({
   ...safeModelMarkdownComponents,
 });
 
+function dashboardUserIdentity(user) {
+  if (user?.id !== null && user?.id !== undefined) return `id:${String(user.id)}`;
+  if (typeof user?.email !== 'string' || !user.email.trim()) return null;
+  return `email:${user.email.trim().toLocaleLowerCase('en-US')}`;
+}
+
 export default function Dashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const summaryUserIdentity = dashboardUserIdentity(user);
+  const researchSummaryRequestRef = useRef({
+    identity: summaryUserIdentity,
+    sequence: 0,
+  });
+  if (researchSummaryRequestRef.current.identity !== summaryUserIdentity) {
+    researchSummaryRequestRef.current = {
+      identity: summaryUserIdentity,
+      sequence: researchSummaryRequestRef.current.sequence + 1,
+    };
+  }
   const [activities, setActivities] = useState([]);
   const [recentSearches, setRecentSearches] = useState([]);
   const [projects, setProjects] = useState([]);
@@ -58,6 +75,15 @@ export default function Dashboard() {
   const [showOnboarding, setShowOnboarding] = useState(false);
 
   const generateResearchSummary = async (currentUser, activityRows, searchRows) => {
+    const requestIdentity = dashboardUserIdentity(currentUser);
+    if (!requestIdentity || researchSummaryRequestRef.current.identity !== requestIdentity) return;
+    const requestSequence = researchSummaryRequestRef.current.sequence + 1;
+    researchSummaryRequestRef.current.sequence = requestSequence;
+    const isCurrentRequest = () => (
+      researchSummaryRequestRef.current.identity === requestIdentity
+      && researchSummaryRequestRef.current.sequence === requestSequence
+    );
+
     try {
       const recentGenes = [...new Set(
         activityRows
@@ -71,7 +97,7 @@ export default function Dashboard() {
         .filter(Boolean)
         .slice(0, 3);
       if (recentGenes.length === 0 && recentConcepts.length === 0) {
-        setResearchSummary(null);
+        if (isCurrentRequest()) setResearchSummary(null);
         return;
       }
 
@@ -95,13 +121,17 @@ export default function Dashboard() {
           recentConcepts,
         },
       );
-      setResearchSummary(enforcePublicationContentType(
-        response?.publication,
-        (content) => typeof content === 'string' && Boolean(content.trim()),
-      ));
+      if (!isCurrentRequest()) return;
+      setResearchSummary({
+        identity: requestIdentity,
+        artifact: enforcePublicationContentType(
+          response?.publication,
+          (content) => typeof content === 'string' && Boolean(content.trim()),
+        ),
+      });
     } catch (error) {
       log.debug('Research activity summary unavailable:', error);
-      setResearchSummary(null);
+      if (isCurrentRequest()) setResearchSummary(null);
     }
   };
 
@@ -145,6 +175,7 @@ export default function Dashboard() {
   };
 
   useEffect(() => {
+    setResearchSummary(null);
     if (!user?.email) {
       setIsLoading(false);
       return undefined;
@@ -158,7 +189,7 @@ export default function Dashboard() {
       clearInterval(interval);
       controller.abort();
     };
-  }, [user?.email]);
+  }, [summaryUserIdentity]);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -182,7 +213,10 @@ export default function Dashboard() {
       index === 0
       || (search.query || '').toLowerCase() !== (rows[index - 1].query || '').toLowerCase()
     ));
-  const researchSummaryContent = publicationContent(researchSummary);
+  const visibleResearchSummary = researchSummary?.identity === summaryUserIdentity
+    ? researchSummary.artifact
+    : null;
+  const researchSummaryContent = publicationContent(visibleResearchSummary);
 
   if (isLoading) {
     return (
@@ -415,7 +449,7 @@ export default function Dashboard() {
               </CardContent>
             </Card>
 
-            {researchSummary && (
+            {visibleResearchSummary && (
               <Card className="border-indigo-200 bg-gradient-to-br from-indigo-50 to-purple-50 shadow-lg">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
@@ -424,7 +458,7 @@ export default function Dashboard() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3 text-sm leading-relaxed text-slate-800">
-                  <PublicationState artifact={researchSummary} />
+                  <PublicationState artifact={visibleResearchSummary} />
                   {typeof researchSummaryContent === 'string' && (
                     <ReactMarkdown components={insightMarkdownComponents}>
                       {researchSummaryContent}

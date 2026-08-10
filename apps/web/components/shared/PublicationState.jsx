@@ -1,39 +1,11 @@
 import React from 'react';
 import { AlertCircle, CheckCircle2, Info } from 'lucide-react';
+import { isCanonicalPublicationArtifact } from '@genemap/shared/publicationStatus';
+
+export { isCanonicalPublicationArtifact };
 
 const REUSABLE_STATUSES = new Set(['available', 'partial']);
-const PUBLICATION_STATUSES = new Set([
-  'available',
-  'partial',
-  'withheld',
-  'unavailable',
-  'superseded',
-]);
 const CORRELATION_ID = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/u;
-const REASON_CODE = /^[a-z0-9][a-z0-9_.-]{0,63}$/u;
-
-export function isCanonicalPublicationArtifact(artifact) {
-  if (!artifact || typeof artifact !== 'object') return false;
-  if (artifact.contractVersion !== 1 || !PUBLICATION_STATUSES.has(artifact.status)) return false;
-  if (!Object.prototype.hasOwnProperty.call(artifact, 'content')) return false;
-  if (typeof artifact.correlationId !== 'string' || !CORRELATION_ID.test(artifact.correlationId)) return false;
-  if (artifact.reasonCode !== null && (
-    typeof artifact.reasonCode !== 'string'
-    || !REASON_CODE.test(artifact.reasonCode)
-  )) return false;
-  if (artifact.status !== 'available' && artifact.reasonCode === null) return false;
-  if (!Array.isArray(artifact.limitations) || !artifact.limitations.every((item) => (
-    typeof item === 'string'
-    && item.length > 0
-    && item === item.trim()
-  )) || new Set(artifact.limitations).size !== artifact.limitations.length) return false;
-
-  if (REUSABLE_STATUSES.has(artifact.status)) {
-    if (artifact.content === null || artifact.content === undefined) return false;
-    return artifact.status !== 'partial' || artifact.limitations.length > 0;
-  }
-  return artifact.content === null;
-}
 
 /**
  * Treat the publication envelope as the authority for generated content.

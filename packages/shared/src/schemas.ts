@@ -79,6 +79,13 @@ export const publicationArtifactSchema = <T extends z.ZodTypeAny>(contentSchema:
       message: 'Partial artifacts require a visible limitation.',
     });
   }
+  if (new Set(artifact.limitations).size !== artifact.limitations.length) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['limitations'],
+      message: 'Publication limitations must be unique.',
+    });
+  }
   if (artifact.status !== 'available' && artifact.reasonCode === null) {
     context.addIssue({
       code: z.ZodIssueCode.custom,

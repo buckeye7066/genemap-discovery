@@ -9,7 +9,6 @@ import { checkEducationEntitlement, enforceUsageLimit } from '../middleware/enti
 import * as llm from '../services/llm.js';
 import {
   withHonestyPrefix,
-  honestySystemMessage,
   QUIZ_HONESTY_NOTE,
 } from '../services/scientificHonesty.js';
 import { getSources } from '../services/educationSources.js';
@@ -110,9 +109,12 @@ function topicMetadata(topic) {
 }
 
 function publicationCorrelationId(request, surface) {
-  const requestId = String(request.id || 'request')
+  const normalizedRequestId = String(request.id || 'request')
     .replace(/[^A-Za-z0-9_.:-]/gu, '-')
     .slice(0, 96) || 'request';
+  const requestId = /^[A-Za-z0-9]/u.test(normalizedRequestId)
+    ? normalizedRequestId
+    : `request-${normalizedRequestId}`.slice(0, 96);
   return `${requestId}:${surface}`;
 }
 
@@ -428,17 +430,16 @@ export default async function educationRoutes(fastify) {
     );
 
     const levelPrompt = LEVEL_PROMPTS[level];
-    const systemMessage = honestySystemMessage(
-      `You are a friendly genetics tutor. ${levelPrompt} Be encouraging, ask follow-up questions to check understanding, and provide examples when helpful. If the student seems confused, try a different approach or analogy.`,
-    );
+    const honestyPersona = `You are a friendly genetics tutor. ${levelPrompt} Be encouraging, ask follow-up questions to check understanding, and provide examples when helpful. If the student seems confused, try a different approach or analogy.`;
 
-    const fullMessages = [systemMessage, { role: 'user', content: composed.prompt }];
+    const fullMessages = [{ role: 'user', content: composed.prompt }];
     let publication;
     try {
       const providerResult = await llm.generateChatResponse(fullMessages, {
         timeoutMs: EDU_TIMEOUT_MS,
         allowGenomic,
         includeMetadata: true,
+        honestyPersona,
       });
       publication = sanitizePublicationArtifact(
         'genetics_education',

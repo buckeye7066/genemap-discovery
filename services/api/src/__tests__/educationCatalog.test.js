@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { EDUCATION_TOPIC_IDS } from '@genemap/shared';
 import {
   EDUCATION_CATALOG_VERSION,
   resolveEducationTopic,
@@ -34,6 +35,7 @@ describe('canonical education catalog boundary', () => {
   it('keeps every published catalog id uniquely resolvable', () => {
     const ids = TOPICS_CATALOG.flatMap(({ topics }) => topics.map(({ id }) => id));
     expect(ids).toHaveLength(new Set(ids).size);
+    expect(ids).toEqual([...EDUCATION_TOPIC_IDS]);
     expect(ids.every((id) => resolveEducationTopic(id)?.id === id)).toBe(true);
   });
 });

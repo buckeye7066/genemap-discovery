@@ -102,6 +102,114 @@ describe('gene report provenance', () => {
     expect(safe.publication.content).toBeNull();
   });
 
+  it('preserves shared publication artifacts while omitting only true ancestor cycles', () => {
+    const sharedPublication = {
+      contractVersion: 1,
+      status: 'available',
+      content: {
+        candidateGenes: [{
+          symbol: 'CFTR',
+          name: 'Approved candidate label',
+          explanation: 'Approved candidate explanation',
+        }],
+        genes: [{
+          symbol: 'RUNX1',
+          name: 'Approved artifact-owned label',
+          explanation: 'Approved artifact-owned explanation',
+        }],
+      },
+      reasonCode: null,
+      correlationId: 'shared-publication-export',
+      limitations: [],
+    };
+    const cycle = { label: 'cycle root' };
+    cycle.self = cycle;
+    const nestedGene = { symbol: 'CFTR', candidatePublication: sharedPublication };
+    nestedGene.self = nestedGene;
+
+    const safe = publicationSafeExportData({
+      genes: [
+        nestedGene,
+        { symbol: 'RUNX1', profilePublication: sharedPublication },
+      ],
+      branch: { publication: sharedPublication },
+      cycle,
+    });
+
+    expect(safe.genes[0].candidatePublication).toEqual(sharedPublication);
+    expect(safe.genes[0].self).toBe('[Circular reference omitted]');
+    expect(safe.genes[1].profilePublication).toEqual(sharedPublication);
+    expect(safe.branch.publication).toEqual(sharedPublication);
+    expect(safe.cycle).toEqual({
+      label: 'cycle root',
+      self: '[Circular reference omitted]',
+    });
+  });
+
+  it('applies terminal publication policy to genes nested in an export wrapper', () => {
+    const blockedCandidateContent = 'BLOCKED_NESTED_CANDIDATE_CONTENT';
+    const blockedProfileContent = 'BLOCKED_NESTED_PROFILE_CONTENT';
+    const terminalGene = {
+      symbol: 'SAFE2',
+      name: 'attacker generated nested name',
+      explanation: blockedCandidateContent,
+      aiSummary: blockedProfileContent,
+      coordinatesVerified: false,
+      profileStatus: 'unavailable',
+      candidatePublication: {
+        contractVersion: 1,
+        status: 'withheld',
+        content: null,
+        reasonCode: 'clinical_boundary',
+        correlationId: 'nested-candidate-withheld',
+        limitations: [],
+      },
+      profilePublication: {
+        contractVersion: 1,
+        status: 'unavailable',
+        content: null,
+        reasonCode: 'provider_failed',
+        correlationId: 'nested-profile-unavailable',
+        limitations: [],
+      },
+      associationClaims: [{
+        source: 'Ensembl',
+        recordId: 'ENSG00000123456',
+        evidenceClass: 'human_verified',
+        directLink: 'https://www.ensembl.org/id/ENSG00000123456',
+        isAiLead: false,
+      }],
+    };
+    const safe = publicationSafeExportData({
+      reportKind: 'candidate-comparison',
+      genes: [terminalGene],
+      analysis: { groups: [{ genes: [terminalGene, 'deterministic-note'] }] },
+    });
+
+    expect(safe.reportKind).toBe('candidate-comparison');
+    expect(safe.genes[0]).toMatchObject({
+      symbol: 'SAFE2',
+      coordinatesVerified: false,
+      associationClaims: [{
+        source: 'Ensembl',
+        recordId: 'ENSG00000123456',
+        evidenceClass: 'human_verified',
+        directLink: 'https://www.ensembl.org/id/ENSG00000123456',
+        isAiLead: false,
+      }],
+      candidatePublication: { status: 'withheld', content: null },
+      profilePublication: { status: 'unavailable', content: null },
+    });
+    expect(safe.genes[0].name).toBeUndefined();
+    expect(safe.genes[0].explanation).toBeUndefined();
+    expect(safe.genes[0].aiSummary).toBeUndefined();
+    expect(JSON.stringify(safe)).not.toContain('attacker generated nested');
+    expect(JSON.stringify(safe)).not.toContain(blockedCandidateContent);
+    expect(JSON.stringify(safe)).not.toContain(blockedProfileContent);
+    expect(safe.analysis.groups[0].genes[0]).toEqual(safe.genes[0]);
+    expect(safe.analysis.groups[0].genes[1]).toBe('deterministic-note');
+  });
+
   it.each([
     ['partial', 'partial content', ['Incomplete output.']],
     ['unavailable', null, []],
@@ -156,6 +264,7 @@ describe('gene report provenance', () => {
     });
 
     expect(safe.symbol).toBe('SAFE1');
+    expect(safe.name).toBeUndefined();
     expect(safe.explanation).toBeUndefined();
     expect(safe.aiSummary).toBeUndefined();
     expect(safe.keyTakeaways).toBeUndefined();
@@ -164,6 +273,7 @@ describe('gene report provenance', () => {
     expect(safe.profilePublication.content).toBeNull();
     expect(JSON.stringify(safe)).not.toContain('LEAK1');
     expect(JSON.stringify(safe)).not.toContain('LEAK2');
+    expect(JSON.stringify(safe)).not.toContain('attacker generated name');
   });
 
   it('serializes partial-publication limitations in printable and copied artifacts', () => {

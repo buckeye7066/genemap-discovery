@@ -20,8 +20,8 @@ describe('PublicationState', () => {
     expect(hasReusablePublicationContent(artifact)).toBe(false);
     expect(publicationContent(artifact)).toBeNull();
     render(<PublicationState artifact={artifact} />);
-    expect(screen.getByText(/publication status invalid/i)).toBeInTheDocument();
-    expect(screen.queryByText(/must not be reused/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/publication status invalid/i)).toBeTruthy();
+    expect(screen.queryByText(/must not be reused/i)).toBeNull();
   });
 
   it('renders a canonical withheld envelope with a safe support identifier', () => {
@@ -35,8 +35,8 @@ describe('PublicationState', () => {
     };
 
     render(<PublicationState artifact={artifact} />);
-    expect(screen.getByText(/publication withheld/i)).toBeInTheDocument();
-    expect(screen.getByText(/withheld-support-1/i)).toBeInTheDocument();
+    expect(screen.getByText(/publication withheld/i)).toBeTruthy();
+    expect(screen.getByText(/withheld-support-1/i)).toBeTruthy();
   });
 
   it('shows every limitation attached to partial reusable content', () => {
@@ -51,8 +51,8 @@ describe('PublicationState', () => {
 
     expect(publicationContent(artifact)).toBe('safe partial content');
     render(<PublicationState artifact={artifact} />);
-    expect(screen.getByText(/ending may be incomplete/i)).toBeInTheDocument();
-    expect(screen.getByText(/one section was omitted/i)).toBeInTheDocument();
+    expect(screen.getByText(/ending may be incomplete/i)).toBeTruthy();
+    expect(screen.getByText(/one section was omitted/i)).toBeTruthy();
   });
 
   it('rejects a partial envelope that omits its required limitation', () => {
@@ -67,8 +67,8 @@ describe('PublicationState', () => {
 
     expect(publicationContent(artifact)).toBeNull();
     render(<PublicationState artifact={artifact} />);
-    expect(screen.getByText(/publication status invalid/i)).toBeInTheDocument();
-    expect(screen.queryByText(/must remain hidden/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/publication status invalid/i)).toBeTruthy();
+    expect(screen.queryByText(/must remain hidden/i)).toBeNull();
   });
 
   it.each([
@@ -86,6 +86,6 @@ describe('PublicationState', () => {
 
     expect(publicationContent(artifact)).toBeNull();
     render(<PublicationState artifact={artifact} />);
-    expect(screen.getByText(/publication status invalid/i)).toBeInTheDocument();
+    expect(screen.getByText(/publication status invalid/i)).toBeTruthy();
   });
 });

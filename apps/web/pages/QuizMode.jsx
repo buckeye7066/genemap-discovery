@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useEducationLevel } from '@/lib/EducationLevelContext';
 import { apiClient } from '@genemap/shared';
@@ -118,6 +118,15 @@ export default function QuizMode() {
 
   const topicParam = searchParams.get('topic');
   const topicId = topicParam || 'what-is-dna';
+  const quizLevel = level || 'undergraduate';
+  const quizRequestScope = `${topicId}\u0000${quizLevel}`;
+  const quizRequestRef = useRef({ scope: quizRequestScope, sequence: 0 });
+  if (quizRequestRef.current.scope !== quizRequestScope) {
+    quizRequestRef.current = {
+      scope: quizRequestScope,
+      sequence: quizRequestRef.current.sequence + 1,
+    };
+  }
 
   const [catalogTopic, setCatalogTopic] = useState(null);
   const [topicMetadata, setTopicMetadata] = useState(null);
@@ -132,9 +141,11 @@ export default function QuizMode() {
   // picker below is shown first.
   const [loading, setLoading] = useState(!!topicParam);
   const [error, setError] = useState(null);
+  const [quizStateScope, setQuizStateScope] = useState(quizRequestScope);
 
   useEffect(() => {
     let active = true;
+    setQuizStateScope(quizRequestScope);
     setCatalogTopic(null);
     setTopicMetadata(null);
     setQuizPublication(null);
@@ -173,7 +184,7 @@ export default function QuizMode() {
 
   useEffect(() => {
     if (catalogTopic?.id === topicId) loadQuiz();
-  }, [catalogTopic?.id, level]);
+  }, [catalogTopic?.id, quizRequestScope]);
 
   if (!topicParam) {
     return (
@@ -188,6 +199,13 @@ export default function QuizMode() {
 
   const loadQuiz = async () => {
     if (!topicParam || catalogTopic?.id !== topicId) return;
+    const requestSequence = quizRequestRef.current.sequence + 1;
+    quizRequestRef.current.sequence = requestSequence;
+    const isCurrentRequest = () => (
+      quizRequestRef.current.scope === quizRequestScope
+      && quizRequestRef.current.sequence === requestSequence
+    );
+    setQuizStateScope(quizRequestScope);
     setLoading(true);
     setError(null);
     setQuizPublication(null);
@@ -200,7 +218,8 @@ export default function QuizMode() {
     setFinished(false);
 
     try {
-      const res = await apiClient.generateQuiz({ topic: topicId, level: level || 'undergraduate', questionCount: 5 });
+      const res = await apiClient.generateQuiz({ topic: topicId, level: quizLevel, questionCount: 5 });
+      if (!isCurrentRequest()) return;
       if (res?.topicMetadata?.id !== topicId) {
         throw new Error('The server returned mismatched topic metadata.');
       }
@@ -213,9 +232,9 @@ export default function QuizMode() {
       setTopicMetadata(res?.topicMetadata || null);
       setQuestions(Array.isArray(content) ? content : []);
     } catch (err) {
-      setError(err.message);
+      if (isCurrentRequest()) setError(err?.message || 'Unable to generate this quiz.');
     } finally {
-      setLoading(false);
+      if (isCurrentRequest()) setLoading(false);
     }
   };
 
@@ -250,8 +269,9 @@ export default function QuizMode() {
   const current = questions[currentIndex];
   const progressPercent = questions.length > 0 ? ((currentIndex + (showResult ? 1 : 0)) / questions.length) * 100 : 0;
   const topicTitle = topicMetadata?.title || catalogTopic?.title || 'Genetics topic';
+  const visibleLoading = quizStateScope === quizRequestScope ? loading : Boolean(topicParam);
 
-  if (loading) {
+  if (visibleLoading) {
     return (
       <div className="p-6 max-w-2xl mx-auto dna-bg min-h-screen">
         <div className="flex flex-col items-center justify-center py-24">

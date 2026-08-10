@@ -5,7 +5,7 @@
  * versioned, structured task contract. Arbitrary prompt text is never an
  * authorization signal and is rejected on the public generation routes.
  */
-import { TOPICS_CATALOG } from './educationCatalog.js';
+import { resolveEducationTopic } from './educationCatalog.js';
 import {
   hasRawGenerationInput,
   parsePublicationTaskInput,
@@ -56,11 +56,6 @@ const SAFE_NON_GENERATION_EDUCATION_ROUTES = new Set([
   '/education/progress',
   '/education/entitlements',
 ]);
-
-const KNOWN_EDUCATION_TOPICS = new Set(
-  TOPICS_CATALOG.flatMap(({ topics }) => topics.flatMap(({ id, title }) => [id, title]))
-    .map((value) => value.trim().toLowerCase())
-);
 
 function rawPathname(url = '') {
   return String(url).split('?')[0].split('#')[0] || '/';
@@ -134,12 +129,11 @@ function requestedTask(body) {
 }
 
 function isKnownEducationTopic(value) {
-  return typeof value === 'string'
-    && KNOWN_EDUCATION_TOPICS.has(value.trim().toLowerCase());
+  return resolveEducationTopic(value) !== null;
 }
 
 function isRouteOwnedGeneticsTopic(body) {
-  const topic = typeof body?.topic === 'string' ? body.topic.trim() : '';
+  const topic = typeof body?.topic === 'string' ? body.topic : '';
   if (!topic) return false;
   if (['prompt', 'messages', 'context', 'taskInput'].some(
     (field) => Object.prototype.hasOwnProperty.call(body, field)

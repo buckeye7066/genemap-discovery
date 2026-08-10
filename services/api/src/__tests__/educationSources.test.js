@@ -6,6 +6,7 @@ import {
   TOPIC_GLOSSARY,
   CATEGORY_SOURCES,
 } from '../services/educationSources.js';
+import { resolveEducationTopic } from '../config/educationCatalog.js';
 
 vi.mock('../services/llm.js', () => ({
   generateExplanation: vi.fn(async () => 'explanation body'),
@@ -33,16 +34,19 @@ describe('education source resolver', () => {
     }
   });
 
-  it('always returns the general NIH/NHGRI references, even for an unknown topic', () => {
+  it('returns no sources for unknown or client-constructed topic metadata', () => {
     const sources = getSources({});
-    expect(sources.length).toBeGreaterThanOrEqual(GENERAL_SOURCES.length);
-    for (const g of GENERAL_SOURCES) {
-      expect(sources.some((s) => s.url === g.url)).toBe(true);
-    }
+    expect(sources).toEqual([]);
+    expect(getSources({
+      id: 'crispr',
+      title: 'Client-controlled title',
+      category: 'Genomics & Technology',
+      catalogVersion: 1,
+    })).toEqual([]);
   });
 
   it('leads with the topic glossary entry, then category, then general — deduped', () => {
-    const sources = getSources({ topicId: 'crispr', category: 'Genomics & Technology' });
+    const sources = getSources(resolveEducationTopic('crispr'));
     expect(sources[0].url).toBe(TOPIC_GLOSSARY.crispr.url);
     // No duplicate URLs.
     const urls = sources.map((s) => s.url);
@@ -79,13 +83,21 @@ describe('/education/explain attaches sources', () => {
       method: 'POST',
       url: '/education/explain',
       headers: { cookie: authCookie(user, prisma) },
-      payload: { topic: 'CRISPR', level: 'high_school' },
+      payload: { topic: 'crispr', level: 'high_school' },
     });
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body);
     expect(Array.isArray(body.sources)).toBe(true);
     expect(body.sources.length).toBeGreaterThan(0);
-    // 'CRISPR' resolves to the crispr topic id → its glossary entry leads.
+    expect(body.publication).toMatchObject({
+      contractVersion: 1,
+      status: 'available',
+      content: 'explanation body',
+      reasonCode: null,
+      limitations: [],
+    });
+    expect(body).not.toHaveProperty('explanation');
+    // The exact catalog id resolves to the CRISPR glossary entry.
     expect(body.sources[0].url).toContain('genome.gov/genetics-glossary/CRISPR');
     for (const s of body.sources) {
       expect(s.url.startsWith('https://')).toBe(true);
@@ -93,17 +105,14 @@ describe('/education/explain attaches sources', () => {
     }
   });
 
-  it('still returns general sources for an unknown/custom topic', async () => {
+  it('rejects an unknown/custom topic before generating content', async () => {
     const res = await app.inject({
       method: 'POST',
       url: '/education/explain',
       headers: { cookie: authCookie(user, prisma) },
       payload: { topic: 'some obscure made-up topic', level: 'undergraduate' },
     });
-    expect(res.statusCode).toBe(200);
-    const body = JSON.parse(res.body);
-    expect(body.sources.length).toBeGreaterThanOrEqual(1);
-    expect(body.sources.some((s) => s.url === 'https://medlineplus.gov/genetics/')).toBe(true);
+    expect(res.statusCode).toBe(400);
   });
 });
 
@@ -146,6 +155,14 @@ describe('/education/chat attaches sources', () => {
     });
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body);
+    expect(body.publication).toMatchObject({
+      contractVersion: 1,
+      status: 'available',
+      content: 'chat',
+      reasonCode: null,
+      limitations: [],
+    });
+    expect(body).not.toHaveProperty('response');
     expect(body.sources[0].url).toContain('genome.gov/genetics-glossary/CRISPR');
   });
 
@@ -166,6 +183,13 @@ describe('/education/chat attaches sources', () => {
     });
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body);
+    expect(body.publication).toMatchObject({
+      contractVersion: 1,
+      status: 'available',
+      content: 'chat',
+      reasonCode: null,
+      limitations: [],
+    });
     expect(body.sources.some((s) => s.url === 'https://medlineplus.gov/genetics/')).toBe(true);
   });
 

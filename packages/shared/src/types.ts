@@ -96,39 +96,42 @@ export type EducationLevel =
   | 'graduate'
   | 'postgraduate';
 
-export type EducationTopicId =
-  | 'what-is-dna'
-  | 'dna-structure'
-  | 'dna-replication'
-  | 'genes-and-chromosomes'
-  | 'transcription'
-  | 'translation'
-  | 'gene-expression'
-  | 'gene-regulation'
-  | 'mendelian-genetics'
-  | 'punnett-squares'
-  | 'sex-linked-traits'
-  | 'complex-inheritance'
-  | 'what-are-mutations'
-  | 'types-of-mutations'
-  | 'genetic-variation'
-  | 'snps-and-polymorphisms'
-  | 'human-genome-project'
-  | 'dna-sequencing'
-  | 'crispr'
-  | 'genetic-testing'
-  | 'genetic-diseases'
-  | 'cancer-genetics'
-  | 'pharmacogenomics'
-  | 'gene-therapy'
-  | 'natural-selection'
-  | 'population-genetics'
-  | 'molecular-evolution'
-  | 'phylogenetics'
-  | 'epigenetics'
-  | 'rna-world'
-  | 'systems-biology'
-  | 'synthetic-biology';
+export const EDUCATION_TOPIC_IDS = Object.freeze([
+  'what-is-dna',
+  'dna-structure',
+  'dna-replication',
+  'genes-and-chromosomes',
+  'transcription',
+  'translation',
+  'gene-expression',
+  'gene-regulation',
+  'mendelian-genetics',
+  'punnett-squares',
+  'sex-linked-traits',
+  'complex-inheritance',
+  'what-are-mutations',
+  'types-of-mutations',
+  'genetic-variation',
+  'snps-and-polymorphisms',
+  'human-genome-project',
+  'dna-sequencing',
+  'crispr',
+  'genetic-testing',
+  'genetic-diseases',
+  'cancer-genetics',
+  'pharmacogenomics',
+  'gene-therapy',
+  'natural-selection',
+  'population-genetics',
+  'molecular-evolution',
+  'phylogenetics',
+  'epigenetics',
+  'rna-world',
+  'systems-biology',
+  'synthetic-biology',
+] as const);
+
+export type EducationTopicId = typeof EDUCATION_TOPIC_IDS[number];
 
 export interface ExplanationRequest {
   topic: EducationTopicId;

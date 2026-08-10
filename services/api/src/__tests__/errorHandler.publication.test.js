@@ -29,18 +29,32 @@ describe('publication error details', () => {
         reasonCode: 'model_publication_disabled',
         correlationId: 'req-123:kill-switch',
         limitations: [],
+        rawProviderText: 'SENTINEL_RAW_PROVIDER_TEXT_MUST_NOT_LEAK',
       },
     };
 
     const { status, body } = harness(error);
     expect(status).toHaveBeenCalledWith(503);
-    expect(body.details).toEqual(error.details);
+    expect(body.details).toEqual({
+      publication: {
+        contractVersion: 1,
+        status: 'unavailable',
+        content: null,
+        reasonCode: 'model_publication_disabled',
+        correlationId: 'req-123:kill-switch',
+        limitations: [],
+      },
+    });
+    expect(JSON.stringify(body)).not.toContain('SENTINEL_RAW_PROVIDER_TEXT_MUST_NOT_LEAK');
   });
 
   it.each([
     { status: 'available', content: 'must not leak' },
     { status: 'withheld', content: 'must not leak' },
     { status: 'unavailable', content: null, correlationId: 'invalid id with spaces' },
+    { status: 'unavailable', content: null, limitations: [''] },
+    { status: 'unavailable', content: null, limitations: [' untrimmed '] },
+    { status: 'unavailable', content: null, limitations: ['duplicate', 'duplicate'] },
   ])('drops unsafe or malformed publication details', (override) => {
     const error = new AppError('Publication failed.', 503);
     error.details = {

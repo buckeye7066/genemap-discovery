@@ -440,7 +440,7 @@ import entityRoutes from '../routes/entities.js';
  * routes needed for testing.  Call `app.close()` in afterAll / afterEach.
  */
 export async function buildTestApp(prismaMock, opts = {}) {
-  const app = Fastify({ logger: false });
+  const app = Fastify({ logger: false, ...(opts.fastifyOptions || {}) });
 
   app.decorate('prisma', prismaMock);
 

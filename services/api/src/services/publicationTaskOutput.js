@@ -22,20 +22,26 @@ const UNAVAILABLE_PROFILE_SUMMARY = 'Generated profile unavailable. This gene re
 const MEDICATION_NAME_PATTERN = '(?:aspirin|ibuprofen|acetaminophen|paracetamol|naproxen|warfarin|heparin|insulin|metformin|glipizide|semaglutide|liraglutide|atorvastatin|rosuvastatin|simvastatin|lisinopril|losartan|amlodipine|metoprolol|carvedilol|levothyroxine|methimazole|prednisone|amoxicillin|azithromycin|doxycycline|ciprofloxacin|gabapentin|pregabalin|sertraline|fluoxetine|escitalopram|omeprazole|pantoprazole|albuterol|epinephrine|naloxone|[a-z]{4,}(?:mab|nib|pril|sartan|olol|statin|cillin|cycline|azole|vir|caine))';
 
 const OBVIOUS_NONCLINICAL_IMPERATIVE_TARGET = '(?:(?:(?:one|two|three|four|five|six|seven|eight|nine|ten|\\d+)\\s+)?(?:(?:a|an|the|this|that|these|those)\\s+)?(?:(?:new|current|proposed|statistical|research|analytical|alternative|further|additional)\\s+)?(?:look|care|caution|example|examples|following|case|cases|concept|concepts|data|dataset|datasets|analysis|analyses|research|reviewing|comparing|examining|analyzing|checking|reading|validating|verifying|exploring|bias|selection|ascertainment|confounding|pipeline|workflow|iteration|simulation|model|models|server|service|process|query|queries|study|studies|experiment|experiments|calculation|calculations|comparison|comparisons|code|script|job|request|requests|method|methods|algorithm|algorithms|regression|software|tool|tools|database|databases|reference|references|equation|equations|formula|formulas|hypothesis|hypotheses|metric|metrics|result|results|evidence|field|fields|variable|variables|record|records|table|tables|figure|figures|chart|charts|sample|samples|specimen|specimens|cell|cells|culture|cultures|reagent|reagents|assay|assays|protein|proteins|cohort|cohorts|variant|variants|gene|genes|chromosome|chromosomes|dna|rna|measurement|measurements|source|sources|lesson|section|reading|learning|education|validation|verification|review|coverage|threshold|resolution|sensitivity|specificity|power))';
-const GENERIC_CLINICAL_ACTION = '(?:take|try|consume|ingest|swallow|inject|administer|prescribe|start|begin|resume|continue|stop|discontinue|increase|decrease|avoid|apply|use|undergo|schedule|screen|test|diagnose|treat|monitor|switch(?:\\s+to)?)';
-const GENERIC_CLINICAL_ACTION_GERUND = '(?:taking|trying|consuming|ingesting|swallowing|injecting|administering|prescribing|starting|beginning|resuming|continuing|stopping|discontinuing|increasing|decreasing|avoiding|applying|using|undergoing|scheduling|screening|testing|diagnosing|treating|monitoring|switching(?:\\s+to)?)';
-const GENERIC_CLINICAL_ACTION_PAST = '(?:taken|tried|consumed|ingested|swallowed|injected|administered|prescribed|started|resumed|continued|stopped|discontinued|increased|decreased|avoided|applied|used|undergone|scheduled|screened|tested|diagnosed|treated|monitored|switched\\s+to)';
+const GENERIC_CLINICAL_ACTION = '(?:take|try|consume|ingest|swallow|chew|drink|dissolve|inhale|spray|inject|administer|prescribe|receive|give|initiate|manage|start|begin|resume|continue|stop|discontinue|skip|taper|increase|decrease|avoid|apply|rub|insert|place|wear|use|undergo|schedule|screen|test|diagnose|treat|monitor|switch(?:\\s+to)?)';
+const GENERIC_CLINICAL_ACTION_GERUND = '(?:taking|trying|consuming|ingesting|swallowing|chewing|drinking|dissolving|inhaling|spraying|injecting|administering|prescribing|receiving|giving|initiating|managing|starting|beginning|resuming|continuing|stopping|discontinuing|skipping|tapering|increasing|decreasing|avoiding|applying|rubbing|inserting|placing|wearing|using|undergoing|scheduling|screening|testing|diagnosing|treating|monitoring|switching(?:\\s+to)?)';
+const GENERIC_CLINICAL_ACTION_PAST = '(?:taken|tried|consumed|ingested|swallowed|chewed|drunk|dissolved|inhaled|sprayed|injected|administered|prescribed|received|given|initiated|managed|started|resumed|continued|stopped|discontinued|skipped|tapered|increased|decreased|avoided|applied|rubbed|inserted|placed|worn|used|undergone|scheduled|screened|tested|diagnosed|treated|monitored|switched\\s+to)';
+const CLINICAL_SUBJECT = '(?:you|patients?|the\\s+patients?|this\\s+patient|these\\s+patients|the\\s+individual|individuals?|your\\s+child|children|adults?|family\\s+members?)';
 
 const CLINICAL_GUIDANCE_PATTERNS = [
   new RegExp(`(?:^|[.!?;:,\\n]\\s*|\\b(?:and|then)\\s+)(?:(?:["'(]|\\[|\\{)\\s*)*(?:please\\s+)?(?:(?:do\\s+not|don't|never)\\s+)?${GENERIC_CLINICAL_ACTION}\\s+(?!${OBVIOUS_NONCLINICAL_IMPERATIVE_TARGET}\\b)[\\p{L}\\p{N}]`, 'iu'),
   /(?:^|[.!?;:,\n]\s*|\b(?:and|then)\s+)(?:please\s+)?(?:get|obtain|order|request|book)\s+(?:(?:a|an|the|your)\s+)?(?:(?:genetic|diagnostic|medical|clinical|cancer|carrier)\s+)?(?:test|testing|screen|screening|scan|biopsy|exam|examination)\b/iu,
-  new RegExp(`\\b(?:you|the patient|this patient|the individual|your child|family members?)\\s+(?:(?:should|must|need(?:s)?\\s+to|ought\\s+to)\\s+|(?:are|is)\\s+(?:advised|instructed)\\s+to\\s+)${GENERIC_CLINICAL_ACTION}\\s+(?!${OBVIOUS_NONCLINICAL_IMPERATIVE_TARGET}\\b)`, 'iu'),
-  new RegExp(`\\b(?:you|the patient|this patient|the individual|your child|family members?)\\s+(?:(?:definitely|certainly|probably|likely|clearly|really)\\s+)?(?:need(?:s)?|require(?:s)?|would\\s+benefit\\s+from)\\s+(?!to\\b)(?!${OBVIOUS_NONCLINICAL_IMPERATIVE_TARGET}\\b)[\\p{L}\\p{N}]`, 'iu'),
-  new RegExp(`\\b(?:recommend(?:s|ed|ing)?|suggest(?:s|ed|ing)?|advise(?:s|d|ing)?|instruct(?:s|ed|ing)?|urge(?:s|d|ing)?)\\s+(?:(?:that\\s+)?(?:you|the patient|this patient|the individual|your child|family members?)\\s+)?(?:to\\s+)?(?:${GENERIC_CLINICAL_ACTION}|${GENERIC_CLINICAL_ACTION_GERUND})\\s+(?!${OBVIOUS_NONCLINICAL_IMPERATIVE_TARGET}\\b)`, 'iu'),
+  new RegExp(`\\b${CLINICAL_SUBJECT}\\s+(?:(?:should|must|need(?:s)?\\s+to|ought\\s+to)\\s+|(?:are|is)\\s+(?:advised|instructed)\\s+to\\s+)${GENERIC_CLINICAL_ACTION}\\s+(?!${OBVIOUS_NONCLINICAL_IMPERATIVE_TARGET}\\b)`, 'iu'),
+  new RegExp(`\\b${CLINICAL_SUBJECT}\\s+(?:(?:definitely|certainly|probably|likely|clearly|really)\\s+)?(?:need(?:s)?|require(?:s)?|would\\s+benefit\\s+from)\\s+(?!to\\b)(?!${OBVIOUS_NONCLINICAL_IMPERATIVE_TARGET}\\b)[\\p{L}\\p{N}]`, 'iu'),
+  new RegExp(`\\b(?:recommend(?:s|ed|ing)?|suggest(?:s|ed|ing)?|advise(?:s|d|ing)?|instruct(?:s|ed|ing)?|urge(?:s|d|ing)?)\\s+(?:(?:that\\s+)?${CLINICAL_SUBJECT}\\s+)?(?:to\\s+)?(?:${GENERIC_CLINICAL_ACTION}|${GENERIC_CLINICAL_ACTION_GERUND})\\s+(?!${OBVIOUS_NONCLINICAL_IMPERATIVE_TARGET}\\b)`, 'iu'),
   new RegExp(`\\b(?:recommend(?:s|ed|ing)?|suggest(?:s|ed|ing)?)\\s+(?!${OBVIOUS_NONCLINICAL_IMPERATIVE_TARGET}\\b)[\\p{L}\\p{N}]`, 'iu'),
+  new RegExp(`\\b(?!${OBVIOUS_NONCLINICAL_IMPERATIVE_TARGET}\\b)[\\p{L}\\p{N}][\\p{L}\\p{N}'-]{1,63}(?:\\s+[\\p{L}\\p{N}][\\p{L}\\p{N}'-]{1,63}){0,2}\\s+(?:is|are|may\\s+be|would\\s+be|should\\s+be|must\\s+be)\\s+(?:recommended|advised|indicated|prescribed|avoided)\\b`, 'iu'),
+  new RegExp(`\\b(?!${OBVIOUS_NONCLINICAL_IMPERATIVE_TARGET}\\b)[\\p{L}\\p{N}][\\p{L}\\p{N}'-]{1,63}(?:\\s+[\\p{L}\\p{N}][\\p{L}\\p{N}'-]{1,63}){0,2}\\s+(?:may|might|can|could|will|should)\\s+(?:help|relieve|reduce|improve|treat|manage)\\s+(?:you|your|the\\s+patient|the\\s+patient's)\\b`, 'iu'),
   new RegExp(`\\b(?!${OBVIOUS_NONCLINICAL_IMPERATIVE_TARGET}\\b)[\\p{L}][\\p{L}\\p{N}'-]{1,63}\\s+(?:is|should\\s+be|must\\s+be|needs?\\s+to\\s+be)\\s+${GENERIC_CLINICAL_ACTION_PAST}\\b`, 'iu'),
-  /\b(?:you|the patient|this patient|the individual|your child)\s+(?:(?:[\p{L}-]+|very)\s+){0,3}(?:have|has|suffer(?:s)?\s+from|test(?:s|ed)?\s+positive\s+for|are\s+positive\s+for|show(?:s)?\s+signs\s+of|meet(?:s)?\s+(?:the\s+)?criteria\s+for|are\s+diagnosed\s+with|is\s+diagnosed\s+with)\b[^.!?\n]{0,100}/iu,
-  /\b(?:you|the patient|this patient|the individual|your child)\s+(?:(?:may|might|could)\s+)?(?:carry|carries|harbor|harbors)\b[^.!?\n]{0,100}/iu,
+  new RegExp(`\\b${CLINICAL_SUBJECT}\\s+(?:(?:[\\p{L}-]+|very)\\s+){0,3}(?:have|has|suffer(?:s)?\\s+from|test(?:s|ed)?\\s+positive\\s+for|are\\s+positive\\s+for|show(?:s)?\\s+signs\\s+of|meet(?:s)?\\s+(?:the\\s+)?criteria\\s+for|are\\s+diagnosed\\s+with|is\\s+diagnosed\\s+with)\\b[^.!?\\n]{0,100}`, 'iu'),
+  new RegExp(`\\b${CLINICAL_SUBJECT}\\s+(?:(?:may|might|could)\\s+)?(?:carry|carries|harbor|harbors)\\b[^.!?\\n]{0,100}`, 'iu'),
+  new RegExp(`\\b${CLINICAL_SUBJECT}\\s+(?:is|are|tests?|tested)\\s+positive\\s+for\\b[^.!?\\n]{0,100}`, 'iu'),
+  /\b(?:the|these|those|this|your)\s+(?:findings?|results?|tests?|test\s+results?|genotype|variants?|data)\s+(?:is|are)\s+(?:diagnostic\s+of|consistent\s+with|indicative\s+of|positive\s+for)\b[^.!?\n]{0,100}/iu,
+  /\byour\s+(?:findings?|results?|tests?|test\s+results?|genotype|variants?)\s+(?:confirm|confirms|show|shows|indicate|indicates|prove|proves)\b[^.!?\n]{0,100}/iu,
   /\byour\s+(?:symptoms|results|genotype|variant|variants|test|tests)\s+(?:mean|means|show|shows|indicate|indicates|confirm|confirms|prove|proves)\s+(?:(?:that\s+)?you\s+have|(?:a\s+)?diagnosis\s+of)\b/iu,
   /\byour\s+(?:symptoms|results|genotype|variant|variants|test|tests)\s+(?:is|are)\s+(?:diagnostic\s+of|consistent\s+with|indicative\s+of)\b/iu,
   /\b(?:recommend(?:ed|ation)?|advise(?:d)?|should|must|need(?:s)? to|ought to|prescribe(?:d)?|start|stop|increase|decrease|take|avoid|undergo|administer|switch)\b[^.!?\n]{0,120}\b(?:treatment|therapy|medication|medicine|drug|screening|test|dose|dosing|dosage|surgery|procedure|clinical care|medical care)\b/iu,
@@ -95,15 +101,37 @@ const SAFETY_CONFUSABLES = new Map(Object.entries({
   'Α': 'A', 'Β': 'B', 'Ε': 'E', 'Ζ': 'Z', 'Η': 'H', 'Ι': 'I', 'Κ': 'K', 'Μ': 'M', 'Ν': 'N', 'Ο': 'O', 'Ρ': 'P', 'Τ': 'T', 'Υ': 'Y', 'Χ': 'X',
   'α': 'a', 'β': 'b', 'ε': 'e', 'ι': 'i', 'κ': 'k', 'ν': 'v', 'ο': 'o', 'ρ': 'p', 'τ': 't', 'υ': 'y', 'χ': 'x', 'ϲ': 'c',
   'А': 'A', 'В': 'B', 'Е': 'E', 'К': 'K', 'М': 'M', 'Н': 'H', 'О': 'O', 'Р': 'P', 'С': 'C', 'Т': 'T', 'Х': 'X',
-  'а': 'a', 'е': 'e', 'і': 'i', 'ј': 'j', 'к': 'k', 'м': 'm', 'н': 'h', 'о': 'o', 'р': 'p', 'с': 'c', 'т': 't', 'х': 'x', 'у': 'y', 'һ': 'h', 'ԁ': 'd', 'ԛ': 'q', 'ӏ': 'l',
+  'а': 'a', 'е': 'e', 'і': 'i', 'ј': 'j', 'к': 'k', 'м': 'm', 'н': 'h', 'о': 'o', 'р': 'p', 'с': 'c', 'т': 't', 'х': 'x', 'у': 'y', 'ѕ': 's', 'һ': 'h', 'ԁ': 'd', 'ԛ': 'q', 'ӏ': 'l',
+  'ս': 'u', 'հ': 'h', 'ո': 'n', 'օ': 'o',
+  'ᴀ': 'a', 'ʙ': 'b', 'ᴄ': 'c', 'ᴅ': 'd', 'ᴇ': 'e', 'ꜰ': 'f', 'ɢ': 'g', 'ʜ': 'h', 'ɪ': 'i', 'ᴊ': 'j', 'ᴋ': 'k', 'ʟ': 'l', 'ᴍ': 'm', 'ɴ': 'n', 'ᴏ': 'o', 'ᴘ': 'p', 'ʀ': 'r', 'ꜱ': 's', 'ᴛ': 't', 'ᴜ': 'u', 'ᴠ': 'v', 'ᴡ': 'w', 'ʏ': 'y', 'ᴢ': 'z',
 }));
 
 const CLINICAL_SKELETON_WORDS = Object.freeze([
-  'administer', 'advised', 'avoid', 'consume', 'diagnose', 'diagnosed',
-  'dose', 'inject', 'ingest', 'medication', 'monitor', 'must', 'need',
+  'administer', 'advised', 'apply', 'avoid', 'chew', 'consume', 'diagnose', 'diagnosed',
+  'dissolve', 'dose', 'drink', 'inhale', 'inject', 'ingest', 'insert', 'medication', 'monitor', 'must', 'need',
   'patient', 'prescribe', 'recommend', 'require', 'screen', 'should',
-  'start', 'stop', 'swallow', 'symptoms', 'take', 'test', 'treat', 'try',
+  'skip', 'spray', 'start', 'stop', 'swallow', 'symptoms', 'take', 'taper', 'test', 'treat', 'try',
 ]);
+
+function containsUnsupportedNamedHtmlEntity(value) {
+  if (typeof value !== 'string') return false;
+  for (const match of value.matchAll(/&([a-z][a-z0-9]+);/giu)) {
+    if (!Object.hasOwn(NAMED_HTML_ENTITIES, match[1].toLowerCase())) return true;
+  }
+  return false;
+}
+
+function collapseObfuscatedClinicalWords(value) {
+  let collapsed = value;
+  for (const word of CLINICAL_SKELETON_WORDS) {
+    const letters = Array.from(word).join('\\s*');
+    collapsed = collapsed.replace(
+      new RegExp(`(?<!\\p{L})${letters}(?!\\p{L})`, 'giu'),
+      word,
+    );
+  }
+  return collapsed;
+}
 
 function isPlainObject(value) {
   return Boolean(value)
@@ -177,36 +205,34 @@ function semanticSafetyText(value, { separatePunctuation = false } = {}) {
     .trim();
 }
 
-function withinOneEdit(left, right) {
+function withinTwoEdits(left, right) {
   if (left === right) return true;
-  if (Math.abs(left.length - right.length) > 1) return false;
-  let leftIndex = 0;
-  let rightIndex = 0;
-  let edits = 0;
-  while (leftIndex < left.length && rightIndex < right.length) {
-    if (left[leftIndex] === right[rightIndex]) {
-      leftIndex += 1;
-      rightIndex += 1;
-      continue;
+  if (Math.abs(left.length - right.length) > 2) return false;
+  let previous = Array.from({ length: right.length + 1 }, (_, index) => index);
+  for (let leftIndex = 1; leftIndex <= left.length; leftIndex += 1) {
+    const current = [leftIndex];
+    let rowMinimum = current[0];
+    for (let rightIndex = 1; rightIndex <= right.length; rightIndex += 1) {
+      const substitution = previous[rightIndex - 1]
+        + (left[leftIndex - 1] === right[rightIndex - 1] ? 0 : 1);
+      current[rightIndex] = Math.min(
+        previous[rightIndex] + 1,
+        current[rightIndex - 1] + 1,
+        substitution,
+      );
+      rowMinimum = Math.min(rowMinimum, current[rightIndex]);
     }
-    edits += 1;
-    if (edits > 1) return false;
-    if (left.length > right.length) leftIndex += 1;
-    else if (right.length > left.length) rightIndex += 1;
-    else {
-      leftIndex += 1;
-      rightIndex += 1;
-    }
+    if (rowMinimum > 2) return false;
+    previous = current;
   }
-  if (leftIndex < left.length || rightIndex < right.length) edits += 1;
-  return edits <= 1;
+  return previous[right.length] <= 2;
 }
 
 /**
  * UTS-39-style defense for mixed/confusable clinical keywords. The explicit
  * skeleton map handles common Greek/Cyrillic lookalikes; for an unmapped
- * non-Latin letter embedded in an otherwise Latin token, a one-edit comparison
- * fails closed on safety-critical words instead of assuming the token is safe.
+ * non-Latin letter embedded in an otherwise Latin token, a bounded two-edit
+ * comparison fails closed on safety-critical words instead of assuming safety.
  */
 function containsSuspiciousClinicalConfusable(value) {
   if (typeof value !== 'string' || !value.trim()) return false;
@@ -221,8 +247,8 @@ function containsSuspiciousClinicalConfusable(value) {
       if (mapped) return mapped;
       return /[A-Za-z]/u.test(character) ? character : '';
     }).join('').toLowerCase();
-    if (skeleton.length < 3) continue;
-    if (CLINICAL_SKELETON_WORDS.some((word) => withinOneEdit(skeleton, word))) {
+    if (skeleton.length < 2) continue;
+    if (CLINICAL_SKELETON_WORDS.some((word) => withinTwoEdits(skeleton, word))) {
       return true;
     }
   }
@@ -274,10 +300,16 @@ function removeAllowedBoundaryDisclaimers(value) {
 
 function containsProhibitedClinicalGuidance(value) {
   if (typeof value !== 'string' || !value.trim()) return false;
+  // CommonMark decodes the complete HTML named-reference table. This service
+  // intentionally keeps only a small reviewed decoder; an unrecognized entity
+  // in visible text therefore fails closed instead of being deleted from the
+  // safety projection while the browser renders a confusable character.
+  const visibleMarkup = stripRenderedMarkupForSafety(value);
+  if (containsUnsupportedNamedHtmlEntity(visibleMarkup)) return true;
   if (containsSuspiciousClinicalConfusable(value)) return true;
   const policyTexts = new Set([
-    semanticSafetyText(value),
-    semanticSafetyText(value, { separatePunctuation: true }),
+    collapseObfuscatedClinicalWords(semanticSafetyText(value)),
+    collapseObfuscatedClinicalWords(semanticSafetyText(value, { separatePunctuation: true })),
   ]);
   return [...policyTexts].some((policyText) => {
     const withoutAllowedDisclaimers = removeAllowedBoundaryDisclaimers(policyText);
@@ -288,7 +320,7 @@ function containsProhibitedClinicalGuidance(value) {
 function cleanNonClinicalText(value, maxLength) {
   if (containsProhibitedClinicalGuidance(value)) return null;
   const cleaned = cleanText(value, maxLength);
-  if (!cleaned || containsProhibitedClinicalGuidance(cleaned)) return null;
+  if (!cleaned || (cleaned !== value && containsProhibitedClinicalGuidance(cleaned))) return null;
   return cleaned;
 }
 
@@ -616,11 +648,20 @@ export function sanitizeEducationQuizOutput(result, maxItems = 20) {
 const PROVIDER_COMPLETIONS = new Set(['complete', 'unknown', 'truncated', 'filtered', 'failed']);
 
 function providerCompletion(result) {
-  if (isPlainObject(result) && Object.hasOwn(result, 'text')) {
+  if (isPlainObject(result)) {
+    const hasText = Object.hasOwn(result, 'text');
     const hasCompletionMetadata = Object.hasOwn(result, 'completion');
+    if (!hasText && !hasCompletionMetadata) {
+      return { text: result, completion: 'unknown' };
+    }
     const suppliedCompletion = result.completion;
+    const structuredText = hasText
+      ? result.text
+      : Object.fromEntries(
+        Object.entries(result).filter(([key]) => key !== 'completion'),
+      );
     return {
-      text: result.text,
+      text: structuredText,
       completion: typeof suppliedCompletion === 'string'
         && PROVIDER_COMPLETIONS.has(suppliedCompletion)
         ? suppliedCompletion
@@ -769,6 +810,37 @@ export function sanitizePublicationArtifact(publicationTask, taskInput, result, 
         reasonCode: 'clinical_fields_withheld',
         correlationId,
         limitations: ['One or more provider fields crossed the non-clinical publication boundary and were omitted.'],
+      });
+    }
+    const candidateCount = Array.isArray(content.candidateGenes)
+      ? content.candidateGenes.length
+      : null;
+    const hasClassificationDetail = Boolean(
+      content.inheritancePattern
+      || content.mainFeatures?.length
+      || content.synonyms?.length,
+    );
+    if (taskInput?.operation === 'suggest_candidates' && candidateCount === 0) {
+      return createPublicationArtifact({
+        status: PUBLICATION_STATUSES.UNAVAILABLE,
+        reasonCode: 'provider_empty',
+        correlationId,
+      });
+    }
+    if (taskInput?.operation === 'classify' && !hasClassificationDetail) {
+      return createPublicationArtifact({
+        status: PUBLICATION_STATUSES.UNAVAILABLE,
+        reasonCode: 'provider_empty',
+        correlationId,
+      });
+    }
+    if (taskInput?.operation === 'classify_and_suggest' && candidateCount === 0) {
+      return createPublicationArtifact({
+        status: PUBLICATION_STATUSES.PARTIAL,
+        content,
+        reasonCode: 'candidate_leads_missing',
+        correlationId,
+        limitations: ['The reviewed query classification is available, but the provider returned no reusable candidate-gene leads.'],
       });
     }
     return createPublicationArtifact({

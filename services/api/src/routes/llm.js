@@ -210,9 +210,12 @@ function clampTemperature(requested) {
 }
 
 function publicationCorrelationId(request) {
-  const requestId = String(request.id || 'request')
+  const normalizedRequestId = String(request.id || 'request')
     .replace(/[^A-Za-z0-9_.:-]/gu, '-')
     .slice(0, 96) || 'request';
+  const requestId = /^[A-Za-z0-9]/u.test(normalizedRequestId)
+    ? normalizedRequestId
+    : `request-${normalizedRequestId}`.slice(0, 96);
   return `${requestId}:llm-invoke`;
 }
 

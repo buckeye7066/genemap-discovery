@@ -12,7 +12,7 @@ const QUERY = {
 };
 
 function sanitizeCandidates(candidateGenes) {
-  return JSON.parse(sanitizePublicationTaskOutput(
+  return sanitizePublicationTaskOutput(
     TASK,
     {
       version: 1,
@@ -21,30 +21,44 @@ function sanitizeCandidates(candidateGenes) {
       audience: 'researcher',
     },
     { candidateGenes },
-  ));
+  );
 }
 
 describe('candidate gene symbol publication policy', () => {
   it('rejects clinical instructions masquerading as syntactically valid gene symbols', () => {
-    const result = sanitizeCandidates([
+    const publication = sanitizeCandidates([
       { symbol: 'STOP-DRUG', name: 'invented lead' },
       { symbol: 'TAKE-5MG', name: 'invented lead' },
       { symbol: 'CFTR', name: 'CF transmembrane conductance regulator' },
     ]);
 
-    expect(result.candidateGenes).toEqual([
+    expect(publication).toMatchObject({
+      contractVersion: 1,
+      status: 'partial',
+      reasonCode: 'clinical_fields_withheld',
+      correlationId: 'legacy-publication-boundary',
+    });
+    expect(publication.limitations).toHaveLength(1);
+    expect(publication.content.candidateGenes).toEqual([
       { symbol: 'CFTR', name: 'CF transmembrane conductance regulator' },
     ]);
   });
 
   it('retains ordinary bounded gene symbols that do not contain clinical guidance', () => {
-    const result = sanitizeCandidates([
+    const publication = sanitizeCandidates([
       { symbol: 'RUNX1' },
       { symbol: 'HLA-DQA1' },
       { symbol: 'SCN1A' },
     ]);
 
-    expect(result.candidateGenes.map((gene) => gene.symbol)).toEqual([
+    expect(publication).toMatchObject({
+      contractVersion: 1,
+      status: 'available',
+      reasonCode: null,
+      correlationId: 'legacy-publication-boundary',
+      limitations: [],
+    });
+    expect(publication.content.candidateGenes.map((gene) => gene.symbol)).toEqual([
       'RUNX1',
       'HLA-DQA1',
       'SCN1A',
