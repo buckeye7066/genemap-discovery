@@ -350,7 +350,7 @@ async function finalizeDatabaseClosure({
     for (const license of transactionLicenses) {
       if (activeLicenseBlocksDeletion(license, user.id, normalizedEmail)) {
         throw codedError(
-          'Institutional-license ownership changed during account deletion. The account remains available; transfer or cancel the license and retry.',
+          'Institutional-license ownership changed during account deletion. The account remains available with billing cancelled; transfer or cancel the license and retry with the deletion receipt.',
           409,
           'ACCOUNT_DELETE_LICENSE_CHANGED',
         );
@@ -439,6 +439,7 @@ async function finalizeDatabaseClosure({
         targetEmailHash: identityDigest(normalizedEmail, 32),
         actorMode,
         independentLedgerRecorded: ledgerResult?.recorded === true,
+        independentLedgerIdentityKeyId: ledgerResult?.identityKeyId || null,
         checkoutSessionsExpired: billingProgress.checkoutSessionsExpired.length,
         stripeSubscriptionsCancelled: billingProgress.subscriptionsCancelled.length,
         stripeCustomersPlanned: billingProgress.discoveredCustomerIds.length,
@@ -615,6 +616,7 @@ export async function closeUserAccount({
         receiptId,
         actorMode,
         independentLedgerRecorded: ledgerResult?.recorded === true,
+        independentLedgerIdentityKeyId: ledgerResult?.identityKeyId || null,
         checkoutSessionsExamined: billingProgress.checkoutSessionsExamined,
         checkoutSessionsExpired: billingProgress.checkoutSessionsExpired,
         stripeSubscriptionsCancelled: billingProgress.subscriptionsCancelled,
@@ -782,7 +784,13 @@ export async function reconcilePendingCustomerCleanup({
 }
 
 export function accountClosureCleanupStatus() {
-  return { ...cleanupRuntimeState };
+  return {
+    running: cleanupRuntimeState.running,
+    pending: cleanupRuntimeState.pending,
+    lastRunAt: cleanupRuntimeState.lastRunAt,
+    lastError: cleanupRuntimeState.lastError ? 'present' : null,
+    lastCompleted: cleanupRuntimeState.lastCompleted,
+  };
 }
 
 /**
