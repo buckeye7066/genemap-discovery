@@ -114,6 +114,8 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Generate Prisma client
         run: pnpm db:generate
+      - name: Build shared package
+        run: pnpm --filter @genemap/shared build
       - name: Apply migrations
         run: pnpm db:migrate:deploy
       - name: API integration tests (Postgres)

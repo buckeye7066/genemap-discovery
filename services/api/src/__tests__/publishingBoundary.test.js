@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { EDUCATION_TOPIC_IDS } from '@genemap/shared';
 import {
   HIGH_RISK_CLINICAL_FEATURES_ENABLED,
   PUBLICATION_MODE,
@@ -13,8 +14,8 @@ import {
 } from '../config/publicationTaskContracts.js';
 import { TOPICS_CATALOG } from '../config/educationCatalog.js';
 
-const CATALOG_TOPICS = TOPICS_CATALOG.flatMap(({ topics }) =>
-  topics.flatMap(({ id, title }) => [id, title])
+const CATALOG_TOPIC_TITLES = TOPICS_CATALOG.flatMap(({ topics }) =>
+  topics.map(({ title }) => title)
 );
 
 const EARLY_ONSET_CONCEPT = Object.freeze({
@@ -354,8 +355,12 @@ describe('publishable route decision', () => {
   );
 
   for (const url of ['/education/explain', '/education/quiz', '/education/image']) {
-    it.each(CATALOG_TOPICS)(`allows catalog topic on ${url}: %s`, (topic) => {
+    it.each(EDUCATION_TOPIC_IDS)(`allows canonical catalog topic ID on ${url}: %s`, (topic) => {
       expect(publicationBoundaryDecision({ url, body: { topic, level: 'undergraduate' } })).toBeNull();
+    });
+    it.each(CATALOG_TOPIC_TITLES)(`rejects catalog title on ${url}: %s`, (topic) => {
+      expect(publicationBoundaryDecision({ url, body: { topic, level: 'undergraduate' } }))
+        .toMatchObject({ statusCode: 403 });
     });
     it.each([
       "Alice Smith's BRCA1 variant",
