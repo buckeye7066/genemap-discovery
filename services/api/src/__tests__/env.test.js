@@ -3,6 +3,7 @@ import { loadEnv, ENV_CONSTANTS } from '../config/env.js';
 
 const VALID_KEY = 'a'.repeat(64); // 64 hex chars
 const STRONG_SECRET = 'x'.repeat(40);
+const LEDGER_IDENTITY_KEYS = `2026-08=${'i'.repeat(40)},2026-01=${'r'.repeat(40)}`;
 
 function prodEnv(overrides = {}) {
   return {
@@ -43,8 +44,24 @@ describe('loadEnv (production)', () => {
       ACCOUNT_CLOSURE_LEDGER_WRITE_URL: 'https://ledger.example.invalid/write',
       ACCOUNT_CLOSURE_LEDGER_READ_URL: 'https://ledger.example.invalid/read',
       ACCOUNT_CLOSURE_LEDGER_SECRET: 'l'.repeat(40),
+      ACCOUNT_CLOSURE_LEDGER_IDENTITY_KEYS: LEDGER_IDENTITY_KEYS,
     }) });
     expect(env.accountClosureLedgerConfigured()).toBe(true);
+  });
+
+  it.each([
+    '',
+    `bad id=${'i'.repeat(40)}`,
+    `duplicate=${'i'.repeat(40)},duplicate=${'r'.repeat(40)}`,
+    'current=short',
+  ])('does not accept an invalid deletion-ledger identity key ring: %s', (keyRing) => {
+    const env = loadEnv({ source: prodEnv({
+      ACCOUNT_CLOSURE_LEDGER_WRITE_URL: 'https://ledger.example.invalid/write',
+      ACCOUNT_CLOSURE_LEDGER_READ_URL: 'https://ledger.example.invalid/read',
+      ACCOUNT_CLOSURE_LEDGER_SECRET: 'l'.repeat(40),
+      ACCOUNT_CLOSURE_LEDGER_IDENTITY_KEYS: keyRing,
+    }) });
+    expect(env.accountClosureLedgerConfigured()).toBe(false);
   });
 
   it.each([
@@ -128,8 +145,9 @@ describe('loadEnv (development)', () => {
 });
 
 describe('ENV_CONSTANTS', () => {
-  it('exports the production-required list', () => {
+  it('exports the production-required list and ledger key validator', () => {
     expect(ENV_CONSTANTS.PRODUCTION_REQUIRED).toContain('MEDICAL_DATA_ENCRYPTION_KEY');
     expect(ENV_CONSTANTS.PRODUCTION_REQUIRED).toContain('JWT_SECRET');
+    expect(ENV_CONSTANTS.isValidLedgerIdentityKeyConfig(LEDGER_IDENTITY_KEYS)).toBe(true);
   });
 });
