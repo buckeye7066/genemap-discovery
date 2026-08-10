@@ -82,7 +82,7 @@ describe('GeneComparison claim-level evidence', () => {
 
     expect(screen.getByRole('heading', { name: /gene evidence comparison/i })).toBeInTheDocument();
     expect(screen.queryByText(/not scored/i)).not.toBeInTheDocument();
-    expect(screen.getByText(/human association/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/human association/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/model-organism/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/metadata/i)).toBeInTheDocument();
     expect(screen.getByText(/SCN1A has a source-recorded association/i)).toBeInTheDocument();
