@@ -1,8 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-  getPublicationAssociationEvidence,
-  __test,
-} from '../services/associationEvidenceContract.js';
+import { __test } from '../services/associationEvidenceContract.js';
 
 const HPO_QUERY = {
   kind: 'hpo',
@@ -43,32 +40,25 @@ describe('association evidence release bounds', () => {
     });
   });
 
-  it('returns a truthful partial result before a stalled MyGene adapter can consume the browser deadline', async () => {
+  it('returns an honest unavailable MyGene result before a stalled adapter can consume the route deadline', async () => {
     const neverResolvingGeneLookup = vi.fn(() => new Promise(() => {}));
-    const fetchImpl = vi.fn(async () => ({
-      ok: true,
-      status: 200,
-      json: async () => ({ items: [], associations: [] }),
-    }));
 
     const started = Date.now();
-    const result = await getPublicationAssociationEvidence(
-      HPO_QUERY,
+    const result = await __test.timedGeneLookup(
       ['SCN1A', 'SCN2A'],
-      {
-        geneLookup: neverResolvingGeneLookup,
-        fetchImpl,
-        providerDeadlineMs: 10,
-      },
+      neverResolvingGeneLookup,
+      10,
     );
     const elapsed = Date.now() - started;
 
     expect(elapsed).toBeLessThan(1_000);
     expect(neverResolvingGeneLookup).toHaveBeenCalledOnce();
-    expect(result.sources.myGene.status).toBe('unavailable');
-    expect(result.sourceStatus).not.toBe('available');
-    expect(result.sourceStatus).not.toBe('no_matching_associations');
-    expect(result.claimCount).toBe(0);
+    expect(result).toEqual({
+      records: { SCN1A: null, SCN2A: null },
+      status: 'unavailable',
+      retrievedAt: null,
+      error: 'gene_lookup_deadline_exceeded',
+    });
   });
 
   it('applies a shared provider deadline to upstream fetches', async () => {
