@@ -38,6 +38,7 @@ vi.mock('../utils/audit.js', () => ({
 }));
 
 import llmRoutes from '../routes/llm.js';
+import { errorHandler } from '../middleware/errorHandler.js';
 
 const STRUCTURED_RESEARCH_INPUT = Object.freeze({
   version: 1,
@@ -56,8 +57,12 @@ afterEach(async () => {
 
 describe('/llm/invoke generation option validation', () => {
   it('rejects explicit options:null before quota, reference resolution, or provider work', async () => {
-    app = Fastify({ logger: false });
+    app = Fastify({
+      logger: false,
+      genReqId: () => 'options-null-validation',
+    });
     app.decorate('prisma', {});
+    app.setErrorHandler(errorHandler);
     await app.register(llmRoutes, { prefix: '/llm' });
 
     const response = await app.inject({
@@ -71,7 +76,10 @@ describe('/llm/invoke generation option validation', () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(response.json().message).toMatch(/generation options must be an object/i);
+    expect(response.json()).toEqual({
+      error: 'generation options must be an object',
+      requestId: 'options-null-validation',
+    });
     expect(mocks.enforceUsageLimit).not.toHaveBeenCalled();
     expect(mocks.resolvePublicationTaskReferences).not.toHaveBeenCalled();
     expect(mocks.generateExplanation).not.toHaveBeenCalled();
