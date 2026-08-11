@@ -107,7 +107,7 @@ export default function PublicationState({ artifact, className = '', showAvailab
     <div
       className={`rounded-md border px-3 py-2 text-sm ${copy.className} ${className}`.trim()}
       role={['available', 'partial', 'superseded'].includes(displayStatus) ? 'status' : 'alert'}
-      data-publication-status={artifact.status || 'unknown'}
+      data-publication-status={displayStatus}
     >
       <div className="flex items-start gap-2">
         <Icon className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
