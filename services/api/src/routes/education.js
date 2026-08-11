@@ -330,12 +330,6 @@ export default async function educationRoutes(fastify) {
       'education-image',
       'image_output_verification_unavailable',
     );
-    await persistPublicationSession(prisma, request, {
-      topic,
-      level,
-      type: 'image',
-      publication,
-    });
 
     return {
       publication,

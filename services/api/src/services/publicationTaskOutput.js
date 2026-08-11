@@ -27,17 +27,20 @@ const GENERIC_CLINICAL_ACTION_GERUND = '(?:taking|trying|consuming|ingesting|swa
 const GENERIC_CLINICAL_ACTION_PAST = '(?:taken|tried|consumed|ingested|swallowed|chewed|drunk|dissolved|inhaled|sprayed|injected|administered|prescribed|dosed|medicated|redosed|refilled|combined|restarted|held|paused|ceased|maintained|replaced|substituted|removed|added|received|given|initiated|managed|started|resumed|continued|stopped|discontinued|skipped|tapered|increased|decreased|avoided|applied|rubbed|inserted|placed|worn|undergone|scheduled|screened|tested|diagnosed|treated|monitored|switched\\s+to)';
 const PASSIVE_CLINICAL_ACTION_PAST = `(?:used|${GENERIC_CLINICAL_ACTION_PAST})`;
 const CLINICAL_SUBJECT = '(?:you|patients?|the\\s+patients?|this\\s+patient|these\\s+patients|the\\s+individual|individuals?|your\\s+child|children|adults?|family\\s+members?)';
-const PASSIVE_USE_SUBJECT = `[\\p{L}][\\p{L}\\p{N}'-]{0,63}`;
-const PASSIVE_USE_AUXILIARY = '(?:is|are|has|have|had|may|might|can|could|would|should|must|will|needs?|ought)';
+// Semantic projection separates letter/digit boundaries so identifiers such as
+// `X-17` become `X 17`. Keep that normalized suffix attached to the passive
+// subject; otherwise an unreviewed identifier can evade percentage handling.
+const PASSIVE_USE_SUBJECT = `(?:[\\p{L}][\\p{L}\\p{N}'-]{0,63}(?:\\s+\\d{1,63})?|\\d{1,63})`;
+const PASSIVE_USE_AUXILIARY = '(?:is|are|was|were|has|have|had|may|might|can|could|would|should|must|will|needs?|ought)';
 const PASSIVE_USE_STRONG_MODAL_AUXILIARY = '(?:(?:should|must|will|needs?|has|have|had|ought)\\b|is\\s+to\\b)';
 const PASSIVE_USE_PERSON_TARGET = `(?:you|your\\s+child|(?:(?:the|this|these)\\s+)?(?:patients?|individuals?|children)(?![-\\s]+(?:derived|samples?|data|records?|cohorts?|cells?|specimens?))|(?:the|this)\\s+child|family\\s+members?)`;
 const PASSIVE_USE_PERSONALIZED_CONTEXT = `(?:(?:for|on|in|into|to|by|among)\\s+${PASSIVE_USE_PERSON_TARGET}|when\\s+(?:treating|screening|monitoring|diagnosing)\\s+${PASSIVE_USE_PERSON_TARGET}|your\\s+(?:symptoms?|treatment|therapy|medication|medicine|drug|dose|dosing|screening|diagnosis|prognosis|genes?|genome|dna|variants?)|(?:in|for)\\s+(?:clinical|medical)\\s+care|during\\s+your\\s+(?:treatment|therapy|screening|clinical\\s+care|medical\\s+care))`;
 const PASSIVE_USE_CLINICAL_INDICATION = '(?:pain|symptoms?|headaches?|migraines?|inflammation|hypertension|diabetes|cancer|asthma|fever|seizures?|infections?|cystic\\s+fibrosis|(?:[\\p{L}-]+\\s+){0,2}(?:disease|disorder|syndrome)|(?!(?:mitosis|meiosis)\\b)[\\p{L}-]+(?:itis|osis|emia|oma|pathy))';
 const PASSIVE_USE_CLINICAL_TARGET = `(?:${PASSIVE_USE_CLINICAL_INDICATION}|(?:you|your\\s+child|(?:the|this|these)\\s+(?:patients?|individuals?|children)|patients?|individuals?|children)(?!-(?:derived|reported)\\b|\\s+(?:derived|samples?|data|records?|cohorts?|cells?|specimens?)))`;
 const PASSIVE_USE_CLINICAL_PURPOSE = `(?:(?:to|for|in)\\s+(?:treat|treating|manage|managing|diagnose|diagnosing|screen|screening|monitor|monitoring|relieve|relieving|reduce|reducing|prevent|preventing)\\s+(?:(?:a|an|the|this|these)\\s+)?${PASSIVE_USE_CLINICAL_TARGET}\\b|(?:for|against)\\s+${PASSIVE_USE_CLINICAL_INDICATION}\\b(?!\\s+(?:research|stud(?:y|ies)|analysis|model(?:s|ing)?|dataset|samples?|cells?))|(?:as|for)\\s+(?:a\\s+|the\\s+)?(?:treatment|therapy|medication)(?:\\s+of\\s+${PASSIVE_USE_CLINICAL_INDICATION})?)`;
-const CLINICAL_QUANTITY = '(?:\\d+(?:\\.\\d+)?|zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|half|quarter)';
+const CLINICAL_QUANTITY = '(?:\\d+(?:\\.\\d+)?|\\.\\d+|zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|half|quarter)';
 const CLINICAL_DOSE_UNIT = '(?:mg|mcg|μg|ug|ng|g|ml|cc|iu|units?|grams?|milli?grams?|micrograms?|nanograms?|milliliters?)';
-const CLINICAL_PERCENT = '(?:%|٪|percent(?:age)?\\b(?!\\s+points?\\b))';
+const CLINICAL_PERCENT = '(?:%|٪|per\\s+cent\\b|percent(?:age)?\\b(?!\\s+points?\\b))';
 const CLINICAL_PERCENTAGE_VALUE = `${CLINICAL_QUANTITY}\\s*${CLINICAL_PERCENT}`;
 const CLINICAL_PERCENTAGE_FORMULATION_NOUN = '(?:(?:topical\\s+)?(?:solutions?|creams?|gels?|ointments?|formulations?)|concentrations?)';
 const CLINICAL_PERCENTAGE_NAMED_FORMULATION = `${CLINICAL_PERCENTAGE_VALUE}(?:(?:\\s*strength)(?:\\s+${CLINICAL_PERCENTAGE_FORMULATION_NOUN})?|\\s+${CLINICAL_PERCENTAGE_FORMULATION_NOUN})`;
@@ -46,7 +49,7 @@ const PASSIVE_USE_ADMINISTRATION_CONTEXT = `(?:(?:(?:orally|topically|intravenou
 const PASSIVE_PERCENTAGE_NAMED_ADMINISTRATION_CONTEXT = `(?:(?:as|in|at)\\s+(?:a\\s+)?${CLINICAL_PERCENTAGE_NAMED_FORMULATION}|(?:in|at)\\s+(?:a\\s+)?concentration\\s+of\\s+${CLINICAL_PERCENTAGE_VALUE})`;
 const PASSIVE_PERCENTAGE_BARE_ADMINISTRATION_CONTEXT = `(?:as|in|at)\\s+(?:a\\s+)?${CLINICAL_PERCENTAGE_VALUE}(?!\\s+points?\\b)`;
 const PERCENTAGE_ADMINISTRATION_CONTEXT = `(?:${PASSIVE_PERCENTAGE_NAMED_ADMINISTRATION_CONTEXT}|${PASSIVE_PERCENTAGE_BARE_ADMINISTRATION_CONTEXT})`;
-const PASSIVE_USE_RESEARCH_CONTEXT = '(?:research|stud(?:y|ies)|analysis|assays?|samples?|workflows?|simulations?|models?|methods?|tools?|lessons?|education|examples?|datasets?|calibration|quality[ -]control|aggregate\\s+research|(?:aggregate|deidentified|population(?:[- ]?level)|cohort(?:[- ]?level))\\s+cohorts?|allele\\s+frequenc(?:y|ies)|significance\\s+levels?|genomic\\s+library|patient-derived\\s+(?:samples?|cells?)|selection\\s+marker|cultured\\s+cells|cell\\s+growth|mitosis|meiosis|absorbance|culture\\s+cells|edit\\s+genes|amplify\\s+dna|tumor\\s+genomes|punnett\\s+squares?|inheritance\\s+ratios?)';
+const PASSIVE_USE_RESEARCH_CONTEXT = '(?:research|stud(?:y|ies)|analysis|assays?|samples?|workflows?|simulations?|models?|methods?|tools?|lessons?|education|examples?|datasets?|calibration|quality[ -]control|aggregate\\s+research|(?:aggregate|deidentified|population(?:[- ]?level)|cohort(?:[- ]?level))\\s+cohorts?|allele\\s+frequenc(?:y|ies)|significance\\s+levels?|sensitivity|specificity|accuracy|precision|recall|false[ -](?:positive|negative)\\s+rates?|genomic\\s+library|patient-derived\\s+(?:samples?|cells?)|selection\\s+marker|cultured\\s+cells|cell\\s+growth|mitosis|meiosis|absorbance|culture\\s+cells|edit\\s+genes|amplify\\s+dna|tumor\\s+genomes|punnett\\s+squares?|inheritance\\s+ratios?)';
 const PASSIVE_USE_CONCRETE_LAB_CONTEXT = '(?:assays?|quality[ -]control|genomic\\s+library|selection\\s+marker|cultured\\s+cells|cell\\s+growth|mitosis|meiosis|absorbance|culture\\s+cells|tumor\\s+genomes|(?:the\\s+)?labs?|laborator(?:y|ies)(?:\\s+research)?|(?:dna|rna)\\s+extraction|p\\s*c\\s*r|sequencing\\s+library\\s+preparation|(?:genetic|genetics|genomic)\\s+experiments?|c\\s*r\\s*i\\s*s\\s*p\\s*r\\s+editing|gel\\s+electrophoresis|cell\\s*culture\\s+experiments?|(?:patient-derived\\s+(?:samples?|cells?)[^.!?;\\n]{0,60}\\b(?:aggregate\\s+research|laborator(?:y|ies)|lab|assays?)|(?:aggregate\\s+research|laborator(?:y|ies)|lab|assays?)[^.!?;\\n]{0,60}\\bpatient-derived\\s+(?:samples?|cells?)))';
 
 const DIRECT_CLINICAL_ACTION = `(?:${GENERIC_CLINICAL_ACTION}|choose|select)`;
@@ -140,7 +143,7 @@ const CLINICAL_GUIDANCE_PATTERNS = [
 ];
 
 const PASSIVE_ACTION_CLAUSE_PATTERN = new RegExp(
-  `\\b${PASSIVE_USE_SUBJECT}\\s+${PASSIVE_USE_AUXILIARY}\\b[^.!?;\\n]{0,80}\\b${PASSIVE_CLINICAL_ACTION_PAST}\\b`,
+  `\\b${PASSIVE_USE_SUBJECT}\\s+${PASSIVE_USE_AUXILIARY}\\b[^.!?;\\n]*?\\b${PASSIVE_CLINICAL_ACTION_PAST}\\b`,
   'iu',
 );
 const PASSIVE_USE_PERSONALIZED_PATTERN = new RegExp(
@@ -159,28 +162,40 @@ const PASSIVE_ACTION_NAMED_PERCENTAGE_ADMINISTRATION_PATTERN = new RegExp(
   `\\b${PASSIVE_CLINICAL_ACTION_PAST}\\b(?=[^.!?;\\n]*\\b${PASSIVE_PERCENTAGE_NAMED_ADMINISTRATION_CONTEXT}(?![\\p{L}\\p{N}%٪]))`,
   'iu',
 );
+const PASSIVE_PERCENTAGE_FORMULATION_SUBJECT = `(?:${CLINICAL_PERCENTAGE_NAMED_FORMULATION}|${CLINICAL_PERCENTAGE_VALUE}\\s+${PASSIVE_USE_SUBJECT}\\s+${CLINICAL_PERCENTAGE_FORMULATION_NOUN})`;
+const PASSIVE_PERCENTAGE_FORMULATION_SUBJECT_PATTERN = new RegExp(
+  `(?<![\\p{L}\\p{N}])(?:(?:the|an?)\\s+)?${PASSIVE_PERCENTAGE_FORMULATION_SUBJECT}\\s+${PASSIVE_USE_AUXILIARY}\\b[^.!?;\\n]*?\\b${PASSIVE_CLINICAL_ACTION_PAST}\\b`,
+  'iu',
+);
+const PASSIVE_PERCENTAGE_AGAROSE_ELECTROPHORESIS_PATTERN = new RegExp(
+  `(?<![\\p{L}\\p{N}])${CLINICAL_PERCENTAGE_VALUE}\\s+agarose\\s+gels?\\s+${PASSIVE_USE_AUXILIARY}\\b[^.!?;\\n]*?\\b${PASSIVE_CLINICAL_ACTION_PAST}\\b[^.!?;\\n]*?\\b(?:for|in|during)\\s+(?:gel\\s+)?electrophoresis\\b`,
+  'iu',
+);
 const PASSIVE_ACTION_BARE_PERCENTAGE_ADMINISTRATION_PATTERN = new RegExp(
   `\\b${PASSIVE_CLINICAL_ACTION_PAST}\\b(?=[^.!?;\\n]*\\b${PASSIVE_PERCENTAGE_BARE_ADMINISTRATION_CONTEXT}(?![\\p{L}\\p{N}%٪]))`,
   'iu',
 );
-const PASSIVE_PERCENTAGE_RESEARCH_SEMANTICS_PATTERN = new RegExp(
-  `(?:\\b${CLINICAL_PERCENTAGE_VALUE}\\s+(?:of\\s+(?:(?:the|these|those|reviewed|aggregate|deidentified)\\s+)?(?:simulations?|samples?|examples?|variants?|cohorts?|datasets?|observations?|experiments?|comparisons?)|(?:statistical\\s+)?(?:significance|confidence|allele\\s+frequenc(?:y|ies)|thresholds?|prevalence|penetrance))\\b|\\b${CLINICAL_QUANTITY}\\s+percentage[ -]?points?\\s+(?:thresholds?|corrections?|changes?|differences?)\\b)`,
+const PASSIVE_PERCENTAGE_RESEARCH_SUBJECT = '(?:methods?|models?|filters?|assays?|reagents?|algorithms?|pipelines?|workflows?|tools?|simulations?|datasets?|variables?|statistics?|thresholds?|tests?|procedures?|corrections?|approach(?:es)?|techniques?|strateg(?:y|ies)|analys(?:is|es)|equations?|estimators?|classifiers?|calibrations?|metrics?|measures?|calculations?|comparisons?|regressions?|p\\s*c\\s*r)';
+const PASSIVE_PERCENTAGE_RESEARCH_SUBJECT_TOKEN_PATTERN = new RegExp(
+  `^${PASSIVE_PERCENTAGE_RESEARCH_SUBJECT}$`,
   'iu',
 );
-const PASSIVE_PERCENTAGE_RESEARCH_SUBJECT_PATTERN = new RegExp(
-  `\\b(?:methods?|models?|filters?|assays?|reagents?|algorithms?|pipelines?|workflows?|tools?|simulations?|datasets?|variables?|statistics?|thresholds?|p\\s*c\\s*r)\\s+${PASSIVE_USE_AUXILIARY}\\b[^.!?;\\n]*\\b${PASSIVE_CLINICAL_ACTION_PAST}\\b`,
-  'iu',
+const PASSIVE_ACTION_BARE_PERCENTAGE_FRAME_PATTERN = new RegExp(
+  `\\b(?<subject>${PASSIVE_USE_SUBJECT})\\s+${PASSIVE_USE_AUXILIARY}\\b[^.!?;\\n]*?\\b${PASSIVE_CLINICAL_ACTION_PAST}\\b(?=[^.!?;\\n]*\\b${PASSIVE_PERCENTAGE_BARE_ADMINISTRATION_CONTEXT}(?![\\p{L}\\p{N}%٪]))`,
+  'giu',
 );
+const PASSIVE_PERCENTAGE_DISCOURSE_BOUNDARY_PATTERN = /\b(?:while|whereas|although|but|however|conversely|meanwhile|afterwards?|subsequently|(?:and\s+)?then)\b/iu;
 const ACTIVE_PERSON_REGULAR_CLINICAL_ACTION = '(?:take|consume|ingest|swallow|chew|drink|dissolve|inhale|spray|inject|administer|prescribe|dose|medicate|redose|refill|combine|hold|pause|cease|maintain|replace|substitute|remove|add|receive|give|initiate|manage|start|begin|resume|continue|stop|discontinue|skip|taper|increase|decrease|avoid|rub|insert|place|wear|use|schedule|screen|test|diagnose|treat|monitor)';
-const ACTIVE_PERSON_CLINICAL_ACTION = `(?:${ACTIVE_PERSON_REGULAR_CLINICAL_ACTION}s?|tr(?:y|ies)|appl(?:y|ies)|undergo(?:es)?|switch(?:es)?(?:\\s+to)?|re\\s*starts?|keeps?\\s+(?:taking|using))`;
+const ACTIVE_PERSON_CLINICAL_ACTION = `(?:${ACTIVE_PERSON_REGULAR_CLINICAL_ACTION}s?|tr(?:y|ies)|appl(?:y|ies)|undergo(?:es)?|switch(?:es)?(?:\\s+to)?|re\\s*starts?|keeps?\\s+(?:taking|using)|${GENERIC_CLINICAL_ACTION_GERUND})`;
 const ACTIVE_PERSON_PERCENTAGE_ACTION_PATTERN = new RegExp(
-  `\\b(?:(?:(?:this|the|a|one)\\s+)?(?:patient|child|individual|person|adult)|(?:(?:these|the)\\s+)?(?:patients|children|individuals|persons|adults)|you)\\s+(?<action>${ACTIVE_PERSON_CLINICAL_ACTION})\\b(?<tail>[^.!?;\\n]*)`,
+  `\\b(?<subject>(?:(?:(?:this|the|a|one)\\s+)?(?:patient|child|individual|person|adult)|(?:(?:these|the)\\s+)?(?:patients|children|individuals|persons|adults)|you))\\b[^.!?;\\n]*?\\b(?<action>${ACTIVE_PERSON_CLINICAL_ACTION})\\b(?<tail>[^.!?;\\n]*)`,
   'giu',
 );
 const ACTIVE_PERSON_PERCENTAGE_CONTEXT_PATTERN = new RegExp(
   `\\b(?:${PERCENTAGE_ADMINISTRATION_CONTEXT}|(?:a\\s+)?(?:${CLINICAL_PERCENTAGE_NAMED_FORMULATION}|${CLINICAL_PERCENTAGE_VALUE}))(?![\\p{L}\\p{N}%٪])`,
   'iu',
 );
+const ACTIVE_PERSON_REVIEWED_PERCENTAGE_RESEARCH_TARGET_PATTERN = /^(?<prefix>\s*(?:(?:a|an|the|this|that)\s+)?)(?<target>filters?|approach(?:es)?|procedures?|estimators?|corrections?|tests?|techniques?|strateg(?:y|ies)|classifiers?|calibrations?)\b(?=[^.!?;\n]*\bpercentage value\b[^.!?;\n]*\baggregate\s+(?:research|analysis|stud(?:y|ies)|comparisons?)\b)/iu;
 const PASSIVE_USE_RESEARCH_CONTEXT_PATTERN = new RegExp(
   `\\b${PASSIVE_USE_RESEARCH_CONTEXT}\\b`,
   'iu',
@@ -190,11 +205,11 @@ const PASSIVE_USE_CONCRETE_LAB_CONTEXT_PATTERN = new RegExp(
   'iu',
 );
 const PASSIVE_ACTION_KNOWN_MEDICATION_PATTERN = new RegExp(
-  `\\b(?:${MEDICATION_NAME_PATTERN}|medications?|medicines?|drugs?)\\s+${PASSIVE_USE_AUXILIARY}\\b[^.!?;\\n]{0,80}\\b${PASSIVE_CLINICAL_ACTION_PAST}\\b`,
+  `\\b(?:${MEDICATION_NAME_PATTERN}|medications?|medicines?|drugs?)\\s+${PASSIVE_USE_AUXILIARY}\\b[^.!?;\\n]*?\\b${PASSIVE_CLINICAL_ACTION_PAST}\\b`,
   'iu',
 );
 const PASSIVE_ACTION_PERSON_SUBJECT_PATTERN = new RegExp(
-  `\\b${CLINICAL_SUBJECT}\\s+${PASSIVE_USE_AUXILIARY}\\b[^.!?;\\n]{0,80}\\b${PASSIVE_CLINICAL_ACTION_PAST}\\b`,
+  `\\b${CLINICAL_SUBJECT}\\s+${PASSIVE_USE_AUXILIARY}\\b[^.!?;\\n]*?\\b${PASSIVE_CLINICAL_ACTION_PAST}\\b`,
   'iu',
 );
 const PASSIVE_ACTION_NONCLINICAL_PERSON_SUBJECT_PATTERN = new RegExp(
@@ -202,11 +217,11 @@ const PASSIVE_ACTION_NONCLINICAL_PERSON_SUBJECT_PATTERN = new RegExp(
   'iu',
 );
 const PASSIVE_ACTION_STRONG_MODAL_PATTERN = new RegExp(
-  `\\b${PASSIVE_USE_SUBJECT}\\s+${PASSIVE_USE_STRONG_MODAL_AUXILIARY}[^.!?;\\n]{0,80}\\b${PASSIVE_CLINICAL_ACTION_PAST}\\b`,
+  `\\b${PASSIVE_USE_SUBJECT}\\s+${PASSIVE_USE_STRONG_MODAL_AUXILIARY}[^.!?;\\n]*?\\b${PASSIVE_CLINICAL_ACTION_PAST}\\b`,
   'iu',
 );
 const PASSIVE_ACTION_WEAK_MODAL_PATTERN = new RegExp(
-  `\\b${PASSIVE_USE_SUBJECT}\\s+(?:may|might|can|could|would)\\b[^.!?;\\n]{0,80}\\b${PASSIVE_CLINICAL_ACTION_PAST}\\b`,
+  `\\b${PASSIVE_USE_SUBJECT}\\s+(?:may|might|can|could|would)\\b[^.!?;\\n]*?\\b${PASSIVE_CLINICAL_ACTION_PAST}\\b`,
   'iu',
 );
 
@@ -266,6 +281,13 @@ const CLINICAL_SKELETON_WORDS = Object.freeze([
   'choose', 'select', 'skip', 'spray', 'start', 'stop', 'substitute', 'swallow', 'symptoms', 'take', 'taken', 'taper', 'test', 'tested', 'treat', 'treated', 'try', 'use', 'used',
 ]);
 
+const OBFUSCATED_CLINICAL_WORD_PATTERNS = Object.freeze(
+  CLINICAL_SKELETON_WORDS.map((word) => Object.freeze([
+    new RegExp(`(?<!\\p{L})${Array.from(word).join('\\s*')}(?!\\p{L})`, 'giu'),
+    word,
+  ])),
+);
+
 function containsUnsupportedNamedHtmlEntity(value) {
   if (typeof value !== 'string') return false;
   for (const match of value.matchAll(/&([a-z][a-z0-9]+);/giu)) {
@@ -276,12 +298,8 @@ function containsUnsupportedNamedHtmlEntity(value) {
 
 function collapseObfuscatedClinicalWords(value) {
   let collapsed = value;
-  for (const word of CLINICAL_SKELETON_WORDS) {
-    const letters = Array.from(word).join('\\s*');
-    collapsed = collapsed.replace(
-      new RegExp(`(?<!\\p{L})${letters}(?!\\p{L})`, 'giu'),
-      word,
-    );
+  for (const [pattern, word] of OBFUSCATED_CLINICAL_WORD_PATTERNS) {
+    collapsed = collapsed.replace(pattern, word);
   }
   return collapsed;
 }
@@ -332,14 +350,17 @@ function stripRenderedMarkupForSafety(value, { separateFormatting = false } = {}
     .replace(/<\/?(?:address|article|aside|blockquote|br|dd|div|dl|dt|figcaption|figure|footer|h[1-6]|header|hr|li|main|nav|ol|p|pre|section|table|tbody|td|tfoot|th|thead|tr|ul)(?:\s[^<>]*)?\s*\/?>/giu, '\n')
     .replace(/<(?:[^"'<>]|"[^"]*"|'[^']*')*>/gu, '');
   return stripUntrustedMarkupAndLinks(withoutHtml)
-    .replace(/\\([\\`*{}[\]()#+\-.!_>~|])/gu, '$1')
+    .replace(/\\([\\`*{}[\]()#+\-.!_>~|%٪])/gu, '$1')
     .replace(/[`*_~]+/gu, separateFormatting ? ' ' : '')
     .replace(/^\s{0,3}#{1,6}\s*/gmu, '')
     .replace(/^\s*>\s?/gmu, ' ')
     .replace(/^\s*(?:[-+*]|\d+[.)])\s+/gmu, '');
 }
 
-function semanticSafetyText(value, { separatePunctuation = false } = {}) {
+function semanticSafetyText(value, {
+  separatePunctuation = false,
+  joinLineBreaks = false,
+} = {}) {
   if (typeof value !== 'string') return '';
   const normalized = replaceControlCharacters(removeInvisibleFormatCharacters(
     decodeHtmlEntities(value, { preserveUnknownNamed: false }).normalize('NFKD'),
@@ -352,12 +373,23 @@ function semanticSafetyText(value, { separatePunctuation = false } = {}) {
     if (codePoint >= 0x06f0 && codePoint <= 0x06f9) {
       return String.fromCodePoint(0x30 + codePoint - 0x06f0);
     }
+    if (codePoint === 0x066b) return '.';
     return SAFETY_CONFUSABLES.get(character) ?? character;
   }).join('');
   return stripRenderedMarkupForSafety(confusableMapped, {
     separateFormatting: separatePunctuation,
   })
     .replace(/\p{M}+/gu, '')
+    // Decimal precision is irrelevant to the publication decision. Collapse
+    // decimal separators in the safety-only projection so neither an ASCII
+    // leading dot nor a normalized Arabic decimal mark becomes a sentence
+    // boundary before dose/percentage classification.
+    .replace(/(?<![\p{L}\p{N}])\.(?=\d)/gu, '0')
+    .replace(/(?<=\d)\.(?=\d)/gu, '')
+    // Renderers can place a symbolic percent on the next visual line or in a
+    // following block. Join only digit + percent-symbol tokens; the spelled
+    // word "percent" keeps its clause boundary semantics.
+    .replace(/(?<=\d)[\p{Z}\t\f\v\r\n\u0085\u2028\u2029]*(?=[%٪])/gu, '')
     // Preserve reviewed genetics compounds before treating rendered long
     // dashes as clause boundaries. Short in-word dashes still flow through
     // the compact-word projection below for obfuscation checks.
@@ -369,7 +401,7 @@ function semanticSafetyText(value, { separatePunctuation = false } = {}) {
     ) => `${letter}${separatePunctuation ? ' ' : ''}`)
     .replace(/(\p{L})(?=\p{N})/gu, '$1 ')
     .replace(/(\p{N})(?=\p{L})/gu, '$1 ')
-    .replace(/[\r\n\u0085\u2028\u2029]+/gu, '\n')
+    .replace(/[\r\n\u0085\u2028\u2029]+/gu, joinLineBreaks ? ' ' : '\n')
     .replace(/[\p{Z}\t\f\v ]+/gu, ' ')
     .trim();
 }
@@ -555,10 +587,21 @@ function containsActivePersonPercentageAdministration(value) {
     const percentageContext = tail.match(ACTIVE_PERSON_PERCENTAGE_CONTEXT_PATTERN);
     if (!percentageContext) return false;
     const safetyTail = tail.replace(percentageContext[0], ' percentage value ');
+    const researchTarget = match.groups.subject.toLocaleLowerCase('en-US') === 'this individual'
+      ? safetyTail.match(ACTIVE_PERSON_REVIEWED_PERCENTAGE_RESEARCH_TARGET_PATTERN)
+      : null;
+    const researchTargetStart = researchTarget
+      ? researchTarget[0].length - researchTarget.groups.target.length
+      : -1;
+    const classificationTail = researchTarget
+      ? `${safetyTail.slice(0, researchTargetStart)}model${safetyTail.slice(
+        researchTargetStart + researchTarget.groups.target.length,
+      )}`
+      : safetyTail;
     return directiveHasUnsafeDirectAction(
       match.groups.action,
-      safetyTail,
-      `${match.groups.action} ${safetyTail}`,
+      classificationTail,
+      `${match.groups.action} ${classificationTail}`,
     );
   });
 }
@@ -656,16 +699,38 @@ function containsPassiveClinicalAction(value) {
 
     const hasReviewedResearchContext = PASSIVE_USE_RESEARCH_CONTEXT_PATTERN.test(clause);
     const hasConcreteLabContext = PASSIVE_USE_CONCRETE_LAB_CONTEXT_PATTERN.test(clause);
-    if (PASSIVE_ACTION_ADMINISTRATION_PATTERN.test(clause) && !hasConcreteLabContext) {
+    const percentageDiscourseFrames = clause.split(
+      PASSIVE_PERCENTAGE_DISCOURSE_BOUNDARY_PATTERN,
+    );
+    const hasUnsafePercentageFrame = percentageDiscourseFrames.some((frame) => {
+      const hasLocalConcreteLabContext = PASSIVE_USE_CONCRETE_LAB_CONTEXT_PATTERN.test(frame)
+        || PASSIVE_PERCENTAGE_AGAROSE_ELECTROPHORESIS_PATTERN.test(frame);
+      const hasNamedPercentageAdministration =
+        PASSIVE_ACTION_NAMED_PERCENTAGE_ADMINISTRATION_PATTERN.test(frame)
+        || PASSIVE_PERCENTAGE_FORMULATION_SUBJECT_PATTERN.test(frame);
+      if (hasNamedPercentageAdministration && !hasLocalConcreteLabContext) return true;
+
+      if (!PASSIVE_ACTION_BARE_PERCENTAGE_ADMINISTRATION_PATTERN.test(frame)
+        || hasLocalConcreteLabContext) return false;
+      const barePercentageFrames = [
+        ...frame.matchAll(PASSIVE_ACTION_BARE_PERCENTAGE_FRAME_PATTERN),
+      ];
+      return !hasReviewedResearchContext
+        || barePercentageFrames.length === 0
+        || barePercentageFrames.some((match) => (
+          !PASSIVE_PERCENTAGE_RESEARCH_SUBJECT_TOKEN_PATTERN.test(match.groups.subject)
+        ));
+    });
+    if (hasUnsafePercentageFrame) return true;
+
+    const hasPercentageAdministration =
+      PASSIVE_ACTION_NAMED_PERCENTAGE_ADMINISTRATION_PATTERN.test(clause)
+      || PASSIVE_ACTION_BARE_PERCENTAGE_ADMINISTRATION_PATTERN.test(clause);
+    if (PASSIVE_ACTION_ADMINISTRATION_PATTERN.test(clause)
+      && !hasConcreteLabContext
+      && !hasPercentageAdministration) {
       return true;
     }
-    if (PASSIVE_ACTION_NAMED_PERCENTAGE_ADMINISTRATION_PATTERN.test(clause)
-      && !hasConcreteLabContext) return true;
-    if (PASSIVE_ACTION_BARE_PERCENTAGE_ADMINISTRATION_PATTERN.test(clause)
-      && !hasConcreteLabContext
-      && !((PASSIVE_PERCENTAGE_RESEARCH_SEMANTICS_PATTERN.test(clause)
-          || PASSIVE_PERCENTAGE_RESEARCH_SUBJECT_PATTERN.test(clause))
-        && hasReviewedResearchContext)) return true;
     if (PASSIVE_ACTION_KNOWN_MEDICATION_PATTERN.test(clause) && !hasConcreteLabContext) {
       return true;
     }
@@ -687,6 +752,14 @@ function containsProhibitedClinicalGuidance(value) {
   const policyTexts = new Set([
     collapseObfuscatedClinicalWords(semanticSafetyText(value)),
     collapseObfuscatedClinicalWords(semanticSafetyText(value, { separatePunctuation: true })),
+    // Keep the boundary-preserving projections above for rendered directives,
+    // and additionally scan soft-line joins so a subject, passive action, or
+    // spelled percentage cannot be split across HTML/entity/Unicode newlines.
+    collapseObfuscatedClinicalWords(semanticSafetyText(value, { joinLineBreaks: true })),
+    collapseObfuscatedClinicalWords(semanticSafetyText(value, {
+      separatePunctuation: true,
+      joinLineBreaks: true,
+    })),
   ]);
   return [...policyTexts].some((policyText) => {
     const withoutAllowedDisclaimers = removeAllowedBoundaryDisclaimers(policyText);

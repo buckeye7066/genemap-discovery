@@ -62,6 +62,12 @@ function normalizeCandidatePublication(artifact) {
     : INVALID_CANDIDATE_PUBLICATION;
 }
 
+function resolveCandidatePublication(candidatePublication, serverPublication) {
+  return isCanonicalPublicationArtifact(candidatePublication)
+    ? candidatePublication
+    : normalizeCandidatePublication(serverPublication);
+}
+
 const TERMINAL_PUBLICATION_STATUSES = new Set([
   'withheld',
   'unavailable',
@@ -160,7 +166,10 @@ export class PhenotypeSearchService {
         this.applyAuthoritativeData(
           candidateGenes.map((gene) => ({
             ...gene,
-            candidatePublication: gene.candidatePublication || publication,
+            candidatePublication: resolveCandidatePublication(
+              gene.candidatePublication,
+              publication,
+            ),
             sources: ['AI-suggested'],
             phenotypes: [],
             detailsPending: true,
@@ -518,11 +527,17 @@ export class PhenotypeSearchService {
     );
     const parsed = parseLLMJson(response, { candidateGenes: [] });
     const result = Array.isArray(parsed) ? { candidateGenes: parsed } : parsed;
-    const publication = response?.publication || null;
+    const publication = normalizeCandidatePublication(response?.publication || null);
     return {
       candidateGenes: (result?.candidateGenes || [])
         .filter((gene) => gene && gene.symbol)
-        .map((gene) => ({ ...gene, candidatePublication: publication })),
+        .map((gene) => ({
+          ...gene,
+          candidatePublication: resolveCandidatePublication(
+            gene.candidatePublication,
+            publication,
+          ),
+        })),
       publication,
     };
   }

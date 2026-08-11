@@ -1,4 +1,8 @@
 import { z } from 'zod';
+import {
+  CORRELATION_ID_PATTERN,
+  REASON_CODE_PATTERN,
+} from './publicationStatus.js';
 
 export const registerSchema = z.object({
   email: z.string().email(),
@@ -58,9 +62,12 @@ export const publicationArtifactSchema = <T extends z.ZodTypeAny>(contentSchema:
   contractVersion: z.literal(1),
   status: publicationStatusSchema,
   content: contentSchema.nullable(),
-  reasonCode: z.string().regex(/^[a-z0-9][a-z0-9_.-]{0,63}$/u).nullable(),
-  correlationId: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/u),
-  limitations: z.array(z.string().trim().min(1)),
+  reasonCode: z.string().regex(REASON_CODE_PATTERN).nullable(),
+  correlationId: z.string().regex(CORRELATION_ID_PATTERN),
+  limitations: z.array(z.string().min(1).refine(
+    (value) => value === value.trim(),
+    { message: 'Publication limitations must not contain leading or trailing whitespace.' },
+  )),
 }).strict().superRefine((artifact, context) => {
   const contentAllowed = artifact.status === 'available' || artifact.status === 'partial';
   if (contentAllowed !== (artifact.content !== null)) {

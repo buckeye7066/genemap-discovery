@@ -190,7 +190,8 @@ describe('publication route contracts without the full application harness', () 
     expect(body).not.toHaveProperty('revisedPrompt');
     expect(boundary.enforceUsageLimit).not.toHaveBeenCalled();
     expect(boundary.generateImage).not.toHaveBeenCalled();
-    expect(prisma.sessions[0].type).toBe('image_status');
+    expect(prisma.learningSession.create).not.toHaveBeenCalled();
+    expect(prisma.sessions).toEqual([]);
   });
 
   it('maps provider timeout to unavailable and persists no provider text', async () => {

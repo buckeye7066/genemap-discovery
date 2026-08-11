@@ -79,6 +79,14 @@ describe('PublicationArtifact', () => {
       correlationId: 'req-127b',
       limitations: ['Duplicate limitation.', 'Duplicate limitation.'],
     }).success).toBe(false);
+    expect(schema.safeParse({
+      contractVersion: 1,
+      status: 'partial',
+      content: 'incomplete content',
+      reasonCode: 'provider_truncated',
+      correlationId: 'req-127c',
+      limitations: [' Untrimmed limitation. '],
+    }).success).toBe(false);
   });
 
   it('provides one runtime predicate for every publication consumer', () => {

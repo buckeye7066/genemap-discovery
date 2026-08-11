@@ -508,14 +508,14 @@ export default function SearchPage() {
               </Suspense>
             )}
 
-            {boundaryCandidatePublication && !isLoading && !geneSetComparison && (
+            {boundaryCandidatePublication && !isSearchLoading && !geneSetComparison && (
               <PublicationState
                 artifact={boundaryCandidatePublication}
                 className="mb-6 sm:mb-8"
               />
             )}
 
-            {isAvailableEmptyResult && !isLoading && !geneSetComparison && (
+            {isAvailableEmptyResult && !isSearchLoading && !geneSetComparison && (
               <Alert
                 className="mb-6 border-slate-300 bg-slate-50 text-slate-800 sm:mb-8"
                 role="status"
@@ -529,7 +529,7 @@ export default function SearchPage() {
             )}
 
             {searchResults
-              && !isLoading
+              && !isSearchLoading
               && !geneSetComparison
               && !boundaryCandidatePublication
               && !isAvailableEmptyResult && (

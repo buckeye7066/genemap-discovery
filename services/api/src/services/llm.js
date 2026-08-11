@@ -276,12 +276,14 @@ export async function generateChatResponse(
         maxTokens,
         temperature,
         timeoutMs,
+        honestyPersona,
       })
       : service.generateChatResponse(protectedMessages, {
         model,
         maxTokens,
         temperature,
         timeoutMs,
+        honestyPersona,
       }),
     { provider }
   );

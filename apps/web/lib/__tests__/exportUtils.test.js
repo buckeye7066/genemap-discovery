@@ -4,6 +4,7 @@ import {
   buildGeneShareText,
   exportGeneReport,
   exportVCFReport,
+  isPublicationExportable,
   publicationSafeExportData,
   publicationSafeGene,
 } from '../exportUtils';
@@ -102,6 +103,163 @@ describe('gene report provenance', () => {
     expect(safe.publication.content).toBeNull();
   });
 
+  it.each([
+    ['primitive', 'not-a-publication-artifact'],
+    ['malformed terminal object', {
+      status: 'withheld',
+      content: { providerRaw: 'MALFORMED_PUBLICATION_CONTENT_LEAK' },
+    }],
+  ])('drops generated aliases whenever the wrapper owns a %s publication value', (_label, publication) => {
+    const safe = publicationSafeExportData({
+      publication,
+      result: 'MALFORMED_PUBLICATION_RESULT_LEAK',
+      response: 'MALFORMED_PUBLICATION_RESPONSE_LEAK',
+      deterministicMetadata: 'preserved',
+    });
+
+    expect(safe.result).toBeUndefined();
+    expect(safe.response).toBeUndefined();
+    expect(safe.deterministicMetadata).toBe('preserved');
+    expect(safe.publication).toEqual({
+      contractVersion: 1,
+      status: 'unavailable',
+      content: null,
+      reasonCode: 'invalid_publication_envelope',
+      correlationId: 'client-invalid-publication',
+      limitations: [],
+    });
+    expect(JSON.stringify(safe)).not.toContain('MALFORMED_PUBLICATION_RESULT_LEAK');
+    expect(JSON.stringify(safe)).not.toContain('MALFORMED_PUBLICATION_RESPONSE_LEAK');
+    expect(JSON.stringify(safe)).not.toContain('MALFORMED_PUBLICATION_CONTENT_LEAK');
+  });
+
+  it('redacts terminal gene fields nested inside replayed publication content', () => {
+    const terminalPublication = {
+      contractVersion: 1,
+      status: 'withheld',
+      content: null,
+      reasonCode: 'clinical_boundary',
+      correlationId: 'nested-terminal-gene',
+      limitations: [],
+    };
+    const safe = publicationSafeExportData({
+      publication: {
+        contractVersion: 1,
+        status: 'available',
+        content: {
+          replayed: {
+            genes: [{
+              symbol: 'BRCA1',
+              name: 'TERMINAL_NAME_LEAK',
+              fullName: 'TERMINAL_FULL_NAME_LEAK',
+              explanation: 'TERMINAL_EXPLANATION_LEAK',
+              description: 'TERMINAL_DESCRIPTION_LEAK',
+              diseases: ['TERMINAL_DISEASE_LEAK'],
+              aiSummary: 'TERMINAL_SUMMARY_LEAK',
+              keyTakeaways: ['TERMINAL_TAKEAWAY_LEAK'],
+              phenotypes: [{ name: 'TERMINAL_PHENOTYPE_LEAK' }],
+              expressionData: [{ tissue: 'TERMINAL_EXPRESSION_LEAK' }],
+              chromosome: 'TERMINAL_CHROMOSOME_LEAK',
+              location: 'TERMINAL_LOCATION_LEAK',
+              ensemblId: 'TERMINAL_ENSEMBL_LEAK',
+              coordinatesVerified: false,
+              profileStatus: 'withheld',
+              candidatePublication: terminalPublication,
+              profilePublication: terminalPublication,
+            }],
+          },
+        },
+        reasonCode: null,
+        correlationId: 'replayed-publication-export',
+        limitations: [],
+      },
+    });
+
+    expect(isPublicationExportable(safe.publication)).toBe(true);
+    expect(safe.publication).toMatchObject({
+      contractVersion: 1,
+      status: 'available',
+      reasonCode: null,
+      correlationId: 'replayed-publication-export',
+      limitations: [],
+    });
+    expect(safe.publication.content.replayed.genes).toEqual([{
+      symbol: 'BRCA1',
+      coordinatesVerified: false,
+      profileStatus: 'withheld',
+      candidatePublication: terminalPublication,
+      profilePublication: terminalPublication,
+      phenotypes: [],
+      expressionData: [],
+    }]);
+    expect(JSON.stringify(safe)).not.toContain('TERMINAL_');
+  });
+
+  it.each([
+    ['available', 'object'],
+    ['available', 'array'],
+    ['partial', 'object'],
+    ['partial', 'array'],
+  ])('redacts a terminal gene at the root of %s publication content shaped as an %s', (status, shape) => {
+    const marker = `TERMINAL_${status.toUpperCase()}_${shape.toUpperCase()}`;
+    const terminalPublication = {
+      contractVersion: 1,
+      status: 'withheld',
+      content: null,
+      reasonCode: 'clinical_boundary',
+      correlationId: `root-content-${status}-${shape}-terminal`,
+      limitations: [],
+    };
+    const terminalGene = {
+      symbol: 'ROOT1',
+      name: `${marker}_NAME_LEAK`,
+      fullName: `${marker}_FULL_NAME_LEAK`,
+      explanation: `${marker}_EXPLANATION_LEAK`,
+      description: `${marker}_DESCRIPTION_LEAK`,
+      diseases: [`${marker}_DISEASE_LEAK`],
+      aiSummary: `${marker}_SUMMARY_LEAK`,
+      keyTakeaways: [`${marker}_TAKEAWAY_LEAK`],
+      phenotypes: [{ name: `${marker}_PHENOTYPE_LEAK` }],
+      expressionData: [{ tissue: `${marker}_EXPRESSION_LEAK` }],
+      chromosome: `${marker}_CHROMOSOME_LEAK`,
+      location: `${marker}_LOCATION_LEAK`,
+      ensemblId: `${marker}_ENSEMBL_LEAK`,
+      coordinatesVerified: false,
+      profileStatus: 'withheld',
+      candidatePublication: terminalPublication,
+      profilePublication: terminalPublication,
+    };
+    const metadata = {
+      kind: 'publication-metadata',
+      marker: `GENERIC_${status.toUpperCase()}_${shape.toUpperCase()}_PRESERVED`,
+    };
+    const content = shape === 'array' ? [terminalGene, metadata] : terminalGene;
+    const safe = publicationSafeExportData({
+      contractVersion: 1,
+      status,
+      content,
+      reasonCode: status === 'partial' ? 'provider_truncated' : null,
+      correlationId: `root-content-${status}-${shape}`,
+      limitations: status === 'partial' ? ['Output may be incomplete.'] : [],
+    });
+    const safeGene = shape === 'array' ? safe.content[0] : safe.content;
+
+    expect(isPublicationExportable(safe)).toBe(true);
+    expect(safeGene).toEqual({
+      symbol: 'ROOT1',
+      coordinatesVerified: false,
+      profileStatus: 'withheld',
+      candidatePublication: terminalPublication,
+      profilePublication: terminalPublication,
+      phenotypes: [],
+      expressionData: [],
+    });
+    if (shape === 'array') {
+      expect(safe.content[1]).toEqual(metadata);
+    }
+    expect(JSON.stringify(safe)).not.toContain(marker);
+  });
+
   it('preserves shared publication artifacts while omitting only true ancestor cycles', () => {
     const sharedPublication = {
       contractVersion: 1,
@@ -136,13 +294,106 @@ describe('gene report provenance', () => {
       cycle,
     });
 
-    expect(safe.genes[0].candidatePublication).toEqual(sharedPublication);
+    const expectedSharedPublication = {
+      ...sharedPublication,
+      content: {
+        ...sharedPublication.content,
+        genes: [{
+          symbol: 'RUNX1',
+          phenotypes: [],
+          expressionData: [],
+        }],
+      },
+    };
+
+    expect(safe.genes[0].candidatePublication).toEqual(expectedSharedPublication);
     expect(safe.genes[0].self).toBe('[Circular reference omitted]');
-    expect(safe.genes[1].profilePublication).toEqual(sharedPublication);
-    expect(safe.branch.publication).toEqual(sharedPublication);
+    expect(safe.genes[1].profilePublication).toEqual(expectedSharedPublication);
+    expect(safe.branch.publication).toEqual(expectedSharedPublication);
     expect(safe.cycle).toEqual({
       label: 'cycle root',
       self: '[Circular reference omitted]',
+    });
+  });
+
+  it('omits publication-to-root-gene cycles without re-entering the canonical envelope', () => {
+    const cyclicPublication = {
+      contractVersion: 1,
+      status: 'available',
+      content: null,
+      reasonCode: null,
+      correlationId: 'root-gene-publication-cycle',
+      limitations: [],
+    };
+    const cyclicGene = {
+      symbol: 'CYCLE1',
+      coordinatesVerified: false,
+      profileStatus: 'withheld',
+      candidatePublication: cyclicPublication,
+      profilePublication: cyclicPublication,
+    };
+    cyclicPublication.content = cyclicGene;
+
+    const safe = publicationSafeExportData(cyclicPublication);
+
+    expect(isPublicationExportable(safe)).toBe(true);
+    expect(safe).toMatchObject({
+      contractVersion: 1,
+      status: 'available',
+      reasonCode: null,
+      correlationId: 'root-gene-publication-cycle',
+      limitations: [],
+    });
+    expect(safe.content).toEqual({
+      symbol: 'CYCLE1',
+      coordinatesVerified: false,
+      profileStatus: 'withheld',
+      candidatePublication: '[Circular reference omitted]',
+      profilePublication: '[Circular reference omitted]',
+      phenotypes: [],
+      expressionData: [],
+    });
+  });
+
+  it('omits root-gene-to-publication cycles when sanitation starts from the gene', () => {
+    const cyclicGene = {
+      symbol: 'CYCLE2',
+      coordinatesVerified: false,
+      profileStatus: 'withheld',
+    };
+    const cyclicPublication = {
+      contractVersion: 1,
+      status: 'available',
+      content: cyclicGene,
+      reasonCode: null,
+      correlationId: 'gene-root-publication-cycle',
+      limitations: [],
+    };
+    cyclicGene.candidatePublication = cyclicPublication;
+
+    const safe = publicationSafeGene(cyclicGene);
+
+    expect(safe).toMatchObject({
+      symbol: 'CYCLE2',
+      coordinatesVerified: false,
+      profileStatus: 'withheld',
+      candidatePublication: {
+        contractVersion: 1,
+        status: 'available',
+        reasonCode: null,
+        correlationId: 'gene-root-publication-cycle',
+        limitations: [],
+      },
+      phenotypes: [],
+      expressionData: [],
+    });
+    expect(safe.candidatePublication.content).toEqual({
+      symbol: 'CYCLE2',
+      coordinatesVerified: false,
+      profileStatus: 'withheld',
+      candidatePublication: '[Circular reference omitted]',
+      phenotypes: [],
+      expressionData: [],
     });
   });
 
@@ -256,6 +507,305 @@ describe('gene report provenance', () => {
     expect(JSON.stringify(safe)).not.toContain(blockedProfileContent);
     expect(safe.analysis.groups[0].genes[0]).toEqual(safe.genes[0]);
     expect(safe.analysis.groups[0].genes[1]).toBe('deterministic-note');
+  });
+
+  it('sanitizes gene records in keyed and deep gene maps without flattening wrapper data', () => {
+    const sharedTerminalPublication = {
+      contractVersion: 1,
+      status: 'withheld',
+      content: null,
+      reasonCode: 'clinical_boundary',
+      correlationId: 'mapped-gene-terminal',
+      limitations: [],
+    };
+    const sharedTerminalGene = {
+      symbol: 'BRCA1',
+      name: 'TERMINAL_MAPPED_NAME_LEAK',
+      explanation: 'TERMINAL_MAPPED_EXPLANATION_LEAK',
+      aiSummary: 'TERMINAL_MAPPED_SUMMARY_LEAK',
+      phenotypes: [{ name: 'TERMINAL_MAPPED_PHENOTYPE_LEAK' }],
+      coordinatesVerified: false,
+      profileStatus: 'withheld',
+      candidatePublication: sharedTerminalPublication,
+      profilePublication: sharedTerminalPublication,
+    };
+    const associationOnlyGene = {
+      associationClaims: [],
+      fullName: 'TERMINAL_DEEP_FULL_NAME_LEAK',
+      description: 'TERMINAL_DEEP_DESCRIPTION_LEAK',
+      keyTakeaways: ['TERMINAL_DEEP_TAKEAWAY_LEAK'],
+      coordinatesVerified: false,
+      profileStatus: 'unavailable',
+      candidatePublication: sharedTerminalPublication,
+      profilePublication: sharedTerminalPublication,
+    };
+    const cycle = { label: 'mapped cycle' };
+    cycle.self = cycle;
+
+    const safe = publicationSafeExportData({
+      genes: {
+        primary: sharedTerminalGene,
+        nested: {
+          count: 2,
+          byRecord: { secondary: associationOnlyGene },
+          metadata: {
+            name: 'GENERIC_MAP_NAME_PRESERVED',
+            phenotypes: [{ name: 'GENERIC_MAP_PHENOTYPE_PRESERVED' }],
+          },
+        },
+        repeated: sharedTerminalGene,
+        cycle,
+        note: 'deterministic map note',
+      },
+    });
+
+    expect(safe.genes.primary).toMatchObject({
+      symbol: 'BRCA1',
+      coordinatesVerified: false,
+      profileStatus: 'withheld',
+      candidatePublication: sharedTerminalPublication,
+      profilePublication: sharedTerminalPublication,
+      phenotypes: [],
+      expressionData: [],
+    });
+    expect(safe.genes.primary.name).toBeUndefined();
+    expect(safe.genes.primary.explanation).toBeUndefined();
+    expect(safe.genes.primary.aiSummary).toBeUndefined();
+    expect(safe.genes.nested.byRecord.secondary).toMatchObject({
+      associationClaims: [],
+      coordinatesVerified: false,
+      profileStatus: 'unavailable',
+      candidatePublication: sharedTerminalPublication,
+      profilePublication: sharedTerminalPublication,
+      phenotypes: [],
+      expressionData: [],
+    });
+    expect(safe.genes.nested.byRecord.secondary.fullName).toBeUndefined();
+    expect(safe.genes.nested.byRecord.secondary.description).toBeUndefined();
+    expect(safe.genes.nested.byRecord.secondary.keyTakeaways).toBeUndefined();
+    expect(safe.genes.nested.count).toBe(2);
+    expect(safe.genes.nested.metadata).toEqual({
+      name: 'GENERIC_MAP_NAME_PRESERVED',
+      phenotypes: [{ name: 'GENERIC_MAP_PHENOTYPE_PRESERVED' }],
+    });
+    expect(safe.genes.repeated).toEqual(safe.genes.primary);
+    expect(safe.genes.repeated).not.toBe('[Circular reference omitted]');
+    expect(safe.genes.cycle).toEqual({
+      label: 'mapped cycle',
+      self: '[Circular reference omitted]',
+    });
+    expect(safe.genes.note).toBe('deterministic map note');
+    expect(JSON.stringify(safe)).not.toContain('TERMINAL_');
+  });
+
+  it('recognizes publication-marked terminal genes without identifiers inside an explicit genes collection', () => {
+    const terminalPublication = {
+      contractVersion: 1,
+      status: 'withheld',
+      content: null,
+      reasonCode: 'clinical_boundary',
+      correlationId: 'identifier-free-terminal-gene',
+      limitations: [],
+    };
+    const genericMetadata = {
+      kind: 'metadata',
+      name: 'GENERIC_IDENTIFIER_FREE_NAME_PRESERVED',
+      explanation: 'GENERIC_IDENTIFIER_FREE_EXPLANATION_PRESERVED',
+      phenotypes: [{ name: 'GENERIC_IDENTIFIER_FREE_PHENOTYPE_PRESERVED' }],
+    };
+    const safe = publicationSafeExportData({
+      genes: [{
+        name: 'TERMINAL_IDENTIFIER_FREE_NAME_LEAK',
+        explanation: 'TERMINAL_IDENTIFIER_FREE_EXPLANATION_LEAK',
+        aiSummary: 'TERMINAL_IDENTIFIER_FREE_SUMMARY_LEAK',
+        phenotypes: [{ name: 'TERMINAL_IDENTIFIER_FREE_PHENOTYPE_LEAK' }],
+        coordinatesVerified: false,
+        profileStatus: 'withheld',
+        candidatePublication: terminalPublication,
+        profilePublication: terminalPublication,
+      }, genericMetadata],
+    });
+
+    expect(safe.genes[0]).toEqual({
+      coordinatesVerified: false,
+      profileStatus: 'withheld',
+      candidatePublication: terminalPublication,
+      profilePublication: terminalPublication,
+      phenotypes: [],
+      expressionData: [],
+    });
+    expect(safe.genes[1]).toEqual(genericMetadata);
+    expect(safe.genes[1]).not.toHaveProperty('expressionData');
+    expect(JSON.stringify(safe)).not.toContain('TERMINAL_IDENTIFIER_FREE');
+  });
+
+  it.each([
+    ['boolean false', false],
+    ['string false', 'false'],
+  ])('requires coordinatesVerified to be true, not %s, before exporting authoritative coordinates', (_label, coordinatesVerified) => {
+    const terminalPublication = {
+      contractVersion: 1,
+      status: 'withheld',
+      content: null,
+      reasonCode: 'clinical_boundary',
+      correlationId: 'string-false-coordinates',
+      limitations: [],
+    };
+    const safe = publicationSafeGene({
+      symbol: 'STRICT1',
+      name: 'STRING_FALSE_NAME_LEAK',
+      fullName: 'STRING_FALSE_FULL_NAME_LEAK',
+      chromosome: 'STRING_FALSE_CHROMOSOME_LEAK',
+      location: 'STRING_FALSE_LOCATION_LEAK',
+      mapLocation: 'STRING_FALSE_MAP_LOCATION_LEAK',
+      start: 123,
+      end: 456,
+      ensemblId: 'STRING_FALSE_ENSEMBL_LEAK',
+      genomeBuild: 'STRING_FALSE_GENOME_BUILD_LEAK',
+      verifiedSource: 'STRING_FALSE_VERIFIED_SOURCE_LEAK',
+      authoritativeRetrievedAt: 'STRING_FALSE_RETRIEVED_AT_LEAK',
+      coordinatesVerified,
+      profileStatus: 'withheld',
+      candidatePublication: terminalPublication,
+      profilePublication: terminalPublication,
+      associationClaims: [{
+        source: 'Ensembl',
+        recordId: 'ENSG-SAFE-PROVENANCE',
+        evidenceClass: 'human_verified',
+      }],
+    });
+
+    expect(safe.symbol).toBe('STRICT1');
+    expect(safe.coordinatesVerified).toBe(coordinatesVerified);
+    expect(safe.associationClaims).toEqual([{
+      source: 'Ensembl',
+      recordId: 'ENSG-SAFE-PROVENANCE',
+      evidenceClass: 'human_verified',
+    }]);
+    for (const key of [
+      'name',
+      'fullName',
+      'chromosome',
+      'location',
+      'mapLocation',
+      'start',
+      'end',
+      'ensemblId',
+      'genomeBuild',
+      'verifiedSource',
+      'authoritativeRetrievedAt',
+    ]) {
+      expect(safe[key]).toBeUndefined();
+    }
+    expect(JSON.stringify(safe)).not.toContain('STRING_FALSE_');
+  });
+
+  it('preserves authoritative coordinate provenance only when coordinatesVerified is true', () => {
+    const terminalPublication = {
+      contractVersion: 1,
+      status: 'withheld',
+      content: null,
+      reasonCode: 'clinical_boundary',
+      correlationId: 'verified-coordinate-provenance',
+      limitations: [],
+    };
+    const safe = publicationSafeGene({
+      symbol: 'STRICT2',
+      name: 'Verified identity',
+      chromosome: '17',
+      location: '17q21.31',
+      mapLocation: '17q21.31',
+      genomeBuild: 'GRCh38',
+      verifiedSource: 'Ensembl',
+      authoritativeRetrievedAt: '2026-08-11',
+      coordinatesVerified: true,
+      profileStatus: 'withheld',
+      candidatePublication: terminalPublication,
+      profilePublication: terminalPublication,
+      associationClaims: [{
+        source: 'Ensembl',
+        recordId: 'ENSG-VERIFIED-PROVENANCE',
+        evidenceClass: 'human_verified',
+      }],
+    });
+
+    expect(safe).toMatchObject({
+      symbol: 'STRICT2',
+      name: 'Verified identity',
+      chromosome: '17',
+      location: '17q21.31',
+      mapLocation: '17q21.31',
+      genomeBuild: 'GRCh38',
+      verifiedSource: 'Ensembl',
+      authoritativeRetrievedAt: '2026-08-11',
+      coordinatesVerified: true,
+      associationClaims: [{
+        source: 'Ensembl',
+        recordId: 'ENSG-VERIFIED-PROVENANCE',
+        evidenceClass: 'human_verified',
+      }],
+    });
+  });
+
+  it('sanitizes gene-shaped entries in mixed root arrays while leaving other objects generic', () => {
+    const terminalPublication = {
+      contractVersion: 1,
+      status: 'unavailable',
+      content: null,
+      reasonCode: 'provider_failed',
+      correlationId: 'root-array-terminal',
+      limitations: [],
+    };
+    const sharedTerminalGene = {
+      symbol: 'CFTR',
+      name: 'TERMINAL_ROOT_NAME_LEAK',
+      explanation: 'TERMINAL_ROOT_EXPLANATION_LEAK',
+      aiSummary: 'TERMINAL_ROOT_SUMMARY_LEAK',
+      coordinatesVerified: false,
+      profileStatus: 'unavailable',
+      candidatePublication: terminalPublication,
+      profilePublication: terminalPublication,
+    };
+    const genericObject = {
+      kind: 'metadata',
+      name: 'GENERIC_ROOT_NAME_PRESERVED',
+      explanation: 'GENERIC_ROOT_EXPLANATION_PRESERVED',
+      phenotypes: [{ name: 'GENERIC_ROOT_PHENOTYPE_PRESERVED' }],
+    };
+    const cyclicWrapper = { kind: 'cycle' };
+    cyclicWrapper.self = cyclicWrapper;
+
+    const safe = publicationSafeExportData([
+      sharedTerminalGene,
+      genericObject,
+      'deterministic root note',
+      [genericObject, sharedTerminalGene],
+      cyclicWrapper,
+    ]);
+
+    expect(safe[0]).toMatchObject({
+      symbol: 'CFTR',
+      coordinatesVerified: false,
+      profileStatus: 'unavailable',
+      candidatePublication: terminalPublication,
+      profilePublication: terminalPublication,
+      phenotypes: [],
+      expressionData: [],
+    });
+    expect(safe[0].name).toBeUndefined();
+    expect(safe[0].explanation).toBeUndefined();
+    expect(safe[0].aiSummary).toBeUndefined();
+    expect(safe[1]).toEqual(genericObject);
+    expect(safe[1]).not.toHaveProperty('expressionData');
+    expect(safe[2]).toBe('deterministic root note');
+    expect(safe[3][0]).toEqual(genericObject);
+    expect(safe[3][1]).toEqual(safe[0]);
+    expect(safe[3][1]).not.toBe('[Circular reference omitted]');
+    expect(safe[4]).toEqual({
+      kind: 'cycle',
+      self: '[Circular reference omitted]',
+    });
+    expect(JSON.stringify(safe)).not.toContain('TERMINAL_');
   });
 
   it.each([

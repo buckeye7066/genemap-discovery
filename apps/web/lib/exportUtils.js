@@ -27,7 +27,7 @@ function sanitizePublicationArtifact(artifact, ancestors) {
   return {
     contractVersion: 1,
     status: canonical ? artifact.status : 'unavailable',
-    content: exportable ? sanitizeExportValue(artifact.content, ancestors, false) : null,
+    content: exportable ? sanitizePublicationContent(artifact.content, ancestors) : null,
     reasonCode: !canonical
       ? 'invalid_publication_envelope'
       : artifact.reasonCode,
@@ -53,38 +53,97 @@ function looksLikePublicationArtifact(value) {
   );
 }
 
+function isGeneRecord(value) {
+  return Boolean(
+    value
+    && typeof value === 'object'
+    && !Array.isArray(value)
+    && ('symbol' in value || 'associationClaims' in value)
+  );
+}
+
+function isExplicitGeneCollectionRecord(value) {
+  return Boolean(
+    isGeneRecord(value)
+    || (
+      value
+      && typeof value === 'object'
+      && !Array.isArray(value)
+      && (
+        Object.prototype.hasOwnProperty.call(value, 'candidatePublication')
+        || Object.prototype.hasOwnProperty.call(value, 'profilePublication')
+      )
+    )
+  );
+}
+
 function sanitizeGeneCollection(genes, ancestors) {
-  if (ancestors.has(genes)) return '[Circular reference omitted]';
-  ancestors.add(genes);
+  return sanitizeExportValue(genes, ancestors, true, true);
+}
+
+function sanitizePublicationContent(content, ancestors) {
+  if (content && typeof content === 'object' && ancestors.has(content)) {
+    return '[Circular reference omitted]';
+  }
+  if (isExplicitGeneCollectionRecord(content)) {
+    return sanitizePublicationSafeGene(content, ancestors);
+  }
+  return Array.isArray(content)
+    ? sanitizeGeneCollection(content, ancestors)
+    : sanitizeExportValue(content, ancestors, true);
+}
+
+function sanitizePublicationReference(publication, ancestors) {
+  if (!publication || typeof publication !== 'object') {
+    return sanitizePublicationArtifact(publication, ancestors);
+  }
+  if (ancestors.has(publication)) return '[Circular reference omitted]';
+  ancestors.add(publication);
   try {
-    return genes.map((gene) => (
-      gene && typeof gene === 'object' && !Array.isArray(gene) && !ancestors.has(gene)
-        ? sanitizePublicationSafeGene(gene, ancestors)
-        : sanitizeExportValue(gene, ancestors, true)
-    ));
+    return sanitizePublicationArtifact(publication, ancestors);
   } finally {
-    ancestors.delete(genes);
+    ancestors.delete(publication);
   }
 }
 
-function sanitizeExportValue(value, ancestors = new WeakSet(), applyGeneCollectionPolicy = false) {
+function sanitizeExportValue(
+  value,
+  ancestors = new WeakSet(),
+  applyGeneCollectionPolicy = false,
+  recognizeGeneRecords = false,
+) {
   if (value === null || typeof value !== 'object') return value;
   if (ancestors.has(value)) return '[Circular reference omitted]';
+  if (recognizeGeneRecords && isExplicitGeneCollectionRecord(value)) {
+    return sanitizePublicationSafeGene(value, ancestors);
+  }
   ancestors.add(value);
   try {
     if (looksLikePublicationArtifact(value)) {
       return sanitizePublicationArtifact(value, ancestors);
     }
     if (Array.isArray(value)) {
-      return value.map((item) => sanitizeExportValue(item, ancestors, applyGeneCollectionPolicy));
+      return value.map((item) => sanitizeExportValue(
+        item,
+        ancestors,
+        applyGeneCollectionPolicy,
+        recognizeGeneRecords,
+      ));
     }
     const sanitized = Object.fromEntries(Object.entries(value).map(([key, item]) => [
       key,
-      applyGeneCollectionPolicy && key === 'genes' && Array.isArray(item)
-        ? sanitizeGeneCollection(item, ancestors)
-        : sanitizeExportValue(item, ancestors, applyGeneCollectionPolicy),
+      key === 'publication'
+        ? sanitizePublicationReference(item, ancestors)
+        : applyGeneCollectionPolicy && key === 'genes'
+          ? sanitizeGeneCollection(item, ancestors)
+          : sanitizeExportValue(
+            item,
+            ancestors,
+            applyGeneCollectionPolicy,
+            recognizeGeneRecords,
+          ),
     ]));
-    if (looksLikePublicationArtifact(value.publication)) {
+    if (Object.prototype.hasOwnProperty.call(value, 'publication')) {
       for (const legacyAlias of [
         'result',
         'response',
@@ -114,7 +173,8 @@ function sanitizePublicationSafeGene(gene, ancestors) {
 
   for (const publicationKey of ['candidatePublication', 'profilePublication']) {
     if (Object.prototype.hasOwnProperty.call(source, publicationKey)) {
-      safe[publicationKey] = sanitizePublicationArtifact(source[publicationKey], ancestors);
+      const publication = source[publicationKey];
+      safe[publicationKey] = sanitizePublicationReference(publication, ancestors);
     }
   }
 
@@ -124,7 +184,7 @@ function sanitizePublicationSafeGene(gene, ancestors) {
     delete safe.associationType;
     delete safe.association_type;
     delete safe.diseases;
-    if (!safe.coordinatesVerified) {
+    if (safe.coordinatesVerified !== true) {
       delete safe.name;
       delete safe.fullName;
     }
@@ -135,15 +195,18 @@ function sanitizePublicationSafeGene(gene, ancestors) {
     safe.phenotypes = [];
     safe.expressionData = [];
   }
-  if (!safe.coordinatesVerified) {
+  if (safe.coordinatesVerified !== true) {
     delete safe.chromosome;
     delete safe.location;
+    delete safe.mapLocation;
     delete safe.start;
     delete safe.end;
     delete safe.ensemblId;
     delete safe.entrezId;
     delete safe.genomeBuild;
     delete safe.omimId;
+    delete safe.verifiedSource;
+    delete safe.authoritativeRetrievedAt;
   }
   return safe;
 }
@@ -153,9 +216,11 @@ export function publicationSafeGene(gene = {}) {
 }
 
 export function publicationSafeExportData(data) {
-  return data && typeof data === 'object' && ('symbol' in data || 'associationClaims' in data)
+  return isGeneRecord(data)
     ? publicationSafeGene(data)
-    : sanitizeExportValue(data, new WeakSet(), true);
+    : Array.isArray(data)
+      ? sanitizeGeneCollection(data, new WeakSet())
+      : sanitizeExportValue(data, new WeakSet(), true);
 }
 
 /**
@@ -172,7 +237,7 @@ export function exportJSON(data, filename) {
  */
 export function exportCSV(rows, headers, filename) {
   const safeRows = rows.map((row) => (
-    row && typeof row === 'object' && ('symbol' in row || 'associationClaims' in row)
+    isGeneRecord(row)
       ? publicationSafeGene(row)
       : publicationSafeExportData(row)
   ));

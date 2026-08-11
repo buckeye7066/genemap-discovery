@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { apiClient } from '@genemap/shared';
+import { publicationSafeExportData } from '../../../lib/exportUtils';
 import { PhenotypeSearchService } from '../PhenotypeSearchService';
 
 afterEach(() => vi.restoreAllMocks());
@@ -253,6 +254,111 @@ describe('PhenotypeSearchService staged candidate journey', () => {
     );
     expect(enrich).toHaveBeenCalledWith(['CFTR'], []);
   });
+
+  it.each(['fused', 'fallback'])(
+    'replaces a malformed provider candidate publication in the %s path before cards or exports',
+    async (path) => {
+      const malformedCandidatePublication = {
+        contractVersion: 1,
+        status: 'available',
+        content: 'MALFORMED_CANDIDATE_PUBLICATION_CONTENT',
+        reasonCode: null,
+        correlationId: 'provider:candidate:malformed',
+        limitations: [],
+        providerRaw: 'PROVIDER_RAW_CANDIDATE_PUBLICATION',
+      };
+      const candidateResponse = envelope({
+        candidateGenes: [{
+          symbol: 'CFTR',
+          candidatePublication: malformedCandidatePublication,
+        }],
+      });
+      const invoke = vi.spyOn(apiClient, 'invokePublicationTask');
+      if (path === 'fallback') {
+        invoke
+          .mockResolvedValueOnce(envelope({
+            queryType: 'disease',
+            isDisease: true,
+            candidateGenes: [],
+          }))
+          .mockResolvedValueOnce(envelope({
+            queryType: 'disease',
+            isDisease: true,
+            mainFeatures: [],
+          }))
+          .mockResolvedValueOnce(candidateResponse);
+      } else {
+        invoke.mockResolvedValueOnce(candidateResponse);
+      }
+      vi.spyOn(apiClient, 'getMe').mockResolvedValue({});
+      vi.spyOn(apiClient, 'enrichGenomicData').mockResolvedValue({ genes: {}, phenotypes: {} });
+
+      const result = await PhenotypeSearchService.findCandidates(
+        'Cystic Fibrosis',
+        false,
+        'disease',
+      );
+      const [cardGene] = result.candidateGenes;
+      const exportedGene = publicationSafeExportData(cardGene);
+
+      expect(cardGene.candidatePublication).toEqual(candidateResponse.publication);
+      expect(cardGene.candidatePublication).not.toBe(malformedCandidatePublication);
+      expect(cardGene.candidatePublication.providerRaw).toBeUndefined();
+      expect(exportedGene.candidatePublication).toEqual(candidateResponse.publication);
+      expect(exportedGene.candidatePublication.providerRaw).toBeUndefined();
+    },
+  );
+
+  it.each(['fused', 'fallback'])(
+    'preserves a canonical provider candidate publication in the %s path',
+    async (path) => {
+      const canonicalCandidatePublication = {
+        contractVersion: 1,
+        status: 'available',
+        content: { association: 'Canonical candidate-specific content' },
+        reasonCode: null,
+        correlationId: 'provider:candidate:canonical',
+        limitations: [],
+      };
+      const candidateResponse = envelope({
+        candidateGenes: [{
+          symbol: 'CFTR',
+          candidatePublication: canonicalCandidatePublication,
+        }],
+      });
+      const invoke = vi.spyOn(apiClient, 'invokePublicationTask');
+      if (path === 'fallback') {
+        invoke
+          .mockResolvedValueOnce(envelope({
+            queryType: 'disease',
+            isDisease: true,
+            candidateGenes: [],
+          }))
+          .mockResolvedValueOnce(envelope({
+            queryType: 'disease',
+            isDisease: true,
+            mainFeatures: [],
+          }))
+          .mockResolvedValueOnce(candidateResponse);
+      } else {
+        invoke.mockResolvedValueOnce(candidateResponse);
+      }
+      vi.spyOn(apiClient, 'getMe').mockResolvedValue({});
+      vi.spyOn(apiClient, 'enrichGenomicData').mockResolvedValue({ genes: {}, phenotypes: {} });
+
+      const result = await PhenotypeSearchService.findCandidates(
+        'Cystic Fibrosis',
+        false,
+        'disease',
+      );
+      const [cardGene] = result.candidateGenes;
+
+      expect(cardGene.candidatePublication).toEqual(canonicalCandidatePublication);
+      expect(publicationSafeExportData(cardGene).candidatePublication).toEqual(
+        canonicalCandidatePublication,
+      );
+    },
+  );
 
   it('falls back through classify and suggest when the fused result is sparse', async () => {
     const invoke = vi.spyOn(apiClient, 'invokePublicationTask')

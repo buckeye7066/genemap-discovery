@@ -338,6 +338,10 @@ describe('Search candidate publication boundary', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /use BRCA1 genes/i }));
     await waitFor(() => expect(service.compareGeneSets).toHaveBeenCalledTimes(1));
+    expect(screen.getByTestId('gene-results')).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Comparing the current gene input',
+    );
     expect(service.compareGeneSets).toHaveBeenCalledWith(
       ['BRCA1'],
       ['CFTR'],

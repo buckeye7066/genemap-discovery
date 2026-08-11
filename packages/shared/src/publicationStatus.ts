@@ -25,8 +25,8 @@ export interface CreatePublicationArtifactInput<T> {
   limitations?: string[];
 }
 
-const REASON_CODE = /^[a-z0-9][a-z0-9_.-]{0,63}$/u;
-const CORRELATION_ID = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/u;
+export const REASON_CODE_PATTERN = /^[a-z0-9][a-z0-9_.-]{0,63}$/u;
+export const CORRELATION_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/u;
 const PUBLICATION_ARTIFACT_KEYS = Object.freeze([
   'content',
   'contractVersion',
@@ -58,13 +58,13 @@ export function isCanonicalPublicationArtifact<T = unknown>(
   ) return false;
   if (
     typeof candidate.correlationId !== 'string'
-    || !CORRELATION_ID.test(candidate.correlationId)
+    || !CORRELATION_ID_PATTERN.test(candidate.correlationId)
   ) return false;
   if (
     candidate.reasonCode !== null
     && (
       typeof candidate.reasonCode !== 'string'
-      || !REASON_CODE.test(candidate.reasonCode)
+      || !REASON_CODE_PATTERN.test(candidate.reasonCode)
     )
   ) return false;
   if (candidate.status !== PUBLICATION_STATUSES.AVAILABLE && candidate.reasonCode === null) {
@@ -96,10 +96,10 @@ export function createPublicationArtifact<T>(
   if (!Object.values(PUBLICATION_STATUSES).includes(input.status)) {
     throw new TypeError('Unknown publication status.');
   }
-  if (!CORRELATION_ID.test(input.correlationId)) {
+  if (!CORRELATION_ID_PATTERN.test(input.correlationId)) {
     throw new TypeError('A non-sensitive correlation identifier is required.');
   }
-  if (input.reasonCode != null && !REASON_CODE.test(input.reasonCode)) {
+  if (input.reasonCode != null && !REASON_CODE_PATTERN.test(input.reasonCode)) {
     throw new TypeError('Publication reason codes must be finite non-sensitive identifiers.');
   }
   if (input.status !== PUBLICATION_STATUSES.AVAILABLE && input.reasonCode == null) {

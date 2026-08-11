@@ -1,6 +1,8 @@
 // Lazy-load the OpenAI SDK so the rest of the API can boot when
 // OPENAI_API_KEY is unset and so tests can mock the wrapper.
 
+import { withHonestyPrefix, withHonestySystem } from './scientificHonesty.js';
+
 let client = null;
 
 async function getClient() {
@@ -39,6 +41,14 @@ function normalizeCompletion(response) {
   };
 }
 
+function protectedTextPrompt(prompt) {
+  return withHonestyPrefix(prompt);
+}
+
+function protectedChatMessages(messages, honestyPersona = '') {
+  return withHonestySystem(messages, honestyPersona);
+}
+
 export async function generateTextResult(
   prompt,
   { model = 'gpt-4o', maxTokens = 2000, temperature = 0.7, timeoutMs = 30_000 } = {}
@@ -50,7 +60,7 @@ export async function generateTextResult(
   const response = await openai.chat.completions.create(
     {
       model,
-      messages: [{ role: 'user', content: prompt }],
+      messages: [{ role: 'user', content: protectedTextPrompt(prompt) }],
       max_tokens: maxTokens,
       temperature,
     },
@@ -65,13 +75,19 @@ export async function generateText(prompt, options = {}) {
 
 export async function generateChatResponseResult(
   messages,
-  { model = 'gpt-4o', maxTokens = 2000, temperature = 0.7, timeoutMs = 30_000 } = {}
+  {
+    model = 'gpt-4o',
+    maxTokens = 2000,
+    temperature = 0.7,
+    timeoutMs = 30_000,
+    honestyPersona = '',
+  } = {}
 ) {
   const openai = await getClient();
   const response = await openai.chat.completions.create(
     {
       model,
-      messages,
+      messages: protectedChatMessages(messages, honestyPersona),
       max_tokens: maxTokens,
       temperature,
     },
@@ -124,4 +140,8 @@ export async function generateImage(
   throw lastErr || new Error('image generation failed');
 }
 
-export const __test = { normalizeCompletion };
+export const __test = {
+  normalizeCompletion,
+  protectedChatMessages,
+  protectedTextPrompt,
+};
