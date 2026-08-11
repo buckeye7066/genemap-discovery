@@ -22,6 +22,7 @@ describe('PublicationState', () => {
     render(<PublicationState artifact={artifact} />);
     expect(screen.getByText(/publication status invalid/i)).toBeTruthy();
     expect(screen.queryByText(/must not be reused/i)).toBeNull();
+    expect(screen.getByRole('alert').getAttribute('data-publication-status')).toBe('invalid');
   });
 
   it('renders a canonical withheld envelope with a safe support identifier', () => {
@@ -87,5 +88,19 @@ describe('PublicationState', () => {
     expect(publicationContent(artifact)).toBeNull();
     render(<PublicationState artifact={artifact} />);
     expect(screen.getByText(/publication status invalid/i)).toBeTruthy();
+  });
+
+  it.each([
+    ['available', { status: 'available', content: 'RAW_AVAILABLE_LEAK' }],
+    ['withheld', { status: 'withheld', content: null }],
+    ['provider-controlled', { status: 'provider-controlled', content: null }],
+  ])('derives a safe display status for a noncanonical %s artifact', (_kind, artifact) => {
+    render(<PublicationState artifact={artifact} showAvailable />);
+
+    const state = screen.getByRole('alert');
+    expect(state.getAttribute('data-publication-status')).toBe('invalid');
+    expect(state.getAttribute('data-publication-status')).not.toBe(artifact.status);
+    expect(screen.getByText(/publication status invalid/i)).toBeTruthy();
+    expect(screen.queryByText(/RAW_AVAILABLE_LEAK/i)).toBeNull();
   });
 });
