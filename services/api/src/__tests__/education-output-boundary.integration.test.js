@@ -30,7 +30,7 @@ describe('education route publication boundaries', () => {
       includeEducation: true,
       fastifyOptions: {
         logger: {
-          level: 'warn',
+          level: 'trace',
           stream: { write: (chunk) => logs.push(String(chunk)) },
         },
       },
