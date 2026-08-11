@@ -158,17 +158,18 @@ export default function QuizMode() {
   // Only auto-load a quiz when a topic was explicitly chosen; otherwise the
   // picker below is shown first.
   const [loading, setLoading] = useState(!!topicParam);
-  const [error, setError] = useState(null);
+  const [catalogError, setCatalogError] = useState({ topicId: '', message: '' });
+  const [quizError, setQuizError] = useState(null);
   const [quizStateScope, setQuizStateScope] = useState(quizRequestScope);
 
   useEffect(() => {
     let active = true;
-    setQuizStateScope(quizRequestScope);
     setCatalogTopic(null);
     setTopicMetadata(null);
     setQuizPublication(null);
     setQuestions([]);
-    setError(null);
+    setCatalogError({ topicId, message: '' });
+    setQuizError(null);
     if (!topicParam) {
       setLoading(false);
       return () => { active = false; };
@@ -185,20 +186,26 @@ export default function QuizMode() {
           })))
           .find((topic) => topic?.id === topicId);
         if (!match) {
-          setError('This education topic is unavailable because it is not in the reviewed catalog.');
+          setCatalogError({
+            topicId,
+            message: 'This education topic is unavailable because it is not in the reviewed catalog.',
+          });
           setLoading(false);
           return;
         }
         setCatalogTopic(match);
         setTopicMetadata(match);
       })
-      .catch((catalogError) => {
+      .catch((catalogRequestError) => {
         if (!active) return;
-        setError(catalogError?.message || 'The reviewed topic catalog is unavailable.');
+        setCatalogError({
+          topicId,
+          message: catalogRequestError?.message || 'The reviewed topic catalog is unavailable.',
+        });
         setLoading(false);
       });
     return () => { active = false; };
-  }, [topicParam]);
+  }, [topicId, topicParam]);
 
   useEffect(() => {
     if (catalogTopic?.id === topicId) loadQuiz();
@@ -225,7 +232,7 @@ export default function QuizMode() {
     );
     setQuizStateScope(quizRequestScope);
     setLoading(true);
-    setError(null);
+    setQuizError(null);
     setQuizPublication(null);
     setTopicMetadata(null);
     setQuestions([]);
@@ -250,7 +257,7 @@ export default function QuizMode() {
       if (isCurrentRequest()) {
         const recoveryPublication = terminalPublicationArtifactFromError(err);
         setQuizPublication(recoveryPublication);
-        setError(recoveryPublication ? null : (err?.message || 'Unable to generate this quiz.'));
+        setQuizError(recoveryPublication ? null : (err?.message || 'Unable to generate this quiz.'));
       }
     } finally {
       if (isCurrentRequest()) setLoading(false);
@@ -288,7 +295,11 @@ export default function QuizMode() {
   const current = questions[currentIndex];
   const progressPercent = questions.length > 0 ? ((currentIndex + (showResult ? 1 : 0)) / questions.length) * 100 : 0;
   const topicTitle = topicMetadata?.title || catalogTopic?.title || 'Genetics topic';
-  const visibleLoading = quizStateScope === quizRequestScope ? loading : Boolean(topicParam);
+  const quizScopeIsCurrent = quizStateScope === quizRequestScope;
+  const visibleCatalogError = catalogError.topicId === topicId ? catalogError.message : '';
+  const visibleError = visibleCatalogError || (quizScopeIsCurrent ? quizError : null);
+  const visibleLoading = !visibleCatalogError
+    && (quizScopeIsCurrent ? loading : Boolean(topicParam));
 
   if (visibleLoading) {
     return (
@@ -302,14 +313,14 @@ export default function QuizMode() {
     );
   }
 
-  if (error) {
+  if (visibleError) {
     return (
       <div className="p-6 max-w-2xl mx-auto">
         <Card>
           <CardContent className="p-6 text-center">
             <XCircle className="w-12 h-12 text-red-400 mx-auto mb-3" />
             <h3 className="text-lg font-semibold mb-2">Quiz Error</h3>
-            <p className="text-slate-600 mb-4" role="alert">{error}</p>
+            <p className="text-slate-600 mb-4" role="alert">{visibleError}</p>
             <div className="flex gap-3 justify-center">
               <Button variant="outline" onClick={() => navigate(-1)}>Go Back</Button>
               {catalogTopic && <Button onClick={loadQuiz}>Try Again</Button>}

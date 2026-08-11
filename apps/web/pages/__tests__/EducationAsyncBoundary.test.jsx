@@ -349,6 +349,24 @@ describe('education async publication boundaries', () => {
     expect(await screen.findByText('Fallback quiz question?')).toBeInTheDocument();
   });
 
+  it('keeps an unknown-topic quiz catalog error visible after saved-level hydration', async () => {
+    const path = '/quizmode?topic=unknown-topic';
+    const { rerender } = render(routedElement(path, QuizMode));
+
+    const catalogError = await screen.findByRole('alert');
+    expect(catalogError).toHaveTextContent(/not in the reviewed catalog/i);
+    expect(apiClient.getTopics).toHaveBeenCalledTimes(1);
+    expect(apiClient.generateQuiz).not.toHaveBeenCalled();
+
+    educationState.level = 'graduate';
+    rerender(routedElement(path, QuizMode));
+
+    expect(screen.getByRole('alert')).toHaveTextContent(/not in the reviewed catalog/i);
+    expect(screen.queryByText(/generating quiz questions/i)).toBeNull();
+    expect(apiClient.getTopics).toHaveBeenCalledTimes(1);
+    expect(apiClient.generateQuiz).not.toHaveBeenCalled();
+  });
+
   it.each([
     ['elementary', 'elementary'],
     ['middle_school', 'middle_school'],
