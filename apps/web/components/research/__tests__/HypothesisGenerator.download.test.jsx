@@ -118,6 +118,47 @@ describe('HypothesisGenerator downloadable artifact', () => {
     expect(capturedBlob).toBeNull();
   });
 
+  it.each([
+    ['missing', undefined],
+    ['null', null],
+    ['scalar', 'LEGACY_HYPOTHESIS_SCALAR_LEAK'],
+    [
+      'noncanonical',
+      {
+        contractVersion: 1,
+        status: 'available',
+        content: 'NONCANONICAL_HYPOTHESIS_CONTENT_LEAK',
+        reasonCode: null,
+        correlationId: 'hypothesis:noncanonical',
+        limitations: [],
+        raw: 'NONCANONICAL_HYPOTHESIS_RAW_LEAK',
+      },
+    ],
+  ])('fails closed when a successful hypothesis response has a %s publication', async (
+    _shape,
+    responsePublication,
+  ) => {
+    apiClient.invokePublicationTask.mockResolvedValueOnce({
+      publication: responsePublication,
+      result: 'LEGACY_HYPOTHESIS_RESULT_LEAK',
+      raw: 'LEGACY_HYPOTHESIS_RAW_LEAK',
+    });
+    render(<HypothesisGenerator />);
+
+    fireEvent.click(screen.getByRole('button', { name: /generate research hypotheses/i }));
+
+    const supportId = await screen.findByText('hypothesis:client-invalid-publication');
+    const publicationAlert = supportId.closest('[data-publication-status]');
+    expect(publicationAlert).not.toBeNull();
+    expect(publicationAlert).toHaveAttribute('data-publication-status', 'unavailable');
+    expect(publicationAlert).toHaveTextContent('Publication unavailable');
+    expect(screen.getByText('Generated Research Hypotheses')).toBeInTheDocument();
+    expect(screen.queryByText(/(?:LEGACY|NONCANONICAL)_HYPOTHESIS_/i)).toBeNull();
+    expect(screen.queryByText(/research service returned no publication status/i)).toBeNull();
+    expect(screen.queryByRole('button', { name: /download markdown/i })).not.toBeInTheDocument();
+    expect(capturedBlob).toBeNull();
+  });
+
   it('renders the terminal recovery publication returned with an invoke 503', async () => {
     const error = new Error('Generated content is temporarily unavailable.');
     error.status = 503;
