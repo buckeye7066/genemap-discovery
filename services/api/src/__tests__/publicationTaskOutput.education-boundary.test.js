@@ -725,6 +725,10 @@ describe('genetics education publication boundary', () => {
         'ZORBLAX is used at 95% sensitivity in aggregate analysis.',
         'zorblax is used at 95% sensitivity in aggregate analysis.',
         'X-17 is applied at 2% in this study.',
+        'The method is used at 50% in this study and the therapy is administered daily.',
+        'The method is used at 50 percent in this study while the therapy is administered weekly.',
+        'The method is used at 50 per cent in this study although the therapy is administered every morning.',
+        'The method is used at 50% in this study but the therapy is administered orally twice daily.',
       ]) {
         expect(__test.containsProhibitedClinicalGuidance(raw)).toBe(true);
         expect(sanitizePublicationArtifact(task, {}, raw, {
@@ -840,6 +844,7 @@ describe('genetics education publication boundary', () => {
         'The approach is applied at 2% in this study.',
         'The calibration is applied at 2% in this study.',
         'PCR is used at 95% sensitivity in aggregate analysis.',
+        'The method is used at 50% in this study and the reagent is administered daily during PCR.',
         'A 5 mg reagent aliquot was tested in cultured cells.',
       ]) {
         expect(__test.containsProhibitedClinicalGuidance(raw)).toBe(false);
@@ -849,6 +854,18 @@ describe('genetics education publication boundary', () => {
       }
     },
   );
+
+  it('scans a full 12k near-miss percentage frame once without suffix rescans', () => {
+    const repeats = 800;
+    const nearMiss = `model is used at 50% in this study${' model is filler'.repeat(repeats)}`;
+
+    expect(nearMiss.length).toBeGreaterThan(12_000);
+    expect(__test.scanPassivePercentageFrame(nearMiss)).toEqual({
+      barePercentageSubjects: ['model'],
+      eventCount: repeats + 3,
+    });
+    expect(__test.containsProhibitedClinicalGuidance(nearMiss)).toBe(false);
+  });
 
   it('keeps quiz option order and answer index, and drops an unsafe question as a unit', () => {
     const result = sanitizeEducationQuizOutput([

@@ -155,7 +155,11 @@ const PASSIVE_USE_CLINICAL_PURPOSE_PATTERN = new RegExp(
   'iu',
 );
 const PASSIVE_ACTION_ADMINISTRATION_PATTERN = new RegExp(
-  `\\b${PASSIVE_CLINICAL_ACTION_PAST}\\b\\s*,?\\s+${PASSIVE_USE_ADMINISTRATION_CONTEXT}\\b`,
+  `\\b${PASSIVE_CLINICAL_ACTION_PAST}\\b\\s*,?\\s+(?<administration>${PASSIVE_USE_ADMINISTRATION_CONTEXT})\\b`,
+  'giu',
+);
+const PASSIVE_ADMINISTRATION_PERCENTAGE_PATTERN = new RegExp(
+  `${CLINICAL_PERCENTAGE_VALUE}(?![\\p{L}\\p{N}%٪])`,
   'iu',
 );
 const PASSIVE_ACTION_NAMED_PERCENTAGE_ADMINISTRATION_PATTERN = new RegExp(
@@ -171,17 +175,13 @@ const PASSIVE_PERCENTAGE_AGAROSE_ELECTROPHORESIS_PATTERN = new RegExp(
   `(?<![\\p{L}\\p{N}])${CLINICAL_PERCENTAGE_VALUE}\\s+agarose\\s+gels?\\s+${PASSIVE_USE_AUXILIARY}\\b[^.!?;\\n]*?\\b${PASSIVE_CLINICAL_ACTION_PAST}\\b[^.!?;\\n]*?\\b(?:for|in|during)\\s+(?:gel\\s+)?electrophoresis\\b`,
   'iu',
 );
-const PASSIVE_ACTION_BARE_PERCENTAGE_ADMINISTRATION_PATTERN = new RegExp(
-  `\\b${PASSIVE_CLINICAL_ACTION_PAST}\\b(?=[^.!?;\\n]*\\b${PASSIVE_PERCENTAGE_BARE_ADMINISTRATION_CONTEXT}(?![\\p{L}\\p{N}%٪]))`,
-  'iu',
-);
 const PASSIVE_PERCENTAGE_RESEARCH_SUBJECT = '(?:methods?|models?|filters?|assays?|reagents?|algorithms?|pipelines?|workflows?|tools?|simulations?|datasets?|variables?|statistics?|thresholds?|tests?|procedures?|corrections?|approach(?:es)?|techniques?|strateg(?:y|ies)|analys(?:is|es)|equations?|estimators?|classifiers?|calibrations?|metrics?|measures?|calculations?|comparisons?|regressions?|p\\s*c\\s*r)';
 const PASSIVE_PERCENTAGE_RESEARCH_SUBJECT_TOKEN_PATTERN = new RegExp(
   `^${PASSIVE_PERCENTAGE_RESEARCH_SUBJECT}$`,
   'iu',
 );
-const PASSIVE_ACTION_BARE_PERCENTAGE_FRAME_PATTERN = new RegExp(
-  `\\b(?<subject>${PASSIVE_USE_SUBJECT})\\s+${PASSIVE_USE_AUXILIARY}\\b[^.!?;\\n]*?\\b${PASSIVE_CLINICAL_ACTION_PAST}\\b(?=[^.!?;\\n]*\\b${PASSIVE_PERCENTAGE_BARE_ADMINISTRATION_CONTEXT}(?![\\p{L}\\p{N}%٪]))`,
+const PASSIVE_PERCENTAGE_FRAME_EVENT_PATTERN = new RegExp(
+  `(?<subjectAux>\\b(?<subject>${PASSIVE_USE_SUBJECT})\\s+${PASSIVE_USE_AUXILIARY}\\b)|(?<action>\\b${PASSIVE_CLINICAL_ACTION_PAST}\\b)|(?<percentage>\\b${PASSIVE_PERCENTAGE_BARE_ADMINISTRATION_CONTEXT}(?![\\p{L}\\p{N}%٪]))`,
   'giu',
 );
 const PASSIVE_PERCENTAGE_DISCOURSE_BOUNDARY_PATTERN = /\b(?:while|whereas|although|but|however|conversely|meanwhile|afterwards?|subsequently|(?:and\s+)?then)\b/iu;
@@ -686,6 +686,30 @@ function containsClinicalDose(value) {
       && !DIRECT_ACTION_AGGREGATE_RISK_PATTERN.test(value));
 }
 
+function scanPassivePercentageFrame(frame) {
+  const barePercentageSubjects = [];
+  let currentSubject = null;
+  let actionSubject = null;
+  let hasActiveAction = false;
+  let eventCount = 0;
+
+  for (const match of frame.matchAll(PASSIVE_PERCENTAGE_FRAME_EVENT_PATTERN)) {
+    eventCount += 1;
+    if (match.groups.subjectAux) {
+      currentSubject = match.groups.subject;
+      actionSubject = null;
+      hasActiveAction = false;
+    } else if (match.groups.action) {
+      actionSubject = currentSubject;
+      hasActiveAction = true;
+    } else if (match.groups.percentage && hasActiveAction) {
+      barePercentageSubjects.push(actionSubject);
+    }
+  }
+
+  return { barePercentageSubjects, eventCount };
+}
+
 function containsPassiveClinicalAction(value) {
   if (typeof value !== 'string' || !value.trim()) return false;
   return value.split(/[.!?;\n]+/u).some((clause) => {
@@ -710,27 +734,20 @@ function containsPassiveClinicalAction(value) {
         || PASSIVE_PERCENTAGE_FORMULATION_SUBJECT_PATTERN.test(frame);
       if (hasNamedPercentageAdministration && !hasLocalConcreteLabContext) return true;
 
-      if (!PASSIVE_ACTION_BARE_PERCENTAGE_ADMINISTRATION_PATTERN.test(frame)
-        || hasLocalConcreteLabContext) return false;
-      const barePercentageFrames = [
-        ...frame.matchAll(PASSIVE_ACTION_BARE_PERCENTAGE_FRAME_PATTERN),
-      ];
-      return !hasReviewedResearchContext
-        || barePercentageFrames.length === 0
-        || barePercentageFrames.some((match) => (
-          !PASSIVE_PERCENTAGE_RESEARCH_SUBJECT_TOKEN_PATTERN.test(match.groups.subject)
-        ));
+      const { barePercentageSubjects } = scanPassivePercentageFrame(frame);
+      if (barePercentageSubjects.length > 0 && !hasLocalConcreteLabContext) {
+        if (!hasReviewedResearchContext
+          || barePercentageSubjects.some((subject) => (
+            !subject || !PASSIVE_PERCENTAGE_RESEARCH_SUBJECT_TOKEN_PATTERN.test(subject)
+          ))) return true;
+      }
+
+      if (hasLocalConcreteLabContext) return false;
+      return [...frame.matchAll(PASSIVE_ACTION_ADMINISTRATION_PATTERN)].some((match) => (
+        !PASSIVE_ADMINISTRATION_PERCENTAGE_PATTERN.test(match.groups.administration)
+      ));
     });
     if (hasUnsafePercentageFrame) return true;
-
-    const hasPercentageAdministration =
-      PASSIVE_ACTION_NAMED_PERCENTAGE_ADMINISTRATION_PATTERN.test(clause)
-      || PASSIVE_ACTION_BARE_PERCENTAGE_ADMINISTRATION_PATTERN.test(clause);
-    if (PASSIVE_ACTION_ADMINISTRATION_PATTERN.test(clause)
-      && !hasConcreteLabContext
-      && !hasPercentageAdministration) {
-      return true;
-    }
     if (PASSIVE_ACTION_KNOWN_MEDICATION_PATTERN.test(clause) && !hasConcreteLabContext) {
       return true;
     }
@@ -1371,6 +1388,7 @@ export const __test = {
   cleanNonClinicalText,
   cleanStringArray,
   containsProhibitedClinicalGuidance,
+  scanPassivePercentageFrame,
   parseJsonCandidate,
   normalizeCandidateGene,
   normalizeCandidateGenes,
