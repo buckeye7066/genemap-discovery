@@ -13,6 +13,13 @@ const sanitizeEducation = (value) => sanitizePublicationTaskOutput(
   value,
 );
 
+const NARRATIVE_TASKS = [
+  'genetics_education',
+  'research_hypothesis',
+  'aggregate_genomics_research',
+  'learning_activity_summary',
+];
+
 describe('genetics education publication boundary', () => {
   it('neutralizes active Markdown, reference targets, HTML, and protocol-relative URLs', () => {
     const raw = [
@@ -186,6 +193,140 @@ describe('genetics education publication boundary', () => {
     const raw = 'Genetic testing can contribute evidence used during clinical evaluation, but this lesson does not assess any individual.';
     expect(sanitizeEducation(raw)).toMatchObject({ status: 'available', content: raw });
   });
+
+  it.each(NARRATIVE_TASKS)(
+    'allows neutral passive descriptions of reviewed research tools for %s',
+    (task) => {
+      for (const raw of [
+        'CRISPR is used to edit genes.',
+        'PCR is used to amplify DNA.',
+        'A microscope is used to observe cultured cells.',
+        'CRISPR&nbsp;is&nbsp;used to edit genes in this lesson.',
+        'P**C**R is used to amplify a reviewed DNA target.',
+        'PCR is used in a daily quality-control workflow.',
+        'PCR is used daily for quality control.',
+        'PCR is used to compare deidentified patient samples in aggregate research.',
+        'Tetracycline is used as a selection marker in cultured cells.',
+        'You are used to seeing DNA as a double helix.',
+        'Patients are used as controls in this research example.',
+        'Gene therapy is used to replace faulty genes.',
+        'PCR is used for cancer research.',
+        'For cancer research, PCR is used to compare tumor genomes.',
+        'PCR is used to screen a genomic library.',
+        'A microscope is used to monitor cell growth.',
+        'An incubator is used daily to culture cells.',
+        'PCR is used to screen patient-derived samples in aggregate research.',
+        'A microscope is used to monitor mitosis in cultured cells.',
+        'A spectrometer is used daily to measure absorbance.',
+        'Tetracycline is used daily as a selection marker in cultured cells.',
+        'CRISPR should be used to edit genes.',
+        'PCR must be used to amplify DNA.',
+        'A microscope should be used to observe cultured cells.',
+        'Tetracycline is used at 0.5 milligrams as a selection marker in cultured cells.',
+        'Tetracycline should be used at 5 milligrams as a selection marker in cultured cells.',
+        'A reagent should be used at 5 milligrams in a cultured-cell assay.',
+        'CRISPR is applied to edit genes.',
+        'PCR is tested on samples.',
+        'CRISPR is injected into cultured cells.',
+        'CRISPR should be applied to edit genes.',
+        'PCR must be tested on samples.',
+        'CRISPR should be injected into cultured cells.',
+        'CRISPR is ap**pl**ied to edit genes.',
+        'PCR is test&#101;d on samples.',
+        'CRISPR is inj&nbsp;ected into cultured cells.',
+      ]) {
+        expect(__test.containsProhibitedClinicalGuidance(raw)).toBe(false);
+        expect(sanitizePublicationArtifact(task, {}, raw, {
+          correlationId: `neutral-passive-${task}`,
+        })).toMatchObject({ status: 'available' });
+      }
+    },
+  );
+
+  it.each(NARRATIVE_TASKS)(
+    'withholds personalized or medication passive guidance for %s',
+    (task) => {
+      for (const raw of [
+        'CRISPR should be u**s**ed to diagnose this patient.',
+        'CRISPR&nbsp;must&nbsp;be&nbsp;used in clinical care for this patient.',
+        'For this patient, CRISPR should be used to edit genes.',
+        'During your treatment, CRISPR should be used to edit genes.',
+        'CRISPR should be used to edit your genes.',
+        'This algorithm should be used for your genes.',
+        'This research tool is used daily for this patient.',
+        'For this patient, this research tool should be used.',
+        'CRISPR should be used for these children.',
+        'For the individual, CRISPR should be used.',
+        'In this patient, CRISPR should be used to edit genes.',
+        'Aspirin is being used for this patient.',
+        'X should be used for this patient.',
+        'Zorblax is used for pain.',
+        'Aspirin is used for migraines.',
+        'Aspirin is used to reduce inflammation.',
+        'Zorblax should be used for pain.',
+        'For&nbsp;pain, Zorblax should be u**s**ed.',
+        'Zorblax should be used twice a day.',
+        'Zorblax should be used every morning.',
+        'Zorblax should be used orally twice a day.',
+        'Zorblax should be used at 0.5 milligrams.',
+        'Zorblax should be used at 0.5 grams.',
+        'Aspirin should be used daily in this study.',
+        'Aspirin should be used orally in this research.',
+        'Aspirin should be used at 5 milligrams in this study.',
+        'Aspirin should be used in this patient study.',
+        'Aspirin should be used on samples.',
+        'Aspirin should be u s e d for pain.',
+        'Aspirin should be u&nbsp;s&nbsp;e&nbsp;d for pain.',
+        'Aspirin is used for p a i n.',
+        'CRISPR should be used for children.',
+        'For patients, CRISPR should be used to edit genes.',
+        'CRISPR should be used for this child.',
+        'CRISPR should be used by you.',
+        'Aspirin is commonly used for pain.',
+        'Aspirin is currently being used for this patient.',
+        'Aspirin is used for headaches.',
+        'Aspirin is used for the treatment of pain.',
+        'CRISPR should be used in treating cystic fibrosis.',
+        'Zorblax should be used, orally twice a day.',
+        'Zorblax should be used three times a day.',
+        'Zorblax should be used as two puffs twice daily.',
+        'Aspirin will be used for this patient.',
+        'Aspirin should generally be used for pain.',
+        'Aspirin is to be used for pain.',
+        'Aspirin ought to be used for pain.',
+        'Aspirin has to be used for this patient.',
+        'When treating this patient, CRISPR should be used to edit genes.',
+        'Among patients, CRISPR should be used to edit genes.',
+        'Aspirin is, for this patient, used daily.',
+        'CRISPR should be used to treat cystic fibrosis.',
+        'CRISPR should be used to screen your child.',
+        'Aspirin can be used for pain.',
+        'This medication is used for your symptoms.',
+        'A diagnostic test should be used for this patient.',
+        'CRISPR is applied to this patient.',
+        'PCR is tested on this patient.',
+        'CRISPR is injected into this patient.',
+        'This patient is injected with CRISPR.',
+        'Aspirin is injected.',
+        'CRISPR must be injected.',
+        'CRISPR is injected daily.',
+        'CRISPR is app&nbsp;lied to this patient.',
+        'PCR is t e s t e d on this patient.',
+        'CRISPR is i n j e c t e d into this patient.',
+        'The patient should be tr&#101;ated with Zorblax.',
+        'Zorblax should be ta**k**en.',
+      ]) {
+        expect(__test.containsProhibitedClinicalGuidance(raw)).toBe(true);
+        expect(sanitizePublicationArtifact(task, {}, raw, {
+          correlationId: `clinical-passive-${task}`,
+        })).toMatchObject({
+          status: 'withheld',
+          content: null,
+          reasonCode: 'clinical_boundary',
+        });
+      }
+    },
+  );
 
   it.each([
     'Avoid selection bias in the aggregate analysis.',
