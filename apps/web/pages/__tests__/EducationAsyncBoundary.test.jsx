@@ -29,7 +29,10 @@ vi.mock('@/components/education/AdaptiveExplanation', async () => {
   const { default: PublicationState } = await vi.importActual('@/components/shared/PublicationState');
   return {
     default: ({ artifact, loading }) => (
-      <div data-testid="adaptive-explanation">
+      <div
+        data-testid="adaptive-explanation"
+        data-publication-reason={artifact?.reasonCode || ''}
+      >
         {loading ? 'explanation-loading' : artifact?.content || 'no-explanation'}
         <PublicationState artifact={artifact} />
       </div>
@@ -427,6 +430,44 @@ describe('education async publication boundaries', () => {
 
     expect(screen.getAllByText(/publication unavailable/i)).toHaveLength(3);
     expect(screen.queryAllByText(/generated content is temporarily unavailable/i)).toHaveLength(0);
+  });
+
+  it.each([
+    ['missing', undefined, 'invalid_publication_artifact', 'explanation:client-invalid-publication'],
+    ['null', null, 'invalid_publication_artifact', 'explanation:client-invalid-publication'],
+    ['scalar', 'PROVIDER_SCALAR_LEAK', 'invalid_publication_artifact', 'explanation:client-invalid-publication'],
+    [
+      'noncanonical',
+      { ...publication('PROVIDER_OBJECT_LEAK', 'explanation:noncanonical'), raw: 'EXTRA_FIELD_LEAK' },
+      'invalid_publication_content',
+      'explanation:noncanonical',
+    ],
+  ])('fails closed when an explanation response has a %s publication', async (
+    _shape,
+    responsePublication,
+    expectedReasonCode,
+    expectedCorrelationId,
+  ) => {
+    apiClient.getExplanation.mockResolvedValue({
+      publication: responsePublication,
+      topicMetadata: { id: 'what-is-dna', title: 'What is DNA?' },
+      sources: [],
+    });
+
+    render(routedElement('/topicexplorer?topic=what-is-dna', TopicExplorer));
+
+    const supportId = await screen.findByText(expectedCorrelationId);
+    const publicationAlert = supportId.closest('[data-publication-status]');
+    expect(publicationAlert).not.toBeNull();
+    expect(publicationAlert).toHaveAttribute('data-publication-status', 'unavailable');
+    expect(publicationAlert).toHaveTextContent('Publication unavailable');
+    expect(screen.getByTestId('adaptive-explanation')).toHaveAttribute(
+      'data-publication-reason',
+      expectedReasonCode,
+    );
+    expect(screen.getByTestId('adaptive-explanation')).toHaveTextContent('no-explanation');
+    expect(screen.queryByText(/PROVIDER_(?:SCALAR|OBJECT)_LEAK/i)).toBeNull();
+    expect(screen.queryByText(/EXTRA_FIELD_LEAK/i)).toBeNull();
   });
 
   it('uses reviewed catalog metadata after validating the response topic identity', async () => {
