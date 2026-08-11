@@ -10,10 +10,15 @@ import { ArrowLeft, CheckCircle2, XCircle, Trophy, RefreshCw, ArrowRight, HelpCi
 import MedicalDisclaimer from '@/components/shared/MedicalDisclaimer';
 import PublicationState, {
   enforcePublicationContentType,
+  isCanonicalPublicationArtifact,
   publicationContent,
 } from '@/components/shared/PublicationState';
 import { normalizeEducationPublicationLevel } from '@/lib/educationPublicationLevel';
-import { terminalPublicationArtifactFromError } from '@genemap/shared/publicationStatus';
+import {
+  createPublicationArtifact,
+  PUBLICATION_STATUSES,
+  terminalPublicationArtifactFromError,
+} from '@genemap/shared/publicationStatus';
 
 function isReusableQuiz(content) {
   return Array.isArray(content) && content.length > 0 && content.every((item) => (
@@ -30,6 +35,17 @@ function isReusableQuiz(content) {
     && typeof item.explanation === 'string'
     && item.explanation.trim()
   ));
+}
+
+function normalizedQuizPublication(artifact) {
+  if (isCanonicalPublicationArtifact(artifact)) {
+    return enforcePublicationContentType(artifact, isReusableQuiz);
+  }
+  return createPublicationArtifact({
+    status: PUBLICATION_STATUSES.UNAVAILABLE,
+    reasonCode: 'invalid_publication_artifact',
+    correlationId: 'quiz:client-invalid-publication',
+  });
 }
 
 // Shown when the user reaches /quizmode without choosing a topic (e.g. the
@@ -225,10 +241,7 @@ export default function QuizMode() {
       if (res?.topicMetadata?.id !== topicId) {
         throw new Error('The server returned mismatched topic metadata.');
       }
-      const publication = enforcePublicationContentType(
-        res?.publication,
-        isReusableQuiz,
-      );
+      const publication = normalizedQuizPublication(res?.publication);
       const content = publicationContent(publication);
       setQuizPublication(publication);
       setTopicMetadata(res?.topicMetadata || null);
