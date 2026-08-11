@@ -36,6 +36,20 @@ function unavailableProfilePublication(reasonCode) {
   });
 }
 
+function invalidProfilePublication() {
+  return createPublicationArtifact({
+    status: 'unavailable',
+    reasonCode: 'invalid_publication_artifact',
+    correlationId: 'profile:client-invalid-publication',
+  });
+}
+
+function normalizeProfilePublication(artifact) {
+  return isCanonicalPublicationArtifact(artifact)
+    ? artifact
+    : invalidProfilePublication();
+}
+
 const INVALID_CANDIDATE_PUBLICATION = Object.freeze(createPublicationArtifact({
   status: 'unavailable',
   reasonCode: 'invalid_candidate_publication',
@@ -590,8 +604,10 @@ export class PhenotypeSearchService {
       },
       { maxTokens: 2048 },
     );
-    const parsed = parseLLMJson(response, {});
-    const topLevelStatus = response?.publication?.status;
+    const responsePublication = normalizeProfilePublication(response?.publication);
+    const normalizedResponse = { publication: responsePublication };
+    const topLevelStatus = responsePublication.status;
+    const parsed = parseLLMJson(normalizedResponse, {});
     const summaryStatus = ['withheld', 'unavailable', 'superseded'].includes(topLevelStatus)
       ? topLevelStatus
       : parsed.summaryStatus === 'available'
@@ -599,7 +615,7 @@ export class PhenotypeSearchService {
       : parsed.summaryStatus === 'withheld'
         ? 'withheld'
         : 'unavailable';
-    const reusableArtifact = reusablePublicationArtifact(response);
+    const reusableArtifact = reusablePublicationArtifact(normalizedResponse);
     const profilePublication = reusableArtifact && summaryStatus !== 'available'
       ? {
           ...reusableArtifact,
@@ -607,7 +623,7 @@ export class PhenotypeSearchService {
           content: null,
           reasonCode: `profile_${summaryStatus}`,
         }
-      : response?.publication || null;
+      : responsePublication;
     const summary = summaryStatus === 'available' && typeof parsed.summary === 'string'
       ? parsed.summary.trim()
       : null;
