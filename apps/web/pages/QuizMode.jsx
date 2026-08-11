@@ -12,6 +12,7 @@ import PublicationState, {
   enforcePublicationContentType,
   publicationContent,
 } from '@/components/shared/PublicationState';
+import { terminalPublicationArtifactFromError } from '@genemap/shared/publicationStatus';
 
 const QUIZ_LEVEL_BY_PROFILE_LEVEL = Object.freeze({
   elementary: 'elementary',
@@ -251,7 +252,11 @@ export default function QuizMode() {
       setTopicMetadata(res?.topicMetadata || null);
       setQuestions(Array.isArray(content) ? content : []);
     } catch (err) {
-      if (isCurrentRequest()) setError(err?.message || 'Unable to generate this quiz.');
+      if (isCurrentRequest()) {
+        const recoveryPublication = terminalPublicationArtifactFromError(err);
+        setQuizPublication(recoveryPublication);
+        setError(recoveryPublication ? null : (err?.message || 'Unable to generate this quiz.'));
+      }
     } finally {
       if (isCurrentRequest()) setLoading(false);
     }

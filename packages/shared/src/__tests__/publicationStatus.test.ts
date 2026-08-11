@@ -5,6 +5,7 @@ import {
   createPublicationArtifact,
   isCanonicalPublicationArtifact,
   PUBLICATION_STATUSES,
+  terminalPublicationArtifactFromError,
 } from '../publicationStatus.js';
 import { publicationArtifactSchema } from '../schemas.js';
 
@@ -143,5 +144,72 @@ describe('PublicationArtifact', () => {
     ];
 
     expect(malformed.every((artifact) => !isCanonicalPublicationArtifact(artifact))).toBe(true);
+  });
+
+  it('recovers only a cloned canonical terminal artifact from operational error details', () => {
+    const limitations = ['Generated publication is disabled during recovery.'];
+    const recovered = terminalPublicationArtifactFromError({
+      status: 503,
+      details: {
+        publication: {
+          contractVersion: 1,
+          status: 'unavailable',
+          content: null,
+          reasonCode: 'model_publication_disabled',
+          correlationId: 'request-recovery:llm-invoke',
+          limitations,
+        },
+        internalTrace: 'must not escape',
+      },
+    });
+
+    expect(recovered).toEqual({
+      contractVersion: 1,
+      status: 'unavailable',
+      content: null,
+      reasonCode: 'model_publication_disabled',
+      correlationId: 'request-recovery:llm-invoke',
+      limitations,
+    });
+    expect(recovered).not.toHaveProperty('internalTrace');
+    expect(recovered?.limitations).not.toBe(limitations);
+  });
+
+  it.each([
+    {
+      contractVersion: 1,
+      status: 'available',
+      content: 'must not be recovered from an error',
+      reasonCode: null,
+      correlationId: 'request-available',
+      limitations: [],
+    },
+    {
+      contractVersion: 1,
+      status: 'partial',
+      content: 'must not be recovered from an error',
+      reasonCode: 'provider_truncated',
+      correlationId: 'request-partial',
+      limitations: ['The output ended early.'],
+    },
+    {
+      contractVersion: 1,
+      status: 'unavailable',
+      content: null,
+      reasonCode: 'model_publication_disabled',
+      correlationId: 'request-extra-key',
+      limitations: [],
+      rawProviderText: 'must not escape',
+    },
+    {
+      contractVersion: 1,
+      status: 'unavailable',
+      content: 'terminal content must be null',
+      reasonCode: 'model_publication_disabled',
+      correlationId: 'request-malformed',
+      limitations: [],
+    },
+  ])('rejects non-terminal or non-canonical $status artifacts carried through error details', (publication) => {
+    expect(terminalPublicationArtifactFromError({ details: { publication } })).toBeNull();
   });
 });

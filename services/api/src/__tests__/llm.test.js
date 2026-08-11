@@ -305,14 +305,20 @@ describe('LLM route protection', () => {
     expect(body.publication.limitations).not.toHaveLength(0);
   });
 
-  it('rejects unsupported generation option fields', async () => {
+  it.each([
+    ['model', 'caller-selected-model'],
+    ['size', '2048x2048'],
+    ['quality', 'hd'],
+    ['publicationTask', 'aggregate_genomics_research'],
+    ['arbitrary', true],
+  ])('rejects the unsupported generation option field %s', async (field, value) => {
     const res = await app.inject({
       method: 'POST',
       url: '/llm/invoke',
       headers: {
         cookie: authCookie({ userId: 'free-user', email: 'free@example.com', role: 'user' }),
       },
-      payload: invokePayload({ maxTokens: 100, arbitrary: true }),
+      payload: invokePayload({ maxTokens: 100, [field]: value }),
     });
 
     expect(res.statusCode).toBe(400);

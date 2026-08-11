@@ -121,6 +121,22 @@ function publication(status, content = null) {
   };
 }
 
+function modelPublicationError(correlationId) {
+  const error = new Error('Generated content is temporarily unavailable.');
+  error.status = 503;
+  error.details = {
+    publication: {
+      contractVersion: 1,
+      status: 'unavailable',
+      content: null,
+      reasonCode: 'model_publication_disabled',
+      correlationId,
+      limitations: [],
+    },
+  };
+  return error;
+}
+
 function candidateResult(artifact) {
   return {
     query: 'Cystic Fibrosis',
@@ -189,6 +205,25 @@ describe('Search candidate publication boundary', () => {
     expect(apiClient.saveSearchHistory).toHaveBeenCalledWith(expect.objectContaining({
       results: expect.objectContaining({ candidateGenes: [], count: 0 }),
     }));
+  });
+
+  it('surfaces a terminal publication from a search 503 without enrichment or history', async () => {
+    service.findCandidates.mockRejectedValue(
+      modelPublicationError('candidate:recovery-disabled'),
+    );
+
+    render(<SearchPage />);
+    fireEvent.click(screen.getByRole('button', { name: /run candidate search/i }));
+
+    const supportId = await screen.findByText('candidate:recovery-disabled');
+    const publicationAlert = supportId.closest('[data-publication-status]');
+    expect(publicationAlert).not.toBeNull();
+    expect(publicationAlert).toHaveAttribute('data-publication-status', 'unavailable');
+    expect(publicationAlert).toHaveTextContent('Support ID: candidate:recovery-disabled');
+    expect(screen.queryByTestId('gene-results')).toBeNull();
+    expect(service.enrichCandidates).not.toHaveBeenCalled();
+    expect(service.compareGeneSets).not.toHaveBeenCalled();
+    expect(apiClient.saveSearchHistory).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -273,11 +308,14 @@ describe('Search candidate publication boundary', () => {
     expect(screen.queryByText(/stale comparison result/i)).toBeNull();
 
     await act(async () => {
-      terminalSearch.resolve(candidateResult(publication('unavailable')));
-      await terminalSearch.promise;
+      terminalSearch.reject(modelPublicationError('candidate:newest-recovery'));
+      await Promise.allSettled([terminalSearch.promise]);
     });
-    const publicationAlert = await screen.findByRole('alert');
+    const supportId = await screen.findByText('candidate:newest-recovery');
+    const publicationAlert = supportId.closest('[data-publication-status]');
+    expect(publicationAlert).not.toBeNull();
     expect(publicationAlert).toHaveAttribute('data-publication-status', 'unavailable');
+    expect(publicationAlert).toHaveTextContent('candidate:newest-recovery');
     expect(screen.queryByTestId('gene-set-comparison')).toBeNull();
   });
 

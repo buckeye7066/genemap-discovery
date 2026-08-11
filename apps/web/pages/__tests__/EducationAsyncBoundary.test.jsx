@@ -25,22 +25,30 @@ vi.mock('@/lib/EducationLevelContext', () => ({
     levelConfig: { label: educationState.level },
   }),
 }));
-vi.mock('@/components/education/AdaptiveExplanation', () => ({
-  default: ({ artifact, loading }) => (
-    <div data-testid="adaptive-explanation">
-      {loading ? 'explanation-loading' : artifact?.content || 'no-explanation'}
-    </div>
-  ),
-}));
-vi.mock('@/components/education/AdaptiveImage', () => ({
-  default: ({ artifact, loading }) => (
-    <div data-testid="adaptive-image">
-      {loading
-        ? 'image-loading'
-        : `${artifact?.status || 'none'}:${artifact?.correlationId || 'no-correlation'}:${artifact?.content?.imageUrl || 'no-image'}`}
-    </div>
-  ),
-}));
+vi.mock('@/components/education/AdaptiveExplanation', async () => {
+  const { default: PublicationState } = await vi.importActual('@/components/shared/PublicationState');
+  return {
+    default: ({ artifact, loading }) => (
+      <div data-testid="adaptive-explanation">
+        {loading ? 'explanation-loading' : artifact?.content || 'no-explanation'}
+        <PublicationState artifact={artifact} />
+      </div>
+    ),
+  };
+});
+vi.mock('@/components/education/AdaptiveImage', async () => {
+  const { default: PublicationState } = await vi.importActual('@/components/shared/PublicationState');
+  return {
+    default: ({ artifact, loading }) => (
+      <div data-testid="adaptive-image">
+        {loading
+          ? 'image-loading'
+          : `${artifact?.status || 'none'}:${artifact?.correlationId || 'no-correlation'}:${artifact?.content?.imageUrl || 'no-image'}`}
+        <PublicationState artifact={artifact} />
+      </div>
+    ),
+  };
+});
 vi.mock('@/components/education/LevelPicker', () => ({ default: () => null }));
 vi.mock('@/components/education/UsageBanner', () => ({ default: () => null }));
 vi.mock('@/components/shared/MedicalDisclaimer', () => ({ default: () => null }));
@@ -81,6 +89,22 @@ function publication(content, correlationId) {
     correlationId,
     limitations: [],
   };
+}
+
+function modelPublicationError(correlationId) {
+  const error = new Error('Generated content is temporarily unavailable.');
+  error.status = 503;
+  error.details = {
+    publication: {
+      contractVersion: 1,
+      status: 'unavailable',
+      content: null,
+      reasonCode: 'model_publication_disabled',
+      correlationId,
+      limitations: [],
+    },
+  };
+  return error;
 }
 
 function quizResponse(topicId, title, question) {
@@ -149,14 +173,29 @@ describe('education async publication boundaries', () => {
 
     await act(async () => {
       staleSuccess.resolve(quizResponse('what-is-dna', 'What is DNA?', 'Stale quiz question?'));
-      staleError.reject(new Error('stale quiz failure'));
+      staleError.reject(modelPublicationError('quiz:stale-disabled'));
       await Promise.allSettled([staleSuccess.promise, staleError.promise]);
     });
 
     expect(screen.getByText('Current quiz question?')).toBeInTheDocument();
     expect(screen.queryByText('Stale quiz question?')).toBeNull();
     expect(screen.queryByText(/stale quiz failure/i)).toBeNull();
+    expect(screen.queryByText('quiz:stale-disabled')).toBeNull();
     expect(screen.queryByText(/generating quiz questions/i)).toBeNull();
+  });
+
+  it('renders the terminal recovery publication returned with a quiz 503', async () => {
+    apiClient.generateQuiz.mockRejectedValue(modelPublicationError('quiz:recovery-disabled'));
+
+    render(routedElement('/quizmode?topic=what-is-dna', QuizMode));
+
+    const supportId = await screen.findByText('quiz:recovery-disabled');
+    const publicationAlert = supportId.closest('[data-publication-status]');
+    expect(publicationAlert).not.toBeNull();
+    expect(publicationAlert).toHaveAttribute('data-publication-status', 'unavailable');
+    expect(publicationAlert).toHaveTextContent('Publication unavailable');
+    expect(publicationAlert).toHaveTextContent('Support ID: quiz:recovery-disabled');
+    expect(screen.queryByText(/quiz error/i)).toBeNull();
   });
 
   it.each([
@@ -323,6 +362,47 @@ describe('education async publication boundaries', () => {
     await waitFor(() => expect(screen.getByTestId('adaptive-image')).toHaveTextContent('unavailable:image:number:no-image'));
     fireEvent.click(screen.getByRole('button', { name: /^regenerate image$/i }));
     await waitFor(() => expect(screen.getByTestId('adaptive-image')).toHaveTextContent('available:image:valid:https://example.test/valid.png'));
+  });
+
+  it('renders terminal 503 publications for explanation, image, and tutor recovery', async () => {
+    apiClient.getExplanation.mockRejectedValue(
+      modelPublicationError('explanation:recovery-disabled'),
+    );
+    apiClient.generateImage.mockRejectedValue(
+      modelPublicationError('image:recovery-disabled'),
+    );
+    apiClient.chat.mockRejectedValue(
+      modelPublicationError('chat:recovery-disabled'),
+    );
+
+    render(routedElement('/topicexplorer?topic=what-is-dna', TopicExplorer));
+
+    expect(await screen.findByText('explanation:recovery-disabled')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /^generate image$/i }));
+    expect(await screen.findByText('image:recovery-disabled')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /explain another way/i }));
+    expect(await screen.findByText('chat:recovery-disabled')).toBeInTheDocument();
+
+    expect(screen.getAllByText(/publication unavailable/i)).toHaveLength(3);
+    expect(screen.queryByText(/could not be completed/i)).toBeNull();
+  });
+
+  it('uses reviewed catalog metadata after validating the response topic identity', async () => {
+    apiClient.getExplanation.mockResolvedValue({
+      publication: publication('Canonical explanation.', 'explanation:canonical-topic'),
+      topicMetadata: {
+        id: 'what-is-dna',
+        title: 'Response-controlled title',
+        category: 'Response-controlled category',
+      },
+      sources: [],
+    });
+
+    render(routedElement('/topicexplorer?topic=what-is-dna', TopicExplorer));
+
+    expect(await screen.findByText('Canonical explanation.')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('What is DNA?');
+    expect(screen.queryByText('Response-controlled title')).toBeNull();
   });
 
   it('keeps an unknown-topic catalog error across education-level changes', async () => {

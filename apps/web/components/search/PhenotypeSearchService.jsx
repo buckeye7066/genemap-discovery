@@ -14,6 +14,7 @@ import {
 import {
   createPublicationArtifact,
   isCanonicalPublicationArtifact,
+  terminalPublicationArtifactFromError,
 } from "@genemap/shared/publicationStatus";
 import { log } from "../shared/logger";
 import { getErrorMessage } from "../shared/errorUtils";
@@ -168,6 +169,19 @@ export class PhenotypeSearchService {
       };
     } catch (error) {
       log.error("Search (find candidates) error:", error);
+      const recoveryPublication = terminalPublicationArtifactFromError(error);
+      if (recoveryPublication) {
+        return {
+          query: phenotypeQuery,
+          candidateGenes: [],
+          isPremium,
+          hpoTerms: [],
+          queryType: searchMode,
+          userPreferences: null,
+          publication: recoveryPublication,
+          enriched: false,
+        };
+      }
       throw new Error(getErrorMessage(error) || "Failed to search for genes. Please try again.");
     }
   }
@@ -227,6 +241,7 @@ export class PhenotypeSearchService {
       return { ...base, candidateGenes: finalGenes, enriched: true };
     } catch (error) {
       log.error("Search (enrich) error:", error);
+      const recoveryPublication = terminalPublicationArtifactFromError(error);
       return {
         ...base,
         candidateGenes: this.attachProvenance(
@@ -234,8 +249,9 @@ export class PhenotypeSearchService {
             ...gene,
             detailsPending: false,
             aiSummary: null,
-            profileStatus: 'unavailable',
-            profilePublication: unavailableProfilePublication('profile_enrichment_failed'),
+            profileStatus: recoveryPublication?.status || 'unavailable',
+            profilePublication: recoveryPublication
+              || unavailableProfilePublication('profile_enrichment_failed'),
             keyTakeaways: [],
             phenotypes: [],
           })),
@@ -530,12 +546,14 @@ export class PhenotypeSearchService {
           };
         } catch (error) {
           log.error(`Error enriching gene ${gene.symbol}:`, error);
+          const recoveryPublication = terminalPublicationArtifactFromError(error);
           return {
             ...gene,
             phenotypes: [],
             aiSummary: null,
-            profileStatus: 'unavailable',
-            profilePublication: unavailableProfilePublication('profile_enrichment_failed'),
+            profileStatus: recoveryPublication?.status || 'unavailable',
+            profilePublication: recoveryPublication
+              || unavailableProfilePublication('profile_enrichment_failed'),
             keyTakeaways: [],
             furtherReading: this.deterministicFurtherReading(gene.symbol),
             expressionData: [],

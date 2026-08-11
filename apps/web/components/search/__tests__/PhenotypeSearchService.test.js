@@ -4,6 +4,22 @@ import { PhenotypeSearchService } from '../PhenotypeSearchService';
 
 afterEach(() => vi.restoreAllMocks());
 
+function modelPublicationError(correlationId, status = 'unavailable') {
+  const error = new Error('Generated content is temporarily unavailable.');
+  error.status = 503;
+  error.details = {
+    publication: {
+      contractVersion: 1,
+      status,
+      content: null,
+      reasonCode: 'model_publication_disabled',
+      correlationId,
+      limitations: [],
+    },
+  };
+  return error;
+}
+
 describe('PhenotypeSearchService authoritative overlays', () => {
   it('replaces model-controlled metadata and carries real adapter timestamps', () => {
     const genes = [{
@@ -175,6 +191,30 @@ describe('PhenotypeSearchService staged candidate journey', () => {
       expect(invoke).not.toHaveBeenCalled();
     },
   );
+
+  it('returns the terminal publication carried by a candidate-search 503', async () => {
+    const invoke = vi.spyOn(apiClient, 'invokePublicationTask').mockRejectedValue(
+      modelPublicationError('candidate:service-recovery'),
+    );
+    vi.spyOn(apiClient, 'getMe').mockResolvedValue({ role: 'user' });
+    const enrich = vi.spyOn(apiClient, 'enrichGenomicData');
+
+    const base = await PhenotypeSearchService.findCandidates(
+      'Cystic Fibrosis',
+      false,
+      'disease',
+    );
+
+    expect(base.publication).toMatchObject({
+      status: 'unavailable',
+      reasonCode: 'model_publication_disabled',
+      correlationId: 'candidate:service-recovery',
+    });
+    expect(base.candidateGenes).toEqual([]);
+    expect(base.enriched).toBe(false);
+    expect(invoke).toHaveBeenCalledTimes(1);
+    expect(enrich).not.toHaveBeenCalled();
+  });
 
   it('uses one strict fused task, caps before enrichment, and returns cards', async () => {
     const invoke = vi.spyOn(apiClient, 'invokePublicationTask').mockResolvedValue(envelope({
@@ -447,6 +487,25 @@ describe('PhenotypeSearchService profile and comparison behavior', () => {
       reasonCode: 'profile_enrichment_failed',
       correlationId: 'client-profile:profile_enrichment_failed',
       limitations: [],
+    });
+  });
+
+  it('preserves a terminal profile artifact and its exact status after a profile 503', async () => {
+    vi.spyOn(apiClient, 'invokePublicationTask').mockRejectedValue(
+      modelPublicationError('profile:service-recovery', 'withheld'),
+    );
+    const [result] = await PhenotypeSearchService.enrichGeneData([{
+      symbol: 'CFTR',
+      ensemblId: 'ENSG00000001626',
+      coordinatesVerified: true,
+    }], false, null);
+
+    expect(result.profileStatus).toBe('withheld');
+    expect(result.aiSummary).toBeNull();
+    expect(result.profilePublication).toMatchObject({
+      status: 'withheld',
+      reasonCode: 'model_publication_disabled',
+      correlationId: 'profile:service-recovery',
     });
   });
 

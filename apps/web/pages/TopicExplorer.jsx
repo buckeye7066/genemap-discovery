@@ -12,6 +12,7 @@ import PublicationState, {
   enforcePublicationContentType,
   publicationContent,
 } from '@/components/shared/PublicationState';
+import { terminalPublicationArtifactFromError } from '@genemap/shared/publicationStatus';
 import { apiClient } from '@genemap/shared';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -263,12 +264,13 @@ export default function TopicExplorer() {
         throw new Error('The server returned mismatched topic metadata.');
       }
       setExplanationPublication(publication);
-      setTopicMetadata(res?.topicMetadata || null);
+      setTopicMetadata(catalogTopic);
       setSources(publicationContent(publication) && Array.isArray(res.sources) ? res.sources : []);
     } catch (err) {
       if (isCurrentRequest()) {
-        setExplanationPublication(null);
-        setExplanationError(err?.message || 'Unable to load this topic.');
+        const recoveryPublication = terminalPublicationArtifactFromError(err);
+        setExplanationPublication(recoveryPublication);
+        setExplanationError(recoveryPublication ? '' : (err?.message || 'Unable to load this topic.'));
         setSources([]);
       }
     } finally {
@@ -304,11 +306,12 @@ export default function TopicExplorer() {
           && (content.revisedPrompt === null || typeof content.revisedPrompt === 'string'),
         ),
       ));
-      setTopicMetadata(res?.topicMetadata || null);
+      setTopicMetadata(catalogTopic);
     } catch (err) {
       if (isCurrentRequest()) {
-        setImagePublication(null);
-        setImageError(err?.message || 'Unable to generate an illustration.');
+        const recoveryPublication = terminalPublicationArtifactFromError(err);
+        setImagePublication(recoveryPublication);
+        setImageError(recoveryPublication ? '' : (err?.message || 'Unable to generate an illustration.'));
       }
     } finally {
       if (isCurrentRequest()) {
@@ -342,7 +345,7 @@ export default function TopicExplorer() {
       if (res?.topicMetadata?.id !== topicId) {
         throw new Error('The server returned mismatched topic metadata.');
       }
-      setTopicMetadata(res?.topicMetadata || null);
+      setTopicMetadata(catalogTopic);
       setChatMessages(prev => [...prev, {
         role: 'assistant',
         publication: enforcePublicationContentType(
@@ -352,10 +355,13 @@ export default function TopicExplorer() {
       }]);
     } catch (err) {
       if (isCurrentRequest()) {
-        setChatMessages(prev => [...prev, {
-          role: 'system',
-          content: `The tutor request could not be completed: ${err?.message || 'unknown error'}`,
-        }]);
+        const recoveryPublication = terminalPublicationArtifactFromError(err);
+        setChatMessages(prev => [...prev, recoveryPublication
+          ? { role: 'assistant', publication: recoveryPublication }
+          : {
+            role: 'system',
+            content: `The tutor request could not be completed: ${err?.message || 'unknown error'}`,
+          }]);
       }
     } finally {
       if (isCurrentRequest()) {

@@ -16,8 +16,8 @@ import type {
   QuizRequest,
   ChatRequest,
   LearningProgress,
-  LLMOptions,
   LLMResponse,
+  PublicationInvocationOptions,
   PublicationTaskContent,
   PublicationTaskRequest,
   SearchHistoryEntry,
@@ -544,10 +544,15 @@ export class ApiClient {
   invokePublicationTask<T extends PublicationTaskRequest>(
     publicationTask: T['publicationTask'],
     taskInput: T['taskInput'],
-    options: LLMOptions = {},
+    options: PublicationInvocationOptions = {},
   ): Promise<LLMResponse<PublicationTaskContent<T['publicationTask']>>> {
-    const { publicationTask: _legacyTask, agent: _retiredAgent, ...llmOptions } =
-      options as LLMOptions & { agent?: unknown };
+    // Build the wire options from an explicit allow-list. TypeScript callers
+    // get the narrow contract above, while plain-JS or casted callers still
+    // cannot smuggle model/image/task controls into the request body.
+    const llmOptions: PublicationInvocationOptions = {};
+    if (options?.provider !== undefined) llmOptions.provider = options.provider;
+    if (options?.temperature !== undefined) llmOptions.temperature = options.temperature;
+    if (options?.maxTokens !== undefined) llmOptions.maxTokens = options.maxTokens;
     return this.request('/llm/invoke', {
       method: 'POST',
       body: JSON.stringify({

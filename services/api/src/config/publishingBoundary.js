@@ -120,12 +120,7 @@ function hasPathPrefix(path, prefix) {
 }
 
 function requestedTask(body) {
-  const topLevel = typeof body?.publicationTask === 'string' ? body.publicationTask.trim() : '';
-  const optionLevel = typeof body?.options?.publicationTask === 'string'
-    ? body.options.publicationTask.trim()
-    : '';
-  if (topLevel && optionLevel && topLevel !== optionLevel) return null;
-  return topLevel || optionLevel || '';
+  return typeof body?.publicationTask === 'string' ? body.publicationTask.trim() : '';
 }
 
 function isKnownEducationTopic(value) {
@@ -185,11 +180,11 @@ export function publicationBoundaryDecision({ url, routeUrl, body } = {}) {
   if (hasOwn(body, 'agent') || hasOwn(body?.options, 'agent')) {
     return block('Persona-routed generation is not available in this published build.');
   }
+  if (hasOwn(body?.options, 'publicationTask')) {
+    return block('The publication task must be supplied as a top-level structured field.');
+  }
 
   const suppliedTask = requestedTask(body);
-  if (suppliedTask === null) {
-    return block('Conflicting publication tasks are not accepted.');
-  }
   if (isUnknownGenerationRoute) {
     return block('This generation route is not available in the published build.');
   }

@@ -66,6 +66,22 @@ function summaryResponse(content, correlationId) {
   };
 }
 
+function modelPublicationError(correlationId) {
+  const error = new Error('Generated content is temporarily unavailable.');
+  error.status = 503;
+  error.details = {
+    publication: {
+      contractVersion: 1,
+      status: 'unavailable',
+      content: null,
+      reasonCode: 'model_publication_disabled',
+      correlationId,
+      limitations: [],
+    },
+  };
+  return error;
+}
+
 function dashboardElement() {
   return (
     <MemoryRouter>
@@ -130,6 +146,21 @@ describe('Dashboard research summary identity boundary', () => {
     });
     expect(screen.getByText('Bob current summary.')).toBeInTheDocument();
     expect(screen.queryByText(/alice stale refresh/i)).toBeNull();
+  });
+
+  it('renders the terminal recovery publication returned with a summary 503', async () => {
+    apiClient.invokePublicationTask.mockRejectedValue(
+      modelPublicationError('summary:recovery-disabled'),
+    );
+
+    render(dashboardElement());
+
+    const supportId = await screen.findByText('summary:recovery-disabled');
+    const publicationAlert = supportId.closest('[data-publication-status]');
+    expect(publicationAlert).not.toBeNull();
+    expect(publicationAlert).toHaveAttribute('data-publication-status', 'unavailable');
+    expect(publicationAlert).toHaveTextContent('Publication unavailable');
+    expect(publicationAlert).toHaveTextContent('Support ID: summary:recovery-disabled');
   });
 
   it('keeps the newest overlapping load data and summary for the same identity', async () => {

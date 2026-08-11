@@ -35,6 +35,7 @@ import PublicationState, {
   enforcePublicationContentType,
   publicationContent,
 } from "../components/shared/PublicationState";
+import { terminalPublicationArtifactFromError } from '@genemap/shared/publicationStatus';
 
 const insightMarkdownComponents = Object.freeze({
   p: ({ children }) => <p className="mb-3">{children}</p>,
@@ -146,7 +147,13 @@ export default function Dashboard() {
       });
     } catch (error) {
       log.debug('Research activity summary unavailable:', error);
-      if (isCurrentRequest()) setResearchSummary(null);
+      if (isCurrentRequest()) {
+        const recoveryPublication = terminalPublicationArtifactFromError(error);
+        setResearchSummary(recoveryPublication ? {
+          identity: requestIdentity,
+          artifact: recoveryPublication,
+        } : null);
+      }
     }
   };
 

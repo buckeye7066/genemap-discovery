@@ -84,4 +84,39 @@ describe('/llm/invoke generation option validation', () => {
     expect(mocks.resolvePublicationTaskReferences).not.toHaveBeenCalled();
     expect(mocks.generateExplanation).not.toHaveBeenCalled();
   });
+
+  it.each([
+    ['model', 'caller-selected-model'],
+    ['size', '2048x2048'],
+    ['quality', 'hd'],
+    ['publicationTask', 'aggregate_genomics_research'],
+    ['arbitrary', true],
+  ])('rejects options.%s before quota, reference resolution, or provider work', async (field, value) => {
+    app = Fastify({
+      logger: false,
+      genReqId: () => `options-${field}-validation`,
+    });
+    app.decorate('prisma', {});
+    app.setErrorHandler(errorHandler);
+    await app.register(llmRoutes, { prefix: '/llm' });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/llm/invoke',
+      payload: {
+        publicationTask: 'aggregate_genomics_research',
+        taskInput: STRUCTURED_RESEARCH_INPUT,
+        options: { maxTokens: 100, [field]: value },
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({
+      error: 'generation options contain unsupported fields',
+      requestId: `options-${field}-validation`,
+    });
+    expect(mocks.enforceUsageLimit).not.toHaveBeenCalled();
+    expect(mocks.resolvePublicationTaskReferences).not.toHaveBeenCalled();
+    expect(mocks.generateExplanation).not.toHaveBeenCalled();
+  });
 });

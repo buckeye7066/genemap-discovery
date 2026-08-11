@@ -30,7 +30,6 @@ const STRUCTURED_LLM_TASKS = new Set([
 ]);
 const INVOKE_BODY_KEYS = new Set(['publicationTask', 'taskInput', 'options']);
 const GENERATION_OPTION_KEYS = new Set([
-  'publicationTask',
   'provider',
   'temperature',
   'maxTokens',
@@ -133,20 +132,11 @@ function structuredTaskRequest(body) {
   const topLevelTask = typeof body.publicationTask === 'string'
     ? body.publicationTask
     : '';
-  const optionTask = typeof body.options?.publicationTask === 'string'
-    ? body.options.publicationTask
-    : '';
   if ((body.publicationTask != null && typeof body.publicationTask !== 'string')
-    || (body.options?.publicationTask != null
-      && typeof body.options.publicationTask !== 'string')
-    || topLevelTask !== topLevelTask.trim()
-    || optionTask !== optionTask.trim()) {
+    || topLevelTask !== topLevelTask.trim()) {
     throw new ValidationError('publication task identifiers must be exact canonical values');
   }
-  if (topLevelTask && optionTask && topLevelTask !== optionTask) {
-    throw new ValidationError('conflicting publication tasks are not accepted');
-  }
-  const publicationTask = topLevelTask || optionTask;
+  const publicationTask = topLevelTask;
   if (!STRUCTURED_LLM_TASKS.has(publicationTask)) {
     throw new ValidationError('a recognized structured LLM publication task is required');
   }

@@ -35,6 +35,11 @@ const PUBLICATION_ARTIFACT_KEYS = Object.freeze([
   'reasonCode',
   'status',
 ]);
+const TERMINAL_PUBLICATION_STATUSES = new Set<PublicationStatus>([
+  PUBLICATION_STATUSES.WITHHELD,
+  PUBLICATION_STATUSES.UNAVAILABLE,
+  PUBLICATION_STATUSES.SUPERSEDED,
+]);
 
 export function isCanonicalPublicationArtifact<T = unknown>(
   artifact: unknown,
@@ -135,4 +140,35 @@ export function canUsePublicationContent<T>(
       || artifact.status === PUBLICATION_STATUSES.PARTIAL)
     && artifact.content != null,
   );
+}
+
+/**
+ * Recover the non-publishable state carried by an operational API error.
+ *
+ * Error details are an untrusted side channel: require the original nested
+ * object to be canonical, permit only terminal statuses, then return a cloned
+ * six-field artifact. Available/partial or extra-key objects are rejected, so
+ * an error response cannot expose reusable or provider-controlled content.
+ */
+export function terminalPublicationArtifactFromError(
+  error: unknown,
+): PublicationArtifact<unknown> | null {
+  if (!error || typeof error !== 'object' || Array.isArray(error)) return null;
+  const details = (error as Record<string, unknown>).details;
+  if (!details || typeof details !== 'object' || Array.isArray(details)) return null;
+  const publication = (details as Record<string, unknown>).publication;
+  if (!publication || typeof publication !== 'object' || Array.isArray(publication)) return null;
+
+  if (
+    !isCanonicalPublicationArtifact(publication)
+    || !TERMINAL_PUBLICATION_STATUSES.has(publication.status)
+  ) return null;
+  return {
+    contractVersion: publication.contractVersion,
+    status: publication.status,
+    content: null,
+    reasonCode: publication.reasonCode,
+    correlationId: publication.correlationId,
+    limitations: [...publication.limitations],
+  };
 }

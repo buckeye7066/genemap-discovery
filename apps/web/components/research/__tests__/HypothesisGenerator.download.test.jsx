@@ -117,4 +117,31 @@ describe('HypothesisGenerator downloadable artifact', () => {
     expect(screen.queryByRole('button', { name: /download markdown/i })).not.toBeInTheDocument();
     expect(capturedBlob).toBeNull();
   });
+
+  it('renders the terminal recovery publication returned with an invoke 503', async () => {
+    const error = new Error('Generated content is temporarily unavailable.');
+    error.status = 503;
+    error.details = {
+      publication: {
+        contractVersion: 1,
+        status: 'unavailable',
+        content: null,
+        reasonCode: 'model_publication_disabled',
+        correlationId: 'hypothesis:recovery-disabled',
+        limitations: [],
+      },
+    };
+    apiClient.invokePublicationTask.mockRejectedValueOnce(error);
+    render(<HypothesisGenerator />);
+
+    fireEvent.click(screen.getByRole('button', { name: /generate research hypotheses/i }));
+
+    const supportId = await screen.findByText('hypothesis:recovery-disabled');
+    const publicationAlert = supportId.closest('[data-publication-status]');
+    expect(publicationAlert).not.toBeNull();
+    expect(publicationAlert).toHaveAttribute('data-publication-status', 'unavailable');
+    expect(publicationAlert).toHaveTextContent('Support ID: hypothesis:recovery-disabled');
+    expect(screen.queryByRole('button', { name: /download markdown/i })).not.toBeInTheDocument();
+    expect(capturedBlob).toBeNull();
+  });
 });

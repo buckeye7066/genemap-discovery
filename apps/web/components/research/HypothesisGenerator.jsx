@@ -26,6 +26,7 @@ import PublicationState, {
   hasReusablePublicationContent,
   publicationContent,
 } from '../shared/PublicationState';
+import { terminalPublicationArtifactFromError } from '@genemap/shared/publicationStatus';
 
 const dataTypeOptions = Object.freeze([
   { key: 'wes', label: 'Whole-exome sequencing (WES)', icon: '🧬' },
@@ -186,8 +187,19 @@ export default function HypothesisGenerator() {
       });
     } catch (err) {
       console.error('Error generating hypotheses:', err);
-      setHypotheses(null);
-      setError(err?.message || 'The structured research request could not be generated. Please try again.');
+      const recoveryPublication = terminalPublicationArtifactFromError(err);
+      setHypotheses(recoveryPublication ? {
+        cohort: taskInput.cohort,
+        focus: taskInput.focus || null,
+        objective,
+        dataTypes: modalities,
+        publication: recoveryPublication,
+        analysis: null,
+        generatedAt: new Date().toISOString(),
+      } : null);
+      setError(recoveryPublication
+        ? ''
+        : (err?.message || 'The structured research request could not be generated. Please try again.'));
     } finally {
       setIsGenerating(false);
     }

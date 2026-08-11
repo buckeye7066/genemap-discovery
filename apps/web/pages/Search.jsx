@@ -1,6 +1,9 @@
 import React, { useState, useRef, lazy, Suspense } from "react";
 import { apiClient } from "@genemap/shared";
-import { createPublicationArtifact } from "@genemap/shared/publicationStatus";
+import {
+  createPublicationArtifact,
+  terminalPublicationArtifactFromError,
+} from "@genemap/shared/publicationStatus";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../lib/AuthContext";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -221,7 +224,20 @@ export default function SearchPage() {
       }
     } catch (err) {
       if (isCurrent()) {
-        setError(getErrorMessage(err) || "Search failed. Please try again.");
+        const recoveryPublication = terminalPublicationArtifactFromError(err);
+        setSearchResults(recoveryPublication ? {
+          query,
+          candidateGenes: [],
+          isPremium,
+          hpoTerms: [],
+          queryType: searchMode,
+          userPreferences: null,
+          publication: recoveryPublication,
+          enriched: false,
+        } : null);
+        setError(recoveryPublication
+          ? null
+          : (getErrorMessage(err) || "Search failed. Please try again."));
         log.error("Search error:", err);
       }
     } finally {

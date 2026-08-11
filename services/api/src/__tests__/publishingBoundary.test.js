@@ -459,7 +459,7 @@ describe('publishable route decision', () => {
     (url) => expect(publicationBoundaryDecision({ url, body: {} })).toMatchObject({ statusCode: 403 }),
   );
 
-  it('rejects missing, unknown, conflicting, route-mismatched, and persona-routed tasks', () => {
+  it('rejects missing, unknown, nested, route-mismatched, and persona-routed tasks', () => {
     expect(publicationBoundaryDecision({ url: '/llm/invoke', body: {} })).toMatchObject({ statusCode: 403 });
     expect(publicationBoundaryDecision({
       url: '/llm/invoke',

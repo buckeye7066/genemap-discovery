@@ -321,6 +321,21 @@ export interface LLMOptions {
   publicationTask?: PublicationTask;
 }
 
+/**
+ * Caller-controlled generation settings accepted by the bounded publication
+ * endpoint. Model selection, image settings, and publication intent remain
+ * owned by the server/top-level structured request.
+ *
+ * The explicit `never` fields are intentional: structural typing would
+ * otherwise allow a variable declared as the broader `LLMOptions` interface
+ * to flow into `invokePublicationTask`, even though it may contain settings
+ * that the endpoint rejects.
+ */
+type PublicationInvocationOptionKey = 'provider' | 'temperature' | 'maxTokens';
+export type PublicationInvocationOptions =
+  Pick<LLMOptions, PublicationInvocationOptionKey>
+  & Partial<Record<Exclude<keyof LLMOptions, PublicationInvocationOptionKey>, never>>;
+
 export type PublicationTaskContent<T extends PublicationTask> =
   T extends 'candidate_gene_research' ? Record<string, unknown> : string;
 
