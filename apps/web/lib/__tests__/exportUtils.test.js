@@ -146,6 +146,54 @@ describe('gene report provenance', () => {
     });
   });
 
+  it.each([
+    ['candidatePublication', null, 'NULL_PUBLICATION_LEAK'],
+    ['candidatePublication', 'PRIMITIVE_CANDIDATE_PUBLICATION_LEAK', 'PRIMITIVE_CANDIDATE_PUBLICATION_LEAK'],
+    ['candidatePublication', { providerRaw: 'OBJECT_CANDIDATE_PUBLICATION_LEAK' }, 'OBJECT_CANDIDATE_PUBLICATION_LEAK'],
+    ['candidatePublication', {
+      ...gene.candidatePublication,
+      providerRaw: 'EXTRA_KEY_CANDIDATE_PUBLICATION_LEAK',
+    }, 'EXTRA_KEY_CANDIDATE_PUBLICATION_LEAK'],
+    ['profilePublication', null, 'NULL_PUBLICATION_LEAK'],
+    ['profilePublication', 'PRIMITIVE_PROFILE_PUBLICATION_LEAK', 'PRIMITIVE_PROFILE_PUBLICATION_LEAK'],
+    ['profilePublication', { providerRaw: 'OBJECT_PROFILE_PUBLICATION_LEAK' }, 'OBJECT_PROFILE_PUBLICATION_LEAK'],
+    ['profilePublication', {
+      ...gene.profilePublication,
+      providerRaw: 'EXTRA_KEY_PROFILE_PUBLICATION_LEAK',
+    }, 'EXTRA_KEY_PROFILE_PUBLICATION_LEAK'],
+  ])('replaces a noncanonical %s value with a safe artifact', (publicationKey, artifact, leak) => {
+    const artifactCorrelationId = artifact !== null
+      && typeof artifact === 'object'
+      && 'correlationId' in artifact
+      && typeof artifact.correlationId === 'string'
+      ? artifact.correlationId
+      : 'client-invalid-publication';
+    const safe = publicationSafeGene({
+      symbol: 'SAFE-EXPORT',
+      coordinatesVerified: false,
+      profileStatus: 'available',
+      explanation: 'CANDIDATE_PROSE_LEAK',
+      aiSummary: 'PROFILE_PROSE_LEAK',
+      phenotypes: [{ name: 'PROFILE_PHENOTYPE_LEAK' }],
+      [publicationKey]: artifact,
+    });
+
+    expect(safe[publicationKey]).toEqual({
+      contractVersion: 1,
+      status: 'unavailable',
+      content: null,
+      reasonCode: 'invalid_publication_envelope',
+      correlationId: artifactCorrelationId,
+      limitations: [],
+    });
+    expect(safe.explanation).toBeUndefined();
+    expect(safe.aiSummary).toBeUndefined();
+    expect(safe.phenotypes).toEqual([]);
+    expect(JSON.stringify(safe)).not.toContain(leak);
+    expect(JSON.stringify(safe)).not.toContain('PROSE_LEAK');
+    expect(JSON.stringify(safe)).not.toContain('PHENOTYPE_LEAK');
+  });
+
   it('applies terminal publication policy to genes nested in an export wrapper', () => {
     const blockedCandidateContent = 'BLOCKED_NESTED_CANDIDATE_CONTENT';
     const blockedProfileContent = 'BLOCKED_NESTED_PROFILE_CONTENT';
