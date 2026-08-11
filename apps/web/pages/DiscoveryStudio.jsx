@@ -8,7 +8,6 @@ import {
   Compass,
   Dna,
   ExternalLink,
-  FlaskConical,
   GraduationCap,
   Microscope,
   Search,
