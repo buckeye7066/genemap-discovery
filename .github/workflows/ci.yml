@@ -202,8 +202,19 @@ jobs:
 
           unzip -Z1 "$APK" | tee "$RUNNER_TEMP/genemap-apk-files.txt"
           test "$(grep -Fxc 'assets/public/index.html' "$RUNNER_TEMP/genemap-apk-files.txt")" -eq 1
-          if grep -Eq '^assets/public/mobile/|(^|/)bundle-[^/]+\.zip$' "$RUNNER_TEMP/genemap-apk-files.txt"; then
-            echo 'Unexpected mobile OTA archive found in Android package' >&2
+          ARCHIVE_REJECT_PATTERN='^assets/public/mobile/|\.zip$'
+          for rejected_path in \
+            'assets/public/mobile/manifest.json' \
+            'assets/public/ota.zip' \
+            'assets/public/OTA.ZIP' \
+            'assets/public/nested/cache/archive.Zip'; do
+            if ! printf '%s\n' "$rejected_path" | grep -Eiq "$ARCHIVE_REJECT_PATTERN"; then
+              echo "Archive reject pattern missed: $rejected_path" >&2
+              exit 1
+            fi
+          done
+          if grep -Eiq "$ARCHIVE_REJECT_PATTERN" "$RUNNER_TEMP/genemap-apk-files.txt"; then
+            echo 'Unexpected mobile OTA directory or ZIP archive found in Android package' >&2
             exit 1
           fi
 
@@ -217,6 +228,7 @@ jobs:
             echo "- APK bytes: $APK_BYTES"
             echo '- Baked web entrypoints: 1'
             echo '- Mobile OTA archives: 0'
+            echo '- Packaged ZIP files: 0'
           } >> "$GITHUB_STEP_SUMMARY"
 
   desktop-build-smoke:
