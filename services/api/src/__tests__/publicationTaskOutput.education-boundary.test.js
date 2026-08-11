@@ -622,6 +622,124 @@ describe('genetics education publication boundary', () => {
     },
   );
 
+  it.each(NARRATIVE_TASKS)(
+    'withholds clause-bounded passive percentage administration for %s',
+    (task) => {
+      for (const raw of [
+        'Zorblax is applied slowly as a 1% solution.',
+        'Zorblax is applied with care as a 1 percent solution.',
+        'Zorblax is used topically as a 1% solution.',
+        'Zorblax is applied in a concentration of 1%.',
+        'Zorblax is applied at a concentration of 1 percent.',
+        'Zorblax is applied at a 1% concentration.',
+        `Zorblax is applied ${'slowly '.repeat(100)}as a 1% solution.`,
+        'Zorblax is applied slowly at thirteen milligrams.',
+        'This patient applies a 1% solution.',
+        'The patient uses a 1% solution.',
+        'Patients use a 1 percent solution.',
+        'This patient applies a 1% solution during PCR.',
+        'The patient uses a 1% solution in the laboratory.',
+        'This patient takes a 1% solution during PCR.',
+        'This patient receives a 1% solution during PCR.',
+        'This patient injects a 1% solution during PCR.',
+        'This patient inhales a 1% solution during PCR.',
+        'This patient administers a 1% solution during PCR.',
+        'This patient starts a 1% solution during PCR.',
+        'This patient continues a 1% solution during PCR.',
+        'Patients take a 1% solution during PCR.',
+        'Patients receive a 1% solution during PCR.',
+        'The adult uses a 1% solution during PCR.',
+        'Zorblax is applied slowly as a 1% topical solution.',
+        'Zorblax is applied slowly as a 1% cream.',
+        'Zorblax is applied slowly as a 1% gel.',
+        'Zorblax is applied slowly as a 1% ointment.',
+        'Zorblax is applied slowly at 1%.',
+        'Zorblax is applied slowly as 1%.',
+        'Zorblax is applied slowly in a 1% formulation.',
+        'Zorblax is applied slowly at one percent strength.',
+        'Zorblax is applied slowly as a 1 percent-strength solution.',
+        'Zorblax is applied slowly as a 1٪ solution.',
+        'Zorblax is applied slowly as a 1&#1642; solution.',
+        'Zorblax is applied slowly as a 1&percnt; solution.',
+        'Zorblax is applied slowly as a ١٪ solution.',
+        'Zorblax is applied slowly as a &#1633;&#1642; solution.',
+        'Zorblax is applied slowly as a ۱٪ solution.',
+        'Zorblax is applied slowly as a &#1777;&#1642; solution.',
+        'Zorblax is applied at 1% in this study.',
+        'This patient uses a 1٪ solution during PCR.',
+        'This patient uses a 1&#1642; solution in the laboratory.',
+        'This individual applies a 1% solution in aggregate research.',
+      ]) {
+        expect(__test.containsProhibitedClinicalGuidance(raw)).toBe(true);
+        expect(sanitizePublicationArtifact(task, {}, raw, {
+          correlationId: `clinical-percentage-${task}`,
+        })).toMatchObject({
+          status: 'withheld',
+          content: null,
+          reasonCode: 'clinical_boundary',
+        });
+      }
+    },
+  );
+
+  it.each(NARRATIVE_TASKS)(
+    'publishes neutral percentage findings and concrete lab formulations for %s',
+    (task) => {
+      for (const raw of [
+        'BRCA1 penetrance is approximately 80 percent in this study.',
+        'The variant prevalence was 50% in the aggregate cohort.',
+        'The assay is applied to 50% of the reviewed samples.',
+        'PCR is used to measure 50% prevalence in this aggregate study.',
+        'A 1% agarose solution is used in a laboratory assay.',
+        'A reagent is applied slowly as a 1% solution in a cultured-cell assay.',
+        'A reagent is applied at a concentration of 1% in a laboratory assay.',
+        'The reagent is used as a 1% solution for DNA extraction.',
+        'A reagent is applied as a 1% solution in a genetics experiment.',
+        'The reagent is applied at a concentration of 1% during PCR.',
+        'The reagent is used as a 1 percent solution for sequencing library preparation.',
+        'The reagent is applied as a 1% solution in the lab.',
+        'The reagent is applied as a 1% solution in laboratory research.',
+        'The reagent is applied as a 1% solution during RNA extraction.',
+        'The reagent is applied as a 1% solution for CRISPR editing.',
+        'The reagent is applied as a 1% solution during gel electrophoresis.',
+        'The reagent is applied as a 1% solution in a cell-culture experiment.',
+        'The reagent is applied as a 1% topical solution during PCR.',
+        'The reagent is applied as a 1% cream during DNA extraction.',
+        'The reagent is applied at one percent strength in a laboratory assay.',
+        'The reagent is applied as a 1 percent-strength solution during sequencing library preparation.',
+        'The variant prevalence was 50٪ in the aggregate cohort.',
+        'The variant prevalence was 50&#1642; in the aggregate cohort.',
+        'The variant prevalence was 50&percnt; in the aggregate cohort.',
+        'The variant prevalence was ٥٠٪ in the aggregate cohort.',
+        'The variant prevalence was ۵۰٪ in the aggregate cohort.',
+        'The variant prevalence was &#1781;&#1776;&#1642; in the aggregate cohort.',
+        'The method is used in 50% of simulations.',
+        'The method is used in this study at 50%.',
+        'The approach is used in 50% of simulations in aggregate analysis.',
+        'The procedure is used in 50% of simulations in aggregate analysis.',
+        'The equation is used in 50% of simulations in aggregate analysis.',
+        'The estimator is used in 50% of simulations in aggregate analysis.',
+        'The correction is used in 50% of simulations in aggregate analysis.',
+        'The test is used in 50% of simulations in aggregate analysis.',
+        'The technique is used in 50% of simulations in aggregate analysis.',
+        'The strategy is used in 50% of simulations in aggregate analysis.',
+        'The analysis is used in 50% of simulations in aggregate analysis.',
+        'The model is tested at a 5% significance level in aggregate analysis.',
+        'The filter is applied at 1% allele frequency in the aggregate cohort.',
+        'You use a Punnett square in 50% of lesson examples.',
+        'The correction is applied at a 1 percentage-point threshold in aggregate analysis.',
+        'The calibration is applied at a 1 percentage-point threshold in aggregate analysis.',
+        'This individual applies the model at a 1% threshold in aggregate research.',
+        'A 5 mg reagent aliquot was tested in cultured cells.',
+      ]) {
+        expect(__test.containsProhibitedClinicalGuidance(raw)).toBe(false);
+        expect(sanitizePublicationArtifact(task, {}, raw, {
+          correlationId: `neutral-percentage-${task}`,
+        })).toMatchObject({ status: 'available' });
+      }
+    },
+  );
+
   it('keeps quiz option order and answer index, and drops an unsafe question as a unit', () => {
     const result = sanitizeEducationQuizOutput([
       {
