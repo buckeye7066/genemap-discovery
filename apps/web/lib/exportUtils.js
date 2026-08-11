@@ -112,6 +112,12 @@ function sanitizePublicationSafeGene(gene, ancestors) {
     && source.profileStatus === 'available';
   const safe = sanitizeExportValue(source, ancestors, true);
 
+  for (const publicationKey of ['candidatePublication', 'profilePublication']) {
+    if (Object.prototype.hasOwnProperty.call(source, publicationKey)) {
+      safe[publicationKey] = sanitizePublicationArtifact(source[publicationKey], ancestors);
+    }
+  }
+
   if (!candidateReusable) {
     delete safe.explanation;
     delete safe.description;
