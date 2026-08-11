@@ -21,10 +21,10 @@ const UNAVAILABLE_PROFILE_SUMMARY = 'Generated profile unavailable. This gene re
 
 const MEDICATION_NAME_PATTERN = '(?:aspirin|ibuprofen|acetaminophen|paracetamol|naproxen|warfarin|heparin|insulin|metformin|glipizide|semaglutide|liraglutide|atorvastatin|rosuvastatin|simvastatin|lisinopril|losartan|amlodipine|metoprolol|carvedilol|levothyroxine|methimazole|prednisone|amoxicillin|azithromycin|doxycycline|ciprofloxacin|gabapentin|pregabalin|sertraline|fluoxetine|escitalopram|omeprazole|pantoprazole|albuterol|epinephrine|naloxone|[a-z]{4,}(?:mab|nib|pril|sartan|olol|statin|cillin|cycline|azole|vir|caine))';
 
-const OBVIOUS_NONCLINICAL_IMPERATIVE_TARGET = '(?:(?:(?:one|two|three|four|five|six|seven|eight|nine|ten|\\d+)\\s+)?(?:(?:a|an|the|this|that|these|those)\\s+)?(?:(?:new|current|proposed|statistical|research|analytical|alternative|further|additional)\\s+)?(?:look|care|caution|example|examples|following|case|cases|concept|concepts|data|dataset|datasets|analysis|analyses|research|reviewing|comparing|examining|analyzing|checking|reading|validating|verifying|exploring|bias|selection|ascertainment|confounding|pipeline|workflow|iteration|simulation|model|models|server|service|process|query|queries|study|studies|experiment|experiments|calculation|calculations|comparison|comparisons|code|script|job|request|requests|method|methods|algorithm|algorithms|regression|software|tool|tools|database|databases|reference|references|equation|equations|formula|formulas|hypothesis|hypotheses|metric|metrics|result|results|evidence|field|fields|variable|variables|record|records|table|tables|figure|figures|chart|charts|sample|samples|specimen|specimens|cell|cells|culture|cultures|reagent|reagents|assay|assays|protein|proteins|cohort|cohorts|variant|variants|gene|genes|chromosome|chromosomes|dna|rna|measurement|measurements|source|sources|lesson|section|reading|learning|education|validation|verification|review|coverage|threshold|resolution|sensitivity|specificity|power))';
-const GENERIC_CLINICAL_ACTION = '(?:take|try|consume|ingest|swallow|chew|drink|dissolve|inhale|spray|inject|administer|prescribe|receive|give|initiate|manage|start|begin|resume|continue|stop|discontinue|skip|taper|increase|decrease|avoid|apply|rub|insert|place|wear|use|undergo|schedule|screen|test|diagnose|treat|monitor|switch(?:\\s+to)?)';
-const GENERIC_CLINICAL_ACTION_GERUND = '(?:taking|trying|consuming|ingesting|swallowing|chewing|drinking|dissolving|inhaling|spraying|injecting|administering|prescribing|receiving|giving|initiating|managing|starting|beginning|resuming|continuing|stopping|discontinuing|skipping|tapering|increasing|decreasing|avoiding|applying|rubbing|inserting|placing|wearing|using|undergoing|scheduling|screening|testing|diagnosing|treating|monitoring|switching(?:\\s+to)?)';
-const GENERIC_CLINICAL_ACTION_PAST = '(?:taken|tried|consumed|ingested|swallowed|chewed|drunk|dissolved|inhaled|sprayed|injected|administered|prescribed|received|given|initiated|managed|started|resumed|continued|stopped|discontinued|skipped|tapered|increased|decreased|avoided|applied|rubbed|inserted|placed|worn|undergone|scheduled|screened|tested|diagnosed|treated|monitored|switched\\s+to)';
+const OBVIOUS_NONCLINICAL_IMPERATIVE_TARGET = '(?:(?:(?:one|two|three|four|five|six|seven|eight|nine|ten|\\d+)\\s+)?(?:(?:a|an|the|this|that|these|those|your|their)\\s+)?(?:(?:new|current|proposed|statistical|research|analytical|alternative|further|additional|aggregate|deidentified|population(?:[- ]?level)|cohort(?:[- ]?level)|genetic|genomic|educational|laboratory|lab|cultured|patient\\s*derived)\\s+)?(?:example|examples|following|case|cases|concept|concepts|data|dataset|datasets|analysis|analyses|research|reviewing|comparing|examining|analyzing|checking|reading|validating|verifying|exploring|bias|selection|ascertainment|confounding|outlier|outliers|pipeline|workflow|iteration|simulation|model|models|server|service|process|query|queries|study|studies|survey|surveys|quiz|quizzes|understanding|knowledge|performance|set|sets|experiment|experiments|calculation|calculations|comparison|comparisons|code|script|job|request|requests|method|methods|algorithm|algorithms|regression|software|tool|tools|database|databases|library|libraries|reference|references|equation|equations|formula|formulas|hypothesis|hypotheses|metric|metrics|statistic|statistics|result|results|evidence|field|fields|variable|variables|record|records|table|tables|figure|figures|chart|charts|sample|samples|specimen|specimens|cell|cells|culture|cultures|reagent|reagents|assay|assays|protein|proteins|cohort|cohorts|variant|variants|coordinate|coordinates|site|sites|signal|signals|codon|codons|cross|crosses|allele|alleles|pedigree|pedigrees|inheritance|gene|genes|chromosome|chromosomes|dna|rna|p\\s*c\\s*r|c\\s*r\\s*i\\s*s\\s*p\\s*r|sequencing|translation|transcription|p\\s*u\\s*n\\s*n\\s*e\\s*t\\s*t\\s+squares?|measurement|measurements|source|sources|lesson|section|reading|learning|education|validation|verification|review|coverage|threshold|resolution|sensitivity|specificity|power))';
+const GENERIC_CLINICAL_ACTION = '(?:take|try|consume|ingest|swallow|chew|drink|dissolve|inhale|spray|inject|administer|prescribe|dose|medicate|redose|refill|combine|restart|re\\s*start|hold|pause|cease|maintain|replace|substitute|remove|add|keep\\s+(?:taking|using)|receive|give|initiate|manage|start|begin|resume|continue|stop|discontinue|skip|taper|increase|decrease|avoid|apply|rub|insert|place|wear|use|undergo|schedule|screen|test|diagnose|treat|monitor|switch(?:\\s+to)?)';
+const GENERIC_CLINICAL_ACTION_GERUND = '(?:taking|trying|consuming|ingesting|swallowing|chewing|drinking|dissolving|inhaling|spraying|injecting|administering|prescribing|dosing|medicating|redosing|refilling|combining|restarting|holding|pausing|ceasing|maintaining|replacing|substituting|removing|adding|receiving|giving|initiating|managing|starting|beginning|resuming|continuing|stopping|discontinuing|skipping|tapering|increasing|decreasing|avoiding|applying|rubbing|inserting|placing|wearing|using|undergoing|scheduling|screening|testing|diagnosing|treating|monitoring|switching(?:\\s+to)?)';
+const GENERIC_CLINICAL_ACTION_PAST = '(?:taken|tried|consumed|ingested|swallowed|chewed|drunk|dissolved|inhaled|sprayed|injected|administered|prescribed|dosed|medicated|redosed|refilled|combined|restarted|held|paused|ceased|maintained|replaced|substituted|removed|added|received|given|initiated|managed|started|resumed|continued|stopped|discontinued|skipped|tapered|increased|decreased|avoided|applied|rubbed|inserted|placed|worn|undergone|scheduled|screened|tested|diagnosed|treated|monitored|switched\\s+to)';
 const PASSIVE_CLINICAL_ACTION_PAST = `(?:used|${GENERIC_CLINICAL_ACTION_PAST})`;
 const CLINICAL_SUBJECT = '(?:you|patients?|the\\s+patients?|this\\s+patient|these\\s+patients|the\\s+individual|individuals?|your\\s+child|children|adults?|family\\s+members?)';
 const PASSIVE_USE_SUBJECT = `[\\p{L}][\\p{L}\\p{N}'-]{0,63}`;
@@ -35,18 +35,83 @@ const PASSIVE_USE_PERSONALIZED_CONTEXT = `(?:(?:for|on|in|into|to|by|among)\\s+$
 const PASSIVE_USE_CLINICAL_INDICATION = '(?:pain|symptoms?|headaches?|migraines?|inflammation|hypertension|diabetes|cancer|asthma|fever|seizures?|infections?|cystic\\s+fibrosis|(?:[\\p{L}-]+\\s+){0,2}(?:disease|disorder|syndrome)|(?!(?:mitosis|meiosis)\\b)[\\p{L}-]+(?:itis|osis|emia|oma|pathy))';
 const PASSIVE_USE_CLINICAL_TARGET = `(?:${PASSIVE_USE_CLINICAL_INDICATION}|(?:you|your\\s+child|(?:the|this|these)\\s+(?:patients?|individuals?|children)|patients?|individuals?|children)(?!-(?:derived|reported)\\b|\\s+(?:derived|samples?|data|records?|cohorts?|cells?|specimens?)))`;
 const PASSIVE_USE_CLINICAL_PURPOSE = `(?:(?:to|for|in)\\s+(?:treat|treating|manage|managing|diagnose|diagnosing|screen|screening|monitor|monitoring|relieve|relieving|reduce|reducing|prevent|preventing)\\s+(?:(?:a|an|the|this|these)\\s+)?${PASSIVE_USE_CLINICAL_TARGET}\\b|(?:for|against)\\s+${PASSIVE_USE_CLINICAL_INDICATION}\\b(?!\\s+(?:research|stud(?:y|ies)|analysis|model(?:s|ing)?|dataset|samples?|cells?))|(?:as|for)\\s+(?:a\\s+|the\\s+)?(?:treatment|therapy|medication)(?:\\s+of\\s+${PASSIVE_USE_CLINICAL_INDICATION})?)`;
-const PASSIVE_USE_ADMINISTRATION_CONTEXT = '(?:(?:(?:orally|topically|intravenously|intramuscularly|subcutaneously)\\s+)?(?:daily|nightly|weekly|once\\s+(?:a\\s+)?day|(?:one|two|three|four|five|six|seven|eight|nine|ten|twice)\\s+times?\\s+(?:a\\s+)?day|twice\\s+(?:a\\s+)?day|twice\\s+daily|every\\s+(?:morning|evening|day|night|week|\\w+\\s+hours?)|at\\s+bedtime|with\\s+meals?|as\\s+needed)|at\\s+(?:a\\s+)?(?:dose\\s+of\\s+)?(?:\\d+(?:\\.\\d+)?|one|two|three|four|five|six|seven|eight|nine|ten)\\s+(?:mg|mcg|μg|ug|ml|g|units?|grams?|milli?grams?|micrograms?|milliliters?)|as\\s+(?:one|two|three|four|five|six|seven|eight|nine|ten|\\d+)\\s+(?:tablets?|capsules?|pills?|drops?|puffs?|sprays?|inhalations?)(?:\\s+(?:once|twice|(?:one|two|three|four|five)\\s+times?)\\s+(?:a\\s+day|daily))?)';
-const PASSIVE_USE_RESEARCH_CONTEXT = '(?:research|stud(?:y|ies)|analysis|assays?|samples?|workflows?|simulations?|models?|calibration|quality[ -]control|aggregate\\s+research|genomic\\s+library|patient-derived\\s+(?:samples?|cells?)|selection\\s+marker|cultured\\s+cells|cell\\s+growth|mitosis|meiosis|absorbance|culture\\s+cells|edit\\s+genes|amplify\\s+dna|tumor\\s+genomes)';
+const CLINICAL_QUANTITY = '(?:\\d+(?:\\.\\d+)?|zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|half|quarter)';
+const CLINICAL_DOSE_UNIT = '(?:mg|mcg|μg|ug|ng|g|ml|cc|iu|units?|grams?|milli?grams?|micrograms?|nanograms?|milliliters?|percent(?:age)?)';
+const CLINICAL_SCHEDULE = `(?:daily|nightly|weekly|each\\s+(?:morning|evening|day|night|week)|once|twice|${CLINICAL_QUANTITY}\\s+times?)\\s*(?:(?:a|per)\\s+(?:day|week)|daily|weekly)?|every\\s+(?:(?:${CLINICAL_QUANTITY}|\\d+)\\s*(?:h|hr|hrs|hours?)|morning|evening|day|night|week)|at\\s+bedtime|with\\s+(?:meals?|breakfast|lunch|dinner)|as\\s+needed|on\\s+(?:mondays?|tuesdays?|wednesdays?|thursdays?|fridays?|saturdays?|sundays?)|q\\s*\\d+\\s*h`;
+const PASSIVE_USE_ADMINISTRATION_CONTEXT = `(?:(?:(?:orally|topically|intravenously|intramuscularly|subcutaneously)\\s+)?(?:${CLINICAL_SCHEDULE})|at\\s+(?:a\\s+)?(?:dose\\s+of\\s+)?${CLINICAL_QUANTITY}\\s*${CLINICAL_DOSE_UNIT}|as\\s+(?:a\\s+)?${CLINICAL_QUANTITY}\\s*(?:${CLINICAL_DOSE_UNIT}|%)\\s*(?:solution)?|as\\s+${CLINICAL_QUANTITY}\\s+(?:tablets?|capsules?|pills?|drops?|puffs?|sprays?|inhalations?)(?:\\s+(?:once|twice|${CLINICAL_QUANTITY}\\s+times?)\\s+(?:a\\s+day|daily))?)`;
+const PASSIVE_USE_RESEARCH_CONTEXT = '(?:research|stud(?:y|ies)|analysis|assays?|samples?|workflows?|simulations?|models?|methods?|tools?|lessons?|education|examples?|datasets?|calibration|quality[ -]control|aggregate\\s+research|genomic\\s+library|patient-derived\\s+(?:samples?|cells?)|selection\\s+marker|cultured\\s+cells|cell\\s+growth|mitosis|meiosis|absorbance|culture\\s+cells|edit\\s+genes|amplify\\s+dna|tumor\\s+genomes|punnett\\s+squares?|inheritance\\s+ratios?)';
 const PASSIVE_USE_CONCRETE_LAB_CONTEXT = '(?:assays?|quality[ -]control|genomic\\s+library|selection\\s+marker|cultured\\s+cells|cell\\s+growth|mitosis|meiosis|absorbance|culture\\s+cells|tumor\\s+genomes|(?:patient-derived\\s+(?:samples?|cells?)[^.!?;\\n]{0,60}\\b(?:aggregate\\s+research|laborator(?:y|ies)|lab|assays?)|(?:aggregate\\s+research|laborator(?:y|ies)|lab|assays?)[^.!?;\\n]{0,60}\\bpatient-derived\\s+(?:samples?|cells?)))';
 
+const DIRECT_CLINICAL_ACTION = `(?:${GENERIC_CLINICAL_ACTION}|choose|select)`;
+const DIRECT_CLINICAL_ACTION_GERUND = `(?:${GENERIC_CLINICAL_ACTION_GERUND}|choosing|selecting)`;
+const DIRECT_CLINICAL_ACTION_FORM = `(?:${DIRECT_CLINICAL_ACTION}|${DIRECT_CLINICAL_ACTION_GERUND})`;
+const RENDERED_DIRECTIVE_BOUNDARY = '(?:^|[.!?;:,\\n|]|[\\p{Pd}\\p{Pi}\\p{Pf}\\p{Ps}\\p{Pe}\\p{Po}\\p{So}]|\\b(?:and|then)\\b)\\s*';
+const RENDERED_DIRECTIVE_OPENERS = `(?:(?:["'(]|\\[|\\{)\\s*)*`;
+const DIRECT_MODAL_SUBJECT = '(?:you|i|we|they|one|someone|anyone|people|persons?|readers?|users?|learners?|students?|patients?|individuals?|adults?|children|(?:the|this|a|one)\\s+(?:patient|child|individual|person|reader|user|learner|student)|your\\s+child|family\\s+members?)';
+const DIRECT_MODAL = `(?:(?:may|might|can|could|would|will|should|must)(?:\\s+(?:not|never))?(?:\\s+(?:want|need)\\s+to)?|(?:cannot|can't|couldn't|wouldn't|won't|shouldn't|mustn't)(?:\\s+(?:want|need)\\s+to)?|(?:ought(?:\\s+not)?|need(?:s)?|do(?:es)?\\s+not\\s+need)\\s+to|(?:is|are)\\s+(?:not\\s+)?to|(?:is|are)\\s+(?:advised|instructed)\\s+to)`;
+const DIRECT_ACTION_PERSON_TARGET = `(?:you|your\\s+child|(?:(?:the|this|these|a|an)\\s+)?(?:patients?|individuals?|children|child|persons?)(?![-\\s]+(?:derived|samples?|data|records?|cohorts?|cells?|specimens?))|family\\s+members?)`;
+const DIRECT_ACTION_HARD_CLINICAL_CONTEXT = `(?:${PASSIVE_USE_PERSONALIZED_CONTEXT}|${PASSIVE_USE_CLINICAL_PURPOSE}|\\b(?:${MEDICATION_NAME_PATTERN}|medications?|medicines?|drugs?|treatments?|therap(?:y|ies)|clinical\\s+care|medical\\s+care|diagnos(?:is|tic|ed)|prognos(?:is|tic)|symptoms?|pain|headaches?|migraines?|hypertension|diabetes|asthma|fever|seizures?|infections?)\\b|\\b(?:for|on|in|into|to|by|among)\\s+${DIRECT_ACTION_PERSON_TARGET}\\b)`;
+const DIRECT_ACTION_HARD_CLINICAL_CONTEXT_PATTERN = new RegExp(
+  DIRECT_ACTION_HARD_CLINICAL_CONTEXT,
+  'iu',
+);
+const DIRECT_ACTION_ADMINISTRATION_PATTERN = new RegExp(
+  `(?:\\b${PASSIVE_USE_ADMINISTRATION_CONTEXT}|\\b${CLINICAL_QUANTITY}\\s*(?:${CLINICAL_DOSE_UNIT}|%))`,
+  'iu',
+);
+const DIRECT_ACTION_SPECIFIC_PERSON_PATTERN = /\b(?:(?:this|the|a|one)\s+(?:patient|child|individual|person)|your\s+child)(?![-\s]+(?:derived|samples?|data|records?|cohorts?|cells?|specimens?))\b/iu;
+const DIRECT_ACTION_PERSON_MARKED_RISK_PATTERN = /\b(?:personal|individual(?:ized)?|your|family|(?:a|the|this)\s+patient'?s?)\b[^.!?;\n]*\brisk\b/iu;
+const DIRECT_ACTION_DISEASE_RISK_PATTERN = /\b(?:disease|cancer|clinical)\b(?:\s+[\p{L}-]+){0,4}\s+risk\b/iu;
+const DIRECT_ACTION_AGGREGATE_RISK_PATTERN = /\b(?:aggregate|deidentified|population(?:[- ]?level)|cohort(?:[- ]?level))\b[^.!?;\n]*\brisk\b|\brisk\b[^.!?;\n]*\b(?:aggregate|deidentified|population(?:[- ]?level)|cohort(?:[- ]?level))\b/iu;
+const EXPLICIT_DOSE_PATTERN = new RegExp(
+  `\\b${CLINICAL_QUANTITY}\\s*(?:${CLINICAL_DOSE_UNIT}\\b|%)`,
+  'iu',
+);
+const DIRECT_ACTION_NONCLINICAL_TARGET_PATTERN = new RegExp(
+  `^\\s*${OBVIOUS_NONCLINICAL_IMPERATIVE_TARGET}\\b`,
+  'iu',
+);
+const DIRECT_ACTION_IDIOM_TARGET_PATTERN = /^\s*(?:(?:a|the|this|your)\s+)?(?<target>care|caution|look)\b/iu;
+const DIRECT_ACTION_GENETICS_NOUN_PATTERN = /^(?:start\s+(?:codons?|(?:gain|loss)\s+variants?)|stop\s+(?:codons?|(?:gain|loss)\s+variants?)|test\s+(?:cross(?:es)?|statistics?|performance|sets?)|(?:start\s+(?:and\s+)?(?:stop|end)|stop\s+(?:and\s+)?start)\s+(?:codons?|coordinates?|sites?|signals?)|(?:test\s+use|use\s+test)\s+cases?|use\s+(?:dependent\s+effects?|in\s+research|as\s+(?:a\s+)?selection\s+marker|is\s+measured\s+in\s+(?:the\s+)?aggregate\s+cohort)|use\s+of\s+(?:(?:a|an|the)\s+)?(?:c\s*r\s*i\s*s\s*p\s*r|p\s*c\s*r|p\s*u\s*n\s*n\s*e\s*t\s*t\s+squares?|genetics?|genomics?|genes?|dna|rna|codons?|alleles?|pedigrees?|models?|datasets?|methods?|tools?))\b/iu;
+const DIRECTIVE_START_PATTERN = new RegExp(
+  `${RENDERED_DIRECTIVE_BOUNDARY}${RENDERED_DIRECTIVE_OPENERS}(?:please\\s+)?(?:(?:do(?:\\s+not)?|don't|never)\\s+)?(?<action>${DIRECT_CLINICAL_ACTION})\\b(?<tail>[^.!?;\\n]*)`,
+  'giu',
+);
+const DIRECTIVE_MODAL_PATTERN = new RegExp(
+  `\\b${DIRECT_MODAL_SUBJECT}\\s+${DIRECT_MODAL}\\s+(?<action>${DIRECT_CLINICAL_ACTION})\\b(?<tail>[^.!?;\\n]*)`,
+  'giu',
+);
+const DIRECTIVE_INVERTED_MODAL_PATTERN = new RegExp(
+  `\\b(?:may|might|can|could|would|will|should|must)(?:\\s+(?:not|never))?\\s+${DIRECT_MODAL_SUBJECT}\\s+(?<action>${DIRECT_CLINICAL_ACTION})\\b(?<tail>[^.!?;\\n]*)`,
+  'giu',
+);
+const DIRECTIVE_INSTRUCTION_PATTERN = new RegExp(
+  `\\b(?:(?:consider)\\s+(?<gerund>${DIRECT_CLINICAL_ACTION_GERUND})|(?:how|ways?|steps?|when)\\s+to\\s+(?<action>${DIRECT_CLINICAL_ACTION})|how\\s+(?:may|might|can|could|would|will|should|must)\\s+${DIRECT_MODAL_SUBJECT}\\s+(?<modalAction>${DIRECT_CLINICAL_ACTION})|(?:it\\s+(?:may|might|can|could|would)\\s+be\\s+(?:reasonable|appropriate|helpful)|the\\s+(?:next\\s+)?step\\s+is)\\s+to\\s+(?<framedAction>${DIRECT_CLINICAL_ACTION})|(?:recommend(?:s|ed|ing)?|suggest(?:s|ed|ing)?|advise(?:s|d|ing)?|instruct(?:s|ed|ing)?|urge(?:s|d|ing)?)\\s+(?:(?:that\\s+)?${DIRECT_MODAL_SUBJECT}\\s+)?(?:to\\s+)?(?<recommendedAction>${DIRECT_CLINICAL_ACTION_FORM}))\\b(?<tail>[^.!?;\\n]*)`,
+  'giu',
+);
+const DIRECTIVE_SUBORDINATE_PATTERN = new RegExp(
+  `\\b(?:before|after|when)\\s+(?:${DIRECT_MODAL_SUBJECT}\\s+)?(?<action>${DIRECT_CLINICAL_ACTION_FORM})\\b(?<tail>[^.!?;\\n]*)`,
+  'giu',
+);
+const DIRECTIVE_NESTED_ACTION_PATTERN = new RegExp(
+  `\\b(?:to|then|and(?:\\s+then)?|before|after)\\s+(?:${DIRECT_MODAL_SUBJECT}\\s+)?(?<action>${DIRECT_CLINICAL_ACTION_FORM})\\b`,
+  'giu',
+);
+const RECOMMENDATION_OBJECT_PATTERN = /\b(?:recommend(?:s|ed|ing)?|suggest(?:s|ed|ing)?)\b(?:\s+(?<tail>[^.!?;\n]*))?/giu;
+const RECOMMENDATION_LEADING_ACTION_PATTERN = new RegExp(
+  `^\\s*(?:(?:that\\s+)?${DIRECT_MODAL_SUBJECT}\\s+)?(?:to\\s+)?(?<action>${DIRECT_CLINICAL_ACTION_FORM})\\b(?<tail>[^.!?;\\n]*)`,
+  'iu',
+);
+const SAFE_PASSIVE_RECOMMENDATION_PATTERN = /\b(?:testing|the\s+test)\s+(?:is|are)\s+(?:recommended|advised|indicated)\b[^.!?;\n]*\b(?:quality[ -]control|(?:a|an|the|this)\s+assay|model\s+validation)\b/iu;
+const RECOMMENDATION_HEADING_PATTERN = new RegExp(
+  `(?:^|[.!?;\\n|]\\s*)(?<frame>(?:(?:(?:my|the|a)\\s+)?(?:recommendation|(?:preferred|best|reasonable)\\s+(?:option|choice)|choice|option|medication|treatment|therapy)(?:\\s+for\\s+[^:;.!?\\n|]{1,100})?|for\\s+(?:${DIRECT_ACTION_PERSON_TARGET}|${PASSIVE_USE_CLINICAL_INDICATION}))\\s*(?:is|:)\\s*(?<object>[^.!?;\\n|]+))`,
+  'giu',
+);
+const RECOMMENDATION_PREDICATE_PATTERN = /(?:^|[.!?;\n|]\s*)(?<frame>(?<object>[^:;.!?\n|]+?)\s+(?:is|would\s+be)\s+(?:(?:(?:my|the|a)\s+)?recommendation|(?:(?:the|a)\s+)?(?:preferred|best|reasonable|good)\s+(?:option|choice)|appropriate|suitable|beneficial|indicated|advised)(?<tail>[^.!?;\n|]*))/giu;
+
 const CLINICAL_GUIDANCE_PATTERNS = [
-  new RegExp(`(?:^|[.!?;:,\\n]\\s*|\\b(?:and|then)\\s+)(?:(?:["'(]|\\[|\\{)\\s*)*(?:please\\s+)?(?:(?:do\\s+not|don't|never)\\s+)?${GENERIC_CLINICAL_ACTION}\\s+(?!${OBVIOUS_NONCLINICAL_IMPERATIVE_TARGET}\\b)[\\p{L}\\p{N}]`, 'iu'),
   /(?:^|[.!?;:,\n]\s*|\b(?:and|then)\s+)(?:please\s+)?(?:get|obtain|order|request|book)\s+(?:(?:a|an|the|your)\s+)?(?:(?:genetic|diagnostic|medical|clinical|cancer|carrier)\s+)?(?:test|testing|screen|screening|scan|biopsy|exam|examination)\b/iu,
-  new RegExp(`\\b${CLINICAL_SUBJECT}\\s+(?:(?:should|must|need(?:s)?\\s+to|ought\\s+to)\\s+|(?:are|is)\\s+(?:advised|instructed)\\s+to\\s+)${GENERIC_CLINICAL_ACTION}\\s+(?!${OBVIOUS_NONCLINICAL_IMPERATIVE_TARGET}\\b)`, 'iu'),
   new RegExp(`\\b${CLINICAL_SUBJECT}\\s+(?:(?:definitely|certainly|probably|likely|clearly|really)\\s+)?(?:need(?:s)?|require(?:s)?|would\\s+benefit\\s+from)\\s+(?!to\\b)(?!${OBVIOUS_NONCLINICAL_IMPERATIVE_TARGET}\\b)[\\p{L}\\p{N}]`, 'iu'),
-  new RegExp(`\\b(?:recommend(?:s|ed|ing)?|suggest(?:s|ed|ing)?|advise(?:s|d|ing)?|instruct(?:s|ed|ing)?|urge(?:s|d|ing)?)\\s+(?:(?:that\\s+)?${CLINICAL_SUBJECT}\\s+)?(?:to\\s+)?(?:${GENERIC_CLINICAL_ACTION}|${GENERIC_CLINICAL_ACTION_GERUND})\\s+(?!${OBVIOUS_NONCLINICAL_IMPERATIVE_TARGET}\\b)`, 'iu'),
-  new RegExp(`\\b(?:recommend(?:s|ed|ing)?|suggest(?:s|ed|ing)?)\\s+(?!${OBVIOUS_NONCLINICAL_IMPERATIVE_TARGET}\\b)[\\p{L}\\p{N}]`, 'iu'),
-  new RegExp(`\\b(?!${OBVIOUS_NONCLINICAL_IMPERATIVE_TARGET}\\b)[\\p{L}\\p{N}][\\p{L}\\p{N}'-]{1,63}(?:\\s+[\\p{L}\\p{N}][\\p{L}\\p{N}'-]{1,63}){0,2}\\s+(?:is|are|may\\s+be|would\\s+be|should\\s+be|must\\s+be)\\s+(?:recommended|advised|indicated|prescribed|avoided)\\b`, 'iu'),
   new RegExp(`\\b(?!${OBVIOUS_NONCLINICAL_IMPERATIVE_TARGET}\\b)[\\p{L}\\p{N}][\\p{L}\\p{N}'-]{1,63}(?:\\s+[\\p{L}\\p{N}][\\p{L}\\p{N}'-]{1,63}){0,2}\\s+(?:may|might|can|could|will|should)\\s+(?:help|relieve|reduce|improve|treat|manage)\\s+(?:you|your|the\\s+patient|the\\s+patient's)\\b`, 'iu'),
   new RegExp(`\\b${CLINICAL_SUBJECT}\\s+(?:(?:[\\p{L}-]+|very)\\s+){0,3}(?:have|has|suffer(?:s)?\\s+from|test(?:s|ed)?\\s+positive\\s+for|are\\s+positive\\s+for|show(?:s)?\\s+signs\\s+of|meet(?:s)?\\s+(?:the\\s+)?criteria\\s+for|are\\s+diagnosed\\s+with|is\\s+diagnosed\\s+with)\\b[^.!?\\n]{0,100}`, 'iu'),
   new RegExp(`\\b${CLINICAL_SUBJECT}\\s+(?:(?:may|might|could)\\s+)?(?:carry|carries|harbor|harbors)\\b[^.!?\\n]{0,100}`, 'iu'),
@@ -55,14 +120,12 @@ const CLINICAL_GUIDANCE_PATTERNS = [
   /\byour\s+(?:findings?|results?|tests?|test\s+results?|genotype|variants?)\s+(?:confirm|confirms|show|shows|indicate|indicates|prove|proves)\b[^.!?\n]{0,100}/iu,
   /\byour\s+(?:symptoms|results|genotype|variant|variants|test|tests)\s+(?:mean|means|show|shows|indicate|indicates|confirm|confirms|prove|proves)\s+(?:(?:that\s+)?you\s+have|(?:a\s+)?diagnosis\s+of)\b/iu,
   /\byour\s+(?:symptoms|results|genotype|variant|variants|test|tests)\s+(?:is|are)\s+(?:diagnostic\s+of|consistent\s+with|indicative\s+of)\b/iu,
-  /\b(?:recommend(?:ed|ation)?|advise(?:d)?|should|must|need(?:s)? to|ought to|prescribe(?:d)?|start|stop|increase|decrease|take|avoid|undergo|administer|switch)\b[^.!?\n]{0,120}\b(?:treatment|therapy|medication|medicine|drug|screening|test|dose|dosing|dosage|surgery|procedure|clinical care|medical care)\b/iu,
-  /\b(?:screening|treatment|therapy|medication|medicine|drug|test|dose|dosing|dosage|surgery|procedure|clinical care|medical care)\b[^.!?\n]{0,40}\b(?:is|are|would be|may be|should be|must be)\b[^.!?\n]{0,40}\b(?:recommended|advised|indicated|required|necessary|appropriate)\b/iu,
+  /\b(?:recommend(?:ed|ation)?|advise(?:d)?|should|must|need(?:s)? to|ought to|prescribe(?:d)?|start|stop|increase|decrease|take|avoid|undergo|administer|switch)\b[^.!?\n]{0,120}\b(?:treatment|therapy|medication|medicine|drug|screening|(?:diagnostic|medical|clinical|genetic|cancer|carrier)\s+tests?|dose|dosing|dosage|surgery|procedure|clinical care|medical care)\b/iu,
+  /\b(?:screening|treatment|therapy|medication|medicine|drug|(?:diagnostic|medical|clinical|genetic|cancer|carrier)\s+tests?|dose|dosing|dosage|surgery|procedure|clinical care|medical care)\b[^.!?\n]{0,40}\b(?:is|are|would be|may be|should be|must be)\b[^.!?\n]{0,40}\b(?:recommended|advised|indicated|required|necessary|appropriate)\b/iu,
   /\b(?:you|your|patient|this patient|individual|family members?)\b[^.!?\n]{0,120}\b(?:personal risk|risk of|diagnos\w*|prognos\w*|treatment|therapy|medication|medicine|drug|screening|dose|dosing|clinical action)\b/iu,
   /\b(?:consult|contact|see|seek)\b[^.!?\n]{0,60}\b(?:doctor|physician|clinician|genetic counselor|medical professional|emergency department|emergency care)\b/iu,
-  /\b(?:diagnos(?:e|ed|es|ing)|diagnosis|prognosis|prognostic conclusion|clinical recommendation|treatment recommendation|screening recommendation|medication recommendation|drug recommendation)\b/iu,
+  /\b(?:diagnosis|prognosis|prognostic conclusion|clinical recommendation|treatment recommendation|screening recommendation|medication recommendation|drug recommendation)\b/iu,
   /\b(?:dose|dosing|dosage)\b[^.!?\n]{0,80}\b(?:recommend\w*|should|must|take|administer|adjust|increase|decrease|mg|mcg|ug|units?)\b/iu,
-  /\b\d+(?:\.\d+)?\s*(?:mg|mcg|μg|ug|ml|units?)\b/iu,
-  /\b(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|half|quarter)\s+(?:milli?grams?|micrograms?|grams?|milliliters?|units?)\b/iu,
   /\b(?:take|start|stop|avoid|administer|inject|swallow|apply|use)\b[^.!?\n]{0,100}\b(?:one|two|three|four|five|six|seven|eight|nine|ten|half|a|an|\d+)\s+(?:tablets?|capsules?|pills?|drops?|puffs?|sprays?|inhalations?|teaspoons?|tablespoons?|units?)\b/iu,
   /\b(?:take|start|stop|avoid|administer|inject|swallow|apply|use)\b[^.!?\n]{0,100}\b(?:daily|nightly|weekly|once\s+(?:a\s+)?day|twice\s+(?:a\s+)?day|every\s+\w+\s+hours?|at\s+bedtime|with\s+meals?|as\s+needed)\b/iu,
   new RegExp(`\\b(?:take|start|stop|avoid|use|administer|prescribe|switch(?:\\s+to)?)\\b[^.!?\\n]{0,80}\\b${MEDICATION_NAME_PATTERN}\\b`, 'iu'),
@@ -107,6 +170,10 @@ const PASSIVE_ACTION_NONCLINICAL_PERSON_SUBJECT_PATTERN = new RegExp(
 );
 const PASSIVE_ACTION_STRONG_MODAL_PATTERN = new RegExp(
   `\\b${PASSIVE_USE_SUBJECT}\\s+${PASSIVE_USE_STRONG_MODAL_AUXILIARY}[^.!?;\\n]{0,80}\\b${PASSIVE_CLINICAL_ACTION_PAST}\\b`,
+  'iu',
+);
+const PASSIVE_ACTION_WEAK_MODAL_PATTERN = new RegExp(
+  `\\b${PASSIVE_USE_SUBJECT}\\s+(?:may|might|can|could|would)\\b[^.!?;\\n]{0,80}\\b${PASSIVE_CLINICAL_ACTION_PAST}\\b`,
   'iu',
 );
 
@@ -159,10 +226,10 @@ const SAFETY_CONFUSABLES = new Map(Object.entries({
 }));
 
 const CLINICAL_SKELETON_WORDS = Object.freeze([
-  'administer', 'advised', 'applied', 'apply', 'avoid', 'chew', 'consume', 'diagnose', 'diagnosed',
-  'dissolve', 'dose', 'drink', 'inhale', 'inject', 'injected', 'ingest', 'insert', 'medication', 'monitor', 'must', 'need',
-  'pain', 'patient', 'prescribe', 'recommend', 'require', 'screen', 'should',
-  'skip', 'spray', 'start', 'stop', 'swallow', 'symptoms', 'take', 'taken', 'taper', 'test', 'tested', 'treat', 'treated', 'try', 'used',
+  'add', 'administer', 'advised', 'applied', 'apply', 'avoid', 'cease', 'chew', 'combine', 'consume', 'diagnose', 'diagnosed',
+  'dissolve', 'dose', 'drink', 'hold', 'inhale', 'inject', 'injected', 'ingest', 'insert', 'maintain', 'medicate', 'medication', 'monitor', 'must', 'need',
+  'pain', 'patient', 'pause', 'prescribe', 'recommend', 'redose', 'refill', 'remove', 'replace', 'require', 'restart', 'screen', 'should',
+  'choose', 'select', 'skip', 'spray', 'start', 'stop', 'substitute', 'swallow', 'symptoms', 'take', 'taken', 'taper', 'test', 'tested', 'treat', 'treated', 'try', 'use', 'used',
 ]);
 
 function containsUnsupportedNamedHtmlEntity(value) {
@@ -225,6 +292,10 @@ function stripRenderedMarkupForSafety(value, { separateFormatting = false } = {}
   // to the same safety text the reader sees: Take.
   const withoutHtml = value
     .replace(/<!--[\s\S]*?-->/gu, '')
+    // Block elements create a rendered boundary. Preserve that boundary so a
+    // directive cannot hide behind a preceding paragraph, table cell, or line
+    // break while inline tags still join the same visible word below.
+    .replace(/<\/?(?:address|article|aside|blockquote|br|dd|div|dl|dt|figcaption|figure|footer|h[1-6]|header|hr|li|main|nav|ol|p|pre|section|table|tbody|td|tfoot|th|thead|tr|ul)(?:\s[^<>]*)?\s*\/?>/giu, '\n')
     .replace(/<(?:[^"'<>]|"[^"]*"|'[^']*')*>/gu, '');
   return stripUntrustedMarkupAndLinks(withoutHtml)
     .replace(/\\([\\`*{}[\]()#+\-.!_>~|])/gu, '$1')
@@ -246,6 +317,11 @@ function semanticSafetyText(value, { separatePunctuation = false } = {}) {
     separateFormatting: separatePunctuation,
   })
     .replace(/\p{M}+/gu, '')
+    // Preserve reviewed genetics compounds before treating rendered long
+    // dashes as clause boundaries. Short in-word dashes still flow through
+    // the compact-word projection below for obfuscation checks.
+    .replace(/\b(start|stop)\s*[\u2012-\u2015\u2e3a\u2e3b]\s*(start|stop|end)\b/giu, '$1 $2')
+    .replace(/[\u2012-\u2015\u2e3a\u2e3b]+/gu, '\n')
     .replace(/([\p{L}\p{N}])[\p{Pd}._/\\,:;|\u00b7\u2022]+(?=[\p{L}\p{N}])/gu, (
       _match,
       letter,
@@ -353,11 +429,155 @@ function cleanText(value, maxLength) {
 
 function removeAllowedBoundaryDisclaimers(value) {
   return value
+    .replace(/(^|[.!?;\n]\s*)use\s+of\s+[\p{L}\p{N}'-]{1,64}\s+(?:is|was)\s+(?:measured|recorded|analyzed)\s+as\s+(?:an?\s+)?(?:aggregate|deidentified|population(?:[- ]?level)|cohort(?:[- ]?level))\s+cohort\s+variable(?=$|[.!?;\n])/gimu, '$1 ')
     .replace(/\bnot\s+(?:a\s+)?diagnosis\b(?=$|[.!?;:\n])/giu, ' ')
     .replace(/\bnot\s+medical\s+advice\b(?=$|[.!?;:\n])/giu, ' ')
     .replace(/\bnot\s+(?:intended|suitable)\s+for\s+clinical\s+use\b(?=$|[.!?;:\n])/giu, ' ')
     .replace(/\bdoes\s+not\s+(?:assess|predict|establish)\s+(?:personal\s*)?(?:risk|diagnosis|prognosis)\b(?=$|[.!?;:\n])/giu, ' ')
     .replace(/\bdo\s+not\s+use\s+(?:it|(?:this|the)\s+(?:output|response|result|results)|these\s+results|output|response|result|results)\s+(?:medically|for\s+(?:medical\s+advice|clinical\s+use|clinical\s+decisions?|(?:diagnosis|personal(?:-|\s)?risk(?:\s+prediction)?|treatment|dosing|screening)(?:\s*(?:,|and|or)\s*(?:diagnosis|personal(?:-|\s)?risk(?:\s+prediction)?|treatment|dosing|screening))*(?:\s*,?\s*(?:and|or)\s+(?:other\s+)?clinical\s+decisions?)?))\b(?=$|[.!?;:\n])/giu, ' ');
+}
+
+function baseDirectAction(action) {
+  const normalized = action.toLocaleLowerCase('en-US');
+  return ({
+    choosing: 'choose',
+    selecting: 'select',
+    starting: 'start',
+    stopping: 'stop',
+    taking: 'take',
+    testing: 'test',
+    using: 'use',
+  })[normalized] ?? normalized;
+}
+
+function isNonClinicalDirectAction(action, tail) {
+  const normalizedAction = baseDirectAction(action);
+  const actionAndTail = `${normalizedAction} ${tail.trimStart()}`;
+  if (DIRECT_ACTION_GENETICS_NOUN_PATTERN.test(actionAndTail)) return true;
+  const idiomTarget = tail.match(DIRECT_ACTION_IDIOM_TARGET_PATTERN)?.groups.target;
+  if (idiomTarget) {
+    return normalizedAction === 'take'
+      || (normalizedAction === 'use' && idiomTarget !== 'look');
+  }
+  return DIRECT_ACTION_NONCLINICAL_TARGET_PATTERN.test(tail);
+}
+
+function reviewedGeneticsNounTailEnd(action, tail) {
+  const normalizedAction = baseDirectAction(action);
+  const trimmedTail = tail.trimStart();
+  const match = `${normalizedAction} ${trimmedTail}`.match(DIRECT_ACTION_GENETICS_NOUN_PATTERN);
+  if (!match) return 0;
+  return (tail.length - trimmedTail.length)
+    + Math.max(0, match[0].length - normalizedAction.length - 1);
+}
+
+function hasHardDirectClinicalContext(directive) {
+  if (DIRECT_ACTION_HARD_CLINICAL_CONTEXT_PATTERN.test(directive)) return true;
+  if (DIRECT_ACTION_SPECIFIC_PERSON_PATTERN.test(directive)) return true;
+  if (DIRECT_ACTION_PERSON_MARKED_RISK_PATTERN.test(directive)) return true;
+  if (DIRECT_ACTION_DISEASE_RISK_PATTERN.test(directive)
+    && !DIRECT_ACTION_AGGREGATE_RISK_PATTERN.test(directive)) return true;
+  return DIRECT_ACTION_ADMINISTRATION_PATTERN.test(directive)
+    && !PASSIVE_USE_CONCRETE_LAB_CONTEXT_PATTERN.test(directive);
+}
+
+function directiveHasUnsafeDirectAction(action, tail, frame) {
+  if (hasHardDirectClinicalContext(frame)) return true;
+
+  const reviewedTailEnd = reviewedGeneticsNounTailEnd(action, tail);
+  const nestedActions = [...tail.matchAll(DIRECTIVE_NESTED_ACTION_PATTERN)].filter((match) => (
+    (match.index ?? 0) >= reviewedTailEnd
+  ));
+  const firstTail = tail.slice(0, nestedActions[0]?.index ?? tail.length);
+  if (!isNonClinicalDirectAction(action, firstTail)) return true;
+
+  return nestedActions.some((match, index) => {
+    const nestedTailStart = (match.index ?? 0) + match[0].length;
+    const nestedTailEnd = nestedActions[index + 1]?.index ?? tail.length;
+    const nestedTail = tail.slice(nestedTailStart, nestedTailEnd);
+    return hasHardDirectClinicalContext(`${match.groups.action} ${nestedTail}`)
+      || !isNonClinicalDirectAction(match.groups.action, nestedTail);
+  });
+}
+
+function recommendationObjectIsUnsafe(object, frame) {
+  if (hasHardDirectClinicalContext(frame)) return true;
+  const actionMatch = object.match(RECOMMENDATION_LEADING_ACTION_PATTERN);
+  if (actionMatch) {
+    return directiveHasUnsafeDirectAction(
+      actionMatch.groups.action,
+      actionMatch.groups.tail ?? '',
+      frame,
+    );
+  }
+  return !isNonClinicalDirectAction('choose', object);
+}
+
+function containsDirectClinicalAction(value) {
+  if (typeof value !== 'string' || !value.trim()) return false;
+  const patterns = [
+    DIRECTIVE_START_PATTERN,
+    DIRECTIVE_MODAL_PATTERN,
+    DIRECTIVE_INVERTED_MODAL_PATTERN,
+    DIRECTIVE_INSTRUCTION_PATTERN,
+    DIRECTIVE_SUBORDINATE_PATTERN,
+  ];
+  return patterns.some((pattern) => [...value.matchAll(pattern)].some((match) => {
+    const action = match.groups.action
+      ?? match.groups.gerund
+      ?? match.groups.modalAction
+      ?? match.groups.framedAction
+      ?? match.groups.recommendedAction;
+    return directiveHasUnsafeDirectAction(action, match.groups.tail ?? '', match[0]);
+  }));
+}
+
+function containsUnsafeRecommendation(value) {
+  return [...value.matchAll(RECOMMENDATION_OBJECT_PATTERN)].some((match) => {
+    const clauseStart = Math.max(
+      value.lastIndexOf('.', match.index ?? 0),
+      value.lastIndexOf('!', match.index ?? 0),
+      value.lastIndexOf('?', match.index ?? 0),
+      value.lastIndexOf(';', match.index ?? 0),
+      value.lastIndexOf('\n', match.index ?? 0),
+    ) + 1;
+    const clauseEndCandidates = ['.', '!', '?', ';', '\n']
+      .map((boundary) => value.indexOf(boundary, match.index ?? 0))
+      .filter((index) => index >= 0);
+    const clauseEnd = clauseEndCandidates.length > 0
+      ? Math.min(...clauseEndCandidates)
+      : value.length;
+    const clause = value.slice(clauseStart, clauseEnd);
+    const tail = match.groups.tail ?? '';
+    const actionMatch = tail.match(RECOMMENDATION_LEADING_ACTION_PATTERN);
+    if (actionMatch) {
+      return recommendationObjectIsUnsafe(tail, clause);
+    }
+    if (!hasHardDirectClinicalContext(clause)
+      && SAFE_PASSIVE_RECOMMENDATION_PATTERN.test(clause)) return false;
+    return recommendationObjectIsUnsafe(tail, clause);
+  });
+}
+
+function containsUnsafeRecommendationFrame(value) {
+  const headingUnsafe = [...value.matchAll(RECOMMENDATION_HEADING_PATTERN)].some((match) => (
+    recommendationObjectIsUnsafe(match.groups.object, match.groups.frame)
+  ));
+  if (headingUnsafe) return true;
+  return [...value.matchAll(RECOMMENDATION_PREDICATE_PATTERN)].some((match) => (
+    recommendationObjectIsUnsafe(match.groups.object, match.groups.frame)
+  ));
+}
+
+function containsClinicalDose(value) {
+  if (!EXPLICIT_DOSE_PATTERN.test(value)) return false;
+  if (!PASSIVE_USE_CONCRETE_LAB_CONTEXT_PATTERN.test(value)) return true;
+  return PASSIVE_USE_PERSONALIZED_PATTERN.test(value)
+    || PASSIVE_USE_CLINICAL_PURPOSE_PATTERN.test(value)
+    || DIRECT_ACTION_SPECIFIC_PERSON_PATTERN.test(value)
+    || DIRECT_ACTION_PERSON_MARKED_RISK_PATTERN.test(value)
+    || (DIRECT_ACTION_DISEASE_RISK_PATTERN.test(value)
+      && !DIRECT_ACTION_AGGREGATE_RISK_PATTERN.test(value));
 }
 
 function containsPassiveClinicalAction(value) {
@@ -379,7 +599,9 @@ function containsPassiveClinicalAction(value) {
     if (PASSIVE_ACTION_KNOWN_MEDICATION_PATTERN.test(clause) && !hasConcreteLabContext) {
       return true;
     }
-    return PASSIVE_ACTION_STRONG_MODAL_PATTERN.test(clause) && !hasReviewedResearchContext;
+    return (PASSIVE_ACTION_STRONG_MODAL_PATTERN.test(clause)
+      || PASSIVE_ACTION_WEAK_MODAL_PATTERN.test(clause))
+      && !hasReviewedResearchContext;
   });
 }
 
@@ -399,6 +621,10 @@ function containsProhibitedClinicalGuidance(value) {
   return [...policyTexts].some((policyText) => {
     const withoutAllowedDisclaimers = removeAllowedBoundaryDisclaimers(policyText);
     return CLINICAL_GUIDANCE_PATTERNS.some((pattern) => pattern.test(withoutAllowedDisclaimers))
+      || containsDirectClinicalAction(withoutAllowedDisclaimers)
+      || containsUnsafeRecommendation(withoutAllowedDisclaimers)
+      || containsUnsafeRecommendationFrame(withoutAllowedDisclaimers)
+      || containsClinicalDose(withoutAllowedDisclaimers)
       || containsPassiveClinicalAction(withoutAllowedDisclaimers);
   });
 }
