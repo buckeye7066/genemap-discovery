@@ -43,10 +43,18 @@ vi.mock('@/components/education/AdaptiveImage', async () => {
   const { default: PublicationState } = await vi.importActual('@/components/shared/PublicationState');
   return {
     default: ({ artifact, loading }) => (
-      <div data-testid="adaptive-image">
+      <div
+        data-testid="adaptive-image"
+        data-publication-reason={artifact?.reasonCode || ''}
+      >
         {loading
           ? 'image-loading'
-          : `${artifact?.status || 'none'}:${artifact?.correlationId || 'no-correlation'}:${artifact?.content?.imageUrl || 'no-image'}`}
+          : [
+            artifact?.status || 'none',
+            artifact?.correlationId || 'no-correlation',
+            artifact?.content?.imageUrl || 'no-image',
+            artifact?.content?.revisedPrompt || 'no-prompt',
+          ].join(':')}
         <PublicationState artifact={artifact} />
       </div>
     ),
@@ -211,6 +219,10 @@ describe('education async publication boundaries', () => {
     ['phd', 'graduate'],
     ['medical', 'postgraduate'],
     ['researcher', 'postgraduate'],
+    ['__proto__', 'undergraduate'],
+    ['constructor', 'undergraduate'],
+    ['hasOwnProperty', 'undergraduate'],
+    ['toString', 'undergraduate'],
   ])('sends saved level %s to the quiz API as %s', async (savedLevel, apiLevel) => {
     educationState.level = savedLevel;
     apiClient.generateQuiz.mockResolvedValue(
@@ -409,6 +421,92 @@ describe('education async publication boundaries', () => {
     await waitFor(() => expect(screen.getByTestId('adaptive-image')).toHaveTextContent('available:image:valid:https://example.test/valid.png'));
   });
 
+  it.each([
+    ['missing', undefined],
+    ['null', null],
+    ['scalar', 'https://provider-scalar-leak.example/image.png'],
+    [
+      'noncanonical',
+      {
+        ...publication({
+          imageUrl: 'https://provider-image-leak.example/image.png',
+          revisedPrompt: 'PROVIDER_REVISED_PROMPT_LEAK',
+        }, 'image:noncanonical'),
+        raw: 'PROVIDER_IMAGE_EXTRA_FIELD_LEAK',
+      },
+    ],
+  ])('fails closed when an image response has a %s publication', async (
+    _shape,
+    responsePublication,
+  ) => {
+    apiClient.getExplanation.mockResolvedValue({
+      publication: publication('Current explanation.', 'explanation:image-fail-closed'),
+      topicMetadata: { id: 'what-is-dna', title: 'What is DNA?' },
+      sources: [],
+    });
+    apiClient.generateImage.mockResolvedValue({
+      publication: responsePublication,
+      topicMetadata: { id: 'what-is-dna', title: 'What is DNA?' },
+    });
+
+    render(routedElement('/topicexplorer?topic=what-is-dna', TopicExplorer));
+    await screen.findByText('Current explanation.');
+    fireEvent.click(screen.getByRole('button', { name: /^generate image$/i }));
+
+    const supportId = await screen.findByText('image:client-invalid-publication');
+    const publicationAlert = supportId.closest('[data-publication-status]');
+    expect(publicationAlert).not.toBeNull();
+    expect(publicationAlert).toHaveAttribute('data-publication-status', 'unavailable');
+    expect(publicationAlert).toHaveTextContent('Publication unavailable');
+    expect(screen.getByTestId('adaptive-image')).toHaveAttribute(
+      'data-publication-reason',
+      'invalid_publication_artifact',
+    );
+    expect(screen.getByTestId('adaptive-image')).toHaveTextContent(
+      'unavailable:image:client-invalid-publication:no-image:no-prompt',
+    );
+    expect(screen.queryByText(/provider-(?:scalar|image)-leak/i)).toBeNull();
+    expect(screen.queryByText(/PROVIDER_(?:REVISED_PROMPT|IMAGE_EXTRA_FIELD)_LEAK/i)).toBeNull();
+  });
+
+  it.each([
+    ['missing', undefined],
+    ['null', null],
+    ['scalar', 'PROVIDER_CHAT_SCALAR_LEAK'],
+    [
+      'noncanonical',
+      {
+        ...publication('PROVIDER_CHAT_OBJECT_LEAK', 'chat:noncanonical'),
+        raw: 'PROVIDER_CHAT_EXTRA_FIELD_LEAK',
+      },
+    ],
+  ])('fails closed when a tutor response has a %s publication', async (
+    _shape,
+    responsePublication,
+  ) => {
+    apiClient.getExplanation.mockResolvedValue({
+      publication: publication('Current explanation.', 'explanation:chat-fail-closed'),
+      topicMetadata: { id: 'what-is-dna', title: 'What is DNA?' },
+      sources: [],
+    });
+    apiClient.chat.mockResolvedValue({
+      publication: responsePublication,
+      topicMetadata: { id: 'what-is-dna', title: 'What is DNA?' },
+    });
+
+    render(routedElement('/topicexplorer?topic=what-is-dna', TopicExplorer));
+    await screen.findByText('Current explanation.');
+    fireEvent.click(screen.getByRole('button', { name: /explain another way/i }));
+
+    const supportId = await screen.findByText('chat:client-invalid-publication');
+    const publicationAlert = supportId.closest('[data-publication-status]');
+    expect(publicationAlert).not.toBeNull();
+    expect(publicationAlert).toHaveAttribute('data-publication-status', 'unavailable');
+    expect(publicationAlert).toHaveTextContent('Publication unavailable');
+    expect(screen.queryByText(/PROVIDER_CHAT_(?:SCALAR|OBJECT|EXTRA_FIELD)_LEAK/i)).toBeNull();
+    expect(screen.queryByText(/could not be completed/i)).toBeNull();
+  });
+
   it('renders terminal 503 publications for explanation, image, and tutor recovery', async () => {
     apiClient.getExplanation.mockRejectedValue(
       modelPublicationError('explanation:recovery-disabled'),
@@ -439,8 +537,8 @@ describe('education async publication boundaries', () => {
     [
       'noncanonical',
       { ...publication('PROVIDER_OBJECT_LEAK', 'explanation:noncanonical'), raw: 'EXTRA_FIELD_LEAK' },
-      'invalid_publication_content',
-      'explanation:noncanonical',
+      'invalid_publication_artifact',
+      'explanation:client-invalid-publication',
     ],
   ])('fails closed when an explanation response has a %s publication', async (
     _shape,
