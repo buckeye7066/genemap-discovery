@@ -10,6 +10,7 @@ import SourceList from '@/components/shared/SourceList';
 import { safeModelMarkdownComponents } from '@/components/shared/safeModelMarkdown';
 import PublicationState, {
   enforcePublicationContentType,
+  isCanonicalPublicationArtifact,
   publicationContent,
 } from '@/components/shared/PublicationState';
 import { normalizeEducationPublicationLevel } from '@/lib/educationPublicationLevel';
@@ -76,11 +77,20 @@ function isSafeGeneratedImageUrl(value) {
   );
 }
 
-function unavailableExplanationPublication() {
+const INVALID_PUBLICATION_CORRELATION = Object.freeze({
+  explanation: 'explanation:client-invalid-publication',
+  image: 'image:client-invalid-publication',
+  chat: 'chat:client-invalid-publication',
+});
+
+function publicationResponseOrUnavailable(flow, artifact, acceptsContent) {
+  if (isCanonicalPublicationArtifact(artifact)) {
+    return enforcePublicationContentType(artifact, acceptsContent);
+  }
   return createPublicationArtifact({
     status: PUBLICATION_STATUSES.UNAVAILABLE,
     reasonCode: 'invalid_publication_artifact',
-    correlationId: 'explanation:client-invalid-publication',
+    correlationId: INVALID_PUBLICATION_CORRELATION[flow],
   });
 }
 
@@ -265,10 +275,11 @@ export default function TopicExplorer() {
     try {
       const res = await apiClient.getExplanation({ topic: topicId, level: publicationLevel });
       if (!isCurrentRequest()) return;
-      const publication = enforcePublicationContentType(
+      const publication = publicationResponseOrUnavailable(
+        'explanation',
         res?.publication,
         (content) => typeof content === 'string' && Boolean(content.trim()),
-      ) ?? unavailableExplanationPublication();
+      );
       if (res?.topicMetadata?.id !== topicId) {
         throw new Error('The server returned mismatched topic metadata.');
       }
@@ -305,7 +316,8 @@ export default function TopicExplorer() {
       if (res?.topicMetadata?.id !== topicId) {
         throw new Error('The server returned mismatched topic metadata.');
       }
-      setImagePublication(enforcePublicationContentType(
+      setImagePublication(publicationResponseOrUnavailable(
+        'image',
         res?.publication,
         (content) => Boolean(
           content
@@ -357,7 +369,8 @@ export default function TopicExplorer() {
       setTopicMetadata(catalogTopic);
       setChatMessages(prev => [...prev, {
         role: 'assistant',
-        publication: enforcePublicationContentType(
+        publication: publicationResponseOrUnavailable(
+          'chat',
           res?.publication,
           (content) => typeof content === 'string' && Boolean(content.trim()),
         ),
