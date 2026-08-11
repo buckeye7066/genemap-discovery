@@ -210,6 +210,100 @@ describe('education async publication boundaries', () => {
   });
 
   it.each([
+    ['missing', undefined],
+    ['null', null],
+    ['scalar', 'LEGACY_QUIZ_SCALAR_LEAK'],
+    [
+      'noncanonical',
+      {
+        ...quizResponse(
+          'what-is-dna',
+          'What is DNA?',
+          'NONCANONICAL_QUIZ_QUESTION_LEAK?',
+        ).publication,
+        raw: 'NONCANONICAL_QUIZ_RAW_LEAK',
+      },
+    ],
+  ])('fails closed when a successful quiz response has a %s publication', async (
+    _shape,
+    responsePublication,
+  ) => {
+    apiClient.generateQuiz.mockResolvedValue({
+      publication: responsePublication,
+      topicMetadata: { id: 'what-is-dna', title: 'What is DNA?' },
+      questions: ['LEGACY_QUIZ_QUESTIONS_LEAK'],
+      result: 'LEGACY_QUIZ_RESULT_LEAK',
+      raw: 'LEGACY_QUIZ_RAW_LEAK',
+    });
+
+    render(routedElement('/quizmode?topic=what-is-dna', QuizMode));
+
+    const supportId = await screen.findByText('quiz:client-invalid-publication');
+    const publicationAlert = supportId.closest('[data-publication-status]');
+    expect(publicationAlert).not.toBeNull();
+    expect(publicationAlert).toHaveAttribute('data-publication-status', 'unavailable');
+    expect(publicationAlert).toHaveTextContent('Publication unavailable');
+    expect(screen.queryByText(/(?:LEGACY|NONCANONICAL)_QUIZ_/i)).toBeNull();
+    expect(screen.queryByText(/quiz error/i)).toBeNull();
+  });
+
+  it.each([
+    [
+      'partial',
+      {
+        contractVersion: 1,
+        status: 'partial',
+        content: [{
+          question: 'Canonical partial quiz question?',
+          options: ['Correct', 'Incorrect'],
+          correctIndex: 0,
+          explanation: 'Canonical partial explanation.',
+        }],
+        reasonCode: 'provider_truncated',
+        correlationId: 'quiz:canonical-partial',
+        limitations: ['The final questions may be missing.'],
+      },
+      'Partial publication',
+      'Canonical partial quiz question?',
+    ],
+    [
+      'unavailable',
+      {
+        contractVersion: 1,
+        status: 'unavailable',
+        content: null,
+        reasonCode: 'provider_unavailable',
+        correlationId: 'quiz:canonical-unavailable',
+        limitations: [],
+      },
+      'Publication unavailable',
+      null,
+    ],
+  ])('preserves a canonical %s quiz response', async (
+    expectedStatus,
+    responsePublication,
+    statusLabel,
+    expectedQuestion,
+  ) => {
+    apiClient.generateQuiz.mockResolvedValue({
+      publication: responsePublication,
+      topicMetadata: { id: 'what-is-dna', title: 'What is DNA?' },
+    });
+
+    render(routedElement('/quizmode?topic=what-is-dna', QuizMode));
+
+    const publicationLabel = await screen.findByText(statusLabel);
+    const publicationState = publicationLabel.closest('[data-publication-status]');
+    expect(publicationState).not.toBeNull();
+    expect(publicationState).toHaveAttribute('data-publication-status', expectedStatus);
+    if (expectedQuestion) {
+      expect(screen.getByText(expectedQuestion)).toBeInTheDocument();
+    } else {
+      expect(publicationState).toHaveTextContent('Support ID: quiz:canonical-unavailable');
+    }
+  });
+
+  it.each([
     ['elementary', 'elementary'],
     ['middle_school', 'middle_school'],
     ['high_school', 'high_school'],
