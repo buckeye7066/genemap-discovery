@@ -1,4 +1,8 @@
 import { z } from 'zod';
+import {
+  CORRELATION_ID_PATTERN,
+  REASON_CODE_PATTERN,
+} from './publicationStatus.js';
 
 export const registerSchema = z.object({
   email: z.string().email(),
@@ -44,6 +48,58 @@ export const userSchema = z.object({
       licenseType: z.string(),
     }).nullable(),
   }).optional(),
+});
+
+export const publicationStatusSchema = z.enum([
+  'available',
+  'partial',
+  'withheld',
+  'unavailable',
+  'superseded',
+]);
+
+export const publicationArtifactSchema = <T extends z.ZodTypeAny>(contentSchema: T) => z.object({
+  contractVersion: z.literal(1),
+  status: publicationStatusSchema,
+  content: contentSchema.nullable(),
+  reasonCode: z.string().regex(REASON_CODE_PATTERN).nullable(),
+  correlationId: z.string().regex(CORRELATION_ID_PATTERN),
+  limitations: z.array(z.string().min(1).refine(
+    (value) => value === value.trim(),
+    { message: 'Publication limitations must not contain leading or trailing whitespace.' },
+  )),
+}).strict().superRefine((artifact, context) => {
+  const contentAllowed = artifact.status === 'available' || artifact.status === 'partial';
+  if (contentAllowed !== (artifact.content !== null)) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['content'],
+      message: contentAllowed
+        ? 'Available or partial artifacts require content.'
+        : 'Non-publishable artifacts cannot carry content.',
+    });
+  }
+  if (artifact.status === 'partial' && artifact.limitations.length === 0) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['limitations'],
+      message: 'Partial artifacts require a visible limitation.',
+    });
+  }
+  if (new Set(artifact.limitations).size !== artifact.limitations.length) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['limitations'],
+      message: 'Publication limitations must be unique.',
+    });
+  }
+  if (artifact.status !== 'available' && artifact.reasonCode === null) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['reasonCode'],
+      message: 'Non-available artifacts require a reason code.',
+    });
+  }
 });
 
 // ─── Inferred Types from Schemas ────────────────────────────────────────────

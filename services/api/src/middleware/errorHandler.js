@@ -1,4 +1,5 @@
 import { ZodError } from 'zod';
+import { isCanonicalPublicationArtifact } from '@genemap/shared/publicationStatus';
 import { AppError, sanitizeError } from '../utils/errors.js';
 
 /**
@@ -16,6 +17,33 @@ function isAppError(error) {
       error.statusCode >= 400 &&
       error.statusCode < 600
   );
+}
+
+const NON_PUBLISHABLE_STATUSES = new Set(['withheld', 'unavailable', 'superseded']);
+
+/**
+ * Operational errors may expose only a validated non-publishable artifact.
+ * This lets clients render an honest recovery state while ensuring generated
+ * or fetched content can never leak through an error-details side channel.
+ */
+export function publicationErrorDetails(error) {
+  const publication = error?.details?.publication;
+  if (!publication || typeof publication !== 'object' || Array.isArray(publication)) {
+    return undefined;
+  }
+  const projected = {
+    contractVersion: publication.contractVersion,
+    status: publication.status,
+    content: publication.content,
+    reasonCode: publication.reasonCode,
+    correlationId: publication.correlationId,
+    limitations: Array.isArray(publication.limitations)
+      ? [...publication.limitations]
+      : publication.limitations,
+  };
+  if (!isCanonicalPublicationArtifact(projected)
+    || !NON_PUBLISHABLE_STATUSES.has(projected.status)) return undefined;
+  return { publication: projected };
 }
 
 /**
@@ -75,10 +103,12 @@ export function errorHandler(error, request, reply) {
   }
 
   if (isAppError(error)) {
+    const details = publicationErrorDetails(error);
     return reply.status(error.statusCode).send({
       error: error.message,
       code: error.code,
       requestId,
+      ...(details ? { details } : {}),
     });
   }
 

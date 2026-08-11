@@ -21,7 +21,11 @@ describe('education model-publication recovery switch', () => {
   beforeEach(async () => {
     process.env.DISABLE_MODEL_PUBLICATION = '1';
     prisma = createPrismaMock();
-    app = await buildTestApp(prisma, { csrf: false, includeEducation: true });
+    app = await buildTestApp(prisma, {
+      csrf: false,
+      includeEducation: true,
+      fastifyOptions: { genReqId: () => '_abc' },
+    });
   });
 
   afterEach(async () => {
@@ -56,7 +60,16 @@ describe('education model-publication recovery switch', () => {
     });
 
     expect(response.statusCode).toBe(503);
-    expect(JSON.parse(response.payload).error).toMatch(/temporarily unavailable during safe recovery/i);
+    const body = JSON.parse(response.payload);
+    expect(body.error).toMatch(/temporarily unavailable during safe recovery/i);
+    expect(body.details?.publication).toMatchObject({
+      contractVersion: 1,
+      status: 'unavailable',
+      content: null,
+      reasonCode: 'model_publication_disabled',
+      correlationId: 'request-_abc:education-recovery',
+    });
+    expect(body.details.publication.correlationId).toMatch(/^[A-Za-z0-9]/u);
     expect(prisma.learningSession.count).not.toHaveBeenCalled();
     expect(provider.generateExplanation).not.toHaveBeenCalled();
     expect(provider.generateImage).not.toHaveBeenCalled();
