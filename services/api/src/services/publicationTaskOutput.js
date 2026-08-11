@@ -37,11 +37,17 @@ const PASSIVE_USE_CLINICAL_TARGET = `(?:${PASSIVE_USE_CLINICAL_INDICATION}|(?:yo
 const PASSIVE_USE_CLINICAL_PURPOSE = `(?:(?:to|for|in)\\s+(?:treat|treating|manage|managing|diagnose|diagnosing|screen|screening|monitor|monitoring|relieve|relieving|reduce|reducing|prevent|preventing)\\s+(?:(?:a|an|the|this|these)\\s+)?${PASSIVE_USE_CLINICAL_TARGET}\\b|(?:for|against)\\s+${PASSIVE_USE_CLINICAL_INDICATION}\\b(?!\\s+(?:research|stud(?:y|ies)|analysis|model(?:s|ing)?|dataset|samples?|cells?))|(?:as|for)\\s+(?:a\\s+|the\\s+)?(?:treatment|therapy|medication)(?:\\s+of\\s+${PASSIVE_USE_CLINICAL_INDICATION})?)`;
 const CLINICAL_QUANTITY = '(?:\\d+(?:\\.\\d+)?|zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|half|quarter)';
 const CLINICAL_DOSE_UNIT = '(?:mg|mcg|μg|ug|ng|g|ml|cc|iu|units?|grams?|milli?grams?|micrograms?|nanograms?|milliliters?)';
-const CLINICAL_PERCENT = '(?:%|percent(?:age)?)';
+const CLINICAL_PERCENT = '(?:%|٪|percent(?:age)?\\b(?!\\s+points?\\b))';
+const CLINICAL_PERCENTAGE_VALUE = `${CLINICAL_QUANTITY}\\s*${CLINICAL_PERCENT}`;
+const CLINICAL_PERCENTAGE_FORMULATION_NOUN = '(?:(?:topical\\s+)?(?:solutions?|creams?|gels?|ointments?|formulations?)|concentrations?)';
+const CLINICAL_PERCENTAGE_NAMED_FORMULATION = `${CLINICAL_PERCENTAGE_VALUE}(?:(?:\\s*strength)(?:\\s+${CLINICAL_PERCENTAGE_FORMULATION_NOUN})?|\\s+${CLINICAL_PERCENTAGE_FORMULATION_NOUN})`;
 const CLINICAL_SCHEDULE = `(?:daily|nightly|weekly|each\\s+(?:morning|evening|day|night|week)|once|twice|${CLINICAL_QUANTITY}\\s+times?)\\s*(?:(?:a|per)\\s+(?:day|week)|daily|weekly)?|every\\s+(?:(?:${CLINICAL_QUANTITY}|\\d+)\\s*(?:h|hr|hrs|hours?)|morning|evening|day|night|week)|at\\s+bedtime|with\\s+(?:meals?|breakfast|lunch|dinner)|as\\s+needed|on\\s+(?:mondays?|tuesdays?|wednesdays?|thursdays?|fridays?|saturdays?|sundays?)|q\\s*\\d+\\s*h`;
 const PASSIVE_USE_ADMINISTRATION_CONTEXT = `(?:(?:(?:orally|topically|intravenously|intramuscularly|subcutaneously)\\s+)?(?:${CLINICAL_SCHEDULE})|at\\s+(?:a\\s+)?(?:dose\\s+of\\s+)?${CLINICAL_QUANTITY}\\s*(?:${CLINICAL_DOSE_UNIT}|${CLINICAL_PERCENT})|as\\s+(?:a\\s+)?${CLINICAL_QUANTITY}\\s*(?:${CLINICAL_DOSE_UNIT}|${CLINICAL_PERCENT})\\s*(?:solution)?|as\\s+${CLINICAL_QUANTITY}\\s+(?:tablets?|capsules?|pills?|drops?|puffs?|sprays?|inhalations?)(?:\\s+(?:once|twice|${CLINICAL_QUANTITY}\\s+times?)\\s+(?:a\\s+day|daily))?)`;
-const PASSIVE_USE_RESEARCH_CONTEXT = '(?:research|stud(?:y|ies)|analysis|assays?|samples?|workflows?|simulations?|models?|methods?|tools?|lessons?|education|examples?|datasets?|calibration|quality[ -]control|aggregate\\s+research|genomic\\s+library|patient-derived\\s+(?:samples?|cells?)|selection\\s+marker|cultured\\s+cells|cell\\s+growth|mitosis|meiosis|absorbance|culture\\s+cells|edit\\s+genes|amplify\\s+dna|tumor\\s+genomes|punnett\\s+squares?|inheritance\\s+ratios?)';
-const PASSIVE_USE_CONCRETE_LAB_CONTEXT = '(?:assays?|quality[ -]control|genomic\\s+library|selection\\s+marker|cultured\\s+cells|cell\\s+growth|mitosis|meiosis|absorbance|culture\\s+cells|tumor\\s+genomes|(?:patient-derived\\s+(?:samples?|cells?)[^.!?;\\n]{0,60}\\b(?:aggregate\\s+research|laborator(?:y|ies)|lab|assays?)|(?:aggregate\\s+research|laborator(?:y|ies)|lab|assays?)[^.!?;\\n]{0,60}\\bpatient-derived\\s+(?:samples?|cells?)))';
+const PASSIVE_PERCENTAGE_NAMED_ADMINISTRATION_CONTEXT = `(?:(?:as|in|at)\\s+(?:a\\s+)?${CLINICAL_PERCENTAGE_NAMED_FORMULATION}|(?:in|at)\\s+(?:a\\s+)?concentration\\s+of\\s+${CLINICAL_PERCENTAGE_VALUE})`;
+const PASSIVE_PERCENTAGE_BARE_ADMINISTRATION_CONTEXT = `(?:as|in|at)\\s+(?:a\\s+)?${CLINICAL_PERCENTAGE_VALUE}(?!\\s+points?\\b)`;
+const PERCENTAGE_ADMINISTRATION_CONTEXT = `(?:${PASSIVE_PERCENTAGE_NAMED_ADMINISTRATION_CONTEXT}|${PASSIVE_PERCENTAGE_BARE_ADMINISTRATION_CONTEXT})`;
+const PASSIVE_USE_RESEARCH_CONTEXT = '(?:research|stud(?:y|ies)|analysis|assays?|samples?|workflows?|simulations?|models?|methods?|tools?|lessons?|education|examples?|datasets?|calibration|quality[ -]control|aggregate\\s+research|(?:aggregate|deidentified|population(?:[- ]?level)|cohort(?:[- ]?level))\\s+cohorts?|allele\\s+frequenc(?:y|ies)|significance\\s+levels?|genomic\\s+library|patient-derived\\s+(?:samples?|cells?)|selection\\s+marker|cultured\\s+cells|cell\\s+growth|mitosis|meiosis|absorbance|culture\\s+cells|edit\\s+genes|amplify\\s+dna|tumor\\s+genomes|punnett\\s+squares?|inheritance\\s+ratios?)';
+const PASSIVE_USE_CONCRETE_LAB_CONTEXT = '(?:assays?|quality[ -]control|genomic\\s+library|selection\\s+marker|cultured\\s+cells|cell\\s+growth|mitosis|meiosis|absorbance|culture\\s+cells|tumor\\s+genomes|(?:the\\s+)?labs?|laborator(?:y|ies)(?:\\s+research)?|(?:dna|rna)\\s+extraction|p\\s*c\\s*r|sequencing\\s+library\\s+preparation|(?:genetic|genetics|genomic)\\s+experiments?|c\\s*r\\s*i\\s*s\\s*p\\s*r\\s+editing|gel\\s+electrophoresis|cell\\s*culture\\s+experiments?|(?:patient-derived\\s+(?:samples?|cells?)[^.!?;\\n]{0,60}\\b(?:aggregate\\s+research|laborator(?:y|ies)|lab|assays?)|(?:aggregate\\s+research|laborator(?:y|ies)|lab|assays?)[^.!?;\\n]{0,60}\\bpatient-derived\\s+(?:samples?|cells?)))';
 
 const DIRECT_CLINICAL_ACTION = `(?:${GENERIC_CLINICAL_ACTION}|choose|select)`;
 const DIRECT_CLINICAL_ACTION_GERUND = `(?:${GENERIC_CLINICAL_ACTION_GERUND}|choosing|selecting)`;
@@ -149,6 +155,32 @@ const PASSIVE_ACTION_ADMINISTRATION_PATTERN = new RegExp(
   `\\b${PASSIVE_CLINICAL_ACTION_PAST}\\b\\s*,?\\s+${PASSIVE_USE_ADMINISTRATION_CONTEXT}\\b`,
   'iu',
 );
+const PASSIVE_ACTION_NAMED_PERCENTAGE_ADMINISTRATION_PATTERN = new RegExp(
+  `\\b${PASSIVE_CLINICAL_ACTION_PAST}\\b(?=[^.!?;\\n]*\\b${PASSIVE_PERCENTAGE_NAMED_ADMINISTRATION_CONTEXT}(?![\\p{L}\\p{N}%٪]))`,
+  'iu',
+);
+const PASSIVE_ACTION_BARE_PERCENTAGE_ADMINISTRATION_PATTERN = new RegExp(
+  `\\b${PASSIVE_CLINICAL_ACTION_PAST}\\b(?=[^.!?;\\n]*\\b${PASSIVE_PERCENTAGE_BARE_ADMINISTRATION_CONTEXT}(?![\\p{L}\\p{N}%٪]))`,
+  'iu',
+);
+const PASSIVE_PERCENTAGE_RESEARCH_SEMANTICS_PATTERN = new RegExp(
+  `(?:\\b${CLINICAL_PERCENTAGE_VALUE}\\s+(?:of\\s+(?:(?:the|these|those|reviewed|aggregate|deidentified)\\s+)?(?:simulations?|samples?|examples?|variants?|cohorts?|datasets?|observations?|experiments?|comparisons?)|(?:statistical\\s+)?(?:significance|confidence|allele\\s+frequenc(?:y|ies)|thresholds?|prevalence|penetrance))\\b|\\b${CLINICAL_QUANTITY}\\s+percentage[ -]?points?\\s+(?:thresholds?|corrections?|changes?|differences?)\\b)`,
+  'iu',
+);
+const PASSIVE_PERCENTAGE_RESEARCH_SUBJECT_PATTERN = new RegExp(
+  `\\b(?:methods?|models?|filters?|assays?|reagents?|algorithms?|pipelines?|workflows?|tools?|simulations?|datasets?|variables?|statistics?|thresholds?|p\\s*c\\s*r)\\s+${PASSIVE_USE_AUXILIARY}\\b[^.!?;\\n]*\\b${PASSIVE_CLINICAL_ACTION_PAST}\\b`,
+  'iu',
+);
+const ACTIVE_PERSON_REGULAR_CLINICAL_ACTION = '(?:take|consume|ingest|swallow|chew|drink|dissolve|inhale|spray|inject|administer|prescribe|dose|medicate|redose|refill|combine|hold|pause|cease|maintain|replace|substitute|remove|add|receive|give|initiate|manage|start|begin|resume|continue|stop|discontinue|skip|taper|increase|decrease|avoid|rub|insert|place|wear|use|schedule|screen|test|diagnose|treat|monitor)';
+const ACTIVE_PERSON_CLINICAL_ACTION = `(?:${ACTIVE_PERSON_REGULAR_CLINICAL_ACTION}s?|tr(?:y|ies)|appl(?:y|ies)|undergo(?:es)?|switch(?:es)?(?:\\s+to)?|re\\s*starts?|keeps?\\s+(?:taking|using))`;
+const ACTIVE_PERSON_PERCENTAGE_ACTION_PATTERN = new RegExp(
+  `\\b(?:(?:(?:this|the|a|one)\\s+)?(?:patient|child|individual|person|adult)|(?:(?:these|the)\\s+)?(?:patients|children|individuals|persons|adults)|you)\\s+(?<action>${ACTIVE_PERSON_CLINICAL_ACTION})\\b(?<tail>[^.!?;\\n]*)`,
+  'giu',
+);
+const ACTIVE_PERSON_PERCENTAGE_CONTEXT_PATTERN = new RegExp(
+  `\\b(?:${PERCENTAGE_ADMINISTRATION_CONTEXT}|(?:a\\s+)?(?:${CLINICAL_PERCENTAGE_NAMED_FORMULATION}|${CLINICAL_PERCENTAGE_VALUE}))(?![\\p{L}\\p{N}%٪])`,
+  'iu',
+);
 const PASSIVE_USE_RESEARCH_CONTEXT_PATTERN = new RegExp(
   `\\b${PASSIVE_USE_RESEARCH_CONTEXT}\\b`,
   'iu',
@@ -200,6 +232,7 @@ const NAMED_HTML_ENTITIES = Object.freeze({
   nbsp: ' ',
   newline: '\n',
   num: '#',
+  percnt: '%',
   period: '.',
   quest: '?',
   quot: '"',
@@ -311,9 +344,16 @@ function semanticSafetyText(value, { separatePunctuation = false } = {}) {
   const normalized = replaceControlCharacters(removeInvisibleFormatCharacters(
     decodeHtmlEntities(value, { preserveUnknownNamed: false }).normalize('NFKD'),
   ), { preserveLineBreaks: true });
-  const confusableMapped = Array.from(normalized, (character) => (
-    SAFETY_CONFUSABLES.get(character) ?? character
-  )).join('');
+  const confusableMapped = Array.from(normalized, (character) => {
+    const codePoint = character.codePointAt(0) ?? -1;
+    if (codePoint >= 0x0660 && codePoint <= 0x0669) {
+      return String.fromCodePoint(0x30 + codePoint - 0x0660);
+    }
+    if (codePoint >= 0x06f0 && codePoint <= 0x06f9) {
+      return String.fromCodePoint(0x30 + codePoint - 0x06f0);
+    }
+    return SAFETY_CONFUSABLES.get(character) ?? character;
+  }).join('');
   return stripRenderedMarkupForSafety(confusableMapped, {
     separateFormatting: separatePunctuation,
   })
@@ -440,15 +480,23 @@ function removeAllowedBoundaryDisclaimers(value) {
 
 function baseDirectAction(action) {
   const normalized = action.toLocaleLowerCase('en-US');
-  return ({
+  const aliased = ({
+    applies: 'apply',
     choosing: 'choose',
+    keeps: 'keep',
     selecting: 'select',
     starting: 'start',
     stopping: 'stop',
+    switches: 'switch',
     taking: 'take',
     testing: 'test',
+    tries: 'try',
+    undergoes: 'undergo',
     using: 'use',
-  })[normalized] ?? normalized;
+  })[normalized];
+  if (aliased) return aliased;
+  if (normalized.startsWith('keeps ')) return `keep ${normalized.slice(6)}`;
+  return normalized.endsWith('s') ? normalized.slice(0, -1) : normalized;
 }
 
 function isNonClinicalDirectAction(action, tail) {
@@ -498,6 +546,20 @@ function directiveHasUnsafeDirectAction(action, tail, frame) {
     const nestedTail = tail.slice(nestedTailStart, nestedTailEnd);
     return hasHardDirectClinicalContext(`${match.groups.action} ${nestedTail}`)
       || !isNonClinicalDirectAction(match.groups.action, nestedTail);
+  });
+}
+
+function containsActivePersonPercentageAdministration(value) {
+  return [...value.matchAll(ACTIVE_PERSON_PERCENTAGE_ACTION_PATTERN)].some((match) => {
+    const tail = match.groups.tail ?? '';
+    const percentageContext = tail.match(ACTIVE_PERSON_PERCENTAGE_CONTEXT_PATTERN);
+    if (!percentageContext) return false;
+    const safetyTail = tail.replace(percentageContext[0], ' percentage value ');
+    return directiveHasUnsafeDirectAction(
+      match.groups.action,
+      safetyTail,
+      `${match.groups.action} ${safetyTail}`,
+    );
   });
 }
 
@@ -597,6 +659,13 @@ function containsPassiveClinicalAction(value) {
     if (PASSIVE_ACTION_ADMINISTRATION_PATTERN.test(clause) && !hasConcreteLabContext) {
       return true;
     }
+    if (PASSIVE_ACTION_NAMED_PERCENTAGE_ADMINISTRATION_PATTERN.test(clause)
+      && !hasConcreteLabContext) return true;
+    if (PASSIVE_ACTION_BARE_PERCENTAGE_ADMINISTRATION_PATTERN.test(clause)
+      && !hasConcreteLabContext
+      && !((PASSIVE_PERCENTAGE_RESEARCH_SEMANTICS_PATTERN.test(clause)
+          || PASSIVE_PERCENTAGE_RESEARCH_SUBJECT_PATTERN.test(clause))
+        && hasReviewedResearchContext)) return true;
     if (PASSIVE_ACTION_KNOWN_MEDICATION_PATTERN.test(clause) && !hasConcreteLabContext) {
       return true;
     }
@@ -622,6 +691,7 @@ function containsProhibitedClinicalGuidance(value) {
   return [...policyTexts].some((policyText) => {
     const withoutAllowedDisclaimers = removeAllowedBoundaryDisclaimers(policyText);
     return CLINICAL_GUIDANCE_PATTERNS.some((pattern) => pattern.test(withoutAllowedDisclaimers))
+      || containsActivePersonPercentageAdministration(withoutAllowedDisclaimers)
       || containsDirectClinicalAction(withoutAllowedDisclaimers)
       || containsUnsafeRecommendation(withoutAllowedDisclaimers)
       || containsUnsafeRecommendationFrame(withoutAllowedDisclaimers)
