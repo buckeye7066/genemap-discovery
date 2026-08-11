@@ -163,6 +163,86 @@ describe('Dashboard research summary identity boundary', () => {
     expect(publicationAlert).toHaveTextContent('Support ID: summary:recovery-disabled');
   });
 
+  it.each([
+    ['missing', undefined],
+    ['null', null],
+    ['scalar', 'LEGACY_SUMMARY_SCALAR_LEAK'],
+    [
+      'noncanonical',
+      {
+        ...summaryResponse('NONCANONICAL_SUMMARY_CONTENT_LEAK', 'summary:noncanonical').publication,
+        raw: 'NONCANONICAL_SUMMARY_RAW_LEAK',
+      },
+    ],
+  ])('fails closed when a successful summary response has a %s publication', async (
+    _shape,
+    responsePublication,
+  ) => {
+    apiClient.invokePublicationTask.mockResolvedValue({
+      publication: responsePublication,
+      result: 'LEGACY_SUMMARY_RESULT_LEAK',
+      raw: 'LEGACY_SUMMARY_RAW_LEAK',
+    });
+
+    render(dashboardElement());
+
+    const supportId = await screen.findByText('summary:client-invalid-publication');
+    const publicationAlert = supportId.closest('[data-publication-status]');
+    expect(publicationAlert).not.toBeNull();
+    expect(publicationAlert).toHaveAttribute('data-publication-status', 'unavailable');
+    expect(publicationAlert).toHaveTextContent('Publication unavailable');
+    expect(screen.getByText('Research Activity Summary')).toBeInTheDocument();
+    expect(screen.queryByText(/(?:LEGACY|NONCANONICAL)_SUMMARY_/i)).toBeNull();
+  });
+
+  it.each([
+    [
+      'partial',
+      {
+        contractVersion: 1,
+        status: 'partial',
+        content: 'Partial canonical summary.',
+        reasonCode: 'provider_truncated',
+        correlationId: 'summary:canonical-partial',
+        limitations: ['The ending may be incomplete.'],
+      },
+      'Partial publication',
+      'Partial canonical summary.',
+    ],
+    [
+      'unavailable',
+      {
+        contractVersion: 1,
+        status: 'unavailable',
+        content: null,
+        reasonCode: 'provider_unavailable',
+        correlationId: 'summary:canonical-unavailable',
+        limitations: [],
+      },
+      'Publication unavailable',
+      null,
+    ],
+  ])('preserves a canonical %s summary response', async (
+    expectedStatus,
+    responsePublication,
+    statusLabel,
+    expectedContent,
+  ) => {
+    apiClient.invokePublicationTask.mockResolvedValue({ publication: responsePublication });
+
+    render(dashboardElement());
+
+    const publicationLabel = await screen.findByText(statusLabel);
+    const publicationState = publicationLabel.closest('[data-publication-status]');
+    expect(publicationState).not.toBeNull();
+    expect(publicationState).toHaveAttribute('data-publication-status', expectedStatus);
+    if (expectedContent) {
+      expect(screen.getByText(expectedContent)).toBeInTheDocument();
+    } else {
+      expect(publicationState).toHaveTextContent('Support ID: summary:canonical-unavailable');
+    }
+  });
+
   it('keeps the newest overlapping load data and summary for the same identity', async () => {
     const staleActivityRows = deferred();
     let runIntervalRefresh;
