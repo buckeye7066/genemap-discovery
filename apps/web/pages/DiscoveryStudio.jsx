@@ -20,7 +20,7 @@ import { useAuth } from '@/lib/AuthContext';
 const pathways = [
   {
     eyebrow: 'FOUNDATIONS',
-    title: 'Build your genetics intuition',
+    title: 'Learn Genetics: build your intuition',
     description: 'Move from the central dogma to inheritance, variation, and gene–phenotype relationships with reviewed learning material matched to your level.',
     action: 'Start learning',
     to: 'LearnGenetics',
