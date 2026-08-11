@@ -24,9 +24,14 @@ import { safeModelMarkdownComponents } from '../shared/safeModelMarkdown';
 import PublicationState, {
   enforcePublicationContentType,
   hasReusablePublicationContent,
+  isCanonicalPublicationArtifact,
   publicationContent,
 } from '../shared/PublicationState';
-import { terminalPublicationArtifactFromError } from '@genemap/shared/publicationStatus';
+import {
+  createPublicationArtifact,
+  PUBLICATION_STATUSES,
+  terminalPublicationArtifactFromError,
+} from '@genemap/shared/publicationStatus';
 
 const dataTypeOptions = Object.freeze([
   { key: 'wes', label: 'Whole-exome sequencing (WES)', icon: '🧬' },
@@ -62,6 +67,20 @@ function selectedModalities(dataTypes) {
   return Object.entries(dataTypes)
     .filter(([, selected]) => Boolean(selected))
     .map(([type]) => type);
+}
+
+function researchHypothesisPublication(artifact) {
+  if (isCanonicalPublicationArtifact(artifact)) {
+    return enforcePublicationContentType(
+      artifact,
+      (content) => typeof content === 'string' && Boolean(content.trim()),
+    );
+  }
+  return createPublicationArtifact({
+    status: PUBLICATION_STATUSES.UNAVAILABLE,
+    reasonCode: 'invalid_publication_artifact',
+    correlationId: 'hypothesis:client-invalid-publication',
+  });
 }
 
 export function describeResearchFocus(focus) {
@@ -168,13 +187,7 @@ export default function HypothesisGenerator() {
         'research_hypothesis',
         taskInput,
       );
-      const publication = enforcePublicationContentType(
-        response?.publication,
-        (content) => typeof content === 'string' && Boolean(content.trim()),
-      );
-      if (!publication) {
-        throw new Error('The research service returned no publication status.');
-      }
+      const publication = researchHypothesisPublication(response?.publication);
       const generated = publicationContent(publication);
       setHypotheses({
         cohort: taskInput.cohort,
