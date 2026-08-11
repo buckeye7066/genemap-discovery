@@ -36,9 +36,10 @@ const PASSIVE_USE_CLINICAL_INDICATION = '(?:pain|symptoms?|headaches?|migraines?
 const PASSIVE_USE_CLINICAL_TARGET = `(?:${PASSIVE_USE_CLINICAL_INDICATION}|(?:you|your\\s+child|(?:the|this|these)\\s+(?:patients?|individuals?|children)|patients?|individuals?|children)(?!-(?:derived|reported)\\b|\\s+(?:derived|samples?|data|records?|cohorts?|cells?|specimens?)))`;
 const PASSIVE_USE_CLINICAL_PURPOSE = `(?:(?:to|for|in)\\s+(?:treat|treating|manage|managing|diagnose|diagnosing|screen|screening|monitor|monitoring|relieve|relieving|reduce|reducing|prevent|preventing)\\s+(?:(?:a|an|the|this|these)\\s+)?${PASSIVE_USE_CLINICAL_TARGET}\\b|(?:for|against)\\s+${PASSIVE_USE_CLINICAL_INDICATION}\\b(?!\\s+(?:research|stud(?:y|ies)|analysis|model(?:s|ing)?|dataset|samples?|cells?))|(?:as|for)\\s+(?:a\\s+|the\\s+)?(?:treatment|therapy|medication)(?:\\s+of\\s+${PASSIVE_USE_CLINICAL_INDICATION})?)`;
 const CLINICAL_QUANTITY = '(?:\\d+(?:\\.\\d+)?|zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|half|quarter)';
-const CLINICAL_DOSE_UNIT = '(?:mg|mcg|μg|ug|ng|g|ml|cc|iu|units?|grams?|milli?grams?|micrograms?|nanograms?|milliliters?|percent(?:age)?)';
+const CLINICAL_DOSE_UNIT = '(?:mg|mcg|μg|ug|ng|g|ml|cc|iu|units?|grams?|milli?grams?|micrograms?|nanograms?|milliliters?)';
+const CLINICAL_PERCENT = '(?:%|percent(?:age)?)';
 const CLINICAL_SCHEDULE = `(?:daily|nightly|weekly|each\\s+(?:morning|evening|day|night|week)|once|twice|${CLINICAL_QUANTITY}\\s+times?)\\s*(?:(?:a|per)\\s+(?:day|week)|daily|weekly)?|every\\s+(?:(?:${CLINICAL_QUANTITY}|\\d+)\\s*(?:h|hr|hrs|hours?)|morning|evening|day|night|week)|at\\s+bedtime|with\\s+(?:meals?|breakfast|lunch|dinner)|as\\s+needed|on\\s+(?:mondays?|tuesdays?|wednesdays?|thursdays?|fridays?|saturdays?|sundays?)|q\\s*\\d+\\s*h`;
-const PASSIVE_USE_ADMINISTRATION_CONTEXT = `(?:(?:(?:orally|topically|intravenously|intramuscularly|subcutaneously)\\s+)?(?:${CLINICAL_SCHEDULE})|at\\s+(?:a\\s+)?(?:dose\\s+of\\s+)?${CLINICAL_QUANTITY}\\s*${CLINICAL_DOSE_UNIT}|as\\s+(?:a\\s+)?${CLINICAL_QUANTITY}\\s*(?:${CLINICAL_DOSE_UNIT}|%)\\s*(?:solution)?|as\\s+${CLINICAL_QUANTITY}\\s+(?:tablets?|capsules?|pills?|drops?|puffs?|sprays?|inhalations?)(?:\\s+(?:once|twice|${CLINICAL_QUANTITY}\\s+times?)\\s+(?:a\\s+day|daily))?)`;
+const PASSIVE_USE_ADMINISTRATION_CONTEXT = `(?:(?:(?:orally|topically|intravenously|intramuscularly|subcutaneously)\\s+)?(?:${CLINICAL_SCHEDULE})|at\\s+(?:a\\s+)?(?:dose\\s+of\\s+)?${CLINICAL_QUANTITY}\\s*(?:${CLINICAL_DOSE_UNIT}|${CLINICAL_PERCENT})|as\\s+(?:a\\s+)?${CLINICAL_QUANTITY}\\s*(?:${CLINICAL_DOSE_UNIT}|${CLINICAL_PERCENT})\\s*(?:solution)?|as\\s+${CLINICAL_QUANTITY}\\s+(?:tablets?|capsules?|pills?|drops?|puffs?|sprays?|inhalations?)(?:\\s+(?:once|twice|${CLINICAL_QUANTITY}\\s+times?)\\s+(?:a\\s+day|daily))?)`;
 const PASSIVE_USE_RESEARCH_CONTEXT = '(?:research|stud(?:y|ies)|analysis|assays?|samples?|workflows?|simulations?|models?|methods?|tools?|lessons?|education|examples?|datasets?|calibration|quality[ -]control|aggregate\\s+research|genomic\\s+library|patient-derived\\s+(?:samples?|cells?)|selection\\s+marker|cultured\\s+cells|cell\\s+growth|mitosis|meiosis|absorbance|culture\\s+cells|edit\\s+genes|amplify\\s+dna|tumor\\s+genomes|punnett\\s+squares?|inheritance\\s+ratios?)';
 const PASSIVE_USE_CONCRETE_LAB_CONTEXT = '(?:assays?|quality[ -]control|genomic\\s+library|selection\\s+marker|cultured\\s+cells|cell\\s+growth|mitosis|meiosis|absorbance|culture\\s+cells|tumor\\s+genomes|(?:patient-derived\\s+(?:samples?|cells?)[^.!?;\\n]{0,60}\\b(?:aggregate\\s+research|laborator(?:y|ies)|lab|assays?)|(?:aggregate\\s+research|laborator(?:y|ies)|lab|assays?)[^.!?;\\n]{0,60}\\bpatient-derived\\s+(?:samples?|cells?)))';
 
@@ -56,7 +57,7 @@ const DIRECT_ACTION_HARD_CLINICAL_CONTEXT_PATTERN = new RegExp(
   'iu',
 );
 const DIRECT_ACTION_ADMINISTRATION_PATTERN = new RegExp(
-  `(?:\\b${PASSIVE_USE_ADMINISTRATION_CONTEXT}|\\b${CLINICAL_QUANTITY}\\s*(?:${CLINICAL_DOSE_UNIT}|%))`,
+  `(?:\\b${PASSIVE_USE_ADMINISTRATION_CONTEXT}|\\b${CLINICAL_QUANTITY}\\s*${CLINICAL_DOSE_UNIT})`,
   'iu',
 );
 const DIRECT_ACTION_SPECIFIC_PERSON_PATTERN = /\b(?:(?:this|the|a|one)\s+(?:patient|child|individual|person)|your\s+child)(?![-\s]+(?:derived|samples?|data|records?|cohorts?|cells?|specimens?))\b/iu;
@@ -64,7 +65,7 @@ const DIRECT_ACTION_PERSON_MARKED_RISK_PATTERN = /\b(?:personal|individual(?:ize
 const DIRECT_ACTION_DISEASE_RISK_PATTERN = /\b(?:disease|cancer|clinical)\b(?:\s+[\p{L}-]+){0,4}\s+risk\b/iu;
 const DIRECT_ACTION_AGGREGATE_RISK_PATTERN = /\b(?:aggregate|deidentified|population(?:[- ]?level)|cohort(?:[- ]?level))\b[^.!?;\n]*\brisk\b|\brisk\b[^.!?;\n]*\b(?:aggregate|deidentified|population(?:[- ]?level)|cohort(?:[- ]?level))\b/iu;
 const EXPLICIT_DOSE_PATTERN = new RegExp(
-  `\\b${CLINICAL_QUANTITY}\\s*(?:${CLINICAL_DOSE_UNIT}\\b|%)`,
+  `\\b${CLINICAL_QUANTITY}\\s*${CLINICAL_DOSE_UNIT}\\b`,
   'iu',
 );
 const DIRECT_ACTION_NONCLINICAL_TARGET_PATTERN = new RegExp(
