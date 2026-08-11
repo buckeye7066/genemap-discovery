@@ -45,6 +45,8 @@ jobs:
           java-version: '21'
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Generate Prisma client
+        run: pnpm db:generate
       - name: Release gates
         run: pnpm release:check
       - name: Build and verify production-configured web app

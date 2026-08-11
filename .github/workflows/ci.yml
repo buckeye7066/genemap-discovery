@@ -146,6 +146,79 @@ jobs:
           path: apps/web/dist
           retention-days: 7
 
+  android-build-smoke:
+    # PR/push-safe native packaging proof: no signing credentials and no
+    # runtime web-bundle updater. The unset version env exercises local defaults.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '24'
+          cache: 'pnpm'
+      - uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5.6.0
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+      - name: Install (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+      - name: Build shared package
+        run: pnpm --filter @genemap/shared build
+      - name: Build web bundle for Android assets
+        run: pnpm --filter @genemap/web build
+        env:
+          VITE_API_URL: http://localhost:3000
+      - name: Verify Java 21
+        shell: bash
+        run: |
+          set -euo pipefail
+          java -version
+          JAVA_SPEC=$(java -XshowSettings:properties -version 2>&1 | awk -F'= ' '/java.specification.version/{print $2; exit}')
+          test "$JAVA_SPEC" = '21'
+      - name: Sync Capacitor Android project
+        run: npx -y @capacitor/cli@8.4.1 sync android
+        working-directory: apps/web
+      - name: Assemble Android debug APK without release credentials
+        run: ./gradlew assembleDebug --no-daemon
+        working-directory: apps/web/android
+      - name: Inspect Android package identity, content, and size
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK='apps/web/android/app/build/outputs/apk/debug/app-debug.apk'
+          test -s "$APK"
+
+          AAPT=$(find "$ANDROID_HOME/build-tools" -maxdepth 2 -type f -name aapt | sort -V | tail -n 1)
+          test -n "$AAPT"
+          "$AAPT" dump badging "$APK" | tee "$RUNNER_TEMP/genemap-apk-badging.txt"
+          grep -F "package: name='com.genemap.discovery' versionCode='1' versionName='1.0'" \
+            "$RUNNER_TEMP/genemap-apk-badging.txt"
+
+          unzip -Z1 "$APK" | tee "$RUNNER_TEMP/genemap-apk-files.txt"
+          test "$(grep -Fxc 'assets/public/index.html' "$RUNNER_TEMP/genemap-apk-files.txt")" -eq 1
+          if grep -Eq '^assets/public/mobile/|(^|/)bundle-[^/]+\.zip$' "$RUNNER_TEMP/genemap-apk-files.txt"; then
+            echo 'Unexpected mobile OTA archive found in Android package' >&2
+            exit 1
+          fi
+
+          APK_BYTES=$(stat -c '%s' "$APK")
+          test "$APK_BYTES" -gt 0
+          {
+            echo '### Android debug package smoke'
+            echo
+            echo "- Package: com.genemap.discovery"
+            echo "- Version: 1 / 1.0 (local defaults)"
+            echo "- APK bytes: $APK_BYTES"
+            echo '- Baked web entrypoints: 1'
+            echo '- Mobile OTA archives: 0'
+          } >> "$GITHUB_STEP_SUMMARY"
+
   desktop-build-smoke:
     # electron-builder is part of the shipped desktop toolchain. Build an unpacked
     # Linux directory on every PR so a dependency/security upgrade cannot silently
