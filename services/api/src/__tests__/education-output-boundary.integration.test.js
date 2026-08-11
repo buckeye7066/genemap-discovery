@@ -10,6 +10,7 @@ const provider = vi.hoisted(() => ({
 vi.mock('../services/llm.js', () => provider);
 
 import { authCookie, buildTestApp, createPrismaMock } from './setup.js';
+import { __test as openai } from '../services/openai.js';
 
 const user = { userId: 'education-output-user', email: 'education-output@example.com', role: 'user' };
 const topic = 'what-is-dna';
@@ -18,11 +19,22 @@ describe('education route publication boundaries', () => {
   let app;
   let prisma;
   let cookie;
+  let logs;
 
   beforeEach(async () => {
     delete process.env.DISABLE_MODEL_PUBLICATION;
+    logs = [];
     prisma = createPrismaMock();
-    app = await buildTestApp(prisma, { csrf: false, includeEducation: true });
+    app = await buildTestApp(prisma, {
+      csrf: false,
+      includeEducation: true,
+      fastifyOptions: {
+        logger: {
+          level: 'warn',
+          stream: { write: (chunk) => logs.push(String(chunk)) },
+        },
+      },
+    });
     cookie = authCookie(user, prisma);
     const seeded = prisma._store.user.find((record) => record.id === user.userId);
     seeded.subscriptions = [];
@@ -238,6 +250,55 @@ describe('education route publication boundaries', () => {
       (session) => session.type === 'explanation_status',
     );
     expect(storedStatus.content.publication.content).toBeNull();
+  });
+
+  it.each([
+    ['string', 'REFUSAL_STRING_ROUTE_SECRET', null],
+    [
+      'structured',
+      { type: 'refusal', reason: 'REFUSAL_OBJECT_ROUTE_SECRET' },
+      'CONTENT_ALONGSIDE_REFUSAL_ROUTE_SECRET',
+    ],
+  ])('maps an OpenAI %s message refusal to a content-free withheld artifact', async (
+    _shape,
+    refusal,
+    content,
+  ) => {
+    provider.generateExplanation.mockResolvedValueOnce(openai.normalizeCompletion({
+      choices: [{
+        finish_reason: 'stop',
+        message: { content, refusal },
+      }],
+    }));
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/education/explain',
+      headers: { cookie },
+      payload: { topic, level: 'undergraduate' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.payload);
+    expect(body.publication).toMatchObject({
+      contractVersion: 1,
+      status: 'withheld',
+      content: null,
+      reasonCode: 'provider_filtered',
+    });
+    expect(body).not.toHaveProperty('explanation');
+
+    const storedStatus = prisma._store.learningSession.find(
+      (session) => session.type === 'explanation_status',
+    );
+    expect(storedStatus.content.publication).toEqual(body.publication);
+
+    const externallyObservable = [
+      response.payload,
+      JSON.stringify(prisma._store.learningSession),
+      logs.join(''),
+    ].join('\n');
+    expect(externallyObservable).not.toContain('ROUTE_SECRET');
   });
 
   it('maps truncated narrative output to partial with a visible limitation', async () => {

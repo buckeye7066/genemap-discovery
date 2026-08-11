@@ -21,6 +21,38 @@ describe('provider completion metadata', () => {
   });
 
   it.each([
+    ['string', 'REFUSAL_STRING_MUST_NOT_ESCAPE', null],
+    [
+      'structured',
+      { type: 'refusal', reason: 'REFUSAL_OBJECT_MUST_NOT_ESCAPE' },
+      'CONTENT_ALONGSIDE_REFUSAL_MUST_NOT_ESCAPE',
+    ],
+  ])('classifies an OpenAI %s message refusal before a stop completion', (
+    _shape,
+    refusal,
+    content,
+  ) => {
+    const normalized = openai.normalizeCompletion({
+      choices: [{
+        finish_reason: 'stop',
+        message: { content, refusal },
+      }],
+    });
+
+    expect(normalized).toEqual({ text: '', completion: 'filtered' });
+    expect(JSON.stringify(normalized)).not.toContain('MUST_NOT_ESCAPE');
+  });
+
+  it('does not treat the standard null OpenAI refusal field as filtering', () => {
+    expect(openai.normalizeCompletion({
+      choices: [{
+        finish_reason: 'stop',
+        message: { content: 'bounded text', refusal: null },
+      }],
+    })).toEqual({ text: 'bounded text', completion: 'complete' });
+  });
+
+  it.each([
     ['end_turn', 'complete'],
     ['stop_sequence', 'complete'],
     ['max_tokens', 'truncated'],

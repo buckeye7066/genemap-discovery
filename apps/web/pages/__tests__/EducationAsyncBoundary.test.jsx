@@ -179,7 +179,7 @@ describe('education async publication boundaries', () => {
 
     expect(screen.getByText('Current quiz question?')).toBeInTheDocument();
     expect(screen.queryByText('Stale quiz question?')).toBeNull();
-    expect(screen.queryByText(/stale quiz failure/i)).toBeNull();
+    expect(screen.queryByText(/generated content is temporarily unavailable/i)).toBeNull();
     expect(screen.queryByText('quiz:stale-disabled')).toBeNull();
     expect(screen.queryByText(/generating quiz questions/i)).toBeNull();
   });
@@ -238,6 +238,48 @@ describe('education async publication boundaries', () => {
       questionCount: 5,
     }));
     expect(await screen.findByText('Fallback quiz question?')).toBeInTheDocument();
+  });
+
+  it.each([
+    ['elementary', 'elementary'],
+    ['middle_school', 'middle_school'],
+    ['high_school', 'high_school'],
+    ['undergraduate', 'undergraduate'],
+    ['graduate', 'graduate'],
+    ['postgraduate', 'postgraduate'],
+    ['phd', 'graduate'],
+    ['medical', 'postgraduate'],
+    ['researcher', 'postgraduate'],
+    ['unknown_profile_level', 'undergraduate'],
+    ['__proto__', 'undergraduate'],
+    ['constructor', 'undergraduate'],
+    ['hasOwnProperty', 'undergraduate'],
+    ['toString', 'undergraduate'],
+  ])('normalizes Topic Explorer saved level %s to publication level %s', async (savedLevel, apiLevel) => {
+    educationState.level = savedLevel;
+    apiClient.getExplanation.mockResolvedValue({
+      publication: publication(`Explanation for ${savedLevel}.`, `explanation:${savedLevel}`),
+      topicMetadata: { id: 'what-is-dna', title: 'What is DNA?' },
+      sources: [],
+    });
+
+    const path = '/topicexplorer?topic=what-is-dna';
+    const { rerender } = render(routedElement(path, TopicExplorer));
+
+    await waitFor(() => expect(apiClient.getExplanation).toHaveBeenCalledWith({
+      topic: 'what-is-dna',
+      level: apiLevel,
+    }));
+    expect(apiClient.getExplanation).toHaveBeenCalledTimes(1);
+    expect(await screen.findByText(`Explanation for ${savedLevel}.`)).toBeInTheDocument();
+
+    // Equivalent saved values share the normalized request scope, so changing
+    // to its canonical value must not invalidate or repeat the publication.
+    educationState.level = apiLevel;
+    rerender(routedElement(path, TopicExplorer));
+
+    expect(apiClient.getExplanation).toHaveBeenCalledTimes(1);
+    expect(screen.getByText(`Explanation for ${savedLevel}.`)).toBeInTheDocument();
   });
 
   it('keeps explanation, image, and chat completions independent and scoped to topic plus level', async () => {
@@ -384,7 +426,7 @@ describe('education async publication boundaries', () => {
     expect(await screen.findByText('chat:recovery-disabled')).toBeInTheDocument();
 
     expect(screen.getAllByText(/publication unavailable/i)).toHaveLength(3);
-    expect(screen.queryByText(/could not be completed/i)).toBeNull();
+    expect(screen.queryAllByText(/generated content is temporarily unavailable/i)).toHaveLength(0);
   });
 
   it('uses reviewed catalog metadata after validating the response topic identity', async () => {

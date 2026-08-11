@@ -18,15 +18,23 @@ async function getClient() {
 function normalizeCompletion(response) {
   const choice = response.choices?.[0];
   const finishReason = choice?.finish_reason;
-  const completion = finishReason === 'length'
-    ? 'truncated'
-    : finishReason === 'content_filter'
-      ? 'filtered'
-      : finishReason === 'stop'
-        ? 'complete'
-        : 'failed';
+  // Chat Completions can carry a message-level refusal while still reporting
+  // `finish_reason: "stop"` (and often `content: null`). Treat any non-null
+  // refusal payload as provider filtering before classifying the finish reason.
+  // The refusal itself is never returned, so downstream publication and
+  // persistence boundaries cannot accidentally expose provider refusal text.
+  const refused = choice?.message?.refusal != null;
+  const completion = refused
+    ? 'filtered'
+    : finishReason === 'length'
+      ? 'truncated'
+      : finishReason === 'content_filter'
+        ? 'filtered'
+        : finishReason === 'stop'
+          ? 'complete'
+          : 'failed';
   return {
-    text: choice?.message?.content || '',
+    text: refused ? '' : choice?.message?.content || '',
     completion,
   };
 }

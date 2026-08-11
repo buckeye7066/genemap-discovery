@@ -12,6 +12,7 @@ import PublicationState, {
   enforcePublicationContentType,
   publicationContent,
 } from '@/components/shared/PublicationState';
+import { normalizeEducationPublicationLevel } from '@/lib/educationPublicationLevel';
 import { terminalPublicationArtifactFromError } from '@genemap/shared/publicationStatus';
 import { apiClient } from '@genemap/shared';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -62,10 +63,6 @@ const TUTOR_ACTIONS = Object.freeze([
   ['give_example', 'Give a general example'],
   ['compare_concepts', 'Compare related concepts'],
   ['check_understanding', 'Check my understanding'],
-]);
-
-const EDUCATION_LEVELS = new Set([
-  'elementary', 'middle_school', 'high_school', 'undergraduate', 'graduate', 'postgraduate',
 ]);
 
 function isSafeGeneratedImageUrl(value) {
@@ -151,7 +148,7 @@ export default function TopicExplorer() {
   const { level, levelConfig } = useEducationLevel();
 
   const topicId = searchParams.get('topic') || '';
-  const publicationLevel = EDUCATION_LEVELS.has(level) ? level : 'undergraduate';
+  const publicationLevel = normalizeEducationPublicationLevel(level);
   const publicationRequestScope = `${topicId}\u0000${publicationLevel}`;
   const publicationRequestRef = useRef({
     scope: publicationRequestScope,
