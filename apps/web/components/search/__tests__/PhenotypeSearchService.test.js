@@ -468,6 +468,90 @@ describe('PhenotypeSearchService profile and comparison behavior', () => {
     expect(result.profilePublication).toEqual(publication);
   });
 
+  it.each([
+    ['available', null, []],
+    ['partial', 'provider_truncated', ['The profile may be incomplete.']],
+  ])('preserves canonical reusable %s profile publications', async (status, reasonCode, limitations) => {
+    const publication = {
+      contractVersion: 1,
+      status,
+      content: {
+        summaryStatus: 'available',
+        summary: '  Canonical reusable profile  ',
+        phenotypes: [{ name: 'Reviewed phenotype' }],
+        keyTakeaways: ['Reviewed takeaway'],
+      },
+      reasonCode,
+      correlationId: `profile-reusable-${status}`,
+      limitations,
+    };
+    vi.spyOn(apiClient, 'invokePublicationTask').mockResolvedValue({ publication });
+
+    const result = await PhenotypeSearchService.enrichGeneCombined({
+      symbol: 'CFTR',
+      ensemblId: 'ENSG00000001626',
+      coordinatesVerified: true,
+    }, null);
+
+    expect(result.profileStatus).toBe('available');
+    expect(result.profilePublication).toEqual(publication);
+    expect(result.aiSummary).toBe('Canonical reusable profile');
+    expect(result.phenotypes).toEqual([{ name: 'Reviewed phenotype' }]);
+    expect(result.keyTakeaways).toEqual(['Reviewed takeaway']);
+  });
+
+  it.each([
+    ['missing', {}, 'MISSING_PROFILE_PUBLICATION_LEAK'],
+    ['null', { publication: null }, 'NULL_PROFILE_PUBLICATION_LEAK'],
+    ['scalar', { publication: 'SCALAR_PROFILE_PUBLICATION_LEAK' }, 'SCALAR_PROFILE_PUBLICATION_LEAK'],
+    ['extra-key', {
+      publication: {
+        contractVersion: 1,
+        status: 'available',
+        content: {
+          summaryStatus: 'available',
+          summary: 'EXTRA_KEY_PROFILE_PUBLICATION_LEAK',
+          phenotypes: [{ name: 'EXTRA_KEY_PHENOTYPE_LEAK' }],
+          keyTakeaways: ['EXTRA_KEY_TAKEAWAY_LEAK'],
+        },
+        reasonCode: null,
+        correlationId: 'profile-extra-key',
+        limitations: [],
+        providerRaw: 'EXTRA_KEY_PROVIDER_RAW_LEAK',
+      },
+    }, 'EXTRA_KEY_PROFILE_PUBLICATION_LEAK'],
+  ])('fails closed for a %s profile publication envelope', async (_kind, response, leak) => {
+    response.providerProse = leak;
+    vi.spyOn(apiClient, 'invokePublicationTask').mockResolvedValue(response);
+
+    const result = await PhenotypeSearchService.enrichGeneCombined({
+      symbol: 'CFTR',
+      ensemblId: 'ENSG00000001626',
+      coordinatesVerified: true,
+    }, null);
+
+    expect(result).toEqual({
+      phenotypes: [],
+      aiSummary: null,
+      profileStatus: 'unavailable',
+      profilePublication: {
+        contractVersion: 1,
+        status: 'unavailable',
+        content: null,
+        reasonCode: 'invalid_publication_artifact',
+        correlationId: 'profile:client-invalid-publication',
+        limitations: [],
+      },
+      keyTakeaways: [],
+      expressionData: [],
+      furtherReading: PhenotypeSearchService.deterministicFurtherReading('CFTR'),
+    });
+    expect(JSON.stringify(result)).not.toContain(leak);
+    expect(JSON.stringify(result)).not.toContain('PROVIDER_RAW_LEAK');
+    expect(JSON.stringify(result)).not.toContain('PHENOTYPE_LEAK');
+    expect(JSON.stringify(result)).not.toContain('TAKEAWAY_LEAK');
+  });
+
   it('uses a deterministic unavailable state after a profile-call failure', async () => {
     vi.spyOn(apiClient, 'invokePublicationTask').mockRejectedValue(new Error('provider outage'));
     const [result] = await PhenotypeSearchService.enrichGeneData([
