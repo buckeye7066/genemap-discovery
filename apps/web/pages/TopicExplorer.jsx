@@ -13,7 +13,11 @@ import PublicationState, {
   publicationContent,
 } from '@/components/shared/PublicationState';
 import { normalizeEducationPublicationLevel } from '@/lib/educationPublicationLevel';
-import { terminalPublicationArtifactFromError } from '@genemap/shared/publicationStatus';
+import {
+  createPublicationArtifact,
+  PUBLICATION_STATUSES,
+  terminalPublicationArtifactFromError,
+} from '@genemap/shared/publicationStatus';
 import { apiClient } from '@genemap/shared';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -70,6 +74,14 @@ function isSafeGeneratedImageUrl(value) {
     /^https:\/\/[^\s]+$/iu.test(value)
     || /^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/u.test(value)
   );
+}
+
+function unavailableExplanationPublication() {
+  return createPublicationArtifact({
+    status: PUBLICATION_STATUSES.UNAVAILABLE,
+    reasonCode: 'invalid_publication_artifact',
+    correlationId: 'explanation:client-invalid-publication',
+  });
 }
 
 // Landing view for /topicexplorer with no ?topic — lets the user browse and
@@ -256,7 +268,7 @@ export default function TopicExplorer() {
       const publication = enforcePublicationContentType(
         res?.publication,
         (content) => typeof content === 'string' && Boolean(content.trim()),
-      );
+      ) ?? unavailableExplanationPublication();
       if (res?.topicMetadata?.id !== topicId) {
         throw new Error('The server returned mismatched topic metadata.');
       }
