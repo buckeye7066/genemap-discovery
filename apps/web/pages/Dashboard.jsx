@@ -33,9 +33,14 @@ import {
 import OnboardingTour from "../components/dashboard/OnboardingTour";
 import PublicationState, {
   enforcePublicationContentType,
+  isCanonicalPublicationArtifact,
   publicationContent,
 } from "../components/shared/PublicationState";
-import { terminalPublicationArtifactFromError } from '@genemap/shared/publicationStatus';
+import {
+  createPublicationArtifact,
+  PUBLICATION_STATUSES,
+  terminalPublicationArtifactFromError,
+} from '@genemap/shared/publicationStatus';
 
 const insightMarkdownComponents = Object.freeze({
   p: ({ children }) => <p className="mb-3">{children}</p>,
@@ -50,6 +55,20 @@ function dashboardUserIdentity(user) {
   if (user?.id !== null && user?.id !== undefined) return `id:${String(user.id)}`;
   if (typeof user?.email !== 'string' || !user.email.trim()) return null;
   return `email:${user.email.trim().toLocaleLowerCase('en-US')}`;
+}
+
+function researchSummaryPublication(artifact) {
+  if (isCanonicalPublicationArtifact(artifact)) {
+    return enforcePublicationContentType(
+      artifact,
+      (content) => typeof content === 'string' && Boolean(content.trim()),
+    );
+  }
+  return createPublicationArtifact({
+    status: PUBLICATION_STATUSES.UNAVAILABLE,
+    reasonCode: 'invalid_publication_artifact',
+    correlationId: 'summary:client-invalid-publication',
+  });
 }
 
 export default function Dashboard() {
@@ -140,10 +159,7 @@ export default function Dashboard() {
       if (!isCurrentRequest()) return;
       setResearchSummary({
         identity: requestIdentity,
-        artifact: enforcePublicationContentType(
-          response?.publication,
-          (content) => typeof content === 'string' && Boolean(content.trim()),
-        ),
+        artifact: researchSummaryPublication(response?.publication),
       });
     } catch (error) {
       log.debug('Research activity summary unavailable:', error);
