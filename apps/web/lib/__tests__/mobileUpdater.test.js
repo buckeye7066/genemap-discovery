@@ -46,7 +46,9 @@ describe('parseUpdateManifest', () => {
   it('rejects non-objects, bad versions, and non-https URLs honestly', () => {
     expect(() => parseUpdateManifest(null)).toThrow(/not available yet/);
     expect(() => parseUpdateManifest({ version: 'builtin', url: 'https://x/y.zip' })).toThrow(/invalid version/);
-    expect(() => parseUpdateManifest({ version: '1.0.2', url: 'http://x/y.zip' })).toThrow(/absolute https/);
+    expect(() => parseUpdateManifest({ version: '1.0.2', url: 'http://x/y.zip' })).toThrow(/absolute https/)
+    // dev/test affordance: http is allowed for localhost only (adb reverse flows)
+    expect(parseUpdateManifest({ version: '1.0.2', url: 'http://localhost:8787/mobile/b.zip' }).url).toBe('http://localhost:8787/mobile/b.zip');
   });
 });
 

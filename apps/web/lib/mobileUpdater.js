@@ -62,8 +62,8 @@ export function parseUpdateManifest(raw) {
   if (!parseVersion(version)) {
     throw new Error('Update feed has an invalid version field.');
   }
-  if (typeof url !== 'string' || !/^https:\/\//.test(url)) {
-    throw new Error('Update feed has an invalid bundle URL (must be absolute https).');
+  if (typeof url !== 'string' || !/^(https:\/\/|http:\/\/localhost(:\d+)?\/)/.test(url)) {
+    throw new Error('Update feed has an invalid bundle URL (must be absolute https; http is allowed for localhost testing only).');
   }
   return {
     version: String(version),
