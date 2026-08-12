@@ -3,7 +3,6 @@ import { ExternalLink, Smartphone } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { isNativeApp } from '@/lib/platform';
-import { version as APP_VERSION } from '../package.json';
 
 const RELEASES_URL = 'https://github.com/buckeye7066/genemap-discovery/releases';
 
@@ -13,7 +12,9 @@ const RELEASES_URL = 'https://github.com/buckeye7066/genemap-discovery/releases'
  * bundle outside that signed release.
  */
 export default function MobileUpdateCard() {
-  if (!isNativeApp()) return null;
+  const capacitor = typeof window !== 'undefined' ? window['Capacitor'] : undefined;
+  if (!isNativeApp() || capacitor?.getPlatform?.() !== 'android') return null;
+  const nativeVersion = import.meta.env.VITE_NATIVE_VERSION;
 
   return (
     <Card>
@@ -22,7 +23,9 @@ export default function MobileUpdateCard() {
           <Smartphone className="w-5 h-5 text-blue-600" />
           App Updates
         </CardTitle>
-        <CardDescription>Installed web version: {APP_VERSION}</CardDescription>
+        <CardDescription>
+          {nativeVersion ? `Installed Android version: ${nativeVersion}` : 'Version available in Android app settings'}
+        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
         <p className="text-sm text-slate-600 dark:text-slate-400">
