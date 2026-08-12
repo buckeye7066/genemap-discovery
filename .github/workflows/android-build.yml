@@ -248,12 +248,34 @@ jobs:
             "https://github.com/google/bundletool/releases/download/${BUNDLETOOL_VERSION}/bundletool-all-${BUNDLETOOL_VERSION}.jar"
           printf '%s  %s\n' "$BUNDLETOOL_SHA256" "$BUNDLETOOL_JAR" | sha256sum --check --status
           java -jar "$BUNDLETOOL_JAR" validate --bundle="$AAB"
-          AAB_PACKAGE=$(java -jar "$BUNDLETOOL_JAR" dump manifest --bundle="$AAB" --xpath=/manifest/@package)
-          AAB_VERSION_CODE=$(java -jar "$BUNDLETOOL_JAR" dump manifest --bundle="$AAB" --xpath=/manifest/@android:versionCode)
-          AAB_VERSION_NAME=$(java -jar "$BUNDLETOOL_JAR" dump manifest --bundle="$AAB" --xpath=/manifest/@android:versionName)
-          test "$AAB_PACKAGE" = 'com.genemap.discovery' || { echo 'Release AAB package id is incorrect'; exit 1; }
-          test "$AAB_VERSION_CODE" = "$ANDROID_VERSION_CODE" || { echo 'Release AAB version code is incorrect'; exit 1; }
-          test "$AAB_VERSION_NAME" = "$ANDROID_VERSION_NAME" || { echo 'Release AAB version name is incorrect'; exit 1; }
+
+          # Some Java/bundletool combinations write launcher diagnostics to the
+          # same stream as an XPath value. Keep the final non-empty output line,
+          # which is the value printed by DumpManagerUtils, and make every
+          # mismatch observable instead of exiting through a silent test.
+          dump_manifest_value() {
+            local xpath="$1"
+            java -jar "$BUNDLETOOL_JAR" dump manifest --bundle="$AAB" --xpath="$xpath" \
+              | awk 'NF { value=$0 } END { sub(/\r$/, "", value); print value }'
+          }
+          AAB_PACKAGE=$(dump_manifest_value '/manifest/@package')
+          AAB_VERSION_CODE=$(dump_manifest_value '/manifest/@android:versionCode')
+          AAB_VERSION_NAME=$(dump_manifest_value '/manifest/@android:versionName')
+          test "$AAB_PACKAGE" = 'com.genemap.discovery' || {
+            printf 'Release AAB package id is incorrect: expected=%q actual=%q\n' \
+              'com.genemap.discovery' "$AAB_PACKAGE" >&2
+            exit 1
+          }
+          test "$AAB_VERSION_CODE" = "$ANDROID_VERSION_CODE" || {
+            printf 'Release AAB version code is incorrect: expected=%q actual=%q\n' \
+              "$ANDROID_VERSION_CODE" "$AAB_VERSION_CODE" >&2
+            exit 1
+          }
+          test "$AAB_VERSION_NAME" = "$ANDROID_VERSION_NAME" || {
+            printf 'Release AAB version name is incorrect: expected=%q actual=%q\n' \
+              "$ANDROID_VERSION_NAME" "$AAB_VERSION_NAME" >&2
+            exit 1
+          }
 
           unzip -Z1 "$APK" > "$RUNNER_TEMP/release-apk-files.txt"
           unzip -Z1 "$AAB" > "$RUNNER_TEMP/release-aab-files.txt"
