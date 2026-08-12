@@ -118,6 +118,18 @@ describe('Search source-grounded comparison selection', () => {
       candidateGenes: evidenceGenes.map(({ symbol }) => ({ symbol })),
       hpoTerms: [],
       isPremium: false,
+      // Search.jsx now requires a canonical, non-terminal publication
+      // envelope on the candidate result before it will enrich/render
+      // results; without one it is replaced with a fail-closed
+      // "invalid_candidate_publication" marker.
+      publication: {
+        contractVersion: 1,
+        status: 'available',
+        content: { candidateGenes: [] },
+        reasonCode: null,
+        correlationId: 'candidate:evidence-comparison-test',
+        limitations: [],
+      },
     };
     phenotypeService.findCandidates.mockResolvedValue(base);
     phenotypeService.enrichCandidates.mockResolvedValue(base);

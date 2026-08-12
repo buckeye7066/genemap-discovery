@@ -1,4 +1,6 @@
-#!/usr/bin/env node
+// Run as `node scripts/reconcile-account-closure-ledger.mjs` (no shebang: this
+// module is also `import`ed directly by src/__tests__/accountClosureRestore.test.js,
+// and a leading shebang line breaks vitest's esbuild-based transform on import).
 import { realpathSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';

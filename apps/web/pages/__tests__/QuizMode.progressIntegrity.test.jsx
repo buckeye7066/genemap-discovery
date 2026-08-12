@@ -23,13 +23,37 @@ vi.mock('@/lib/EducationLevelContext', () => ({
 describe('QuizMode progress integrity', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // QuizMode now verifies the requested topic against the reviewed catalog
+    // (apiClient.getTopics) before generating a quiz for it, and the server
+    // wraps generated questions in a canonical publication artifact rather
+    // than returning `{ questions }` directly.
+    apiClient.getTopics.mockResolvedValue([
+      {
+        category: 'Genetics Basics',
+        topics: [{ id: 'what-is-dna', title: 'What is DNA?' }],
+      },
+    ]);
     apiClient.generateQuiz.mockResolvedValue({
-      questions: [{
-        question: 'Which molecule stores hereditary information?',
-        options: ['DNA', 'Water'],
-        correctIndex: 0,
-        explanation: 'DNA stores hereditary information.',
-      }],
+      topicMetadata: {
+        id: 'what-is-dna',
+        title: 'What is DNA?',
+        description: 'Introductory genetics.',
+        category: 'Genetics Basics',
+        catalogVersion: 1,
+      },
+      publication: {
+        contractVersion: 1,
+        status: 'available',
+        content: [{
+          question: 'Which molecule stores hereditary information?',
+          options: ['DNA', 'Water'],
+          correctIndex: 0,
+          explanation: 'DNA stores hereditary information.',
+        }],
+        reasonCode: null,
+        correlationId: 'quiz:test-what-is-dna',
+        limitations: [],
+      },
     });
     apiClient.updateLearningProgress.mockResolvedValue({
       topicId: 'what-is-dna',
