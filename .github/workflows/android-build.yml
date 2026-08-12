@@ -52,6 +52,7 @@ jobs:
       - name: Build and verify production-configured web app
         env:
           VITE_API_URL: https://genemap-api-production.up.railway.app
+          VITE_NATIVE_VERSION: ${{ env.ANDROID_VERSION_NAME }}
         run: |
           pnpm --filter @genemap/shared build
           pnpm --filter @genemap/web build
