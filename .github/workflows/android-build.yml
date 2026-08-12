@@ -125,22 +125,44 @@ jobs:
           test -s "$AAB" || { echo 'Signed release AAB is missing or empty'; exit 1; }
           APKSIGNER=$(find "$ANDROID_HOME/build-tools" -maxdepth 2 -type f -name apksigner | sort -V | tail -n 1)
           test -n "$APKSIGNER" || { echo 'Android apksigner was not found'; exit 1; }
-          if ! "$APKSIGNER" verify --print-certs "$APK" > "$RUNNER_TEMP/apk-certs.txt"; then
+          # apksigner versions do not consistently use the same output stream
+          # for certificate details. Capture the complete verified diagnostic
+          # stream, then locate the field label instead of depending on a
+          # version-specific signer prefix.
+          if ! "$APKSIGNER" verify --print-certs "$APK" > "$RUNNER_TEMP/apk-certs.txt" 2>&1; then
+            cat "$RUNNER_TEMP/apk-certs.txt" >&2
             echo 'Built APK signature verification failed'
             exit 1
           fi
 
+          extract_apk_cert_sha256() {
+            awk '
+              {
+                line = $0
+                lower = tolower(line)
+                marker = "certificate sha-256 digest:"
+                position = index(lower, marker)
+                if (position > 0) {
+                  fingerprint = substr(line, position + length(marker))
+                  gsub(/[^0-9A-Fa-f]/, "", fingerprint)
+                  if (length(fingerprint) > 0) {
+                    print tolower(fingerprint)
+                  }
+                }
+              }
+            '
+          }
+
+          # Keep a parser regression fixture beside the release operation so a
+          # future apksigner wording/prefix change cannot silently break every
+          # main-branch Android release again.
+          PARSER_FIXTURE='Signer #1 certificate SHA-256 digest: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'
+          test "$(printf '%s\n' "$PARSER_FIXTURE" | extract_apk_cert_sha256)" = \
+            '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'
+
           EXPECTED_CERT_SHA256=$(tr '[:upper:]' '[:lower:]' < "$RUNNER_TEMP/keystore-cert.sha256" | tr -d ':[:space:]')
           [[ "$EXPECTED_CERT_SHA256" =~ ^[0-9a-f]{64}$ ]] || { echo 'Configured keystore fingerprint is malformed'; exit 1; }
-          awk '
-            tolower($0) ~ /^[[:space:]]*signer .* certificate sha-256 digest:[[:space:]]*/ {
-              line = $0
-              marker = index(tolower(line), "digest:")
-              fingerprint = substr(line, marker + length("digest:"))
-              gsub(/[:[:space:]\r]/, "", fingerprint)
-              print tolower(fingerprint)
-            }
-          ' "$RUNNER_TEMP/apk-certs.txt" | sort -u > "$RUNNER_TEMP/apk-cert.sha256"
+          extract_apk_cert_sha256 < "$RUNNER_TEMP/apk-certs.txt" | sort -u > "$RUNNER_TEMP/apk-cert.sha256"
           test -s "$RUNNER_TEMP/apk-cert.sha256" || { echo 'Verified APK did not report a signer SHA-256 fingerprint'; exit 1; }
           test "$(wc -l < "$RUNNER_TEMP/apk-cert.sha256")" -eq 1 || { echo 'Verified APK reported multiple signer SHA-256 fingerprints'; exit 1; }
           APK_CERT_SHA256=$(< "$RUNNER_TEMP/apk-cert.sha256")
