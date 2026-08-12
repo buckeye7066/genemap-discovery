@@ -9,16 +9,6 @@ import { initSentry } from '@/lib/sentry.js'
 // it can capture errors thrown during the first paint.
 initSentry()
 
-// Native app only: confirm the active OTA bundle booted successfully so
-// @capgo/capacitor-updater does not roll it back (manual-update mode; see
-// lib/mobileUpdater.js and the Profile page's "App Updates" card).
-import('@/lib/platform.js')
-  .then(({ isNativeApp }) => {
-    if (!isNativeApp()) return null
-    return import('@capgo/capacitor-updater').then(({ CapacitorUpdater }) => CapacitorUpdater.notifyAppReady())
-  })
-  .catch(() => {}) // plugin unavailable (older APK) — nothing to confirm
-
 
 // Capture uncaught errors and unhandled promise rejections once, at bootstrap,
 // and report them to the backend (which emails the owner for non-admin users).
