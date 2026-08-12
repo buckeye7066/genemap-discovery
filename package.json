@@ -83,7 +83,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",
-    "adm-zip": "^0.5.16",
+    "adm-zip": "^0.6.0",
     "eslint": "^9.39.5",
     "eslint-plugin-react": "^7.37.4",
     "eslint-plugin-react-hooks": "^5.0.0",

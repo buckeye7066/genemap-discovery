@@ -13,6 +13,18 @@
 // The in-app "Check for Updates" card (apps/web/lib/mobileUpdater.js)
 // consumes this feed via @capgo/capacitor-updater. Version = apps/web
 // package.json version.
+//
+// IMPORTANT: `apps/web/dist` is also `capacitor.config.ts`'s `webDir` — the
+// exact directory `npx cap sync` copies verbatim into the native Android/iOS
+// package. If this script ran unconditionally, every native build would ship
+// its own OTA update archive baked inside itself (nonsensical, and rejected
+// outright by the `android-build-smoke` CI job's OTA-archive guard). Vercel
+// sets VERCEL=1 in its build environment, so gate on that: the feed is only
+// written for the real web deploy that's meant to serve it, and every other
+// build of `apps/web` (local `pnpm build:web`, CI's `build-web`/
+// `android-build-smoke`, `npx cap sync` for Android/iOS) gets a clean `dist`
+// with no `mobile/` folder. Set MOBILE_BUNDLE_FORCE=1 to opt into generating
+// the feed outside Vercel (e.g. to inspect it locally).
 
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
@@ -29,6 +41,14 @@ const mobileDir = path.join(distDir, 'mobile');
 const pkg = JSON.parse(fs.readFileSync(path.join(webDir, 'package.json'), 'utf8'));
 const version = pkg.version;
 const baseUrl = process.env.MOBILE_UPDATE_BASE_URL || 'https://genemap-discovery.vercel.app';
+
+if (process.env.VERCEL !== '1' && process.env.MOBILE_BUNDLE_FORCE !== '1') {
+  console.log(
+    '[mobile-bundle] skipped (not a Vercel build): apps/web/dist stays free of the OTA feed so native ' +
+      '(Capacitor Android/iOS) syncs never bundle it into the app package. Set MOBILE_BUNDLE_FORCE=1 to override.',
+  );
+  process.exit(0);
+}
 
 if (!fs.existsSync(path.join(distDir, 'index.html'))) {
   console.error('[mobile-bundle] apps/web/dist/index.html not found — run the web build first (pnpm --filter @genemap/web build).');
