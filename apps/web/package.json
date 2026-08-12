@@ -6,7 +6,6 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "postbuild": "node ../../scripts/build-mobile-bundle.mjs",
     "preview": "vite preview",
     "lint": "eslint .",
     "typecheck": "tsc -p ./jsconfig.typecheck.json",
@@ -18,7 +17,6 @@
     "@capacitor/android": "^8.5.0",
     "@capacitor/core": "^8.5.0",
     "@capacitor/ios": "^8.5.0",
-    "@capgo/capacitor-updater": "^8.51.3",
     "@genemap/shared": "workspace:*",
     "@radix-ui/react-alert-dialog": "^1.1.23",
     "@radix-ui/react-checkbox": "^1.3.11",
