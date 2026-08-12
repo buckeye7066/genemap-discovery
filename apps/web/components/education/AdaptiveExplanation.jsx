@@ -3,8 +3,9 @@ import ReactMarkdown from 'react-markdown';
 import { BookOpen } from 'lucide-react';
 import AiThinkingIndicator from '@/components/AiThinkingIndicator';
 import { safeModelMarkdownComponents } from '@/components/shared/safeModelMarkdown';
+import PublicationState, { publicationContent } from '@/components/shared/PublicationState';
 
-export default function AdaptiveExplanation({ content, loading, level }) {
+export default function AdaptiveExplanation({ artifact, loading, level }) {
   if (loading) {
     // Pulse skeleton PLUS a live progress indicator so a 10-25s generation
     // doesn't read as a hung page.
@@ -22,12 +23,19 @@ export default function AdaptiveExplanation({ content, loading, level }) {
     );
   }
 
-  if (!content) {
+  const content = publicationContent(artifact);
+
+  if (!content || typeof content !== 'string') {
     return (
-      <div className="text-center py-12 text-slate-400">
-        <BookOpen className="w-10 h-10 mx-auto mb-3 opacity-40" />
-        <p className="text-sm font-medium">No explanation loaded yet.</p>
-        <p className="text-xs mt-1">Click refresh to generate one.</p>
+      <div className="space-y-3">
+        <PublicationState artifact={artifact} />
+        {!artifact && (
+          <div className="text-center py-12 text-slate-400">
+            <BookOpen className="w-10 h-10 mx-auto mb-3 opacity-40" />
+            <p className="text-sm font-medium">No explanation loaded yet.</p>
+            <p className="text-xs mt-1">Click refresh to generate one.</p>
+          </div>
+        )}
       </div>
     );
   }
@@ -37,9 +45,11 @@ export default function AdaptiveExplanation({ content, loading, level }) {
     : 'text-sm leading-relaxed';
 
   return (
-    <div className={`prose prose-slate max-w-none ${fontSizeClass} animate-fade-in`}>
-      <ReactMarkdown
-        components={{
+    <div className="space-y-3">
+      <PublicationState artifact={artifact} />
+      <div className={`prose prose-slate max-w-none ${fontSizeClass} animate-fade-in`}>
+        <ReactMarkdown
+          components={{
           h2: ({ children }) => (
             <h2 className="text-lg font-bold text-slate-900 mt-6 mb-2.5 first:mt-0 flex items-center gap-2">
               <div className="w-1 h-5 rounded-full bg-gradient-to-b from-blue-500 to-indigo-500" />
@@ -75,10 +85,11 @@ export default function AdaptiveExplanation({ content, loading, level }) {
             </code>
           ),
           ...safeModelMarkdownComponents,
-        }}
-      >
-        {content}
-      </ReactMarkdown>
+          }}
+        >
+          {content}
+        </ReactMarkdown>
+      </div>
     </div>
   );
 }

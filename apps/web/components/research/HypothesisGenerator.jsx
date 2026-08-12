@@ -21,6 +21,17 @@ import {
   publicationHpoReference,
 } from '@/lib/publicationConceptCatalog';
 import { safeModelMarkdownComponents } from '../shared/safeModelMarkdown';
+import PublicationState, {
+  enforcePublicationContentType,
+  hasReusablePublicationContent,
+  isCanonicalPublicationArtifact,
+  publicationContent,
+} from '../shared/PublicationState';
+import {
+  createPublicationArtifact,
+  PUBLICATION_STATUSES,
+  terminalPublicationArtifactFromError,
+} from '@genemap/shared/publicationStatus';
 
 const dataTypeOptions = Object.freeze([
   { key: 'wes', label: 'Whole-exome sequencing (WES)', icon: '🧬' },
@@ -56,6 +67,20 @@ function selectedModalities(dataTypes) {
   return Object.entries(dataTypes)
     .filter(([, selected]) => Boolean(selected))
     .map(([type]) => type);
+}
+
+function researchHypothesisPublication(artifact) {
+  if (isCanonicalPublicationArtifact(artifact)) {
+    return enforcePublicationContentType(
+      artifact,
+      (content) => typeof content === 'string' && Boolean(content.trim()),
+    );
+  }
+  return createPublicationArtifact({
+    status: PUBLICATION_STATUSES.UNAVAILABLE,
+    reasonCode: 'invalid_publication_artifact',
+    correlationId: 'hypothesis:client-invalid-publication',
+  });
 }
 
 export function describeResearchFocus(focus) {
@@ -162,33 +187,56 @@ export default function HypothesisGenerator() {
         'research_hypothesis',
         taskInput,
       );
-      const generated = typeof response?.result === 'string' ? response.result.trim() : '';
-      if (!generated) {
-        throw new Error('The research service returned no bounded narrative.');
-      }
+      const publication = researchHypothesisPublication(response?.publication);
+      const generated = publicationContent(publication);
       setHypotheses({
         cohort: taskInput.cohort,
         focus: taskInput.focus || null,
         objective,
         dataTypes: modalities,
-        analysis: generated,
+        publication,
+        analysis: typeof generated === 'string' ? generated.trim() : null,
         generatedAt: new Date().toISOString(),
       });
     } catch (err) {
       console.error('Error generating hypotheses:', err);
-      setHypotheses(null);
-      setError(err?.message || 'The structured research request could not be generated. Please try again.');
+      const recoveryPublication = terminalPublicationArtifactFromError(err);
+      setHypotheses(recoveryPublication ? {
+        cohort: taskInput.cohort,
+        focus: taskInput.focus || null,
+        objective,
+        dataTypes: modalities,
+        publication: recoveryPublication,
+        analysis: null,
+        generatedAt: new Date().toISOString(),
+      } : null);
+      setError(recoveryPublication
+        ? ''
+        : (err?.message || 'The structured research request could not be generated. Please try again.'));
     } finally {
       setIsGenerating(false);
     }
   };
 
   const handleDownload = () => {
-    if (!hypotheses) return;
+    if (!hypotheses || !hasReusablePublicationContent(hypotheses.publication)) return;
+    const analysis = publicationContent(hypotheses.publication);
+    if (typeof analysis !== 'string' || !analysis.trim()) return;
+    const limitations = Array.isArray(hypotheses.publication.limitations)
+      ? hypotheses.publication.limitations.filter((item) => typeof item === 'string' && item.trim())
+      : [];
     const header = [
       '# GeneMap Discovery Research Hypothesis',
       '',
       `Generated: ${hypotheses.generatedAt}`,
+      `Publication status: ${hypotheses.publication.status}`,
+      `Publication correlation: ${hypotheses.publication.correlationId}`,
+      ...(hypotheses.publication.reasonCode
+        ? [`Publication reason: ${hypotheses.publication.reasonCode}`]
+        : []),
+      ...(limitations.length > 0
+        ? ['Publication limitations:', ...limitations.map((item) => `- ${item}`)]
+        : []),
       `Cohort: ${hypotheses.cohort.sampleCount} samples (${hypotheses.cohort.classification})`,
       `Control group present: ${hypotheses.cohort.hasControls ? 'Yes' : 'No'}`,
       `Focus: ${describeResearchFocus(hypotheses.focus)}`,
@@ -198,7 +246,7 @@ export default function HypothesisGenerator() {
       'Education and exploratory research only. Verify every material claim in authoritative sources.',
       '',
     ].join('\n');
-    const blob = new Blob([header, hypotheses.analysis], { type: 'text/markdown;charset=utf-8' });
+    const blob = new Blob([header, analysis], { type: 'text/markdown;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
     anchor.href = url;
@@ -416,21 +464,28 @@ export default function HypothesisGenerator() {
                   ))}
                 </div>
               </div>
-              <Button type="button" variant="outline" onClick={handleDownload}>
-                <Download className="mr-2 h-4 w-4" />
-                Download Markdown
-              </Button>
+              {hasReusablePublicationContent(hypotheses.publication) && (
+                <Button type="button" variant="outline" onClick={handleDownload}>
+                  <Download className="mr-2 h-4 w-4" />
+                  Download Markdown
+                </Button>
+              )}
             </div>
           </CardHeader>
-          <CardContent className="pt-6">
-            <div className="prose prose-sm max-w-none">
-              <ReactMarkdown components={generatedMarkdownComponents}>
-                {hypotheses.analysis}
-              </ReactMarkdown>
-            </div>
-            <p className="mt-5 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-              AI-generated research lead. Verify study design, assumptions, methods, and every scientific claim in authoritative sources before use.
-            </p>
+          <CardContent className="space-y-4 pt-6">
+            <PublicationState artifact={hypotheses.publication} />
+            {hypotheses.analysis && hasReusablePublicationContent(hypotheses.publication) && (
+              <>
+                <div className="prose prose-sm max-w-none">
+                  <ReactMarkdown components={generatedMarkdownComponents}>
+                    {hypotheses.analysis}
+                  </ReactMarkdown>
+                </div>
+                <p className="mt-5 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                  AI-generated research lead. Verify study design, assumptions, methods, and every scientific claim in authoritative sources before use.
+                </p>
+              </>
+            )}
           </CardContent>
         </Card>
       )}

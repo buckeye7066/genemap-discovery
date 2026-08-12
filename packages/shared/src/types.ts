@@ -1,3 +1,5 @@
+import type { PublicationArtifact } from './publicationStatus.js';
+
 // ─── Core User Types ────────────────────────────────────────────────────────
 
 export type UserRole = 'user' | 'admin' | 'super_admin';
@@ -76,7 +78,7 @@ export interface PortalSessionResponse {
 // ─── Education Types ────────────────────────────────────────────────────────
 
 export interface Topic {
-  id: string;
+  id: EducationTopicId;
   title: string;
   description?: string;
 }
@@ -94,9 +96,46 @@ export type EducationLevel =
   | 'graduate'
   | 'postgraduate';
 
+export const EDUCATION_TOPIC_IDS = Object.freeze([
+  'what-is-dna',
+  'dna-structure',
+  'dna-replication',
+  'genes-and-chromosomes',
+  'transcription',
+  'translation',
+  'gene-expression',
+  'gene-regulation',
+  'mendelian-genetics',
+  'punnett-squares',
+  'sex-linked-traits',
+  'complex-inheritance',
+  'what-are-mutations',
+  'types-of-mutations',
+  'genetic-variation',
+  'snps-and-polymorphisms',
+  'human-genome-project',
+  'dna-sequencing',
+  'crispr',
+  'genetic-testing',
+  'genetic-diseases',
+  'cancer-genetics',
+  'pharmacogenomics',
+  'gene-therapy',
+  'natural-selection',
+  'population-genetics',
+  'molecular-evolution',
+  'phylogenetics',
+  'epigenetics',
+  'rna-world',
+  'systems-biology',
+  'synthetic-biology',
+] as const);
+
+export type EducationTopicId = typeof EDUCATION_TOPIC_IDS[number];
+
 export interface ExplanationRequest {
-  topic: string;
-  level: EducationLevel | string;
+  topic: EducationTopicId;
+  level: EducationLevel;
 }
 
 /**
@@ -110,13 +149,13 @@ export interface EducationSource {
 }
 
 export interface ImageGenerationRequest {
-  topic: string;
-  level: EducationLevel | string;
+  topic: EducationTopicId;
+  level: EducationLevel;
 }
 
 export interface QuizRequest {
-  topic: string;
-  level: EducationLevel | string;
+  topic: EducationTopicId;
+  level: EducationLevel;
   questionCount?: number;
 }
 
@@ -235,7 +274,7 @@ export interface LearningActivityTaskInput {
 
 export interface GeneticsTutorTaskInput {
   version: 1;
-  topic: string;
+  topic: EducationTopicId;
   level: EducationLevel;
   interaction:
     | 'explain_another_way'
@@ -262,7 +301,7 @@ export interface ChatRequest {
 }
 
 export interface LearningProgress {
-  topicId: string;
+  topicId: EducationTopicId;
   bestScore?: number;
   totalQuestions?: number;
   attempts?: number;
@@ -282,14 +321,26 @@ export interface LLMOptions {
   publicationTask?: PublicationTask;
 }
 
-// API actually returns { result, disclaimer } for /llm/* — fix the contract.
-export interface LLMResponse {
-  result: string;
-  disclaimer: string;
-}
+/**
+ * Caller-controlled generation settings accepted by the bounded publication
+ * endpoint. Model selection, image settings, and publication intent remain
+ * owned by the server/top-level structured request.
+ *
+ * The explicit `never` fields are intentional: structural typing would
+ * otherwise allow a variable declared as the broader `LLMOptions` interface
+ * to flow into `invokePublicationTask`, even though it may contain settings
+ * that the endpoint rejects.
+ */
+type PublicationInvocationOptionKey = 'provider' | 'temperature' | 'maxTokens';
+export type PublicationInvocationOptions =
+  Pick<LLMOptions, PublicationInvocationOptionKey>
+  & Partial<Record<Exclude<keyof LLMOptions, PublicationInvocationOptionKey>, never>>;
 
-export interface LLMImageResponse {
-  result: { url?: string; revisedPrompt?: string };
+export type PublicationTaskContent<T extends PublicationTask> =
+  T extends 'candidate_gene_research' ? Record<string, unknown> : string;
+
+export interface LLMResponse<T = unknown> {
+  publication: PublicationArtifact<T>;
   disclaimer: string;
 }
 

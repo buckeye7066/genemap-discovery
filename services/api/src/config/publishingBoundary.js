@@ -5,7 +5,7 @@
  * versioned, structured task contract. Arbitrary prompt text is never an
  * authorization signal and is rejected on the public generation routes.
  */
-import { TOPICS_CATALOG } from './educationCatalog.js';
+import { resolveEducationTopic } from './educationCatalog.js';
 import {
   hasRawGenerationInput,
   parsePublicationTaskInput,
@@ -56,11 +56,6 @@ const SAFE_NON_GENERATION_EDUCATION_ROUTES = new Set([
   '/education/progress',
   '/education/entitlements',
 ]);
-
-const KNOWN_EDUCATION_TOPICS = new Set(
-  TOPICS_CATALOG.flatMap(({ topics }) => topics.flatMap(({ id, title }) => [id, title]))
-    .map((value) => value.trim().toLowerCase())
-);
 
 function rawPathname(url = '') {
   return String(url).split('?')[0].split('#')[0] || '/';
@@ -125,21 +120,15 @@ function hasPathPrefix(path, prefix) {
 }
 
 function requestedTask(body) {
-  const topLevel = typeof body?.publicationTask === 'string' ? body.publicationTask.trim() : '';
-  const optionLevel = typeof body?.options?.publicationTask === 'string'
-    ? body.options.publicationTask.trim()
-    : '';
-  if (topLevel && optionLevel && topLevel !== optionLevel) return null;
-  return topLevel || optionLevel || '';
+  return typeof body?.publicationTask === 'string' ? body.publicationTask.trim() : '';
 }
 
 function isKnownEducationTopic(value) {
-  return typeof value === 'string'
-    && KNOWN_EDUCATION_TOPICS.has(value.trim().toLowerCase());
+  return resolveEducationTopic(value) !== null;
 }
 
 function isRouteOwnedGeneticsTopic(body) {
-  const topic = typeof body?.topic === 'string' ? body.topic.trim() : '';
+  const topic = typeof body?.topic === 'string' ? body.topic : '';
   if (!topic) return false;
   if (['prompt', 'messages', 'context', 'taskInput'].some(
     (field) => Object.prototype.hasOwnProperty.call(body, field)
@@ -191,11 +180,11 @@ export function publicationBoundaryDecision({ url, routeUrl, body } = {}) {
   if (hasOwn(body, 'agent') || hasOwn(body?.options, 'agent')) {
     return block('Persona-routed generation is not available in this published build.');
   }
+  if (hasOwn(body?.options, 'publicationTask')) {
+    return block('The publication task must be supplied as a top-level structured field.');
+  }
 
   const suppliedTask = requestedTask(body);
-  if (suppliedTask === null) {
-    return block('Conflicting publication tasks are not accepted.');
-  }
   if (isUnknownGenerationRoute) {
     return block('This generation route is not available in the published build.');
   }

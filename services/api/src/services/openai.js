@@ -1,6 +1,8 @@
 // Lazy-load the OpenAI SDK so the rest of the API can boot when
 // OPENAI_API_KEY is unset and so tests can mock the wrapper.
 
+import { withHonestyPrefix, withHonestySystem } from './scientificHonesty.js';
+
 let client = null;
 
 async function getClient() {
@@ -15,7 +17,39 @@ async function getClient() {
   return client;
 }
 
-export async function generateText(
+function normalizeCompletion(response) {
+  const choice = response.choices?.[0];
+  const finishReason = choice?.finish_reason;
+  // Chat Completions can carry a message-level refusal while still reporting
+  // `finish_reason: "stop"` (and often `content: null`). Treat any non-null
+  // refusal payload as provider filtering before classifying the finish reason.
+  // The refusal itself is never returned, so downstream publication and
+  // persistence boundaries cannot accidentally expose provider refusal text.
+  const refused = choice?.message?.refusal != null;
+  const completion = refused
+    ? 'filtered'
+    : finishReason === 'length'
+      ? 'truncated'
+      : finishReason === 'content_filter'
+        ? 'filtered'
+        : finishReason === 'stop'
+          ? 'complete'
+          : 'failed';
+  return {
+    text: refused ? '' : choice?.message?.content || '',
+    completion,
+  };
+}
+
+function protectedTextPrompt(prompt) {
+  return withHonestyPrefix(prompt);
+}
+
+function protectedChatMessages(messages, honestyPersona = '') {
+  return withHonestySystem(messages, honestyPersona);
+}
+
+export async function generateTextResult(
   prompt,
   { model = 'gpt-4o', maxTokens = 2000, temperature = 0.7, timeoutMs = 30_000 } = {}
 ) {
@@ -26,30 +60,44 @@ export async function generateText(
   const response = await openai.chat.completions.create(
     {
       model,
-      messages: [{ role: 'user', content: prompt }],
+      messages: [{ role: 'user', content: protectedTextPrompt(prompt) }],
       max_tokens: maxTokens,
       temperature,
     },
     { timeout: timeoutMs }
   );
-  return response.choices[0]?.message?.content || '';
+  return normalizeCompletion(response);
 }
 
-export async function generateChatResponse(
+export async function generateText(prompt, options = {}) {
+  return (await generateTextResult(prompt, options)).text;
+}
+
+export async function generateChatResponseResult(
   messages,
-  { model = 'gpt-4o', maxTokens = 2000, temperature = 0.7, timeoutMs = 30_000 } = {}
+  {
+    model = 'gpt-4o',
+    maxTokens = 2000,
+    temperature = 0.7,
+    timeoutMs = 30_000,
+    honestyPersona = '',
+  } = {}
 ) {
   const openai = await getClient();
   const response = await openai.chat.completions.create(
     {
       model,
-      messages,
+      messages: protectedChatMessages(messages, honestyPersona),
       max_tokens: maxTokens,
       temperature,
     },
     { timeout: timeoutMs }
   );
-  return response.choices[0]?.message?.content || '';
+  return normalizeCompletion(response);
+}
+
+export async function generateChatResponse(messages, options = {}) {
+  return (await generateChatResponseResult(messages, options)).text;
 }
 
 // Ordered list of image models to attempt. The deployed key has chat access
@@ -91,3 +139,9 @@ export async function generateImage(
   }
   throw lastErr || new Error('image generation failed');
 }
+
+export const __test = {
+  normalizeCompletion,
+  protectedChatMessages,
+  protectedTextPrompt,
+};

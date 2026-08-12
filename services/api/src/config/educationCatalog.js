@@ -1,4 +1,8 @@
 /** Curated public genetics-learning topics shared by routing and policy tests. */
+import { EDUCATION_TOPIC_IDS } from '@genemap/shared';
+
+export const EDUCATION_CATALOG_VERSION = 1;
+
 export const TOPICS_CATALOG = Object.freeze([
   {
     category: 'DNA Basics',
@@ -73,3 +77,33 @@ export const TOPICS_CATALOG = Object.freeze([
     ],
   },
 ]);
+
+const TOPIC_BY_ID = new Map();
+for (const { category, topics } of TOPICS_CATALOG) {
+  for (const topic of topics) {
+    TOPIC_BY_ID.set(topic.id, Object.freeze({
+      ...topic,
+      category,
+      catalogVersion: EDUCATION_CATALOG_VERSION,
+    }));
+  }
+}
+
+const SHARED_TOPIC_IDS = new Set(EDUCATION_TOPIC_IDS);
+if (TOPIC_BY_ID.size !== SHARED_TOPIC_IDS.size
+  || [...TOPIC_BY_ID.keys()].some((id) => !SHARED_TOPIC_IDS.has(id))) {
+  throw new Error('The server education catalog must exactly match the shared topic identifiers.');
+}
+
+/**
+ * Resolve only a canonical catalog identifier. Titles, labels, aliases, and
+ * arbitrary free text are deliberately not executable provider input.
+ */
+export function resolveEducationTopic(value) {
+  if (typeof value !== 'string') return null;
+  const id = value.trim();
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(id) || id !== value) return null;
+  const topic = TOPIC_BY_ID.get(id);
+  if (!topic || topic.deprecated === true) return null;
+  return topic;
+}

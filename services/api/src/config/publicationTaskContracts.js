@@ -1,4 +1,4 @@
-import { TOPICS_CATALOG } from './educationCatalog.js';
+import { resolveEducationTopic } from './educationCatalog.js';
 
 export const PUBLICATION_TASK_INPUT_VERSION = 1;
 
@@ -92,14 +92,6 @@ const PUBLICATION_CONCEPTS = Object.freeze([
 const PUBLICATION_CONCEPT_INDEX = new Map(PUBLICATION_CONCEPTS.map(
   ([conceptId, canonicalLabel, conceptKind]) => [conceptId, { conceptId, canonicalLabel, conceptKind }]
 ));
-
-const KNOWN_TOPIC_VALUES = new Set();
-for (const { topics } of TOPICS_CATALOG) {
-  for (const topic of topics) {
-    KNOWN_TOPIC_VALUES.add(topic.id.trim().toLowerCase());
-    KNOWN_TOPIC_VALUES.add(topic.title.trim().toLowerCase());
-  }
-}
 
 const MODALITY_LABELS = Object.freeze({
   wes: 'whole-exome sequencing (WES)',
@@ -415,11 +407,19 @@ function validateTutorInput(input) {
     return invalid('Tutor input contains unsupported fields.');
   }
   if (input.version !== PUBLICATION_TASK_INPUT_VERSION) return invalid('Unsupported tutor input version.');
-  const topic = typeof input.topic === 'string' ? input.topic.trim() : '';
-  if (!KNOWN_TOPIC_VALUES.has(topic.toLowerCase())) return invalid('Tutor chat requires a catalog topic.');
+  const topic = resolveEducationTopic(input.topic);
+  if (!topic) return invalid('Tutor chat requires a canonical catalog topic identifier.');
   if (!EDUCATION_LEVELS.has(input.level)) return invalid('Tutor chat requires a recognized education level.');
   if (!TUTOR_INTERACTIONS.has(input.interaction)) return invalid('Tutor chat requires a guided interaction.');
-  return ok({ version: PUBLICATION_TASK_INPUT_VERSION, topic, level: input.level, interaction: input.interaction });
+  return ok({
+    version: PUBLICATION_TASK_INPUT_VERSION,
+    topic: topic.title,
+    topicId: topic.id,
+    topicCategory: topic.category,
+    catalogVersion: topic.catalogVersion,
+    level: input.level,
+    interaction: input.interaction,
+  });
 }
 
 export function hasRawGenerationInput(body) {
@@ -546,7 +546,7 @@ function composeTutorPrompt(input) {
     check_understanding: 'Ask one short knowledge-check question, then provide the answer separately.',
   }[input.interaction];
   return [
-    `Catalog genetics topic: ${JSON.stringify(input.topic)}.`,
+    `Reviewed catalog genetics topic: ${JSON.stringify(input.topic)} (id=${input.topicId}; category=${JSON.stringify(input.topicCategory)}; catalog v${input.catalogVersion}).`,
     interaction,
     'Keep the response general and educational. Do not provide diagnosis, personal risk, treatment, screening, medication, PGx, or dosing advice.',
   ].join('\n');
