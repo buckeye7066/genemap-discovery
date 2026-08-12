@@ -359,11 +359,11 @@ jobs:
             echo '::error title=AAB configuration missing::base/assets/capacitor.config.json could not be read'
             exit 1
           fi
-          jq -e '.plugins.CapacitorUpdater == null' "$RUNNER_TEMP/release-apk-capacitor-config.json" > /dev/null || {
+          jq -e '(.plugins // {} | has("CapacitorUpdater") | not)' "$RUNNER_TEMP/release-apk-capacitor-config.json" > /dev/null || {
             echo '::error title=Forbidden APK updater::CapacitorUpdater must be absent'
             exit 1
           }
-          jq -e '.plugins.CapacitorUpdater == null' "$RUNNER_TEMP/release-aab-capacitor-config.json" > /dev/null || {
+          jq -e '(.plugins // {} | has("CapacitorUpdater") | not)' "$RUNNER_TEMP/release-aab-capacitor-config.json" > /dev/null || {
             echo '::error title=Forbidden AAB updater::CapacitorUpdater must be absent'
             exit 1
           }
