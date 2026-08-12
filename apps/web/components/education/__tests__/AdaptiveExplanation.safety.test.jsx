@@ -9,7 +9,14 @@ describe('AdaptiveExplanation model-markdown boundary', () => {
       <AdaptiveExplanation
         loading={false}
         level="undergraduate"
-        content={'Read [the source](https://untrusted.example) and ![tracking pixel](https://tracker.example/pixel.png).'}
+        artifact={{
+          contractVersion: 1,
+          status: 'available',
+          content: 'Read [the source](https://untrusted.example) and ![tracking pixel](https://tracker.example/pixel.png).',
+          reasonCode: null,
+          correlationId: 'adaptive-explanation-safety-test',
+          limitations: [],
+        }}
       />,
     );
 

@@ -1,5 +1,7 @@
 // Lazy-load Anthropic SDK — same rationale as ./openai.js.
 
+import { withHonestyPrefix, withHonestySystem } from './scientificHonesty.js';
+
 /**
  * Default Claude model. `claude-sonnet-4-20250514` is past EOL (deprecated,
  * retires 2026-06-15); `claude-sonnet-5` is the current Sonnet. Override with
@@ -48,7 +50,28 @@ async function getClient() {
   return client;
 }
 
-export async function generateText(
+function normalizeCompletion(response) {
+  const textBlock = response.content.find((block) => block.type === 'text');
+  const completion = response.stop_reason === 'max_tokens'
+    || response.stop_reason === 'model_context_window_exceeded'
+    ? 'truncated'
+    : response.stop_reason === 'refusal'
+      ? 'filtered'
+      : response.stop_reason === 'end_turn' || response.stop_reason === 'stop_sequence'
+        ? 'complete'
+        : 'failed';
+  return { text: textBlock?.text || '', completion };
+}
+
+function protectedTextPrompt(prompt) {
+  return withHonestyPrefix(prompt);
+}
+
+function protectedChatMessages(messages, honestyPersona = '') {
+  return withHonestySystem(messages, honestyPersona);
+}
+
+export async function generateTextResult(
   prompt,
   { model = DEFAULT_ANTHROPIC_MODEL, maxTokens = 2000, temperature = 0.7, timeoutMs = 30_000 } = {}
 ) {
@@ -56,17 +79,26 @@ export async function generateText(
   const response = await anthropic.messages.create(
     {
       ...buildParams(model || DEFAULT_ANTHROPIC_MODEL, maxTokens, temperature),
-      messages: [{ role: 'user', content: prompt }],
+      messages: [{ role: 'user', content: protectedTextPrompt(prompt) }],
     },
     { timeout: timeoutMs }
   );
-  const textBlock = response.content.find((block) => block.type === 'text');
-  return textBlock?.text || '';
+  return normalizeCompletion(response);
 }
 
-export async function generateChatResponse(
+export async function generateText(prompt, options = {}) {
+  return (await generateTextResult(prompt, options)).text;
+}
+
+export async function generateChatResponseResult(
   messages,
-  { model = DEFAULT_ANTHROPIC_MODEL, maxTokens = 2000, temperature = 0.7, timeoutMs = 30_000 } = {}
+  {
+    model = DEFAULT_ANTHROPIC_MODEL,
+    maxTokens = 2000,
+    temperature = 0.7,
+    timeoutMs = 30_000,
+    honestyPersona = '',
+  } = {}
 ) {
   const anthropic = await getClient();
 
@@ -76,7 +108,7 @@ export async function generateChatResponse(
   let systemPrompt = '';
   const chatMessages = [];
 
-  for (const msg of messages) {
+  for (const msg of protectedChatMessages(messages, honestyPersona)) {
     if (msg.role === 'system') {
       if (!systemPrompt) systemPrompt = msg.content;
       // Subsequent system messages are silently dropped.
@@ -95,6 +127,15 @@ export async function generateChatResponse(
   }
 
   const response = await anthropic.messages.create(params, { timeout: timeoutMs });
-  const textBlock = response.content.find((block) => block.type === 'text');
-  return textBlock?.text || '';
+  return normalizeCompletion(response);
 }
+
+export async function generateChatResponse(messages, options = {}) {
+  return (await generateChatResponseResult(messages, options)).text;
+}
+
+export const __test = {
+  normalizeCompletion,
+  protectedChatMessages,
+  protectedTextPrompt,
+};

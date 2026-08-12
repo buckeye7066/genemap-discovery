@@ -348,9 +348,17 @@ describe('no-cloud-genomic default is enforced on every cloud-AI route', () => {
       method: 'POST',
       url: '/education/explain',
       headers: { cookie: authCookie(user, prisma) },
-      payload: { topic: 'Transcription', level: 'high_school' },
+      payload: { topic: 'transcription', level: 'high_school' },
     });
     expect(res.statusCode).toBe(200);
+    expect(res.json().publication).toMatchObject({
+      contractVersion: 1,
+      status: 'available',
+      content: 'MOCK_EXPLANATION',
+      reasonCode: null,
+      limitations: [],
+    });
+    expect(res.json()).not.toHaveProperty('explanation');
     expect(llmService.generateExplanation).toHaveBeenCalledOnce();
   });
 });

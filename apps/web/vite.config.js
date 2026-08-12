@@ -14,6 +14,7 @@ export default defineConfig({
       '@genemap/shared/client': path.resolve(__dirname, '../../packages/shared/src/client.ts'),
       '@genemap/shared/schemas': path.resolve(__dirname, '../../packages/shared/src/schemas.ts'),
       '@genemap/shared/types': path.resolve(__dirname, '../../packages/shared/src/types.ts'),
+      '@genemap/shared/publicationStatus': path.resolve(__dirname, '../../packages/shared/src/publicationStatus.ts'),
       '@genemap/shared': path.resolve(__dirname, '../../packages/shared/src/client.ts'),
     },
   },

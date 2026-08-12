@@ -9,6 +9,7 @@ import {
   partitionClaimsBySpecies,
   safeExternalHttpUrl,
 } from "../../../../packages/shared/src/associationClaim.ts";
+import PublicationState, { hasReusablePublicationContent } from "../shared/PublicationState";
 
 function normalizeText(value) {
   return typeof value === "string" ? value.trim() : "";
@@ -21,6 +22,12 @@ function geneSymbol(gene) {
 function phenotypeNames(gene) {
   return (gene?.phenotypes || [])
     .map((phenotype) => normalizeText(phenotype?.name || phenotype))
+    .filter(Boolean);
+}
+
+function sourceNames(gene) {
+  return (gene?.sources || [])
+    .map((source) => normalizeText(source?.name || source?.source || source))
     .filter(Boolean);
 }
 
@@ -64,20 +71,25 @@ export default function GeneComparison({ genes = [], onClose }) {
   const comparison = useMemo(() => {
     const rows = genes.map((gene) => {
       const groups = claimGroups(gene);
+      const candidateReusable = hasReusablePublicationContent(gene?.candidatePublication);
+      const profileReusable = hasReusablePublicationContent(gene?.profilePublication)
+        && gene?.profileStatus === 'available';
       return {
         gene,
         symbol: geneSymbol(gene),
-        name: normalizeText(gene?.name),
-        location: formatLocation(gene),
-        phenotypes: phenotypeNames(gene),
+        name: gene?.coordinatesVerified || candidateReusable ? normalizeText(gene?.name) : '',
+        location: gene?.coordinatesVerified ? formatLocation(gene) : 'Not listed',
+        phenotypes: profileReusable ? phenotypeNames(gene) : [],
+        sources: sourceNames(gene),
+        explanation: (candidateReusable ? normalizeText(gene?.explanation) : '')
+          || (profileReusable ? normalizeText(gene?.aiSummary) : ''),
         rankingBasis: gene?.rankingBasis || 'ai_lead',
         ...groups,
       };
     });
 
     const phenotypeSets = rows
-      .map((row) => new Set(row.phenotypes.map((item) => item.toLowerCase())))
-      .filter((set) => set.size > 0);
+      .map((row) => new Set(row.phenotypes.map((item) => item.toLowerCase())));
     const sharedPhenotypeKeys = intersection(phenotypeSets);
     const sharedPhenotypes = sharedPhenotypeKeys
       .map((key) => rows.flatMap((row) => row.phenotypes).find((item) => item.toLowerCase() === key))
@@ -289,6 +301,37 @@ export default function GeneComparison({ genes = [], onClose }) {
               </AlertDescription>
             </Alert>
           </div>
+
+          <Card className="border-slate-200">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Per-Gene Evidence Notes</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {comparison.rows.map((row) => (
+                <div key={row.symbol} className="rounded-md bg-slate-50 p-3">
+                  <div className="font-semibold text-slate-900">{row.symbol}</div>
+                  {row.gene?.candidatePublication && (
+                    <div className="mt-2">
+                      <p className="mb-1 text-xs font-medium text-slate-600">Candidate publication</p>
+                      <PublicationState artifact={row.gene.candidatePublication} showAvailable />
+                    </div>
+                  )}
+                  {row.gene?.profilePublication && (
+                    <div className="mt-2">
+                      <p className="mb-1 text-xs font-medium text-slate-600">Profile publication</p>
+                      <PublicationState artifact={row.gene.profilePublication} showAvailable />
+                    </div>
+                  )}
+                  <p className="text-sm text-slate-700 mt-1">
+                    {row.explanation || "No evidence note was loaded for this gene."}
+                  </p>
+                  {row.sources.length > 0 && (
+                    <p className="text-xs text-slate-500 mt-2">Sources: {row.sources.join(", ")}</p>
+                  )}
+                </div>
+              ))}
+            </CardContent>
+          </Card>
         </CardContent>
       </Card>
     </div>

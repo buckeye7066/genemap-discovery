@@ -126,8 +126,9 @@ export async function enforceUsageLimit(request, reply) {
 
 /**
  * Persist a usage record so that subsequent enforceUsageLimit calls see the
- * incremented count. Called by route handlers AFTER a successful upstream LLM
- * call so that failures do not consume the user's daily allowance.
+ * incremented count. Reusable publications use the quota-counted route type;
+ * terminal publication states use a dedicated non-counted status type so a
+ * provider or policy failure remains observable without consuming allowance.
  *
  * Premium / admin users still get a record (it is useful audit data) but the
  * limit check is short-circuited for them upstream.
@@ -141,7 +142,8 @@ export async function recordUsage(prisma, userId, sessionType, content = {}) {
         topic: content.topic || sessionType,
         level: content.level || 'standard',
         type: sessionType,
-        // Content payload is non-sensitive metadata only — never the prompt.
+        // Content is bounded metadata and/or a canonical publication envelope:
+        // never the raw prompt, and never blocked provider text.
         content,
       },
     });

@@ -164,7 +164,7 @@ describe('LLM route input bounds', () => {
     expect(res.statusCode).toBe(400);
   });
 
-  it('rejects raw VCF-looking content by default', async () => {
+  it('rejects raw VCF-looking content because raw prompts are outside the contract', async () => {
     const res = await app.inject({
       method: 'POST',
       url: '/llm/invoke',
@@ -179,7 +179,7 @@ describe('LLM route input bounds', () => {
       },
     });
     expect(res.statusCode).toBe(400);
-    expect(JSON.parse(res.body).error).toMatch(/raw prompt/i);
+    expect(JSON.parse(res.body).error).toMatch(/structured publication task/i);
   });
 
   it('rejects an out-of-contract structured cohort bound', async () => {

@@ -1,6 +1,7 @@
 import { lazyWithRetry } from '@/lib/lazyWithRetry';
 import __Layout from './Layout.jsx';
 
+const DiscoveryStudio = lazyWithRetry(() => import('./pages/DiscoveryStudio'));
 const Search = lazyWithRetry(() => import('./pages/Search'));
 const Premium = lazyWithRetry(() => import('./pages/Premium'));
 const History = lazyWithRetry(() => import('./pages/History'));
@@ -28,6 +29,7 @@ const PrivacyPolicy = lazyWithRetry(() => import('./pages/PrivacyPolicy'));
 const TermsOfService = lazyWithRetry(() => import('./pages/TermsOfService'));
 
 export const PAGES = {
+    "DiscoveryStudio": DiscoveryStudio,
     "Login": Login,
     "LearnGenetics": LearnGenetics,
     "TopicExplorer": TopicExplorer,
@@ -87,7 +89,7 @@ export const superAdminPages = [
 ];
 
 export const pagesConfig = {
-    mainPage: "LearnGenetics",
+    mainPage: "DiscoveryStudio",
     publicPages: ["Login"],
     adminPages,
     superAdminPages,

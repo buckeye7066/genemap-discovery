@@ -11,18 +11,74 @@ import {
   rankGenesByProvenance,
   stripLlmSelfScores,
 } from "../../../../packages/shared/src/associationClaim.ts";
+import {
+  createPublicationArtifact,
+  isCanonicalPublicationArtifact,
+  terminalPublicationArtifactFromError,
+} from "@genemap/shared/publicationStatus";
 import { log } from "../shared/logger";
 import { getErrorMessage } from "../shared/errorUtils";
 import { GENE_ENRICHMENT_CONCURRENCY } from "../shared/constants";
-import { parseLLMJson } from "../shared/llmJson";
+import { parseLLMJson, reusablePublicationArtifact } from "../shared/llmJson";
 import { resolvePublicationSearchReference } from "@/lib/publicationConceptCatalog";
-
-const UNAVAILABLE_PROFILE_SUMMARY = 'Generated profile unavailable. This gene remains an unverified AI-suggested candidate lead; verify relevance in cited authoritative sources.';
 
 function adapterDate(value) {
   if (typeof value !== 'string' || !value.trim()) return null;
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString().slice(0, 10);
+}
+
+function unavailableProfilePublication(reasonCode) {
+  return createPublicationArtifact({
+    status: 'unavailable',
+    reasonCode,
+    correlationId: `client-profile:${reasonCode}`,
+  });
+}
+
+function invalidProfilePublication() {
+  return createPublicationArtifact({
+    status: 'unavailable',
+    reasonCode: 'invalid_publication_artifact',
+    correlationId: 'profile:client-invalid-publication',
+  });
+}
+
+function normalizeProfilePublication(artifact) {
+  return isCanonicalPublicationArtifact(artifact)
+    ? artifact
+    : invalidProfilePublication();
+}
+
+const INVALID_CANDIDATE_PUBLICATION = Object.freeze(createPublicationArtifact({
+  status: 'unavailable',
+  reasonCode: 'invalid_candidate_publication',
+  correlationId: 'client-candidate:invalid-publication',
+}));
+
+function normalizeCandidatePublication(artifact) {
+  return isCanonicalPublicationArtifact(artifact)
+    ? artifact
+    : INVALID_CANDIDATE_PUBLICATION;
+}
+
+function resolveCandidatePublication(candidatePublication, serverPublication) {
+  return isCanonicalPublicationArtifact(candidatePublication)
+    ? candidatePublication
+    : normalizeCandidatePublication(serverPublication);
+}
+
+const TERMINAL_PUBLICATION_STATUSES = new Set([
+  'withheld',
+  'unavailable',
+  'superseded',
+]);
+
+function isTerminalPublicationArtifact(artifact) {
+  return Boolean(
+    isCanonicalPublicationArtifact(artifact)
+    && TERMINAL_PUBLICATION_STATUSES.has(artifact.status),
+  );
 }
 
 export class PhenotypeSearchService {
@@ -72,17 +128,25 @@ export class PhenotypeSearchService {
         this.analyzeAndFindCandidates(queryReference),
       ]);
       const effectivePremium = isPremium || isAdmin;
-      let { analysis, candidateGenes } = fused;
+      let { analysis, candidateGenes, publication } = fused;
+      publication = normalizeCandidatePublication(publication);
+      if (isTerminalPublicationArtifact(publication)) candidateGenes = [];
 
       // A sparse but syntactically valid response receives one bounded fallback
       // through the same immutable reference, never through model-generated text.
-      if (!candidateGenes.length) {
+      if (!candidateGenes.length && reusablePublicationArtifact({ publication })) {
         analysis = await this.analyzePhenotype(queryReference);
-        candidateGenes = await this.findCandidateGenes(
-          analysis,
-          effectivePremium,
-          queryReference,
-        );
+        publication = normalizeCandidatePublication(analysis.publication);
+        if (!isTerminalPublicationArtifact(publication)) {
+          const fallback = await this.findCandidateGenes(
+            analysis,
+            effectivePremium,
+            queryReference,
+          );
+          candidateGenes = fallback.candidateGenes;
+          publication = normalizeCandidatePublication(fallback.publication);
+          if (isTerminalPublicationArtifact(publication)) candidateGenes = [];
+        }
       }
 
       const usesDiseaseCandidateLimit = this.usesDiseaseCandidatePrompt(
@@ -102,6 +166,10 @@ export class PhenotypeSearchService {
         this.applyAuthoritativeData(
           candidateGenes.map((gene) => ({
             ...gene,
+            candidatePublication: resolveCandidatePublication(
+              gene.candidatePublication,
+              publication,
+            ),
             sources: ['AI-suggested'],
             phenotypes: [],
             detailsPending: true,
@@ -120,10 +188,24 @@ export class PhenotypeSearchService {
         queryType: analysis.queryType || 'phenotype',
         publicationReference: queryReference,
         userPreferences,
+        publication,
         enriched: false,
       };
     } catch (error) {
       log.error("Search (find candidates) error:", error);
+      const recoveryPublication = terminalPublicationArtifactFromError(error);
+      if (recoveryPublication) {
+        return {
+          query: phenotypeQuery,
+          candidateGenes: [],
+          isPremium,
+          hpoTerms: [],
+          queryType: searchMode,
+          userPreferences: null,
+          publication: recoveryPublication,
+          enriched: false,
+        };
+      }
       throw new Error(getErrorMessage(error) || "Failed to search for genes. Please try again.");
     }
   }
@@ -158,6 +240,7 @@ export class PhenotypeSearchService {
         hpoTerms: [],
       },
       candidateGenes,
+      publication: response?.publication || null,
     };
   }
 
@@ -182,14 +265,17 @@ export class PhenotypeSearchService {
       return { ...base, candidateGenes: finalGenes, enriched: true };
     } catch (error) {
       log.error("Search (enrich) error:", error);
+      const recoveryPublication = terminalPublicationArtifactFromError(error);
       return {
         ...base,
         candidateGenes: this.attachProvenance(
           (base.candidateGenes || []).map((gene) => ({
             ...gene,
             detailsPending: false,
-            aiSummary: UNAVAILABLE_PROFILE_SUMMARY,
-            profileStatus: 'unavailable',
+            aiSummary: null,
+            profileStatus: recoveryPublication?.status || 'unavailable',
+            profilePublication: recoveryPublication
+              || unavailableProfilePublication('profile_enrichment_failed'),
             keyTakeaways: [],
             phenotypes: [],
           })),
@@ -212,6 +298,13 @@ export class PhenotypeSearchService {
       searchMode,
       selectedReference,
     );
+    if (
+      isTerminalPublicationArtifact(base.publication)
+      || (
+        base.publication.status === 'partial'
+        && base.candidateGenes.length === 0
+      )
+    ) return base;
     return this.enrichCandidates(base);
   }
 
@@ -416,7 +509,10 @@ export class PhenotypeSearchService {
         audience: 'researcher',
       },
     );
-    return parseLLMJson(response, {});
+    return {
+      ...parseLLMJson(response, {}),
+      publication: response?.publication || null,
+    };
   }
 
   static async findCandidateGenes(_phenotypeAnalysis, _isPremium, queryReference) {
@@ -432,7 +528,19 @@ export class PhenotypeSearchService {
     );
     const parsed = parseLLMJson(response, { candidateGenes: [] });
     const result = Array.isArray(parsed) ? { candidateGenes: parsed } : parsed;
-    return (result?.candidateGenes || []).filter((gene) => gene && gene.symbol);
+    const publication = normalizeCandidatePublication(response?.publication || null);
+    return {
+      candidateGenes: (result?.candidateGenes || [])
+        .filter((gene) => gene && gene.symbol)
+        .map((gene) => ({
+          ...gene,
+          candidatePublication: resolveCandidatePublication(
+            gene.candidatePublication,
+            publication,
+          ),
+        })),
+      publication,
+    };
   }
 
   static usesDiseaseCandidatePrompt(phenotypeAnalysis, queryReference) {
@@ -468,11 +576,14 @@ export class PhenotypeSearchService {
           };
         } catch (error) {
           log.error(`Error enriching gene ${gene.symbol}:`, error);
+          const recoveryPublication = terminalPublicationArtifactFromError(error);
           return {
             ...gene,
             phenotypes: [],
-            aiSummary: UNAVAILABLE_PROFILE_SUMMARY,
-            profileStatus: 'unavailable',
+            aiSummary: null,
+            profileStatus: recoveryPublication?.status || 'unavailable',
+            profilePublication: recoveryPublication
+              || unavailableProfilePublication('profile_enrichment_failed'),
             keyTakeaways: [],
             furtherReading: this.deterministicFurtherReading(gene.symbol),
             expressionData: [],
@@ -490,8 +601,9 @@ export class PhenotypeSearchService {
     if (!gene.coordinatesVerified || !verifiedIdentifier) {
       return {
         phenotypes: [],
-        aiSummary: `${gene.symbol} is an AI-suggested candidate lead. Authoritative gene-identifier verification was unavailable, so no additional model profile was generated.`,
+        aiSummary: null,
         profileStatus: 'unavailable',
+        profilePublication: unavailableProfilePublication('profile_identifier_unverified'),
         keyTakeaways: [],
         expressionData: [],
         furtherReading: this.deterministicFurtherReading(gene.symbol),
@@ -508,15 +620,39 @@ export class PhenotypeSearchService {
       },
       { maxTokens: 2048 },
     );
-    const parsed = parseLLMJson(response, {});
-    const summary = typeof parsed.summary === 'string' && parsed.summary.trim()
-      ? parsed.summary
-      : UNAVAILABLE_PROFILE_SUMMARY;
+    const responsePublication = normalizeProfilePublication(response?.publication);
+    const normalizedResponse = { publication: responsePublication };
+    const topLevelStatus = responsePublication.status;
+    const parsed = parseLLMJson(normalizedResponse, {});
+    const summaryStatus = ['withheld', 'unavailable', 'superseded'].includes(topLevelStatus)
+      ? topLevelStatus
+      : parsed.summaryStatus === 'available'
+      ? 'available'
+      : parsed.summaryStatus === 'withheld'
+        ? 'withheld'
+        : 'unavailable';
+    const reusableArtifact = reusablePublicationArtifact(normalizedResponse);
+    const profilePublication = reusableArtifact && summaryStatus !== 'available'
+      ? {
+          ...reusableArtifact,
+          status: summaryStatus,
+          content: null,
+          reasonCode: `profile_${summaryStatus}`,
+        }
+      : responsePublication;
+    const summary = summaryStatus === 'available' && typeof parsed.summary === 'string'
+      ? parsed.summary.trim()
+      : null;
     return {
-      phenotypes: Array.isArray(parsed.phenotypes) ? parsed.phenotypes : [],
+      phenotypes: summaryStatus === 'available' && Array.isArray(parsed.phenotypes)
+        ? parsed.phenotypes
+        : [],
       aiSummary: summary,
-      profileStatus: parsed.summaryStatus || 'unavailable',
-      keyTakeaways: Array.isArray(parsed.keyTakeaways) ? parsed.keyTakeaways : [],
+      profileStatus: summaryStatus,
+      profilePublication,
+      keyTakeaways: summaryStatus === 'available' && Array.isArray(parsed.keyTakeaways)
+        ? parsed.keyTakeaways
+        : [],
       expressionData: [],
       furtherReading: this.deterministicFurtherReading(gene.symbol),
     };

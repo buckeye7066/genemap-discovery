@@ -16,8 +16,11 @@ import {
   __test as resolverTest,
 } from '../services/publicationResolvers.js';
 
-const CATALOG_TOPICS = TOPICS_CATALOG.flatMap(({ topics }) =>
-  topics.flatMap(({ id, title }) => [id, title])
+const CATALOG_TOPIC_IDS = TOPICS_CATALOG.flatMap(({ topics }) =>
+  topics.map(({ id }) => id)
+);
+const CATALOG_TOPIC_TITLES = TOPICS_CATALOG.flatMap(({ topics }) =>
+  topics.map(({ title }) => title)
 );
 
 const concept = (conceptId, canonicalLabel, conceptKind) => ({
@@ -435,7 +438,7 @@ describe('structured publication boundary in real Fastify', () => {
   });
 
   for (const path of ['/education/explain', '/education/quiz', '/education/image']) {
-    it.each(CATALOG_TOPICS)(`executes ${path} for catalog topic %s`, async (topic) => {
+    it.each(CATALOG_TOPIC_IDS)(`executes ${path} for exact catalog topic id %s`, async (topic) => {
       const response = await app.inject({
         method: 'POST',
         url: path,
@@ -443,6 +446,16 @@ describe('structured publication boundary in real Fastify', () => {
       });
       expect(response.statusCode).toBe(200);
       expect(handler).toHaveBeenCalledOnce();
+    });
+
+    it.each(CATALOG_TOPIC_TITLES)(`does not execute ${path} for catalog title %s`, async (topic) => {
+      const response = await app.inject({
+        method: 'POST',
+        url: path,
+        payload: { topic, level: 'undergraduate' },
+      });
+      expect(response.statusCode).toBe(403);
+      expect(handler).not.toHaveBeenCalled();
     });
 
     it.each([
@@ -472,7 +485,7 @@ describe('structured publication boundary in real Fastify', () => {
     });
   }
 
-  it.each(CATALOG_TOPICS)('executes guided tutor for catalog topic %s', async (topic) => {
+  it.each(CATALOG_TOPIC_IDS)('executes guided tutor for exact catalog topic id %s', async (topic) => {
     const response = await app.inject({
       method: 'POST',
       url: '/education/chat',
@@ -483,6 +496,19 @@ describe('structured publication boundary in real Fastify', () => {
     });
     expect(response.statusCode).toBe(200);
     expect(handler).toHaveBeenCalledOnce();
+  });
+
+  it.each(CATALOG_TOPIC_TITLES)('does not execute guided tutor for catalog title %s', async (topic) => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/education/chat',
+      payload: {
+        publicationTask: PUBLICATION_TASKS.GENETICS_EDUCATION,
+        taskInput: { ...TUTOR_INPUT, topic },
+      },
+    });
+    expect(response.statusCode).toBe(403);
+    expect(handler).not.toHaveBeenCalled();
   });
 
   it('does not execute tutor for free messages, unknown topics, or conflicting task', async () => {

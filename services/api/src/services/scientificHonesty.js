@@ -54,8 +54,19 @@ export function honestySystemMessage(persona = '') {
  * message array).
  */
 export function withHonestyPrefix(prompt, extra = '') {
-  const tail = extra ? `\n${extra}` : '';
-  return `${SCIENTIFIC_HONESTY_DIRECTIVE}${tail}\n\n${prompt}`;
+  const value = String(prompt ?? '');
+  const hasTrustedPrefix = value.startsWith(SCIENTIFIC_HONESTY_DIRECTIVE)
+    && (value.length === SCIENTIFIC_HONESTY_DIRECTIVE.length
+      || value[SCIENTIFIC_HONESTY_DIRECTIVE.length] === '\n');
+  if (!hasTrustedPrefix) {
+    const tail = extra ? `\n${extra}` : '';
+    return `${SCIENTIFIC_HONESTY_DIRECTIVE}${tail}\n\n${value}`;
+  }
+  if (!extra) return value;
+
+  const existingTail = value.slice(SCIENTIFIC_HONESTY_DIRECTIVE.length);
+  if (existingTail.startsWith(`\n${extra}\n`)) return value;
+  return `${SCIENTIFIC_HONESTY_DIRECTIVE}\n${extra}\n\n${existingTail.replace(/^\n+/u, '')}`;
 }
 
 /**
@@ -65,8 +76,7 @@ export function withHonestyPrefix(prompt, extra = '') {
  * or dilute the guard rails.
  */
 export function withHonestySystem(messages, persona = '') {
-  const rest = Array.isArray(messages)
-    ? messages.filter((m) => m && m.role !== 'system')
-    : [];
+  const input = Array.isArray(messages) ? messages.filter(Boolean) : [];
+  const rest = input.filter((message) => message.role !== 'system');
   return [honestySystemMessage(persona), ...rest];
 }

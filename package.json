@@ -77,11 +77,13 @@
       "react-router@>=7.0.0 <7.18.0": ">=7.18.0",
       "react-router-dom@>=7.0.0 <7.18.0": ">=7.18.0",
       "tmp@<0.2.6": ">=0.2.6",
-      "form-data@>=4.0.0 <4.0.6": ">=4.0.6"
+      "form-data@>=4.0.0 <4.0.6": ">=4.0.6",
+      "uuid@<11.1.1": ">=11.1.1"
     }
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",
+    "adm-zip": "^0.6.0",
     "eslint": "^9.39.5",
     "eslint-plugin-react": "^7.37.4",
     "eslint-plugin-react-hooks": "^5.0.0",

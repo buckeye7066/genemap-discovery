@@ -3,17 +3,232 @@ import {
   deriveRankingBasisFromClaims,
   safeExternalHttpUrl,
 } from '../../../packages/shared/src/associationClaim.js';
+import { isCanonicalPublicationArtifact } from '@genemap/shared/publicationStatus';
 
 /**
  * Export utilities for GeneMap Discovery
  * Provides PDF-like HTML export, JSON export, and shareable summaries.
  */
 
+const EXPORTABLE_PUBLICATION_STATUSES = new Set(['available', 'partial']);
+const CORRELATION_ID = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/u;
+
+/** Export paths enforce the publication boundary independently of the UI. */
+export function isPublicationExportable(artifact) {
+  return Boolean(
+    isCanonicalPublicationArtifact(artifact)
+    && EXPORTABLE_PUBLICATION_STATUSES.has(artifact.status)
+  );
+}
+
+function sanitizePublicationArtifact(artifact, ancestors) {
+  const canonical = isCanonicalPublicationArtifact(artifact);
+  const exportable = isPublicationExportable(artifact);
+  return {
+    contractVersion: 1,
+    status: canonical ? artifact.status : 'unavailable',
+    content: exportable ? sanitizePublicationContent(artifact.content, ancestors) : null,
+    reasonCode: !canonical
+      ? 'invalid_publication_envelope'
+      : artifact.reasonCode,
+    correlationId: typeof artifact?.correlationId === 'string' && CORRELATION_ID.test(artifact.correlationId)
+      ? artifact.correlationId
+      : 'client-invalid-publication',
+    limitations: canonical ? [...artifact.limitations] : [],
+  };
+}
+
+function looksLikePublicationArtifact(value) {
+  return Boolean(
+    value
+    && typeof value === 'object'
+    && Object.prototype.hasOwnProperty.call(value, 'status')
+    && Object.prototype.hasOwnProperty.call(value, 'content')
+    && (
+      Object.prototype.hasOwnProperty.call(value, 'contractVersion')
+      || Object.prototype.hasOwnProperty.call(value, 'correlationId')
+      || Object.prototype.hasOwnProperty.call(value, 'reasonCode')
+      || Object.prototype.hasOwnProperty.call(value, 'limitations')
+    ),
+  );
+}
+
+function isGeneRecord(value) {
+  return Boolean(
+    value
+    && typeof value === 'object'
+    && !Array.isArray(value)
+    && ('symbol' in value || 'associationClaims' in value)
+  );
+}
+
+function isExplicitGeneCollectionRecord(value) {
+  return Boolean(
+    isGeneRecord(value)
+    || (
+      value
+      && typeof value === 'object'
+      && !Array.isArray(value)
+      && (
+        Object.prototype.hasOwnProperty.call(value, 'candidatePublication')
+        || Object.prototype.hasOwnProperty.call(value, 'profilePublication')
+      )
+    )
+  );
+}
+
+function sanitizeGeneCollection(genes, ancestors) {
+  return sanitizeExportValue(genes, ancestors, true, true);
+}
+
+function sanitizePublicationContent(content, ancestors) {
+  if (content && typeof content === 'object' && ancestors.has(content)) {
+    return '[Circular reference omitted]';
+  }
+  if (isExplicitGeneCollectionRecord(content)) {
+    return sanitizePublicationSafeGene(content, ancestors);
+  }
+  return Array.isArray(content)
+    ? sanitizeGeneCollection(content, ancestors)
+    : sanitizeExportValue(content, ancestors, true);
+}
+
+function sanitizePublicationReference(publication, ancestors) {
+  if (!publication || typeof publication !== 'object') {
+    return sanitizePublicationArtifact(publication, ancestors);
+  }
+  if (ancestors.has(publication)) return '[Circular reference omitted]';
+  ancestors.add(publication);
+  try {
+    return sanitizePublicationArtifact(publication, ancestors);
+  } finally {
+    ancestors.delete(publication);
+  }
+}
+
+function sanitizeExportValue(
+  value,
+  ancestors = new WeakSet(),
+  applyGeneCollectionPolicy = false,
+  recognizeGeneRecords = false,
+) {
+  if (value === null || typeof value !== 'object') return value;
+  if (ancestors.has(value)) return '[Circular reference omitted]';
+  if (recognizeGeneRecords && isExplicitGeneCollectionRecord(value)) {
+    return sanitizePublicationSafeGene(value, ancestors);
+  }
+  ancestors.add(value);
+  try {
+    if (looksLikePublicationArtifact(value)) {
+      return sanitizePublicationArtifact(value, ancestors);
+    }
+    if (Array.isArray(value)) {
+      return value.map((item) => sanitizeExportValue(
+        item,
+        ancestors,
+        applyGeneCollectionPolicy,
+        recognizeGeneRecords,
+      ));
+    }
+    const sanitized = Object.fromEntries(Object.entries(value).map(([key, item]) => [
+      key,
+      key === 'publication'
+        ? sanitizePublicationReference(item, ancestors)
+        : applyGeneCollectionPolicy && key === 'genes'
+          ? sanitizeGeneCollection(item, ancestors)
+          : sanitizeExportValue(
+            item,
+            ancestors,
+            applyGeneCollectionPolicy,
+            recognizeGeneRecords,
+          ),
+    ]));
+    if (Object.prototype.hasOwnProperty.call(value, 'publication')) {
+      for (const legacyAlias of [
+        'result',
+        'response',
+        'explanation',
+        'questions',
+        'imageUrl',
+        'revisedPrompt',
+        'analysis',
+      ]) {
+        delete sanitized[legacyAlias];
+      }
+    }
+    return sanitized;
+  } finally {
+    ancestors.delete(value);
+  }
+}
+
+function sanitizePublicationSafeGene(gene, ancestors) {
+  const source = /** @type {Record<string, unknown>} */ (
+    gene && typeof gene === 'object' ? gene : {}
+  );
+  const candidateReusable = isPublicationExportable(source.candidatePublication);
+  const profileReusable = isPublicationExportable(source.profilePublication)
+    && source.profileStatus === 'available';
+  const safe = sanitizeExportValue(source, ancestors, true);
+
+  for (const publicationKey of ['candidatePublication', 'profilePublication']) {
+    if (Object.prototype.hasOwnProperty.call(source, publicationKey)) {
+      const publication = source[publicationKey];
+      safe[publicationKey] = sanitizePublicationReference(publication, ancestors);
+    }
+  }
+
+  if (!candidateReusable) {
+    delete safe.explanation;
+    delete safe.description;
+    delete safe.associationType;
+    delete safe.association_type;
+    delete safe.diseases;
+    if (safe.coordinatesVerified !== true) {
+      delete safe.name;
+      delete safe.fullName;
+    }
+  }
+  if (!profileReusable) {
+    delete safe.aiSummary;
+    delete safe.keyTakeaways;
+    safe.phenotypes = [];
+    safe.expressionData = [];
+  }
+  if (safe.coordinatesVerified !== true) {
+    delete safe.chromosome;
+    delete safe.location;
+    delete safe.mapLocation;
+    delete safe.start;
+    delete safe.end;
+    delete safe.ensemblId;
+    delete safe.entrezId;
+    delete safe.genomeBuild;
+    delete safe.omimId;
+    delete safe.verifiedSource;
+    delete safe.authoritativeRetrievedAt;
+  }
+  return safe;
+}
+
+export function publicationSafeGene(gene = {}) {
+  return sanitizePublicationSafeGene(gene, new WeakSet());
+}
+
+export function publicationSafeExportData(data) {
+  return isGeneRecord(data)
+    ? publicationSafeGene(data)
+    : Array.isArray(data)
+      ? sanitizeGeneCollection(data, new WeakSet())
+      : sanitizeExportValue(data, new WeakSet(), true);
+}
+
 /**
  * Export data as a downloadable JSON file.
  */
 export function exportJSON(data, filename) {
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const safeData = publicationSafeExportData(data);
+  const blob = new Blob([JSON.stringify(safeData, null, 2)], { type: 'application/json' });
   downloadBlob(blob, `${filename}.json`);
 }
 
@@ -21,9 +236,14 @@ export function exportJSON(data, filename) {
  * Export data as a CSV file.
  */
 export function exportCSV(rows, headers, filename) {
+  const safeRows = rows.map((row) => (
+    isGeneRecord(row)
+      ? publicationSafeGene(row)
+      : publicationSafeExportData(row)
+  ));
   const csvRows = [
     headers.join(','),
-    ...rows.map(row =>
+    ...safeRows.map(row =>
       headers.map(h => {
         const val = row[h] ?? '';
         const escaped = String(val).replace(/"/g, '""');
@@ -158,12 +378,35 @@ function associationClaimContent(claim, index) {
     </div>`;
 }
 
+function publicationBoundaryContent(gene) {
+  const entries = [
+    ['Candidate lead', gene?.candidatePublication],
+    ['Generated profile', gene?.profilePublication],
+  ].filter(([, artifact]) => artifact && typeof artifact === 'object');
+  if (entries.length === 0) return null;
+
+  return entries.map(([label, artifact]) => {
+    const limitations = Array.isArray(artifact.limitations)
+      ? artifact.limitations.filter((item) => typeof item === 'string' && item.trim())
+      : [];
+    return `
+      <div class="notice">
+        <p><strong>${escapeHtml(label)} publication:</strong> ${escapeHtml(displayValue(artifact.status, 'unavailable'))}</p>
+        ${artifact.correlationId ? `<p>Correlation: ${escapeHtml(artifact.correlationId)}</p>` : ''}
+        ${artifact.reasonCode ? `<p>Reason: ${escapeHtml(artifact.reasonCode)}</p>` : ''}
+        ${limitations.length
+          ? `<p>Limitations:</p><ul>${limitations.map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ul>`
+          : ''}
+      </div>`;
+  }).join('');
+}
+
 /**
  * Build the printable gene-report sections as a pure function so provenance
  * completeness and escaping can be regression-tested without opening a window.
  */
 export function buildGeneReportSections(gene = {}) {
-  gene = gene ?? {};
+  gene = publicationSafeGene(gene);
   const sections = [];
   const claims = Array.isArray(gene.associationClaims) ? gene.associationClaims : [];
   const rankingLabel = rankingLabelFor(rankingBasisForGene(gene, claims));
@@ -182,6 +425,14 @@ export function buildGeneReportSections(gene = {}) {
       ${gene.description ? `<p>${escapeHtml(gene.description)}</p>` : ''}
     `,
   });
+
+  const publicationBoundary = publicationBoundaryContent(gene);
+  if (publicationBoundary) {
+    sections.push({
+      title: 'Publication Status',
+      content: publicationBoundary,
+    });
+  }
 
   sections.push({
     title: 'Evidence and Source Provenance',
@@ -232,10 +483,11 @@ export function buildGeneReportSections(gene = {}) {
  * Generate a gene card report.
  */
 export function exportGeneReport(gene) {
+  const safeGene = publicationSafeGene(gene);
   exportReport({
-    title: `Gene Report: ${gene?.symbol || 'Unknown gene'}`,
-    subtitle: gene?.name || gene?.fullName,
-    sections: buildGeneReportSections(gene),
+    title: `Gene Report: ${safeGene.symbol || 'Unknown gene'}`,
+    subtitle: safeGene.name || safeGene.fullName,
+    sections: buildGeneReportSections(safeGene),
   });
 }
 
@@ -284,7 +536,7 @@ export function exportVCFReport(variants, summary) {
  * Build a provenance-preserving plain-text gene summary.
  */
 export function buildGeneShareText(data = {}) {
-  data = data ?? {};
+  data = publicationSafeGene(data);
   const claims = Array.isArray(data.associationClaims) ? data.associationClaims : [];
   const lines = [
     `GeneMap Discovery - Gene: ${displayValue(data.symbol, 'Unknown gene')}`,
@@ -292,6 +544,19 @@ export function buildGeneShareText(data = {}) {
     `Location: ${displayValue([data.chromosome, data.location].filter(Boolean).join(' · '))}`,
     `Ranking: ${rankingLabelFor(rankingBasisForGene(data, claims))}`,
   ];
+
+  for (const [label, artifact] of [
+    ['Candidate lead publication', data.candidatePublication],
+    ['Generated profile publication', data.profilePublication],
+  ]) {
+    if (!artifact || typeof artifact !== 'object') continue;
+    lines.push(`${label}: ${displayValue(artifact.status, 'unavailable')}`);
+    if (artifact.correlationId) lines.push(`${label} correlation: ${artifact.correlationId}`);
+    if (artifact.reasonCode) lines.push(`${label} reason: ${artifact.reasonCode}`);
+    for (const limitation of artifact.limitations || []) {
+      lines.push(`${label} limitation: ${limitation}`);
+    }
+  }
 
   if (claims.length) {
     lines.push('Evidence and source provenance:');
@@ -334,7 +599,7 @@ export function buildGeneShareText(data = {}) {
 export async function copyShareableLink(data, type = 'gene') {
   const text = type === 'gene'
     ? buildGeneShareText(data)
-    : `GeneMap Discovery Analysis\n${JSON.stringify(data, null, 2).substring(0, 500)}`;
+    : `GeneMap Discovery Analysis\n${JSON.stringify(publicationSafeExportData(data), null, 2).substring(0, 500)}`;
 
   try {
     await navigator.clipboard.writeText(text);

@@ -1,3 +1,14 @@
+import { isCanonicalPublicationArtifact } from '@genemap/shared/publicationStatus';
+
+export function reusablePublicationArtifact(raw) {
+  const artifact = raw && typeof raw === 'object' ? raw.publication : null;
+  const canUseContent = Boolean(
+    isCanonicalPublicationArtifact(artifact)
+    && (artifact.status === 'available' || artifact.status === 'partial')
+  );
+  return canUseContent ? artifact : null;
+}
+
 /**
  * Robustly extract a JSON value from a raw LLM completion (browser side).
  *
@@ -10,13 +21,13 @@
  *   2. extract the first balanced {...} / [...] block (ignoring surrounding prose),
  *   3. parse without throwing.
  *
- * @param {*} raw - the model output. May already be a parsed object (some
- *   providers return structured JSON), a string, or { result } envelope.
+ * @param {*} raw - the API response carrying a canonical publication envelope.
  * @param {*} [fallback={}] - returned when parsing fails.
  */
 export function parseLLMJson(raw, fallback = {}) {
-  // Unwrap the { result, disclaimer } envelope invokeLLM resolves to.
-  const value = raw && typeof raw === 'object' && 'result' in raw ? raw.result : raw;
+  const artifact = reusablePublicationArtifact(raw);
+  if (!artifact) return fallback;
+  const value = artifact.content;
 
   if (value && typeof value === 'object') return value;
   if (typeof value !== 'string' || !value.trim()) return fallback;

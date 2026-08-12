@@ -1,8 +1,25 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { apiClient } from '@genemap/shared';
+import { publicationSafeExportData } from '../../../lib/exportUtils';
 import { PhenotypeSearchService } from '../PhenotypeSearchService';
 
 afterEach(() => vi.restoreAllMocks());
+
+function modelPublicationError(correlationId, status = 'unavailable') {
+  const error = new Error('Generated content is temporarily unavailable.');
+  error.status = 503;
+  error.details = {
+    publication: {
+      contractVersion: 1,
+      status,
+      content: null,
+      reasonCode: 'model_publication_disabled',
+      correlationId,
+      limitations: [],
+    },
+  };
+  return error;
+}
 
 describe('PhenotypeSearchService authoritative overlays', () => {
   it('replaces model-controlled metadata and carries real adapter timestamps', () => {
@@ -157,7 +174,16 @@ describe('PhenotypeSearchService provenance', () => {
 });
 
 describe('PhenotypeSearchService staged candidate journey', () => {
-  const envelope = (value) => ({ result: JSON.stringify(value), disclaimer: 'educational' });
+  const envelope = (value) => ({
+    publication: {
+      contractVersion: 1,
+      status: 'available',
+      content: JSON.stringify(value),
+      reasonCode: null,
+      correlationId: 'test:candidate-gene-research',
+      limitations: [],
+    },
+  });
 
   it.each(['Alice Smith', 'Alice Smith BRCA1 result', 'DNA and bomb making'])(
     'does not invoke generation for unresolved free label %s',
@@ -169,6 +195,30 @@ describe('PhenotypeSearchService staged candidate journey', () => {
       expect(invoke).not.toHaveBeenCalled();
     },
   );
+
+  it('returns the terminal publication carried by a candidate-search 503', async () => {
+    const invoke = vi.spyOn(apiClient, 'invokePublicationTask').mockRejectedValue(
+      modelPublicationError('candidate:service-recovery'),
+    );
+    vi.spyOn(apiClient, 'getMe').mockResolvedValue({ role: 'user' });
+    const enrich = vi.spyOn(apiClient, 'enrichGenomicData');
+
+    const base = await PhenotypeSearchService.findCandidates(
+      'Cystic Fibrosis',
+      false,
+      'disease',
+    );
+
+    expect(base.publication).toMatchObject({
+      status: 'unavailable',
+      reasonCode: 'model_publication_disabled',
+      correlationId: 'candidate:service-recovery',
+    });
+    expect(base.candidateGenes).toEqual([]);
+    expect(base.enriched).toBe(false);
+    expect(invoke).toHaveBeenCalledTimes(1);
+    expect(enrich).not.toHaveBeenCalled();
+  });
 
   it('uses one strict fused task, caps before enrichment, and returns cards', async () => {
     const invoke = vi.spyOn(apiClient, 'invokePublicationTask').mockResolvedValue(envelope({
@@ -207,6 +257,111 @@ describe('PhenotypeSearchService staged candidate journey', () => {
     );
     expect(enrich).toHaveBeenCalledWith(['CFTR'], []);
   });
+
+  it.each(['fused', 'fallback'])(
+    'replaces a malformed provider candidate publication in the %s path before cards or exports',
+    async (path) => {
+      const malformedCandidatePublication = {
+        contractVersion: 1,
+        status: 'available',
+        content: 'MALFORMED_CANDIDATE_PUBLICATION_CONTENT',
+        reasonCode: null,
+        correlationId: 'provider:candidate:malformed',
+        limitations: [],
+        providerRaw: 'PROVIDER_RAW_CANDIDATE_PUBLICATION',
+      };
+      const candidateResponse = envelope({
+        candidateGenes: [{
+          symbol: 'CFTR',
+          candidatePublication: malformedCandidatePublication,
+        }],
+      });
+      const invoke = vi.spyOn(apiClient, 'invokePublicationTask');
+      if (path === 'fallback') {
+        invoke
+          .mockResolvedValueOnce(envelope({
+            queryType: 'disease',
+            isDisease: true,
+            candidateGenes: [],
+          }))
+          .mockResolvedValueOnce(envelope({
+            queryType: 'disease',
+            isDisease: true,
+            mainFeatures: [],
+          }))
+          .mockResolvedValueOnce(candidateResponse);
+      } else {
+        invoke.mockResolvedValueOnce(candidateResponse);
+      }
+      vi.spyOn(apiClient, 'getMe').mockResolvedValue({});
+      vi.spyOn(apiClient, 'enrichGenomicData').mockResolvedValue({ genes: {}, phenotypes: {} });
+
+      const result = await PhenotypeSearchService.findCandidates(
+        'Cystic Fibrosis',
+        false,
+        'disease',
+      );
+      const [cardGene] = result.candidateGenes;
+      const exportedGene = publicationSafeExportData(cardGene);
+
+      expect(cardGene.candidatePublication).toEqual(candidateResponse.publication);
+      expect(cardGene.candidatePublication).not.toBe(malformedCandidatePublication);
+      expect(cardGene.candidatePublication.providerRaw).toBeUndefined();
+      expect(exportedGene.candidatePublication).toEqual(candidateResponse.publication);
+      expect(exportedGene.candidatePublication.providerRaw).toBeUndefined();
+    },
+  );
+
+  it.each(['fused', 'fallback'])(
+    'preserves a canonical provider candidate publication in the %s path',
+    async (path) => {
+      const canonicalCandidatePublication = {
+        contractVersion: 1,
+        status: 'available',
+        content: { association: 'Canonical candidate-specific content' },
+        reasonCode: null,
+        correlationId: 'provider:candidate:canonical',
+        limitations: [],
+      };
+      const candidateResponse = envelope({
+        candidateGenes: [{
+          symbol: 'CFTR',
+          candidatePublication: canonicalCandidatePublication,
+        }],
+      });
+      const invoke = vi.spyOn(apiClient, 'invokePublicationTask');
+      if (path === 'fallback') {
+        invoke
+          .mockResolvedValueOnce(envelope({
+            queryType: 'disease',
+            isDisease: true,
+            candidateGenes: [],
+          }))
+          .mockResolvedValueOnce(envelope({
+            queryType: 'disease',
+            isDisease: true,
+            mainFeatures: [],
+          }))
+          .mockResolvedValueOnce(candidateResponse);
+      } else {
+        invoke.mockResolvedValueOnce(candidateResponse);
+      }
+      vi.spyOn(apiClient, 'getMe').mockResolvedValue({});
+      vi.spyOn(apiClient, 'enrichGenomicData').mockResolvedValue({ genes: {}, phenotypes: {} });
+
+      const result = await PhenotypeSearchService.findCandidates(
+        'Cystic Fibrosis',
+        false,
+        'disease',
+      );
+      const [cardGene] = result.candidateGenes;
+
+      expect(cardGene.candidatePublication).toEqual(canonicalCandidatePublication);
+      expect(publicationSafeExportData(cardGene).candidatePublication).toEqual(
+        canonicalCandidatePublication,
+      );
+    },
+  );
 
   it('falls back through classify and suggest when the fused result is sparse', async () => {
     const invoke = vi.spyOn(apiClient, 'invokePublicationTask')
@@ -252,6 +407,108 @@ describe('PhenotypeSearchService staged candidate journey', () => {
     expect(taskInput.query).toEqual({ kind: 'mondo', identifier: 'MONDO:0007947' });
     expect(JSON.stringify(taskInput)).not.toContain('untrusted browser label');
   });
+
+  it.each(['withheld', 'unavailable'])(
+    'returns a canonical %s candidate publication without empty-result fallback work',
+    async (status) => {
+      const publication = {
+        contractVersion: 1,
+        status,
+        content: null,
+        reasonCode: `candidate_${status}`,
+        correlationId: `candidate:${status}`,
+        limitations: [],
+      };
+      const invoke = vi.spyOn(apiClient, 'invokePublicationTask').mockResolvedValue({ publication });
+      vi.spyOn(apiClient, 'getMe').mockResolvedValue({});
+      const enrich = vi.spyOn(apiClient, 'enrichGenomicData');
+
+      const base = await PhenotypeSearchService.findCandidates(
+        'Cystic Fibrosis',
+        false,
+        'disease',
+      );
+
+      expect(base.publication).toEqual(publication);
+      expect(base.candidateGenes).toEqual([]);
+      expect(base.enriched).toBe(false);
+      expect(invoke).toHaveBeenCalledTimes(1);
+      expect(enrich).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['missing', undefined],
+    ['malformed', { ...envelope({ candidateGenes: [] }).publication, raw: 'leak' }],
+  ])(
+    'canonicalizes a %s candidate publication and searchGenes does not enrich it',
+    async (_caseName, publication) => {
+      vi.spyOn(apiClient, 'invokePublicationTask').mockResolvedValue({ publication });
+      vi.spyOn(apiClient, 'getMe').mockResolvedValue({});
+      const authoritativeEnrich = vi.spyOn(apiClient, 'enrichGenomicData');
+      const candidateEnrich = vi.spyOn(PhenotypeSearchService, 'enrichCandidates');
+
+      const result = await PhenotypeSearchService.searchGenes(
+        'Cystic Fibrosis',
+        false,
+        'disease',
+      );
+
+      expect(result.publication).toEqual({
+        contractVersion: 1,
+        status: 'unavailable',
+        content: null,
+        reasonCode: 'invalid_candidate_publication',
+        correlationId: 'client-candidate:invalid-publication',
+        limitations: [],
+      });
+      expect(result.candidateGenes).toEqual([]);
+      expect(result.enriched).toBe(false);
+      expect(authoritativeEnrich).not.toHaveBeenCalled();
+      expect(candidateEnrich).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    { stage: 'classify', status: 'unavailable', calls: 2 },
+    { stage: 'suggest_candidates', status: 'withheld', calls: 3 },
+  ])(
+    'propagates a terminal $status publication from the $stage fallback',
+    async ({ stage, status, calls }) => {
+      const terminal = {
+        publication: {
+          contractVersion: 1,
+          status,
+          content: null,
+          reasonCode: `fallback_${status}`,
+          correlationId: `fallback:${stage}:${status}`,
+          limitations: [],
+        },
+      };
+      const responses = [
+        envelope({ queryType: 'disease', isDisease: true, candidateGenes: [] }),
+      ];
+      if (stage === 'suggest_candidates') {
+        responses.push(envelope({ queryType: 'disease', isDisease: true, mainFeatures: [] }));
+      }
+      responses.push(terminal);
+      const invoke = vi.spyOn(apiClient, 'invokePublicationTask');
+      for (const response of responses) invoke.mockResolvedValueOnce(response);
+      vi.spyOn(apiClient, 'getMe').mockResolvedValue({});
+      const enrich = vi.spyOn(apiClient, 'enrichGenomicData');
+
+      const base = await PhenotypeSearchService.findCandidates(
+        'Cystic Fibrosis',
+        false,
+        'disease',
+      );
+
+      expect(base.publication).toEqual(terminal.publication);
+      expect(base.candidateGenes).toEqual([]);
+      expect(invoke).toHaveBeenCalledTimes(calls);
+      expect(enrich).not.toHaveBeenCalled();
+    },
+  );
 });
 
 describe('PhenotypeSearchService profile and comparison behavior', () => {
@@ -273,20 +530,28 @@ describe('PhenotypeSearchService profile and comparison behavior', () => {
     );
     expect(invoke).not.toHaveBeenCalled();
     expect(result.profileStatus).toBe('unavailable');
-    expect(result.aiSummary).toMatch(/AI-suggested candidate lead/i);
+    expect(result.aiSummary).toBeNull();
+    expect(result.profilePublication).toEqual({
+      contractVersion: 1,
+      status: 'unavailable',
+      content: null,
+      reasonCode: 'profile_identifier_unverified',
+      correlationId: 'client-profile:profile_identifier_unverified',
+      limitations: [],
+    });
     expect(result.phenotypes).toEqual([]);
   });
 
   it('sends only a verified symbol and honors explicit server profile states', async () => {
-    const invoke = vi.spyOn(apiClient, 'invokePublicationTask').mockResolvedValue({
-      result: JSON.stringify({
-        summary: 'Generated profile withheld because the response crossed the boundary.',
-        summaryStatus: 'withheld',
-        keyTakeaways: [],
-        phenotypes: [],
-      }),
-      disclaimer: 'educational',
-    });
+    const publication = {
+      contractVersion: 1,
+      status: 'withheld',
+      content: null,
+      reasonCode: 'profile_policy_boundary',
+      correlationId: 'test:gene-profile:withheld',
+      limitations: [],
+    };
+    const invoke = vi.spyOn(apiClient, 'invokePublicationTask').mockResolvedValue({ publication });
     const result = await PhenotypeSearchService.enrichGeneCombined(
       {
         symbol: 'CFTR',
@@ -309,6 +574,91 @@ describe('PhenotypeSearchService profile and comparison behavior', () => {
     );
     expect(JSON.stringify(invoke.mock.calls[0])).not.toContain('untrusted model prose');
     expect(result.profileStatus).toBe('withheld');
+    expect(result.profilePublication).toEqual(publication);
+  });
+
+  it.each([
+    ['available', null, []],
+    ['partial', 'provider_truncated', ['The profile may be incomplete.']],
+  ])('preserves canonical reusable %s profile publications', async (status, reasonCode, limitations) => {
+    const publication = {
+      contractVersion: 1,
+      status,
+      content: {
+        summaryStatus: 'available',
+        summary: '  Canonical reusable profile  ',
+        phenotypes: [{ name: 'Reviewed phenotype' }],
+        keyTakeaways: ['Reviewed takeaway'],
+      },
+      reasonCode,
+      correlationId: `profile-reusable-${status}`,
+      limitations,
+    };
+    vi.spyOn(apiClient, 'invokePublicationTask').mockResolvedValue({ publication });
+
+    const result = await PhenotypeSearchService.enrichGeneCombined({
+      symbol: 'CFTR',
+      ensemblId: 'ENSG00000001626',
+      coordinatesVerified: true,
+    }, null);
+
+    expect(result.profileStatus).toBe('available');
+    expect(result.profilePublication).toEqual(publication);
+    expect(result.aiSummary).toBe('Canonical reusable profile');
+    expect(result.phenotypes).toEqual([{ name: 'Reviewed phenotype' }]);
+    expect(result.keyTakeaways).toEqual(['Reviewed takeaway']);
+  });
+
+  it.each([
+    ['missing', {}, 'MISSING_PROFILE_PUBLICATION_LEAK'],
+    ['null', { publication: null }, 'NULL_PROFILE_PUBLICATION_LEAK'],
+    ['scalar', { publication: 'SCALAR_PROFILE_PUBLICATION_LEAK' }, 'SCALAR_PROFILE_PUBLICATION_LEAK'],
+    ['extra-key', {
+      publication: {
+        contractVersion: 1,
+        status: 'available',
+        content: {
+          summaryStatus: 'available',
+          summary: 'EXTRA_KEY_PROFILE_PUBLICATION_LEAK',
+          phenotypes: [{ name: 'EXTRA_KEY_PHENOTYPE_LEAK' }],
+          keyTakeaways: ['EXTRA_KEY_TAKEAWAY_LEAK'],
+        },
+        reasonCode: null,
+        correlationId: 'profile-extra-key',
+        limitations: [],
+        providerRaw: 'EXTRA_KEY_PROVIDER_RAW_LEAK',
+      },
+    }, 'EXTRA_KEY_PROFILE_PUBLICATION_LEAK'],
+  ])('fails closed for a %s profile publication envelope', async (_kind, response, leak) => {
+    response.providerProse = leak;
+    vi.spyOn(apiClient, 'invokePublicationTask').mockResolvedValue(response);
+
+    const result = await PhenotypeSearchService.enrichGeneCombined({
+      symbol: 'CFTR',
+      ensemblId: 'ENSG00000001626',
+      coordinatesVerified: true,
+    }, null);
+
+    expect(result).toEqual({
+      phenotypes: [],
+      aiSummary: null,
+      profileStatus: 'unavailable',
+      profilePublication: {
+        contractVersion: 1,
+        status: 'unavailable',
+        content: null,
+        reasonCode: 'invalid_publication_artifact',
+        correlationId: 'profile:client-invalid-publication',
+        limitations: [],
+      },
+      keyTakeaways: [],
+      expressionData: [],
+      furtherReading: PhenotypeSearchService.deterministicFurtherReading('CFTR'),
+    });
+    expect(JSON.stringify(result)).not.toContain(leak);
+    expect(JSON.stringify(result)).not.toContain('PROVIDER_RAW_LEAK');
+    expect(JSON.stringify(result)).not.toContain('PHENOTYPE_LEAK');
+    expect(JSON.stringify(result)).not.toContain('TAKEAWAY_LEAK');
   });
 
   it('uses a deterministic unavailable state after a profile-call failure', async () => {
@@ -322,8 +672,34 @@ describe('PhenotypeSearchService profile and comparison behavior', () => {
     ], false, null);
 
     expect(result.profileStatus).toBe('unavailable');
-    expect(result.aiSummary).toMatch(/Generated profile unavailable/i);
-    expect(result.aiSummary).not.toMatch(/is associated with/i);
+    expect(result.aiSummary).toBeNull();
+    expect(result.profilePublication).toEqual({
+      contractVersion: 1,
+      status: 'unavailable',
+      content: null,
+      reasonCode: 'profile_enrichment_failed',
+      correlationId: 'client-profile:profile_enrichment_failed',
+      limitations: [],
+    });
+  });
+
+  it('preserves a terminal profile artifact and its exact status after a profile 503', async () => {
+    vi.spyOn(apiClient, 'invokePublicationTask').mockRejectedValue(
+      modelPublicationError('profile:service-recovery', 'withheld'),
+    );
+    const [result] = await PhenotypeSearchService.enrichGeneData([{
+      symbol: 'CFTR',
+      ensemblId: 'ENSG00000001626',
+      coordinatesVerified: true,
+    }], false, null);
+
+    expect(result.profileStatus).toBe('withheld');
+    expect(result.aiSummary).toBeNull();
+    expect(result.profilePublication).toMatchObject({
+      status: 'withheld',
+      reasonCode: 'model_publication_disabled',
+      correlationId: 'profile:service-recovery',
+    });
   });
 
   it('compares lists deterministically without personal interpretation', async () => {
