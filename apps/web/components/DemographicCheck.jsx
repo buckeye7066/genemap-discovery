@@ -17,10 +17,14 @@ export default function DemographicCheck({ children }) {
     }
 
     const demographicPath = createPageUrl("DemographicCollection");
-    if (location.pathname === demographicPath || location.pathname.includes('demographic')) {
-      // We've arrived on the demographic page — clear the redirect flag so the
-      // page renders instead of an endless spinner. (Without this reset the
-      // wrapper stayed on the spinner forever, the root cause of the hang.)
+    const accountSettingsPath = createPageUrl("AccountSettings");
+    const isDemographicPage = location.pathname === demographicPath
+      || location.pathname.includes('demographic');
+    const isAccountPrivacyPage = location.pathname === accountSettingsPath;
+    if (isDemographicPage || isAccountPrivacyPage) {
+      // Optional profile questions must never become a condition for reaching
+      // privacy controls or permanent account deletion. Clear any previous
+      // redirect spinner when the user is on either exempt route.
       if (shouldRedirect) setShouldRedirect(false);
       return;
     }

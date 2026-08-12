@@ -11,7 +11,9 @@
     "retentionDays": 7,
     "lastSuccessfulBackupAt": "REPLACE — ISO date of most recent automated backup",
     "restoreTestedAt": "2026-06-30T00:00:00Z",
-    "restoreRunbook": "docs/BACKUP.md"
+    "restoreRunbook": "docs/BACKUP.md",
+    "externalDeletionLedgerConfigured": false,
+    "deletionLedgerReconciledAt": "REPLACE — ISO date of the most recent zero-blocker quarantined ledger reconciliation"
   },
   "monitoring": {
     "errorTrackingConfigured": true,

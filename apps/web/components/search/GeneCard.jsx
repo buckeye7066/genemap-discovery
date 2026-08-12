@@ -57,6 +57,20 @@ function provenanceRoleLabel(claim) {
   return 'Identity / ontology / follow-up metadata';
 }
 
+function groundedEvidenceSummary(partition = {}) {
+  const associationCount = (list) =>
+    (list || []).filter((c) => claimProvenanceRole(c) === 'association_evidence').length;
+  const entries = [
+    ['human', associationCount(partition.human)],
+    ['model-organism', associationCount(partition.animal)],
+    ['computed', associationCount(partition.computational)],
+  ].filter(([, count]) => count > 0);
+  if (entries.length === 0) return null;
+  return entries
+    .map(([label, count]) => `${count} ${label} claim${count === 1 ? '' : 's'}`)
+    .join(', ');
+}
+
 function GeneCard({ gene, rank, isSelected = false, onSelect = null }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const { user } = useAuth();
@@ -110,6 +124,7 @@ function GeneCard({ gene, rank, isSelected = false, onSelect = null }) {
   // contradictory evidenceClass/taxon fields in both data and fallback paths.
   const partition = gene.evidencePartition || partitionClaimsBySpecies(claims);
   const rankingBasis = gene.rankingBasis || deriveRankingBasisFromClaims(claims);
+  const sourceEvidenceSummary = groundedEvidenceSummary(partition);
   const rankingLabel = rankingBasis === 'human_verified'
     ? 'Human-verified association evidence'
     : rankingBasis === 'computational'
@@ -364,19 +379,44 @@ function GeneCard({ gene, rank, isSelected = false, onSelect = null }) {
           <div className="mb-4 flex items-start gap-2 text-xs text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-md px-3 py-2">
             <Info className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
             <span>
-              <strong>Coordinates &amp; IDs verified</strong> against MyGene.info (Ensembl/NCBI).
-              Gene-phenotype associations and the summary are AI-suggested
-              {gene.hpoChecked ? "; HP: ids shown are HPO-validated" : ""}. Verify each association
-              in the cited primary database record before research use; do not use this output medically.
+              <strong>Coordinates &amp; IDs verified</strong> against MyGene.info (Ensembl/NCBI).{' '}
+              {sourceEvidenceSummary ? (
+                <>
+                  Source-grounded association rows are shown separately ({sourceEvidenceSummary}).
+                  The AI candidate lead, AI summary, and candidate phenotype terms remain model-generated
+                  unless a provenance row identifies their source
+                  {gene.hpoChecked ? "; HP: identifiers shown are term-validated" : ""}.
+                </>
+              ) : (
+                <>
+                  No source-grounded gene-query association was attached. The candidate association,
+                  summary, and phenotype terms remain AI-generated research leads
+                  {gene.hpoChecked ? "; HP: identifiers shown are term-validated" : ""}.
+                </>
+              )}{' '}
+              Review the cited record, study design, context, contradictions, and limitations before
+              research use; never use this output for diagnosis or clinical decisions.
             </span>
           </div>
         ) : (
           <div className="mb-4 flex items-start gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
             <Info className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
             <span>
-              <strong>Authoritative metadata unavailable.</strong> Coordinates and identifiers are
-              withheld. Candidate associations and summaries remain AI-suggested research leads;
-              verify them in official databases before research use and never use them clinically.
+              <strong>Authoritative identity metadata unavailable.</strong> Coordinates and identifiers
+              are withheld.{' '}
+              {sourceEvidenceSummary ? (
+                <>
+                  Separate source-grounded association rows are still shown ({sourceEvidenceSummary});
+                  they do not validate the missing identity fields. The AI summary and candidate terms
+                  remain model-generated.
+                </>
+              ) : (
+                <>
+                  No source-grounded association record was attached, so the candidate, summary, and
+                  phenotype terms remain unverified AI research leads.
+                </>
+              )}{' '}
+              Review primary records before research use and never use this output clinically.
             </span>
           </div>
         )}
@@ -505,5 +545,7 @@ function GeneCard({ gene, rank, isSelected = false, onSelect = null }) {
     </Card>
   );
 }
+
+export const __test = { groundedEvidenceSummary };
 
 export default memo(GeneCard);

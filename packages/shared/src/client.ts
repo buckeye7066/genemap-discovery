@@ -170,13 +170,21 @@ export class ApiError extends Error {
   status: number;
   code?: string;
   details?: unknown;
+  receiptId?: string;
 
-  constructor(message: string, status: number, code?: string, details?: unknown) {
+  constructor(
+    message: string,
+    status: number,
+    code?: string,
+    details?: unknown,
+    receiptId?: string
+  ) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
     this.code = code;
     this.details = details;
+    this.receiptId = receiptId;
   }
 }
 
@@ -397,13 +405,18 @@ export class ApiClient {
     }
 
     if (!response.ok) {
-      const body: { error?: string; code?: string; details?: unknown } =
-        await response.json().catch(() => ({}));
+      const body: {
+        error?: string;
+        code?: string;
+        details?: unknown;
+        receiptId?: string;
+      } = await response.json().catch(() => ({}));
       throw new ApiError(
         body.error || `Request failed with status ${response.status}`,
         response.status,
         body.code,
-        body.details
+        body.details,
+        body.receiptId
       );
     }
 

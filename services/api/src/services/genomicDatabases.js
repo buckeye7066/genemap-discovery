@@ -341,7 +341,7 @@ function toGeneRecord(querySymbol, hit, retrievedAt) {
  * request for all uncached symbols; per-symbol results (including misses) are
  * cached so repeat searches preserve the original adapter-retrieval timestamp.
  */
-export async function enrichGenes(symbols) {
+async function enrichGenesInternal(symbols) {
   const clean = [
     ...new Set(
       (symbols || [])
@@ -350,16 +350,19 @@ export async function enrichGenes(symbols) {
     ),
   ].slice(0, MAX_ENRICH_SYMBOLS);
 
-  const result = {};
-  if (clean.length === 0) return result;
+  const records = {};
+  if (clean.length === 0) {
+    return { records, ok: true, partial: false, retrievedAt: null };
+  }
 
   const toFetch = [];
   for (const sym of clean) {
     const cached = cache.get(`generec:${sym.toLowerCase()}`);
-    if (cached !== undefined) result[sym] = cached;
+    if (cached !== undefined) records[sym] = cached;
     else toFetch.push(sym);
   }
 
+  let fetchFailed = false;
   if (toFetch.length > 0) {
     try {
       const body = new URLSearchParams({
@@ -390,16 +393,44 @@ export async function enrichGenes(symbols) {
         const hit = byQuery.get(sym.toLowerCase());
         const record = hit ? toGeneRecord(sym, hit, retrievedAt) : null;
         cache.set(`generec:${sym.toLowerCase()}`, record);
-        result[sym] = record;
+        records[sym] = record;
       }
     } catch (err) {
+      fetchFailed = true;
       console.error('[genomicDatabases] enrichGenes failed:', err.message);
       // Fail soft: leave unresolved symbols as null so the caller keeps AI data.
-      for (const sym of toFetch) if (!(sym in result)) result[sym] = null;
+      // Do not cache transport failures as authoritative "not found" records.
+      for (const sym of toFetch) if (!(sym in records)) records[sym] = null;
     }
   }
 
-  return result;
+  const successfulRecords = Object.values(records).filter((record) => record?.verified);
+  const retrievedAt = successfulRecords
+    .map((record) => record.retrievedAt)
+    .filter(Boolean)
+    .sort()
+    .at(-1) || null;
+  const hasAuthoritativeCachedRecord = successfulRecords.length > 0;
+  return {
+    records,
+    ok: !fetchFailed || hasAuthoritativeCachedRecord,
+    partial: fetchFailed && hasAuthoritativeCachedRecord,
+    retrievedAt,
+  };
+}
+
+export async function enrichGenes(symbols) {
+  return (await enrichGenesInternal(symbols)).records;
+}
+
+/**
+ * Association evidence needs transport health in addition to records. This
+ * companion API preserves the existing `enrichGenes()` shape for ordinary
+ * callers while preventing a MyGene outage from being reported as an
+ * authoritative no-match in the research evidence workflow.
+ */
+export async function enrichGenesWithStatus(symbols) {
+  return enrichGenesInternal(symbols);
 }
 
 const MAX_HPO_TERMS = 80;

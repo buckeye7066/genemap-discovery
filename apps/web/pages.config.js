@@ -6,6 +6,7 @@ const Search = lazyWithRetry(() => import('./pages/Search'));
 const Premium = lazyWithRetry(() => import('./pages/Premium'));
 const History = lazyWithRetry(() => import('./pages/History'));
 const Profile = lazyWithRetry(() => import('./pages/Profile'));
+const AccountSettings = lazyWithRetry(() => import('./pages/AccountSettings'));
 const ResearchMode = lazyWithRetry(() => import('./pages/ResearchMode'));
 const Dashboard = lazyWithRetry(() => import('./pages/Dashboard'));
 const InstitutionalAdmin = lazyWithRetry(() => import('./pages/InstitutionalAdmin'));
@@ -38,6 +39,7 @@ export const PAGES = {
     "Premium": Premium,
     "History": History,
     "Profile": Profile,
+    "AccountSettings": AccountSettings,
     "ResearchMode": ResearchMode,
     "Dashboard": Dashboard,
     "InstitutionalAdmin": InstitutionalAdmin,

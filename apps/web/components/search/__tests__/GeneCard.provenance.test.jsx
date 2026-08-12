@@ -2,7 +2,7 @@ import React from 'react';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { apiClient } from '@genemap/shared';
-import GeneCard from '../GeneCard';
+import GeneCard, { __test } from '../GeneCard';
 
 vi.mock('@genemap/shared', () => ({
   apiClient: { logActivity: vi.fn().mockResolvedValue({}) },
@@ -45,6 +45,22 @@ const identityClaim = {
   isAiLead: false,
 };
 
+const associationClaim = {
+  source: 'Monarch Initiative',
+  recordId: 'association:RUNX1:HP0001250',
+  claim: 'RUNX1 has a source-recorded association to Seizure',
+  taxon: '9606',
+  species: 'Homo sapiens',
+  evidenceClass: 'human_verified',
+  evidenceType: 'gene_phenotype_association',
+  evidenceStrength: 'supporting',
+  releaseVersion: '2026-06-08',
+  referenceAssembly: null,
+  retrievalDate: '2026-08-09',
+  directLink: 'https://example.org/association/RUNX1-HP0001250',
+  isAiLead: false,
+};
+
 const gene = {
   symbol: 'RUNX1',
   name: 'RUNX family transcription factor 1',
@@ -52,11 +68,12 @@ const gene = {
   // the fallback badge look like verified gene-query association evidence.
   associationClaims: [aiClaim, identityClaim],
   evidencePartition: {
-    human: [identityClaim],
+    human: [],
     animal: [],
     computational: [],
     aiLeads: [aiClaim],
     external: [],
+    metadata: [identityClaim],
   },
   sources: ['ClinGen'],
   phenotypes: [],
@@ -104,6 +121,7 @@ describe('GeneCard claim-level provenance', () => {
     expect(ai.getByText('AI candidate lead')).toBeInTheDocument();
     expect(aiRow).toHaveTextContent('AI lead: true');
     expect(aiRow).toHaveTextContent('No validated HTTP(S) source link recorded');
+    expect(screen.getByText(/no source-grounded association record was attached/i)).toBeInTheDocument();
 
     await waitFor(() => expect(apiClient.logActivity).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -112,6 +130,50 @@ describe('GeneCard claim-level provenance', () => {
         entityId: 'RUNX1',
       }),
     ));
+  });
+
+  it('states the exact grounded evidence classes without relabeling AI summaries', () => {
+    const groundedGene = {
+      ...gene,
+      coordinatesVerified: true,
+      chromosome: '21',
+      start: 34787801,
+      end: 36004667,
+      genomeBuild: 'GRCh38',
+      entrezId: '861',
+      ensemblId: 'ENSG00000159216',
+      hpoChecked: true,
+      associationClaims: [associationClaim, aiClaim, identityClaim],
+      evidencePartition: {
+        human: [associationClaim],
+        animal: [],
+        computational: [],
+        aiLeads: [aiClaim],
+        external: [],
+        metadata: [identityClaim],
+      },
+    };
+
+    render(<GeneCard gene={groundedGene} rank={1} />);
+
+    expect(screen.getByText('Human-verified association evidence')).toBeInTheDocument();
+    const notice = screen.getByText(/source-grounded association rows are shown separately/i).closest('div');
+    expect(notice).toHaveTextContent('1 human claim');
+    expect(notice).toHaveTextContent(/AI candidate lead, AI summary, and candidate phenotype terms remain model-generated/i);
+    expect(notice).toHaveTextContent(/HP: identifiers shown are term-validated/i);
+    expect(notice).not.toHaveTextContent(/Gene-phenotype associations and the summary are AI-suggested/i);
+    expect(screen.getByText(associationClaim.claim)).toBeInTheDocument();
+    expect(screen.getByText('2026-06-08')).toBeInTheDocument();
+  });
+
+  it('summarizes human, model-organism, and computed evidence without counting metadata', () => {
+    expect(__test.groundedEvidenceSummary({
+      human: [associationClaim],
+      animal: [{ ...associationClaim, taxon: '10090' }],
+      computational: [{ ...associationClaim, evidenceClass: 'computational' }],
+      metadata: [identityClaim],
+    })).toBe('1 human claim, 1 model-organism claim, 1 computed claim');
+    expect(__test.groundedEvidenceSummary({ metadata: [identityClaim], aiLeads: [aiClaim] })).toBeNull();
   });
 
   it('retries activity logging while mounted and preserves successful de-duplication', async () => {

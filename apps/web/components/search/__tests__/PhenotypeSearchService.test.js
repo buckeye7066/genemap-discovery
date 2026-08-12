@@ -131,11 +131,14 @@ describe('PhenotypeSearchService provenance', () => {
 
     expect(gene.rankingBasis).toBe('ai_lead');
     expect(gene.evidencePartition.aiLeads).toHaveLength(1);
-    expect(gene.evidencePartition.human[0]).toMatchObject({
-      evidenceClass: 'human_verified',
-      evidenceType: 'gene_identity',
-      retrievalDate: '2026-08-09',
-    });
+    expect(gene.evidencePartition.human).toHaveLength(0);
+    expect(gene.evidencePartition.metadata).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        evidenceClass: 'human_verified',
+        evidenceType: 'gene_identity',
+        retrievalDate: '2026-08-09',
+      }),
+    ]));
     const ontology = gene.evidencePartition.external.find(
       (claim) => claim.evidenceType === 'phenotype_ontology',
     );

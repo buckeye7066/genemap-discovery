@@ -18,7 +18,9 @@ import {
 } from './config/rateLimitStore.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { requireCsrf } from './middleware/csrf.js';
+import adminDeletionLockPlugin from './plugins/adminDeletionLock.js';
 import authRoutes from './routes/auth.js';
+import accountRoutes from './routes/account.js';
 import billingRoutes from './routes/billing.js';
 import educationRoutes from './routes/education.js';
 import llmRoutes, { isModelPublicationEnabled } from './routes/llm.js';
@@ -28,6 +30,12 @@ import genomicsRoutes from './routes/genomics.js';
 import publicationConceptRoutes from './routes/publicationConcepts.js';
 import clinicalTrialRoutes from './routes/clinicalTrials.js';
 import clientErrorRoutes from './routes/clientError.js';
+import {
+  accountClosureCleanupStatus,
+  createAccountClosureStripeClient,
+  reconcilePendingCustomerCleanup,
+} from './services/accountClosure.js';
+import { accountClosureLedgerStatus } from './services/accountClosureLedger.js';
 import {
   PUBLICATION_MODE,
   enforceHiddenPathBoundary,
@@ -60,15 +68,6 @@ const fastify = Fastify({
 fastify.decorate('prisma', prisma);
 fastify.decorate('env', env);
 
-// Security headers on every API response. This is a JSON API on its own origin
-// (the web app is served from Vercel with its own headers), so we keep the
-// browser-page protections minimal and focus on transport + sniffing:
-//  - HSTS: force HTTPS for a year incl. subdomains (the API is HTTPS-only on
-//    Railway). Harmless if a proxy already sets it.
-//  - nosniff + frameguard(deny) + no-referrer: defense in depth.
-//  - CSP/COEP are disabled: they govern HTML documents, and this origin never
-//    serves one, so enabling CSP here only risks breaking JSON clients.
-//  - x-powered-by is removed so we do not advertise the framework.
 await fastify.register(helmet, {
   contentSecurityPolicy: false,
   crossOriginEmbedderPolicy: false,
@@ -94,13 +93,9 @@ await fastify.register(cookie, {
   secret: env.COOKIE_SECRET,
 });
 
-// Rate limiting is distributed through Redis when configured. The Fastify
-// plugin skips a Redis command error so a cache outage cannot produce blanket
-// 500s. Its command callbacks mark the shared client degraded, then the
-// preHandler emergency limiter takes over on that same request with bounded,
-// per-instance counters. Health/readiness routes bypass both layers so an outage
-// can never hide the very status operators need.
 const rateLimitRedis = createRateLimitRedis(env, { logger: fastify.log });
+const accountClosureStripeClient = createAccountClosureStripeClient(process.env);
+let accountClosureCleanupTimer = null;
 
 await fastify.register(rateLimit, {
   max: GLOBAL_RATE_LIMIT_MAX,
@@ -119,15 +114,8 @@ fastify.addHook(
   })
 );
 
-// Reject hidden path families during onRequest, before content-type parsing,
-// so the publication build never accepts a VCF/medical/clinical request body.
 fastify.addHook('onRequest', enforceHiddenPathBoundary);
-
-// Enforce bounded generation contracts after parsing their small structured
-// bodies. Register before CSRF and child route authentication/handlers.
 fastify.addHook('preHandler', enforcePublishingBoundary);
-
-// Global CSRF guard for state-changing requests on cookie-authenticated paths.
 fastify.addHook('preHandler', requireCsrf);
 
 fastify.addContentTypeParser('application/json', { parseAs: 'string' }, function (req, body, done) {
@@ -140,15 +128,12 @@ fastify.addContentTypeParser('application/json', { parseAs: 'string' }, function
   }
 });
 
-// Register the error handler BEFORE plugins so child scopes inherit it.
 fastify.setErrorHandler(errorHandler);
 
 await fastify.register(async (authScope) => {
   await authScope.register(rateLimit, {
     max: AUTH_RATE_LIMIT_MAX,
     timeWindow: '15 minutes',
-    // Distinct namespace: without it the auth counters would share Redis keys
-    // with the global limiter (both key on nameSpace + ip).
     ...rateLimitStoreOptions(rateLimitRedis, 'auth'),
   });
   authScope.addHook(
@@ -163,6 +148,12 @@ await fastify.register(async (authScope) => {
   await authScope.register(authRoutes, { prefix: '/auth' });
 });
 
+// Install the admin-delete wrapper in the root route scope before admin routes
+// are declared. It wraps only DELETE .../users/:idOrEmail after that route's
+// authentication/role preHandlers have succeeded.
+await adminDeletionLockPlugin(fastify);
+
+await fastify.register(accountRoutes, { prefix: '/account' });
 await fastify.register(billingRoutes, { prefix: '/billing' });
 await fastify.register(educationRoutes, { prefix: '/education' });
 await fastify.register(llmRoutes, { prefix: '/llm' });
@@ -171,24 +162,14 @@ await fastify.register(entityRoutes, { prefix: '/entities' });
 await fastify.register(genomicsRoutes, { prefix: '/genomics' });
 await fastify.register(publicationConceptRoutes, { prefix: '/genomics/publication-concepts' });
 await fastify.register(clinicalTrialRoutes, { prefix: '/clinical-trials' });
-
-// Frontend error ingest (auth optional). Registered at root so the web app can
-// POST uncaught errors to `/report-client-error`.
 await fastify.register(clientErrorRoutes);
 
-// Liveness: the process is up. Cheap, never touches the DB, and is explicitly
-// excluded from rate limiting as a second layer of defense beyond allowList.
 fastify.get(
   '/healthz',
   { config: { rateLimit: false } },
   async () => ({ status: 'ok', uptime: process.uptime() })
 );
 
-// Readiness: the process is up and can reach its hard dependencies. Redis is
-// deliberately not a hard dependency because emergency local limiting remains
-// active during an outage. Model publication uses the exact same runtime switch
-// as /llm/invoke; a recovery-disabled API stays probeable but reports degraded
-// so release gates cannot mistake it for the full product.
 fastify.get('/readyz', { config: { rateLimit: false } }, async (request, reply) => {
   try {
     await prisma.$queryRaw`SELECT 1`;
@@ -199,7 +180,16 @@ fastify.get('/readyz', { config: { rateLimit: false } }, async (request, reply) 
 
   const rateLimitProtection = rateLimitProtectionStatus(rateLimitRedis);
   const modelPublicationEnabled = isModelPublicationEnabled(process.env);
-  const degraded = rateLimitProtection.emergency || !modelPublicationEnabled;
+  const ledger = accountClosureLedgerStatus(process.env);
+  const accountClosureCleanup = accountClosureCleanupStatus();
+  const accountClosureDegraded = env.isProduction && (
+    !ledger.configured
+    || accountClosureCleanup.lastError
+    || Number(accountClosureCleanup.pending || 0) > 0
+  );
+  const degraded = rateLimitProtection.emergency
+    || !modelPublicationEnabled
+    || accountClosureDegraded;
   return {
     status: degraded ? 'degraded' : 'ready',
     degraded,
@@ -209,30 +199,42 @@ fastify.get('/readyz', { config: { rateLimit: false } }, async (request, reply) 
       status: modelPublicationEnabled ? 'enabled' : 'disabled_for_safe_recovery',
     },
     medicalEncryption: env.hasMedicalEncryption(),
+    accountClosureLedger: ledger,
+    accountClosureCleanup,
     rateLimitStore: rateLimitStoreStatus(rateLimitRedis),
     rateLimitProtection,
     timestamp: new Date().toISOString(),
   };
 });
 
-// Legacy `/health` retained for backward compatibility and probeability.
 fastify.get(
   '/health',
   { config: { rateLimit: false } },
   async () => ({ status: 'ok', timestamp: new Date().toISOString() })
 );
 
+async function runAccountClosureCleanup() {
+  try {
+    const result = await reconcilePendingCustomerCleanup({
+      prisma,
+      stripeClient: accountClosureStripeClient,
+    });
+    if (result.pending || result.completed) {
+      fastify.log.info({ result }, 'account-closure customer cleanup reconciliation completed');
+    }
+  } catch (error) {
+    fastify.log.error({ err: error }, 'account-closure customer cleanup reconciliation failed');
+  }
+}
+
 const start = async () => {
   try {
-    // Keep-alive race fix: Node's default keepAliveTimeout (5s; Fastify's 72s
-    // default can also sit under a proxy's idle window) is shorter than the
-    // Railway edge proxy's idle timeout, so the server can close an idle
-    // socket at the exact moment the proxy writes the next request into it.
-    // The server-side timeout must exceed the proxy's so the proxy closes first;
-    // headersTimeout must exceed keepAliveTimeout.
     fastify.server.keepAliveTimeout = Number(process.env.HTTP_KEEPALIVE_TIMEOUT_MS || 620_000);
     fastify.server.headersTimeout = fastify.server.keepAliveTimeout + 5_000;
     await fastify.listen({ port: env.PORT, host: env.HOST });
+    await runAccountClosureCleanup();
+    accountClosureCleanupTimer = setInterval(runAccountClosureCleanup, 15 * 60 * 1000);
+    accountClosureCleanupTimer.unref?.();
     fastify.log.info(
       { port: env.PORT, host: env.HOST, env: env.NODE_ENV, sentry: sentryEnabled },
       'API listening'
@@ -252,9 +254,11 @@ const gracefulShutdown = async (signal) => {
   isShuttingDown = true;
   fastify.log.info(`Received ${signal}, shutting down gracefully...`);
   if (rateLimitRedis) {
-    // Fastify plugins may begin teardown during close(), so suppress expected
-    // Redis close/end events before any application resource is dismantled.
     markRateLimitRedisShuttingDown(rateLimitRedis);
+  }
+  if (accountClosureCleanupTimer) {
+    clearInterval(accountClosureCleanupTimer);
+    accountClosureCleanupTimer = null;
   }
   await fastify.close();
   await prisma.$disconnect();

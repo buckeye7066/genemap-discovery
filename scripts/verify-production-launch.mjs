@@ -174,6 +174,18 @@ export function validateLaunchEnv(source = process.env) {
     }
   }
 
+  if (env.accountClosureLedgerConfigured()) {
+    checks.push(pass(
+      'accountClosure.ledger',
+      'restore-independent account-deletion ledger write/read URLs, transport secret, and rotation-safe identity key ring are configured',
+    ));
+  } else {
+    checks.push(fail(
+      'accountClosure.ledger',
+      'ACCOUNT_CLOSURE_LEDGER_WRITE_URL, ACCOUNT_CLOSURE_LEDGER_READ_URL, a 32+ character ACCOUNT_CLOSURE_LEDGER_SECRET, and a valid ACCOUNT_CLOSURE_LEDGER_IDENTITY_KEYS key ring are required for production account deletion and restore reconciliation',
+    ));
+  }
+
   return { env, checks };
 }
 
@@ -209,6 +221,15 @@ export function validateEvidence(evidence, opts = {}) {
   checks.push(isBlank(backups.restoreRunbook)
     ? fail('backups.restoreRunbook', 'restore runbook path is required')
     : pass('backups.restoreRunbook', `restore runbook recorded: ${backups.restoreRunbook}`));
+  checks.push(backups.externalDeletionLedgerConfigured === true
+    ? pass('backups.externalDeletionLedgerConfigured', 'restore-independent deletion ledger configured')
+    : fail('backups.externalDeletionLedgerConfigured', 'restore-independent deletion ledger must be configured'));
+  checks.push(checkRecentDate(
+    'backups.deletionLedgerReconciledAt',
+    backups.deletionLedgerReconciledAt,
+    90,
+    now,
+  ));
 
   const monitoring = evidence?.monitoring || {};
   checks.push(monitoring.errorTrackingConfigured === true
@@ -416,6 +437,10 @@ const SELF_TEST_ENV = {
   STRIPE_PRICE_ENT_MONTHLY: 'price_selftestEntMonthly',
   STRIPE_PRICE_ENT_YEARLY: 'price_selftestEntYearly',
   OPENAI_API_KEY: 'sk-selftest-openai-placeholder',
+  ACCOUNT_CLOSURE_LEDGER_WRITE_URL: 'https://ledger.example.com/write',
+  ACCOUNT_CLOSURE_LEDGER_READ_URL: 'https://ledger.example.com/read',
+  ACCOUNT_CLOSURE_LEDGER_SECRET: 'l'.repeat(48),
+  ACCOUNT_CLOSURE_LEDGER_IDENTITY_KEYS: `selftest-current=${'i'.repeat(48)},selftest-retired=${'r'.repeat(48)}`,
 };
 
 function buildSelfTestEvidence(now) {
@@ -430,6 +455,8 @@ function buildSelfTestEvidence(now) {
       lastSuccessfulBackupAt: iso(ONE_DAY_MS),
       restoreTestedAt: iso(7 * ONE_DAY_MS),
       restoreRunbook: 'docs/BACKUP.md',
+      externalDeletionLedgerConfigured: true,
+      deletionLedgerReconciledAt: iso(7 * ONE_DAY_MS),
     },
     monitoring: {
       errorTrackingConfigured: true,
@@ -473,6 +500,16 @@ export function runSelfTest(now = new Date()) {
   const brokenEnv = validateLaunchEnv({ ...SELF_TEST_ENV, STRIPE_SECRET_KEY: 'sk_test_not_live' }).checks;
   if (!brokenEnv.some((c) => c.status === 'fail')) {
     problems.push('verifier did not reject a non-live Stripe key (fail-open regression)');
+  }
+
+  // Fail-closed invariant: a ledger without historical-key custody is not a
+  // complete restore-safety configuration.
+  const brokenLedger = validateLaunchEnv({
+    ...SELF_TEST_ENV,
+    ACCOUNT_CLOSURE_LEDGER_IDENTITY_KEYS: '',
+  }).checks;
+  if (!brokenLedger.some((c) => c.id === 'accountClosure.ledger' && c.status === 'fail')) {
+    problems.push('verifier did not reject a missing deletion-ledger identity key ring');
   }
 
   return { ok: problems.length === 0, problems };

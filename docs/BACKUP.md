@@ -129,14 +129,23 @@ pg_restore --exit-on-error --no-owner --no-privileges \
 ```
 
 After validation, securely remove plaintext restore files and destroy the test
-database. Do not expose the restored service until deletion requests and legal
-holds have been reconciled against a deletion/tombstone ledger that is newer
-than the backup.
+database. Do not expose the restored service until deletion requests and legal holds have
+been reconciled against a restore-independent tombstone ledger newer than the
+backup. Configure the ledger read credentials, keep outbound application traffic
+disabled, and run:
 
-The repository does not currently provide that external tombstone ledger.
-Consequently, a restored production database must remain quarantined until an
-operator performs and records that reconciliation; otherwise previously deleted
-data could be resurrected.
+```bash
+export RESTORE_RECONCILIATION_ACK='I CONFIRM THIS RESTORED DATABASE IS QUARANTINED'
+node scripts/reconcile-account-closure-ledger.mjs
+```
+
+The command accepts only fresh HMAC-signed ledger responses and reports
+`safeToExpose: true` only when every resurrected account matching the secret-keyed
+user-ID authorization has been removed and no institutional
+license conflict remains. A nonzero exit or any blocker keeps the restore
+quarantined. Repository support does not prove that a production ledger operator
+is configured, immutable, monitored, or successfully drilled; those remain
+operational launch evidence.
 
 ## Restore acceptance record
 

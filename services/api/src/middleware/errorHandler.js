@@ -52,22 +52,38 @@ export function publicationErrorDetails(error) {
  * the path with the query string stripped so query params — which can be PII on
  * a medical app (e.g. ?q=<phenotype>) — never reach the log pipeline or external
  * error tracking.
- *
- * NOTE: `request.routerPath` was REMOVED in Fastify v5; `routeOptions.url` is
- * the replacement. The old `request.routerPath || request.url` therefore always
- * fell back to the full URL (incl. query string) on every error.
  */
 export function routeLabel(request) {
   return request.routeOptions?.url || String(request.url || '').split('?')[0];
+}
+
+function boundedCount(value) {
+  if (Array.isArray(value)) return Math.min(value.length, 1_000_000);
+  const numeric = Number(value);
+  return Number.isInteger(numeric) && numeric >= 0
+    ? Math.min(numeric, 1_000_000)
+    : 0;
+}
+
+/**
+ * Account-closure recovery needs to tell the user which classes of work
+ * completed, but Stripe/session identifiers must never be serialized. Reduce
+ * the internal exact receipt to bounded counts only.
+ */
+export function publicBillingProgress(progress) {
+  if (!progress || typeof progress !== 'object') return null;
+  return {
+    checkoutSessionsExamined: boundedCount(progress.checkoutSessionsExamined),
+    checkoutSessionsExpired: boundedCount(progress.checkoutSessionsExpired),
+    subscriptionsCancelled: boundedCount(progress.subscriptionsCancelled),
+    customersDeleted: boundedCount(progress.customersDeleted),
+  };
 }
 
 export function errorHandler(error, request, reply) {
   const requestId = request.id;
   const isProd = request.server?.env?.isProduction ?? process.env.NODE_ENV === 'production';
 
-  // Use the Fastify pino logger so logs are structured (JSON) and include
-  // request context in production. The previous handler used console.error
-  // which produced unindexed plain-text and lost the requestId/traceability.
   request.log.error(
     {
       requestId,
@@ -76,8 +92,6 @@ export function errorHandler(error, request, reply) {
         message: isProd ? undefined : sanitizeError(error),
         code: error.code,
         statusCode: error.statusCode,
-        // Stack traces are useful in dev/test but can leak file system
-        // layout in production logs that get aggregated to third parties.
         stack: isProd ? undefined : error.stack,
       },
       route: routeLabel(request),
@@ -86,11 +100,6 @@ export function errorHandler(error, request, reply) {
     'request failed'
   );
 
-  // Framework-originated client errors (@fastify/rate-limit's 429, body
-  // parser 400s/413s, …) carry a 4xx statusCode but are NOT AppErrors, so they
-  // previously fell through to the generic 500 branch — a rate-limited client
-  // saw "Internal server error" (masking the real "retry in N minutes"
-  // message) and every 429 was captured by Sentry as a server failure.
   const isFrameworkClientError =
     Number.isInteger(error?.statusCode) && error.statusCode >= 400 && error.statusCode < 500;
 
@@ -103,12 +112,19 @@ export function errorHandler(error, request, reply) {
   }
 
   if (isAppError(error)) {
-    const details = publicationErrorDetails(error);
+    const billingProgress = publicBillingProgress(error.billingProgress);
+    const publicationDetails = publicationErrorDetails(error);
+    const details = {
+      ...(billingProgress ? { billingProgress } : {}),
+      ...(publicationDetails || {}),
+    };
+    const hasDetails = Object.keys(details).length > 0;
     return reply.status(error.statusCode).send({
       error: error.message,
       code: error.code,
       requestId,
-      ...(details ? { details } : {}),
+      ...(typeof error.receiptId === 'string' ? { receiptId: error.receiptId } : {}),
+      ...(hasDetails ? { details } : {}),
     });
   }
 

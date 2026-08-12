@@ -1,4 +1,4 @@
-import React, { useState, useRef, lazy, Suspense } from "react";
+import React, { useState, useRef, lazy, Suspense, useMemo } from "react";
 import { apiClient } from "@genemap/shared";
 import {
   createPublicationArtifact,
@@ -91,7 +91,8 @@ export default function SearchPage() {
   const searchTokenRef = useRef(0);
   const comparisonTokenRef = useRef(0);
   const [searchType, setSearchType] = useState("free");
-  const [selectedGenes, setSelectedGenes] = useState([]);
+  const [selectedGeneSymbols, setSelectedGeneSymbols] = useState([]);
+  const [evidenceGenes, setEvidenceGenes] = useState([]);
   const [showComparison, setShowComparison] = useState(false);
   const [userInputGenes, setUserInputGenes] = useState([]);
   const [geneSetComparison, setGeneSetComparison] = useState(null);
@@ -133,7 +134,8 @@ export default function SearchPage() {
     setSearchResults(null);
     setSearchQuery(query);
     setSearchType(isPremium ? "premium" : "free");
-    setSelectedGenes([]);
+    setSelectedGeneSymbols([]);
+    setEvidenceGenes([]);
     setShowComparison(false);
     setGeneSetComparison(null);
 
@@ -360,19 +362,26 @@ export default function SearchPage() {
     }
   };
 
+  const selectedGenes = useMemo(() => {
+    const current = evidenceGenes.length > 0
+      ? evidenceGenes
+      : searchResults?.candidateGenes || [];
+    const bySymbol = new Map(current.map((gene) => [gene.symbol, gene]));
+    return selectedGeneSymbols.map((symbol) => bySymbol.get(symbol)).filter(Boolean);
+  }, [evidenceGenes, searchResults?.candidateGenes, selectedGeneSymbols]);
+
   const handleGeneSelect = (gene) => {
-    setSelectedGenes(prev => {
-      const isSelected = prev.some(g => g.symbol === gene.symbol);
-      return isSelected
-        ? prev.filter(g => g.symbol !== gene.symbol)
-        : [...prev, gene];
-    });
+    setSelectedGeneSymbols((previous) => (
+      previous.includes(gene.symbol)
+        ? previous.filter((symbol) => symbol !== gene.symbol)
+        : [...previous, gene.symbol]
+    ));
   };
 
   const handleCompareGenes = () => setShowComparison(true);
   const handleCloseComparison = () => setShowComparison(false);
   const handleClearSelection = () => {
-    setSelectedGenes([]);
+    setSelectedGeneSymbols([]);
     setShowComparison(false);
   };
 
@@ -538,6 +547,7 @@ export default function SearchPage() {
                   results={searchResults}
                   selectedGenes={selectedGenes}
                   onGeneSelect={handleGeneSelect}
+                  onEvidenceGenesChange={setEvidenceGenes}
                 />
               </ErrorBoundary>
             )}
