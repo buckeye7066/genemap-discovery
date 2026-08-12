@@ -83,7 +83,20 @@ jobs:
             > "$RUNNER_TEMP/keystore-cert.sha256"
           test -s "$RUNNER_TEMP/keystore-cert.sha256"
 
-          BASELINE_TAG=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 100 --json tagName --jq '.[] | select(.tagName | startswith("android-v")) | .tagName' | head -n 1 || true)
+          if ! BASELINE_TAG=$(gh api --paginate \
+            "/repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+            | jq -sr '
+                [ .[][]
+                  | select(.draft | not)
+                  | select(.tag_name | startswith("android-v"))
+                ]
+                | sort_by(.published_at)
+                | reverse
+                | .[0].tag_name // ""
+              '); then
+            echo 'Unable to inspect prior Android releases for signing continuity'
+            exit 1
+          fi
           if [ -n "$BASELINE_TAG" ]; then
             mkdir -p "$RUNNER_TEMP/signing-baseline"
             gh release download "$BASELINE_TAG" --repo "$GITHUB_REPOSITORY" --pattern genemap-signing-cert.sha256 --dir "$RUNNER_TEMP/signing-baseline"
@@ -108,18 +121,156 @@ jobs:
           set -euo pipefail
           APK='apps/web/android/app/build/outputs/apk/release/app-release.apk'
           AAB='apps/web/android/app/build/outputs/bundle/release/app-release.aab'
-          test -f "$APK"
-          test -f "$AAB"
+          test -s "$APK" || { echo 'Signed release APK is missing or empty'; exit 1; }
+          test -s "$AAB" || { echo 'Signed release AAB is missing or empty'; exit 1; }
           APKSIGNER=$(find "$ANDROID_HOME/build-tools" -maxdepth 2 -type f -name apksigner | sort -V | tail -n 1)
-          test -n "$APKSIGNER"
-          "$APKSIGNER" verify --print-certs "$APK" > "$RUNNER_TEMP/apk-certs.txt"
-          awk -F': ' '/Signer #1 certificate SHA-256 digest:/{gsub(":", "", $2); print tolower($2); exit}' "$RUNNER_TEMP/apk-certs.txt" > "$RUNNER_TEMP/apk-cert.sha256"
-          test -s "$RUNNER_TEMP/apk-cert.sha256"
-          cmp "$RUNNER_TEMP/keystore-cert.sha256" "$RUNNER_TEMP/apk-cert.sha256" || { echo 'Built APK signing certificate does not match configured persistent keystore'; exit 1; }
+          test -n "$APKSIGNER" || { echo 'Android apksigner was not found'; exit 1; }
+          if ! "$APKSIGNER" verify --print-certs "$APK" > "$RUNNER_TEMP/apk-certs.txt"; then
+            echo 'Built APK signature verification failed'
+            exit 1
+          fi
+
+          EXPECTED_CERT_SHA256=$(tr '[:upper:]' '[:lower:]' < "$RUNNER_TEMP/keystore-cert.sha256" | tr -d ':[:space:]')
+          [[ "$EXPECTED_CERT_SHA256" =~ ^[0-9a-f]{64}$ ]] || { echo 'Configured keystore fingerprint is malformed'; exit 1; }
+          awk '
+            tolower($0) ~ /^[[:space:]]*signer .* certificate sha-256 digest:[[:space:]]*/ {
+              line = $0
+              marker = index(tolower(line), "digest:")
+              fingerprint = substr(line, marker + length("digest:"))
+              gsub(/[:[:space:]\r]/, "", fingerprint)
+              print tolower(fingerprint)
+            }
+          ' "$RUNNER_TEMP/apk-certs.txt" | sort -u > "$RUNNER_TEMP/apk-cert.sha256"
+          test -s "$RUNNER_TEMP/apk-cert.sha256" || { echo 'Verified APK did not report a signer SHA-256 fingerprint'; exit 1; }
+          test "$(wc -l < "$RUNNER_TEMP/apk-cert.sha256")" -eq 1 || { echo 'Verified APK reported multiple signer SHA-256 fingerprints'; exit 1; }
+          APK_CERT_SHA256=$(< "$RUNNER_TEMP/apk-cert.sha256")
+          [[ "$APK_CERT_SHA256" =~ ^[0-9a-f]{64}$ ]] || { echo 'Built APK signer fingerprint is malformed'; exit 1; }
+          test "$EXPECTED_CERT_SHA256" = "$APK_CERT_SHA256" || { echo 'Built APK signing certificate does not match configured persistent keystore'; exit 1; }
+
+          cat > "$RUNNER_TEMP/VerifySignedAab.java" <<'JAVA'
+          import java.io.OutputStream;
+          import java.nio.file.Path;
+          import java.security.MessageDigest;
+          import java.security.cert.Certificate;
+          import java.util.HexFormat;
+          import java.util.Locale;
+          import java.util.Set;
+          import java.util.TreeSet;
+          import java.util.jar.JarEntry;
+          import java.util.jar.JarFile;
+
+          final class VerifySignedAab {
+            public static void main(String[] args) throws Exception {
+              if (args.length != 2 || !args[1].matches("[0-9a-f]{64}")) {
+                throw new IllegalArgumentException("Expected AAB path and normalized SHA-256 fingerprint");
+              }
+              var expected = args[1];
+              var entryCount = 0;
+              try (var jar = new JarFile(Path.of(args[0]).toFile(), true)) {
+                var entries = jar.entries();
+                while (entries.hasMoreElements()) {
+                  JarEntry entry = entries.nextElement();
+                  if (entry.isDirectory() || isSignatureMetadata(entry.getName())) {
+                    continue;
+                  }
+                  entryCount += 1;
+                  try (var input = jar.getInputStream(entry)) {
+                    input.transferTo(OutputStream.nullOutputStream());
+                  }
+                  var signers = entry.getCodeSigners();
+                  if (signers == null || signers.length == 0) {
+                    throw new SecurityException("AAB contains an unsigned payload entry");
+                  }
+                  Set<String> leafFingerprints = new TreeSet<>();
+                  for (var signer : signers) {
+                    Certificate leaf = signer.getSignerCertPath().getCertificates().get(0);
+                    var digest = MessageDigest.getInstance("SHA-256").digest(leaf.getEncoded());
+                    leafFingerprints.add(HexFormat.of().formatHex(digest));
+                  }
+                  if (!leafFingerprints.equals(Set.of(expected))) {
+                    throw new SecurityException("AAB payload signer does not match the configured keystore");
+                  }
+                }
+              }
+              if (entryCount == 0) {
+                throw new SecurityException("AAB contains no signed payload entries");
+              }
+            }
+
+            private static boolean isSignatureMetadata(String name) {
+              var upper = name.toUpperCase(Locale.ROOT);
+              if (!upper.startsWith("META-INF/")) {
+                return false;
+              }
+              var leaf = upper.substring("META-INF/".length());
+              return leaf.equals("MANIFEST.MF")
+                || leaf.matches("[^/]+\\.(SF|RSA|DSA|EC)");
+            }
+          }
+          JAVA
+          java "$RUNNER_TEMP/VerifySignedAab.java" "$AAB" "$EXPECTED_CERT_SHA256"
+
+          AAPT=$(find "$ANDROID_HOME/build-tools" -maxdepth 2 -type f -name aapt | sort -V | tail -n 1)
+          test -n "$AAPT" || { echo 'Android aapt was not found'; exit 1; }
+          "$AAPT" dump badging "$APK" > "$RUNNER_TEMP/release-apk-badging.txt"
+          grep -F "package: name='com.genemap.discovery' versionCode='${ANDROID_VERSION_CODE}' versionName='${ANDROID_VERSION_NAME}'" "$RUNNER_TEMP/release-apk-badging.txt"
+
+          BUNDLETOOL_VERSION='1.18.3'
+          BUNDLETOOL_SHA256='a099cfa1543f55593bc2ed16a70a7c67fe54b1747bb7301f37fdfd6d91028e29'
+          BUNDLETOOL_JAR="$RUNNER_TEMP/bundletool-all-${BUNDLETOOL_VERSION}.jar"
+          curl --fail --show-error --location \
+            --proto '=https' --tlsv1.2 \
+            --retry 3 --retry-all-errors \
+            --connect-timeout 15 --max-time 180 \
+            --output "$BUNDLETOOL_JAR" \
+            "https://github.com/google/bundletool/releases/download/${BUNDLETOOL_VERSION}/bundletool-all-${BUNDLETOOL_VERSION}.jar"
+          printf '%s  %s\n' "$BUNDLETOOL_SHA256" "$BUNDLETOOL_JAR" | sha256sum --check --status
+          java -jar "$BUNDLETOOL_JAR" validate --bundle="$AAB"
+          AAB_PACKAGE=$(java -jar "$BUNDLETOOL_JAR" dump manifest --bundle="$AAB" --xpath=/manifest/@package)
+          AAB_VERSION_CODE=$(java -jar "$BUNDLETOOL_JAR" dump manifest --bundle="$AAB" --xpath=/manifest/@android:versionCode)
+          AAB_VERSION_NAME=$(java -jar "$BUNDLETOOL_JAR" dump manifest --bundle="$AAB" --xpath=/manifest/@android:versionName)
+          test "$AAB_PACKAGE" = 'com.genemap.discovery' || { echo 'Release AAB package id is incorrect'; exit 1; }
+          test "$AAB_VERSION_CODE" = "$ANDROID_VERSION_CODE" || { echo 'Release AAB version code is incorrect'; exit 1; }
+          test "$AAB_VERSION_NAME" = "$ANDROID_VERSION_NAME" || { echo 'Release AAB version name is incorrect'; exit 1; }
+
+          unzip -Z1 "$APK" > "$RUNNER_TEMP/release-apk-files.txt"
+          unzip -Z1 "$AAB" > "$RUNNER_TEMP/release-aab-files.txt"
+          test "$(grep -Fxc 'assets/public/index.html' "$RUNNER_TEMP/release-apk-files.txt")" -eq 1
+          test "$(grep -Fxc 'base/assets/public/index.html' "$RUNNER_TEMP/release-aab-files.txt")" -eq 1
+          if grep -Eiq '^assets/public/mobile/|\.zip$' "$RUNNER_TEMP/release-apk-files.txt"; then
+            echo 'Release APK contains a forbidden OTA directory or ZIP archive'
+            exit 1
+          fi
+          if grep -Eiq '^base/assets/public/mobile/|\.zip$' "$RUNNER_TEMP/release-aab-files.txt"; then
+            echo 'Release AAB contains a forbidden OTA directory or ZIP archive'
+            exit 1
+          fi
+          unzip -p "$APK" assets/capacitor.config.json > "$RUNNER_TEMP/release-apk-capacitor-config.json"
+          unzip -p "$AAB" base/assets/capacitor.config.json > "$RUNNER_TEMP/release-aab-capacitor-config.json"
+          jq -e '.plugins.CapacitorUpdater == null' "$RUNNER_TEMP/release-apk-capacitor-config.json" > /dev/null
+          jq -e '.plugins.CapacitorUpdater == null' "$RUNNER_TEMP/release-aab-capacitor-config.json" > /dev/null
+
           cp "$APK" "GeneMap-${ANDROID_VERSION_NAME}.apk"
           cp "$AAB" "GeneMap-${ANDROID_VERSION_NAME}.aab"
           cp "$RUNNER_TEMP/apk-cert.sha256" genemap-signing-cert.sha256
-          sha256sum "GeneMap-${ANDROID_VERSION_NAME}.apk" > genemap-android.sha256
+          sha256sum \
+            "GeneMap-${ANDROID_VERSION_NAME}.apk" \
+            "GeneMap-${ANDROID_VERSION_NAME}.aab" \
+            > genemap-android.sha256
+          APK_BYTES=$(stat -c '%s' "$APK")
+          AAB_BYTES=$(stat -c '%s' "$AAB")
+          {
+            echo '### Signed Android release inspection'
+            echo "- Package: com.genemap.discovery"
+            echo "- Version: ${ANDROID_VERSION_NAME} (${ANDROID_VERSION_CODE})"
+            echo "- APK bytes: ${APK_BYTES}"
+            echo "- AAB bytes: ${AAB_BYTES}"
+            echo '- APK web entrypoints: 1'
+            echo '- AAB web entrypoints: 1'
+            echo '- OTA directories: 0'
+            echo '- ZIP files: 0'
+            echo '- Runtime web-bundle updater: absent'
+          } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: genemap-signed-android
