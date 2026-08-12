@@ -285,22 +285,242 @@ jobs:
           assert_manifest_value '/manifest/@android:versionCode' "$ANDROID_VERSION_CODE" version-code
           assert_manifest_value '/manifest/@android:versionName' "$ANDROID_VERSION_NAME" version-name
 
-          unzip -Z1 "$APK" > "$RUNNER_TEMP/release-apk-files.txt"
-          unzip -Z1 "$AAB" > "$RUNNER_TEMP/release-aab-files.txt"
-          test "$(grep -Fxc 'assets/public/index.html' "$RUNNER_TEMP/release-apk-files.txt")" -eq 1
-          test "$(grep -Fxc 'base/assets/public/index.html' "$RUNNER_TEMP/release-aab-files.txt")" -eq 1
-          if grep -Eiq '^assets/public/mobile/|\.zip$' "$RUNNER_TEMP/release-apk-files.txt"; then
-            echo 'Release APK contains a forbidden OTA directory or ZIP archive'
+          cat > "$RUNNER_TEMP/InspectZip.java" <<'JAVA'
+          import java.io.OutputStream;
+          import java.nio.file.Path;
+          import java.util.Comparator;
+          import java.util.zip.ZipFile;
+
+          final class InspectZip {
+            public static void main(String[] args) throws Exception {
+              if (args.length < 2 || args.length > 3) {
+                throw new IllegalArgumentException("Expected mode, archive, and optional entry");
+              }
+              try (var zip = new ZipFile(Path.of(args[1]).toFile())) {
+                switch (args[0]) {
+                  case "list" ->
+                    zip.stream()
+                      .map(entry -> entry.getName())
+                      .sorted(Comparator.naturalOrder())
+                      .forEach(System.out::println);
+                  case "extract" -> {
+                    if (args.length != 3) {
+                      throw new IllegalArgumentException("Extract mode requires an entry");
+                    }
+                    var entry = zip.getEntry(args[2]);
+                    if (entry == null || entry.isDirectory()) {
+                      throw new IllegalArgumentException("ZIP entry is missing: " + args[2]);
+                    }
+                    try (var input = zip.getInputStream(entry)) {
+                      input.transferTo(System.out);
+                    }
+                  }
+                  default -> throw new IllegalArgumentException("Unknown ZIP inspection mode");
+                }
+              }
+            }
+          }
+          JAVA
+
+          java "$RUNNER_TEMP/InspectZip.java" list "$APK" > "$RUNNER_TEMP/release-apk-files.txt"
+          java "$RUNNER_TEMP/InspectZip.java" list "$AAB" > "$RUNNER_TEMP/release-aab-files.txt"
+
+          assert_zip_entry_once() {
+            local inventory="$1"
+            local expected="$2"
+            local label="$3"
+            local matches
+            matches=$(awk -v expected="$expected" '$0 == expected { count += 1 } END { print count + 0 }' "$inventory")
+            if [ "$matches" -ne 1 ]; then
+              echo "::error title=Android package content mismatch::${label} expected=${expected} exact_matches=${matches}"
+              grep -Ei '(^|/)assets/|index\.html|capacitor\.config\.json' "$inventory" >&2 || true
+              return 1
+            fi
+          }
+          assert_zip_entry_once "$RUNNER_TEMP/release-apk-files.txt" 'assets/public/index.html' 'APK web entrypoint'
+          assert_zip_entry_once "$RUNNER_TEMP/release-aab-files.txt" 'base/assets/public/index.html' 'AAB web entrypoint'
+
+          if grep -Eiq '^assets/public/mobile/|\.zip
+          cp "$APK" "GeneMap-${ANDROID_VERSION_NAME}.apk"
+          cp "$AAB" "GeneMap-${ANDROID_VERSION_NAME}.aab"
+          cp "$RUNNER_TEMP/apk-cert.sha256" genemap-signing-cert.sha256
+          sha256sum \
+            "GeneMap-${ANDROID_VERSION_NAME}.apk" \
+            "GeneMap-${ANDROID_VERSION_NAME}.aab" \
+            > genemap-android.sha256
+          APK_BYTES=$(stat -c '%s' "$APK")
+          AAB_BYTES=$(stat -c '%s' "$AAB")
+          {
+            echo '### Signed Android release inspection'
+            echo "- Package: com.genemap.discovery"
+            echo "- Version: ${ANDROID_VERSION_NAME} (${ANDROID_VERSION_CODE})"
+            echo "- APK bytes: ${APK_BYTES}"
+            echo "- AAB bytes: ${AAB_BYTES}"
+            echo '- APK web entrypoints: 1'
+            echo '- AAB web entrypoints: 1'
+            echo '- OTA directories: 0'
+            echo '- ZIP files: 0'
+            echo '- Runtime web-bundle updater: absent'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: genemap-signed-android
+          path: |
+            GeneMap-*.apk
+            GeneMap-*.aab
+            genemap-android.sha256
+            genemap-signing-cert.sha256
+          if-no-files-found: error
+
+  publish:
+    name: Publish repo-direct Android release
+    needs: android
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: genemap-signed-android
+      - name: Publish GitHub Release for phone updater
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="android-v${ANDROID_VERSION_NAME}"
+          NOTES="Automated signed Android release from main at ${GITHUB_SHA}. Package com.genemap.discovery. Intended for repo-direct phone updates; Android requires the same signing certificate as the installed copy."
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            TARGET=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json targetCommitish --jq .targetCommitish)
+            test "$TARGET" = "$GITHUB_SHA" || { echo "Existing $TAG targets $TARGET, expected $GITHUB_SHA"; exit 1; }
+            gh release upload "$TAG" \
+              "GeneMap-${ANDROID_VERSION_NAME}.apk" \
+              "GeneMap-${ANDROID_VERSION_NAME}.aab" \
+              genemap-android.sha256 \
+              genemap-signing-cert.sha256 \
+              --repo "$GITHUB_REPOSITORY" \
+              --clobber
+            gh release edit "$TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "GeneMap Android ${ANDROID_VERSION_NAME}" \
+              --notes "$NOTES" \
+              --draft=false
+          else
+            gh release create "$TAG" \
+              "GeneMap-${ANDROID_VERSION_NAME}.apk" \
+              "GeneMap-${ANDROID_VERSION_NAME}.aab" \
+              genemap-android.sha256 \
+              genemap-signing-cert.sha256 \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" \
+              --title "GeneMap Android ${ANDROID_VERSION_NAME}" \
+              --notes "$NOTES"
+          fi
+ "$RUNNER_TEMP/release-apk-files.txt"; then
+            echo '::error title=Forbidden APK content::Release APK contains an OTA directory or ZIP archive'
             exit 1
           fi
-          if grep -Eiq '^base/assets/public/mobile/|\.zip$' "$RUNNER_TEMP/release-aab-files.txt"; then
-            echo 'Release AAB contains a forbidden OTA directory or ZIP archive'
+          if grep -Eiq '^base/assets/public/mobile/|\.zip
+          cp "$APK" "GeneMap-${ANDROID_VERSION_NAME}.apk"
+          cp "$AAB" "GeneMap-${ANDROID_VERSION_NAME}.aab"
+          cp "$RUNNER_TEMP/apk-cert.sha256" genemap-signing-cert.sha256
+          sha256sum \
+            "GeneMap-${ANDROID_VERSION_NAME}.apk" \
+            "GeneMap-${ANDROID_VERSION_NAME}.aab" \
+            > genemap-android.sha256
+          APK_BYTES=$(stat -c '%s' "$APK")
+          AAB_BYTES=$(stat -c '%s' "$AAB")
+          {
+            echo '### Signed Android release inspection'
+            echo "- Package: com.genemap.discovery"
+            echo "- Version: ${ANDROID_VERSION_NAME} (${ANDROID_VERSION_CODE})"
+            echo "- APK bytes: ${APK_BYTES}"
+            echo "- AAB bytes: ${AAB_BYTES}"
+            echo '- APK web entrypoints: 1'
+            echo '- AAB web entrypoints: 1'
+            echo '- OTA directories: 0'
+            echo '- ZIP files: 0'
+            echo '- Runtime web-bundle updater: absent'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: genemap-signed-android
+          path: |
+            GeneMap-*.apk
+            GeneMap-*.aab
+            genemap-android.sha256
+            genemap-signing-cert.sha256
+          if-no-files-found: error
+
+  publish:
+    name: Publish repo-direct Android release
+    needs: android
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: genemap-signed-android
+      - name: Publish GitHub Release for phone updater
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="android-v${ANDROID_VERSION_NAME}"
+          NOTES="Automated signed Android release from main at ${GITHUB_SHA}. Package com.genemap.discovery. Intended for repo-direct phone updates; Android requires the same signing certificate as the installed copy."
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            TARGET=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json targetCommitish --jq .targetCommitish)
+            test "$TARGET" = "$GITHUB_SHA" || { echo "Existing $TAG targets $TARGET, expected $GITHUB_SHA"; exit 1; }
+            gh release upload "$TAG" \
+              "GeneMap-${ANDROID_VERSION_NAME}.apk" \
+              "GeneMap-${ANDROID_VERSION_NAME}.aab" \
+              genemap-android.sha256 \
+              genemap-signing-cert.sha256 \
+              --repo "$GITHUB_REPOSITORY" \
+              --clobber
+            gh release edit "$TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "GeneMap Android ${ANDROID_VERSION_NAME}" \
+              --notes "$NOTES" \
+              --draft=false
+          else
+            gh release create "$TAG" \
+              "GeneMap-${ANDROID_VERSION_NAME}.apk" \
+              "GeneMap-${ANDROID_VERSION_NAME}.aab" \
+              genemap-android.sha256 \
+              genemap-signing-cert.sha256 \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" \
+              --title "GeneMap Android ${ANDROID_VERSION_NAME}" \
+              --notes "$NOTES"
+          fi
+ "$RUNNER_TEMP/release-aab-files.txt"; then
+            echo '::error title=Forbidden AAB content::Release AAB contains an OTA directory or ZIP archive'
             exit 1
           fi
-          unzip -p "$APK" assets/capacitor.config.json > "$RUNNER_TEMP/release-apk-capacitor-config.json"
-          unzip -p "$AAB" base/assets/capacitor.config.json > "$RUNNER_TEMP/release-aab-capacitor-config.json"
-          jq -e '.plugins.CapacitorUpdater == null' "$RUNNER_TEMP/release-apk-capacitor-config.json" > /dev/null
-          jq -e '.plugins.CapacitorUpdater == null' "$RUNNER_TEMP/release-aab-capacitor-config.json" > /dev/null
+
+          if ! java "$RUNNER_TEMP/InspectZip.java" extract "$APK" assets/capacitor.config.json \
+            > "$RUNNER_TEMP/release-apk-capacitor-config.json"; then
+            echo '::error title=APK configuration missing::assets/capacitor.config.json could not be read'
+            exit 1
+          fi
+          if ! java "$RUNNER_TEMP/InspectZip.java" extract "$AAB" base/assets/capacitor.config.json \
+            > "$RUNNER_TEMP/release-aab-capacitor-config.json"; then
+            echo '::error title=AAB configuration missing::base/assets/capacitor.config.json could not be read'
+            exit 1
+          fi
+          jq -e '.plugins.CapacitorUpdater == null' "$RUNNER_TEMP/release-apk-capacitor-config.json" > /dev/null || {
+            echo '::error title=Forbidden APK updater::CapacitorUpdater must be absent'
+            exit 1
+          }
+          jq -e '.plugins.CapacitorUpdater == null' "$RUNNER_TEMP/release-aab-capacitor-config.json" > /dev/null || {
+            echo '::error title=Forbidden AAB updater::CapacitorUpdater must be absent'
+            exit 1
+          }
 
           cp "$APK" "GeneMap-${ANDROID_VERSION_NAME}.apk"
           cp "$AAB" "GeneMap-${ANDROID_VERSION_NAME}.aab"
