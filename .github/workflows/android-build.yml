@@ -249,33 +249,41 @@ jobs:
           printf '%s  %s\n' "$BUNDLETOOL_SHA256" "$BUNDLETOOL_JAR" | sha256sum --check --status
           java -jar "$BUNDLETOOL_JAR" validate --bundle="$AAB"
 
-          # Some Java/bundletool combinations write launcher diagnostics to the
-          # same stream as an XPath value. Keep the final non-empty output line,
-          # which is the value printed by DumpManagerUtils, and make every
-          # mismatch observable instead of exiting through a silent test.
-          dump_manifest_value() {
+          # Assert the expected scalar as an exact output line. This is robust to
+          # launcher diagnostics before or after bundletool's XPath value and
+          # preserves complete stdout/stderr when a future toolchain changes.
+          assert_manifest_value() {
             local xpath="$1"
-            java -jar "$BUNDLETOOL_JAR" dump manifest --bundle="$AAB" --xpath="$xpath" \
-              | awk 'NF { value=$0 } END { sub(/\r$/, "", value); print value }'
+            local expected="$2"
+            local label="$3"
+            local stdout_file="$RUNNER_TEMP/bundletool-${label}.stdout"
+            local stderr_file="$RUNNER_TEMP/bundletool-${label}.stderr"
+
+            if ! java -jar "$BUNDLETOOL_JAR" dump manifest \
+              --bundle="$AAB" \
+              --xpath="$xpath" \
+              > "$stdout_file" 2> "$stderr_file"; then
+              cat "$stdout_file" >&2
+              cat "$stderr_file" >&2
+              echo "::error title=AAB manifest inspection failed::bundletool could not read ${label}"
+              return 1
+            fi
+
+            tr -d '\r' < "$stdout_file" > "$stdout_file.normalized"
+            local matches
+            matches=$(grep -Fxc -- "$expected" "$stdout_file.normalized" || true)
+            if [ "$matches" -ne 1 ]; then
+              echo "::error title=AAB manifest mismatch::${label} expected=${expected} exact_matches=${matches}"
+              echo 'bundletool stdout:' >&2
+              cat "$stdout_file.normalized" >&2
+              echo 'bundletool stderr:' >&2
+              cat "$stderr_file" >&2
+              return 1
+            fi
           }
-          AAB_PACKAGE=$(dump_manifest_value '/manifest/@package')
-          AAB_VERSION_CODE=$(dump_manifest_value '/manifest/@android:versionCode')
-          AAB_VERSION_NAME=$(dump_manifest_value '/manifest/@android:versionName')
-          test "$AAB_PACKAGE" = 'com.genemap.discovery' || {
-            printf 'Release AAB package id is incorrect: expected=%q actual=%q\n' \
-              'com.genemap.discovery' "$AAB_PACKAGE" >&2
-            exit 1
-          }
-          test "$AAB_VERSION_CODE" = "$ANDROID_VERSION_CODE" || {
-            printf 'Release AAB version code is incorrect: expected=%q actual=%q\n' \
-              "$ANDROID_VERSION_CODE" "$AAB_VERSION_CODE" >&2
-            exit 1
-          }
-          test "$AAB_VERSION_NAME" = "$ANDROID_VERSION_NAME" || {
-            printf 'Release AAB version name is incorrect: expected=%q actual=%q\n' \
-              "$ANDROID_VERSION_NAME" "$AAB_VERSION_NAME" >&2
-            exit 1
-          }
+          assert_manifest_value '/manifest/@package' 'com.genemap.discovery' package
+          assert_manifest_value '/manifest/@android:versionCode' "$ANDROID_VERSION_CODE" version-code
+          assert_manifest_value '/manifest/@android:versionName' "$ANDROID_VERSION_NAME" version-name
 
           unzip -Z1 "$APK" > "$RUNNER_TEMP/release-apk-files.txt"
           unzip -Z1 "$AAB" > "$RUNNER_TEMP/release-aab-files.txt"
