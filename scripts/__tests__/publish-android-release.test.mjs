@@ -58,7 +58,10 @@ test('fake-gh retries transient inspection, treats only HTTP 404 as missing, and
       state = releaseState(args[2], SHA);
       return { stdout: '' };
     }
-    if (args[0] === 'api' && args[1].includes('/commits/')) return { stdout: `${state.sha}\n` };
+    if (args[0] === 'api' && args[1].includes('/commits/')) {
+      assert.equal(state.draft, false, 'a draft release has no tag ref to resolve yet');
+      return { stdout: `${state.sha}\n` };
+    }
     if (args[0] === 'release' && args[1] === 'upload') {
       assert.ok(args.includes('--clobber'));
       state.assets = [
@@ -136,6 +139,38 @@ test('fake-gh refuses to overwrite a release tag that resolves to another commit
     }),
     /expected exact commit/u,
   );
+  assert.equal(calls.some((args) => args[0] === 'release' && args[1] === 'upload'), false);
+});
+
+test('fake-gh refuses an existing draft that targets another exact commit', async () => {
+  const calls = [];
+  const runGh = async (args) => {
+    calls.push(args);
+    if (args[0] === 'release' && args[1] === 'view') {
+      return {
+        stdout: JSON.stringify({
+          tagName: `android-v${VERSION}`,
+          targetCommitish: OTHER_SHA,
+          isDraft: true,
+          assets: [],
+        }),
+      };
+    }
+    throw new Error(`Unexpected mutation: ${args.join(' ')}`);
+  };
+
+  await assert.rejects(
+    publishAndroidRelease({
+      repo: REPO,
+      expectedSha: SHA,
+      version: VERSION,
+      runGh,
+      sleep: async () => {},
+      fileReady: () => true,
+    }),
+    /existing draft .* expected exact commit/iu,
+  );
+  assert.equal(calls.some((args) => args[0] === 'api'), false);
   assert.equal(calls.some((args) => args[0] === 'release' && args[1] === 'upload'), false);
 });
 
