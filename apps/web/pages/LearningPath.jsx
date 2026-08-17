@@ -42,10 +42,14 @@ export default function LearningPath() {
     try {
       // Pull the curriculum from the canonical topic catalog (same source as
       // Learn Genetics) so every catalog topic is included — no hardcoded subset.
-      const [topicsRes, progressRes] = await Promise.allSettled([
+      const settled = await Promise.allSettled([
         apiClient.getTopics(),
         apiClient.getLearningProgress(),
       ]);
+      if (!Array.isArray(settled) || settled.length !== 2) {
+        return;
+      }
+      const [topicsRes, progressRes] = settled;
 
       if (topicsRes.status === 'fulfilled') {
         const categories = topicsRes.value || [];
