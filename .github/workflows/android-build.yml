@@ -84,24 +84,8 @@ jobs:
             > "$RUNNER_TEMP/keystore-cert.sha256"
           test -s "$RUNNER_TEMP/keystore-cert.sha256"
 
-          if ! BASELINE_TAG=$(gh api --paginate \
-            "/repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
-            | jq -sr '
-                [ .[][]
-                  | select(.draft | not)
-                  | select(.tag_name | startswith("android-v"))
-                ]
-                | sort_by(.published_at)
-                | reverse
-                | .[0].tag_name // ""
-              '); then
-            echo 'Unable to inspect prior Android releases for signing continuity'
-            exit 1
-          fi
-          if [ -n "$BASELINE_TAG" ]; then
-            mkdir -p "$RUNNER_TEMP/signing-baseline"
-            gh release download "$BASELINE_TAG" --repo "$GITHUB_REPOSITORY" --pattern genemap-signing-cert.sha256 --dir "$RUNNER_TEMP/signing-baseline"
-            test -s "$RUNNER_TEMP/signing-baseline/genemap-signing-cert.sha256" || { echo "Existing Android release lacks signing fingerprint"; exit 1; }
+          node scripts/publish-android-release.mjs signing-baseline "$RUNNER_TEMP/signing-baseline"
+          if [ -s "$RUNNER_TEMP/signing-baseline/genemap-signing-cert.sha256" ]; then
             cmp "$RUNNER_TEMP/signing-baseline/genemap-signing-cert.sha256" "$RUNNER_TEMP/keystore-cert.sha256" || { echo 'Configured keystore certificate differs from prior Android releases'; exit 1; }
           else
             echo 'No prior signed Android release: this main build will establish the signing fingerprint bootstrap.'
@@ -408,40 +392,16 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: genemap-signed-android
       - name: Publish GitHub Release for phone updater
         env:
           GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          TAG="android-v${ANDROID_VERSION_NAME}"
-          NOTES="Automated signed Android release from main at ${GITHUB_SHA}. Package com.genemap.discovery. Intended for repo-direct phone updates; Android requires the same signing certificate as the installed copy."
-          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            TARGET=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json targetCommitish --jq .targetCommitish)
-            test "$TARGET" = "$GITHUB_SHA" || { echo "Existing $TAG targets $TARGET, expected $GITHUB_SHA"; exit 1; }
-            gh release upload "$TAG" \
-              "GeneMap-${ANDROID_VERSION_NAME}.apk" \
-              "GeneMap-${ANDROID_VERSION_NAME}.aab" \
-              genemap-android.sha256 \
-              genemap-signing-cert.sha256 \
-              --repo "$GITHUB_REPOSITORY" \
-              --clobber
-            gh release edit "$TAG" \
-              --repo "$GITHUB_REPOSITORY" \
-              --title "GeneMap Android ${ANDROID_VERSION_NAME}" \
-              --notes "$NOTES" \
-              --draft=false
-          else
-            gh release create "$TAG" \
-              "GeneMap-${ANDROID_VERSION_NAME}.apk" \
-              "GeneMap-${ANDROID_VERSION_NAME}.aab" \
-              genemap-android.sha256 \
-              genemap-signing-cert.sha256 \
-              --repo "$GITHUB_REPOSITORY" \
-              --target "$GITHUB_SHA" \
-              --title "GeneMap Android ${ANDROID_VERSION_NAME}" \
-              --notes "$NOTES"
-          fi
+        run: node scripts/publish-android-release.mjs publish

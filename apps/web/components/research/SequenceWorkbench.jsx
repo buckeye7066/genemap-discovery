@@ -32,28 +32,40 @@ export default function SequenceWorkbench() {
   const [frame, setFrame] = useState(0);
   const [analysis, setAnalysis] = useState(null);
   const [alignment, setAlignment] = useState(null);
-  const [error, setError] = useState('');
+  const [analysisError, setAnalysisError] = useState('');
+  const [alignmentError, setAlignmentError] = useState('');
 
   const runAnalysis = () => {
-    setError('');
+    setAnalysisError('');
+    setAlignmentError('');
     setAlignment(null);
     try {
       setAnalysis(analyzeDna(sequence, frame));
     } catch (err) {
       setAnalysis(null);
-      setError(err?.message || 'The sequence could not be analyzed.');
+      setAnalysisError(err?.message || 'The sequence could not be analyzed.');
     }
   };
 
   const runAlignment = () => {
-    setError('');
+    setAnalysisError('');
+    setAlignmentError('');
+    let nextAnalysis;
     try {
-      const nextAnalysis = analyzeDna(sequence, frame);
-      setAnalysis(nextAnalysis);
+      nextAnalysis = analyzeDna(sequence, frame);
+    } catch (err) {
+      setAnalysis(null);
+      setAlignment(null);
+      setAnalysisError(err?.message || 'The sequence could not be analyzed.');
+      return;
+    }
+
+    setAnalysis(nextAnalysis);
+    try {
       setAlignment(globalAlign(nextAnalysis.sequence, comparison));
     } catch (err) {
       setAlignment(null);
-      setError(err?.message || 'The sequences could not be aligned.');
+      setAlignmentError(err?.message || 'The sequences could not be aligned.');
     }
   };
 
@@ -99,7 +111,9 @@ export default function SequenceWorkbench() {
             <Button onClick={runAnalysis}><FlaskConical className="mr-2 h-4 w-4" /> Analyze sequence</Button>
           </div>
 
-          {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
+          {analysisError && (
+            <Alert variant="destructive"><AlertDescription>{analysisError}</AlertDescription></Alert>
+          )}
 
           {analysis && (
             <div className="space-y-4" aria-live="polite">
@@ -133,6 +147,9 @@ export default function SequenceWorkbench() {
             />
           </div>
           <Button variant="outline" onClick={runAlignment}>Align teaching sequences</Button>
+          {alignmentError && (
+            <Alert variant="destructive"><AlertDescription>{alignmentError}</AlertDescription></Alert>
+          )}
           {alignment && (
             <div className="space-y-2 overflow-x-auto" aria-live="polite">
               <Badge variant="outline">Identity {alignment.identityPercent}% · score {alignment.score}</Badge>

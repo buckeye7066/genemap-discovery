@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { AppError } from '../utils/errors.js';
+import { releaseSha } from '../config/releaseIdentity.js';
 
 const LEDGER_TIMEOUT_MS = 8_000;
 const MIN_LEDGER_SECRET_LENGTH = 32;
@@ -20,14 +21,6 @@ function safeHttpsUrl(value) {
   } catch {
     return null;
   }
-}
-
-function releaseSha(env = process.env) {
-  return env.RAILWAY_GIT_COMMIT_SHA
-    || env.VERCEL_GIT_COMMIT_SHA
-    || env.GITHUB_SHA
-    || env.RELEASE_SHA
-    || null;
 }
 
 function signature(secret, timestamp, body) {

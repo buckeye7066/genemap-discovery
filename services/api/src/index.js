@@ -7,6 +7,7 @@ import rateLimit from '@fastify/rate-limit';
 import { PrismaClient } from '@prisma/client';
 import { loadEnv } from './config/env.js';
 import { initSentry } from './config/sentry.js';
+import { releaseSha } from './config/releaseIdentity.js';
 import {
   createEmergencyRateLimitHook,
   createRateLimitRedis,
@@ -49,6 +50,7 @@ const AUTH_RATE_LIMIT_MAX = 10;
 // Load + validate env BEFORE constructing anything that depends on it.
 // loadEnv() throws in production if required secrets are missing.
 const env = loadEnv();
+const currentReleaseSha = releaseSha(process.env);
 
 // Initialize error tracking as early as possible (no-op unless SENTRY_DSN set).
 const sentryEnabled = initSentry(env);
@@ -170,7 +172,7 @@ await fastify.register(clientErrorRoutes);
 fastify.get(
   '/healthz',
   { config: { rateLimit: false } },
-  async () => ({ status: 'ok', uptime: process.uptime() })
+  async () => ({ status: 'ok', uptime: process.uptime(), releaseSha: currentReleaseSha })
 );
 
 fastify.get('/readyz', { config: { rateLimit: false } }, async (request, reply) => {
@@ -178,7 +180,7 @@ fastify.get('/readyz', { config: { rateLimit: false } }, async (request, reply) 
     await prisma.$queryRaw`SELECT 1`;
   } catch (err) {
     reply.status(503);
-    return { status: 'not_ready', reason: 'database unreachable' };
+    return { status: 'not_ready', reason: 'database unreachable', releaseSha: currentReleaseSha };
   }
 
   const rateLimitProtection = rateLimitProtectionStatus(rateLimitRedis);
@@ -196,6 +198,7 @@ fastify.get('/readyz', { config: { rateLimit: false } }, async (request, reply) 
   return {
     status: degraded ? 'degraded' : 'ready',
     degraded,
+    releaseSha: currentReleaseSha,
     publicationMode: PUBLICATION_MODE,
     modelPublication: {
       enabled: modelPublicationEnabled,

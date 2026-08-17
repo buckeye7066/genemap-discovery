@@ -24,6 +24,14 @@ describe('educational sequence analysis', () => {
     });
   });
 
+  it('rejects multiple FASTA records instead of silently concatenating them', () => {
+    expect(() => analyzeDna('>record-one\nACGT\n>record-two\nTGCA')).toThrow(
+      expect.objectContaining({ code: 'multiple_fasta_records' }),
+    );
+
+    expect(analyzeDna('>one-record\nACGT')).toMatchObject({ sequence: 'ACGT', length: 4 });
+  });
+
   it('does not silently clean unsupported input', () => {
     expect(normalizeDna('ACGT?12')).toMatchObject({ valid: false, invalidSymbols: ['?', '1', '2'] });
     expect(() => analyzeDna('ACGT?')).toThrow(SequenceInputError);
