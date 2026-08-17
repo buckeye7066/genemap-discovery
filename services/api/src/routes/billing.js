@@ -18,6 +18,7 @@ const stripe = (() => {
 
 function requireStripe() {
   if (!stripe) {
+    console.error('Stripe not properly configured');
     throw new ValidationError('Stripe is not configured for this deployment');
   }
   return stripe;

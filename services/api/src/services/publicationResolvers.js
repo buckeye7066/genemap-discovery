@@ -88,10 +88,12 @@ async function fetchJson(url, fetchImpl) {
  * not accepted: only the exact normalized record returned here can be composed
  * into a model prompt.
  */
+import { enrichGenes } from './genomicDatabases.js';
+
 export async function resolvePublicationGene(symbolValue, { geneLookup } = {}) {
   const symbol = normalizedGeneSymbol(symbolValue);
   if (!symbol) return null;
-  const lookup = geneLookup || (await import('./genomicDatabases.js')).enrichGenes;
+  const lookup = geneLookup || enrichGenes;
   const records = await lookup([symbol]);
   const record = Object.values(records || {}).find((candidate) => (
     candidate && String(candidate.symbol || '').trim().toUpperCase() === symbol
