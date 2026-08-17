@@ -8,7 +8,13 @@ import {
   recordCheckoutOrExpire,
 } from '../services/accountClosureState.js';
 
-const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY) : null;
+const stripe = (() => {
+  if (!process.env.STRIPE_SECRET_KEY) {
+    console.error('STRIPE_SECRET_KEY is not configured');
+    return null;
+  }
+  return new Stripe(process.env.STRIPE_SECRET_KEY);
+})();
 
 function requireStripe() {
   if (!stripe) {
@@ -249,7 +255,7 @@ export default async function billingRoutes(fastify) {
     if (!sig) return reply.status(400).send({ error: 'Missing stripe-signature header' });
     if (!webhookSecret) {
       console.error('STRIPE_WEBHOOK_SECRET not configured');
-      return reply.status(500).send({ error: 'Webhook not configured' });
+      return reply.status(400).send({ error: 'Webhook not configured' });
     }
 
     const stripeClient = stripe;

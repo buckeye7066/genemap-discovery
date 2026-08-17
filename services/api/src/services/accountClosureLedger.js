@@ -136,7 +136,7 @@ async function fetchWithTimeout(
 function ledgerConfig(env = process.env) {
   const writeUrl = safeHttpsUrl(env.ACCOUNT_CLOSURE_LEDGER_WRITE_URL);
   const readUrl = safeHttpsUrl(env.ACCOUNT_CLOSURE_LEDGER_READ_URL);
-  const secret = typeof env.ACCOUNT_CLOSURE_LEDGER_SECRET === 'string'
+  const secret = (typeof env.ACCOUNT_CLOSURE_LEDGER_SECRET === 'string' && env.ACCOUNT_CLOSURE_LEDGER_SECRET.length >= MIN_LEDGER_SECRET_LENGTH)
     ? env.ACCOUNT_CLOSURE_LEDGER_SECRET
     : '';
   const identity = parseIdentityKeyConfig(env.ACCOUNT_CLOSURE_LEDGER_IDENTITY_KEYS);

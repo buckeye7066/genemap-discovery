@@ -53,6 +53,7 @@ function normalizeChromosome(chromosome) {
 }
 
 function inferVariantType(ref, alt) {
+  if (typeof ref !== 'string' || typeof alt !== 'string') return null;
   if (ref.length === 1 && alt.length === 1) return 'SNV';
   if (ref.length === alt.length) return 'MNV';
   if (ref.length < alt.length) return 'Insertion';
@@ -272,8 +273,14 @@ async function enrichOneVariant(variant) {
   ]);
 
   const clinVarIds = clinVarSearch?.esearchresult?.idlist || [];
-  const clinVarDetails = clinVarIds.length > 0 ? await getClinVarVariant(clinVarIds[0]) : null;
-  const clinVarRecord = clinVarIds.length > 0 ? clinVarDetails?.result?.[clinVarIds[0]] : null;
+  let clinVarDetails = null;
+  let clinVarRecord = null;
+  try {
+    clinVarDetails = clinVarIds.length > 0 ? await getClinVarVariant(clinVarIds[0]) : null;
+    clinVarRecord = clinVarIds.length > 0 ? clinVarDetails?.result?.[clinVarIds[0]] : null;
+  } catch (error) {
+    console.error('Error retrieving ClinVar data:', error);
+  }
   const clinVarClassification = extractClinVarClassification(clinVarRecord);
 
   return {
