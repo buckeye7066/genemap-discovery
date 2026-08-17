@@ -65,7 +65,7 @@ function ProjectAnnotations({ project }) {
     try {
       await apiClient.createAnnotation(project.id, {
         targetType: targetGene ? 'gene' : 'project',
-        targetId: targetGene || project.id,
+        targetId: targetGene.trim() || project.id,
         content: newContent,
       });
       setNewContent("");

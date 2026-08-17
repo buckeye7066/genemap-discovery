@@ -187,7 +187,13 @@ export default function Dashboard() {
 
     if (!autoRefresh && isCurrentLoad()) setIsLoading(true);
     try {
-      if (signal?.aborted || !user?.email || !isCurrentLoad()) return;
+      if (signal?.aborted || !user?.email || !isCurrentLoad()) {
+        if (signal?.aborted) {
+          setIsLoading(false);
+          setIsRefreshing(false);
+        }
+        return;
+      }
       const [activityRows, searchRows, projectRows, setRows] = await Promise.all([
         apiClient.getUserActivity().catch(() => []),
         apiClient.getSearchHistory().catch(() => []),
