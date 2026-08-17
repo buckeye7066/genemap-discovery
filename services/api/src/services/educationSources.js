@@ -75,7 +75,8 @@ export const TOPIC_GLOSSARY = {
  * returns no sources and must never accompany provider output.
  */
 export function getSources(topic) {
-  const resolved = resolveEducationTopic(topic?.id);
+  if (!topic) return [];
+  const resolved = resolveEducationTopic(topic.id);
   if (
     !resolved
     || resolved.category !== topic?.category
