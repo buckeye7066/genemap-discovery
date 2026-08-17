@@ -141,6 +141,19 @@ async function assertExactTagCommit(tag, expectedSha, options) {
   }
 }
 
+async function assertReleaseIdentity(release, tag, expectedSha, options) {
+  if (release?.isDraft) {
+    const target = String(release.targetCommitish || '').trim().toLowerCase();
+    if (target !== expectedSha) {
+      throw new Error(
+        `Existing draft ${tag} targets ${target || '(missing target)'}, expected exact commit ${expectedSha}.`,
+      );
+    }
+    return;
+  }
+  await assertExactTagCommit(tag, expectedSha, options);
+}
+
 async function createDraftRelease(tag, title, notes, expectedSha, options) {
   const args = [
     'release',
@@ -233,7 +246,10 @@ export async function publishAndroidRelease(options = {}) {
     if (!release) throw new Error(`GitHub did not return ${tag} after release creation.`);
   }
 
-  await assertExactTagCommit(tag, expectedSha, shared);
+  // GitHub does not create the tag ref until a draft release is published.
+  // Before publication, targetCommitish is the only exact identity available;
+  // after publication, resolve the resulting tag to its commit.
+  await assertReleaseIdentity(release, tag, expectedSha, shared);
   await runGhWithRetry([
     'release',
     'upload',
