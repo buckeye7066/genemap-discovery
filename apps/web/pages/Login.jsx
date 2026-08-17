@@ -76,6 +76,9 @@ export default function Login() {
   };
 
   if (maintenance.active) {
+    const maintenanceTitle = maintenance.title || "Maintenance Ongoing";
+    const maintenanceMessage = maintenance.message || "The system is currently under maintenance.";
+    const maintenanceEta = maintenance.etaText || "Estimated time of return is unavailable.";
     return (
       <div className="min-h-screen bg-slate-950 px-4 py-10 text-slate-100">
         <div className="mx-auto flex min-h-[calc(100vh-5rem)] w-full max-w-md flex-col items-center justify-center">
@@ -95,8 +98,8 @@ export default function Login() {
                   <Wrench className="mt-0.5 h-5 w-5 shrink-0 text-amber-400" aria-hidden="true" />
                   <div>
                     <p className="font-semibold text-amber-50">{maintenance.title}</p>
-                    <p className="mt-1">{maintenance.message}</p>
-                    <p className="mt-2 font-medium text-amber-50">{maintenance.etaText}</p>
+                    <p className="mt-1">{maintenanceMessage}</p>
+                    <p className="mt-2 font-medium text-amber-50">{maintenanceEta}</p>
                     <p className="mt-2">
                       Sign-in and registration are disabled until the upgrade completes. No action
                       is needed on your part.

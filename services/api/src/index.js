@@ -89,6 +89,9 @@ await fastify.register(cors, {
   credentials: true,
 });
 
+if (!env.COOKIE_SECRET || env.COOKIE_SECRET === 'defaultValue' || env.COOKIE_SECRET.trim() === '') {
+  throw new Error('Invalid COOKIE_SECRET');
+}
 await fastify.register(cookie, {
   secret: env.COOKIE_SECRET,
 });

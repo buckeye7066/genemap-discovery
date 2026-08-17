@@ -110,7 +110,8 @@ export default function AutocompleteSearch({
           description: `${item.identifier} · ${item.source} API ${item.apiVersion}`,
           publicationReference: { kind: item.kind, identifier: item.identifier },
         }));
-      } catch {
+      } catch (error) {
+        console.error('Error fetching suggestions:', error);
         // Deterministic local examples remain available during resolver outage.
       }
       if (cancelled) return;

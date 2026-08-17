@@ -48,7 +48,8 @@ export default function LearnGenetics() {
       if (progressRes.status === 'fulfilled') {
         setProgress(progressRes.value.progress || []);
       }
-    } catch {
+    } catch (error) {
+      console.error('Error loading data:', error);
       setTopicsError(true);
     } finally {
       setLoading(false);
