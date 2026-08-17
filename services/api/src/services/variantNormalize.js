@@ -75,6 +75,7 @@ export function decomposeMultiallelic(ref, altText) {
 export function genomicHgvs({ chromosome, position, referenceAllele, alternateAllele, accession = null }) {
   const chrom = normalizeChromosome(chromosome);
   const prefix = accession || chrom;
+  if (!referenceAllele || !alternateAllele) return null;
   return `${prefix}:g.${position}${referenceAllele}>${alternateAllele}`;
 }
 

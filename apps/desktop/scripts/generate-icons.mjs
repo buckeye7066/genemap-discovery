@@ -181,22 +181,57 @@ function pngsToIcns(entries) {
 }
 
 // Emit
-mkdirSync(desktopIcons, { recursive: true });
-mkdirSync(webIcons, { recursive: true });
+try {
+  mkdirSync(desktopIcons, { recursive: true });
+} catch (error) {
+  console.error(`Failed to create directory: ${desktopIcons}`, error);
+  process.exit(1);
+}
+try {
+  mkdirSync(webIcons, { recursive: true });
+} catch (error) {
+  console.error(`Failed to create directory: ${webIcons}`, error);
+  process.exit(1);
+}
 
 const png512 = encodePNG(512, render(512));
 const png256 = encodePNG(256, render(256));
 const png192 = encodePNG(192, render(192));
 
-writeFileSync(path.join(desktopIcons, 'icon.png'), png512);
-writeFileSync(path.join(desktopIcons, 'icon.ico'), pngToIco(png256));
-writeFileSync(path.join(desktopIcons, 'icon.icns'), pngsToIcns([
+try {
+  writeFileSync(path.join(desktopIcons, 'icon.png'), png512);
+} catch (error) {
+  console.error('Error writing icon.png:', error);
+  process.exit(1);
+}
+try {
+  writeFileSync(path.join(desktopIcons, 'icon.ico'), pngToIco(png256));
+} catch (error) {
+  console.error('Error writing icon.ico:', error);
+  process.exit(1);
+}
+try {
+  writeFileSync(path.join(desktopIcons, 'icon.icns'), pngsToIcns([
   { type: 'ic08', png: png256 },
   { type: 'ic09', png: png512 },
 ]));
+} catch (error) {
+  console.error('Error writing icon.icns:', error);
+  process.exit(1);
+}
 
 // PWA assets referenced by Layout.jsx (apple-touch-icon + manifest).
-writeFileSync(path.join(webIcons, 'icon-192.png'), png192);
-writeFileSync(path.join(webIcons, 'icon-512.png'), png512);
+try {
+  writeFileSync(path.join(webIcons, 'icon-192.png'), png192);
+} catch (error) {
+  console.error('Error writing icon-192.png:', error);
+  process.exit(1);
+}
+try {
+  writeFileSync(path.join(webIcons, 'icon-512.png'), png512);
+} catch (error) {
+  console.error('Error writing icon-512.png:', error);
+  process.exit(1);
+}
 
 console.log('Generated desktop icons (png/ico/icns) and web PWA icons (192/512).');

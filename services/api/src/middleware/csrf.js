@@ -30,7 +30,7 @@ function getSecret() {
   return (
     process.env.CSRF_SECRET ||
     process.env.COOKIE_SECRET ||
-    'dev-only-csrf-secret-change-in-production'
+    'change-this-secret-in-production'
   );
 }
 
@@ -74,7 +74,10 @@ function verifyCsrfTokenIntegrity(token, secret = getSecret()) {
   const nonce = fromB64url(nonceEnc);
   if (!userId || !nonce) return null;
   const expected = signCsrf(userId, nonce, secret);
-  if (!constantTimeEqual(sigEnc, expected)) return null;
+  if (!constantTimeEqual(sigEnc, expected)) {
+    console.warn('CSRF token verification failed: integrity check did not pass');
+    return null;
+  }
   return userId;
 }
 

@@ -29,7 +29,9 @@ export default function ProjectVersionControl({ project, onRestore }) {
   const { user } = useAuth();
 
   useEffect(() => {
-    loadVersions();
+    if (project.id) {
+      loadVersions();
+    }
   }, [project.id]);
 
   const loadVersions = async () => {

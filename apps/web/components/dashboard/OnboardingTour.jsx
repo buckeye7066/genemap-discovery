@@ -106,6 +106,7 @@ export default function OnboardingTour({ onComplete, forceShow = false }) {
       await apiClient.updateProfile({ demographicsCollected: true });
     } catch (err) {
       console.error("Failed to mark onboarding complete:", err);
+      alert("Failed to mark onboarding complete. Please try again later.");
     }
   };
 

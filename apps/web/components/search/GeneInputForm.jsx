@@ -54,7 +54,8 @@ export default function GeneInputForm({ onGenesSubmit, isLoading, initialGenes =
   };
 
   const handleRemoveGene = (geneToRemove) => {
-    setGenes(genes.filter(g => g !== geneToRemove));
+    setGenes((prevGenes) => prevGenes.filter(g => g !== geneToRemove));
+    alert(`${geneToRemove} has been removed from the list.`);
   };
 
   const handleSubmit = (e) => {

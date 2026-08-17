@@ -18,6 +18,7 @@ function uniqueSymbols(values = []) {
 }
 
 function percent(numerator, denominator) {
+  if (denominator === 0 && numerator === 0) return "undefined";
   if (!denominator) return "0%";
   return `${Math.round((numerator / denominator) * 100)}%`;
 }
