@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -17,8 +18,29 @@ function loadFixtures() {
     .map((name) => JSON.parse(readFileSync(join(FIXTURE_DIR, name), 'utf8')));
 }
 
+function computeFixtureHash() {
+  const hash = createHash('sha256');
+  const files = readdirSync(FIXTURE_DIR)
+    .filter((name) => name.endsWith('.json'))
+    .sort();
+  for (const name of files) {
+    hash.update(name);
+    hash.update('\0');
+    hash.update(readFileSync(join(FIXTURE_DIR, name)));
+    hash.update('\0');
+  }
+  return hash.digest('hex');
+}
+
 describe('scientific benchmarks (deterministic fixtures)', () => {
   const fixtures = loadFixtures();
+
+  it('produces a stable deterministic fixture hash across runs', () => {
+    const first = computeFixtureHash();
+    const second = computeFixtureHash();
+    expect(first).toBe(second);
+    expect(first).toMatch(/^[0-9a-f]{64}$/);
+  });
 
   it('loads ClinGen/ClinVar, HPO/Monarch, and GIAB fixtures', () => {
     const ids = fixtures.map((f) => f.id).sort();

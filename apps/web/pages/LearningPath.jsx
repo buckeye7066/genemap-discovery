@@ -68,9 +68,26 @@ export default function LearningPath() {
   const getTopicStatus = (topicId) => getStatus(progress, topicId);
 
   const allTopics = curriculum.flatMap(m => m.topics);
-  const completedCount = allTopics.filter(t => getTopicStatus(t.id) === 'mastered').length;
+  const completedTopics = allTopics.filter(t => getTopicStatus(t.id) === 'mastered');
+  const completedCount = completedTopics.length;
   const totalCount = allTopics.length;
   const overallProgress = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+  // Bridge from educational completion into research/discovery modes. Unlocks
+  // once the learner has mastered enough topics, carrying lesson context
+  // (the most recently mastered topic) into the research search/explorer.
+  const RESEARCH_UNLOCK_THRESHOLD = 3;
+  const researchUnlocked = completedCount >= RESEARCH_UNLOCK_THRESHOLD;
+  const lastMasteredTopic = completedTopics[completedTopics.length - 1];
+  const goToResearch = () => {
+    const params = new URLSearchParams();
+    if (lastMasteredTopic) {
+      params.set('q', lastMasteredTopic.title);
+      params.set('from', 'learning-path');
+      params.set('topic', lastMasteredTopic.id);
+    }
+    const qs = params.toString();
+    navigate(`/search${qs ? `?${qs}` : ''}`);
+  };
 
   if (needsOnboarding) {
     return (
@@ -119,6 +136,26 @@ export default function LearningPath() {
               <Progress value={overallProgress} className="h-3" />
             </div>
           </div>
+          {researchUnlocked && (
+            <div className="mt-4 pt-4 border-t border-emerald-200/60 relative">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <BookOpen className="w-4 h-4 text-emerald-600" />
+                  <span className="text-sm text-slate-700">
+                    You've mastered enough to start exploring real genes.
+                    {lastMasteredTopic ? ` Continue from “${lastMasteredTopic.title}”.` : ''}
+                  </span>
+                </div>
+                <Button
+                  onClick={goToResearch}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white shrink-0"
+                >
+                  Continue to Research
+                  <ArrowRight className="w-4 h-4 ml-1.5" />
+                </Button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
