@@ -7,10 +7,12 @@ import {
   Lightbulb,
   Shield,
   TrendingUp,
-  Beaker
+  Beaker,
+  Dna
 } from "lucide-react";
 const HypothesisGenerator = lazy(() => import("../components/research/HypothesisGenerator"));
 const ProjectManager = lazy(() => import("../components/research/ProjectManager"));
+const SequenceWorkbench = lazy(() => import("../components/research/SequenceWorkbench"));
 
 // Contained fallback for the lazy tab panels. Without a local Suspense
 // boundary these lazy imports suspended up to App.jsx's top-level Suspense,
@@ -64,7 +66,7 @@ export default function ResearchMode() {
 
         {/* Feature Tabs */}
         <Tabs defaultValue="hypothesis" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-2 h-auto">
+          <TabsList className="grid w-full grid-cols-3 h-auto">
             <TabsTrigger value="hypothesis" className="flex-col gap-1 py-3">
               <Lightbulb className="w-5 h-5" />
               <span className="text-xs">Hypothesis</span>
@@ -73,6 +75,11 @@ export default function ResearchMode() {
               <Beaker className="w-5 h-5" />
               <span className="text-xs">Projects</span>
               <Badge className="bg-green-600 text-white text-[10px] px-1">New</Badge>
+            </TabsTrigger>
+            <TabsTrigger value="sequence" className="flex-col gap-1 py-3">
+              <Dna className="w-5 h-5" />
+              <span className="text-xs">Sequence lab</span>
+              <Badge className="bg-indigo-600 text-white text-[10px] px-1">Local</Badge>
             </TabsTrigger>
           </TabsList>
 
@@ -85,6 +92,12 @@ export default function ResearchMode() {
           <TabsContent value="projects">
             <Suspense fallback={<TabLoading />}>
               <ProjectManager />
+            </Suspense>
+          </TabsContent>
+
+          <TabsContent value="sequence">
+            <Suspense fallback={<TabLoading />}>
+              <SequenceWorkbench />
             </Suspense>
           </TabsContent>
         </Tabs>
