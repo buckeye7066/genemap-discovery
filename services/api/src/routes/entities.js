@@ -327,7 +327,7 @@ export default async function entityRoutes(fastify) {
       { required: true }
     );
 
-    return { record: { ...record, content: mergedContent, metadata: decrypt(record.metadata) } };
+    return { record: { ...record, content: mergedContent, metadata: record.metadata ? decrypt(record.metadata) : null } };
   });
 
   fastify.delete('/medical-data/:id', { preHandler: logMedicalAccess('medical_data.delete') }, async (request) => {

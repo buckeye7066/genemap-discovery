@@ -248,7 +248,8 @@ export default function Dashboard() {
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
-    await loadDashboardData();
+    const controller = new AbortController();
+    await loadDashboardData(false, controller.signal);
   };
 
   const hour = new Date().getHours();

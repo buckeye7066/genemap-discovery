@@ -327,7 +327,7 @@ export default function SearchPage() {
     try {
       const genesToSave = userInputGenes.length > 0
         ? userInputGenes
-        : selectedGenes.map(g => g.symbol);
+        : selectedGenes.map(g => g.symbol); // eslint-disable-line no-use-before-define
 
       if (genesToSave.length === 0) {
         setError("No genes to save. Either input genes or select from results.");
