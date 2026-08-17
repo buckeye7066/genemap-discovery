@@ -226,13 +226,14 @@ export async function assertNoRawGenomicLLM(prisma, userId, text) {
   if (!looksLikeRawGenomicContent(text)) return false;
 
   if (process.env.ALLOW_GENOMIC_LLM_UPLOAD !== 'true') {
+    // Log a warning and throw an error if the configuration is incorrect.
+    console.warn('Warning: ALLOW_GENOMIC_LLM_UPLOAD is not set to true. This may prevent genomic uploads.')
     throw new ValidationError('Raw VCF/genomic file content is not allowed in LLM requests by default');
   }
 
-  // Fail closed when we don't know who the user is (e.g. an unauthenticated
-  // path): there is no one whose consent we could check.
+  // Check if user is authenticated
   if (!userId) {
-    throw new ValidationError(`Consent required: ${GENOMIC_LLM_CONSENT_TYPE} v${GENOMIC_LLM_CONSENT_VERSION}`);
+    throw new ValidationError('Unauthenticated request: Consent required but no user is logged in.');
   }
 
   // Fetch the LATEST consent record regardless of its `granted` value, then

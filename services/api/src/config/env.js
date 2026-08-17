@@ -244,6 +244,16 @@ export function loadEnv(opts = {}) {
     }
   }
 
+  if (missing.length > 0 || weak.length > 0) {
+    const parts = [];
+    if (missing.length > 0) parts.push(`missing required vars: ${missing.join(', ')}`);
+    if (weak.length > 0) {
+      parts.push(`secrets too short or placeholders (need >= ${MIN_SECRET_LENGTH} chars): ${weak.join(', ')}`);
+    }
+    const message = `[env] environment is unsafe — ${parts.join('; ')}`;
+    throw new Error(message);
+  }
+
   return {
     ...env,
     isProduction: isProd,

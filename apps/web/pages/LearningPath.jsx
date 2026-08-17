@@ -63,6 +63,8 @@ export default function LearningPath() {
       }
       if (progressRes.status === 'fulfilled') {
         setProgress(progressRes.value?.progress || []);
+      } else {
+        setProgress([]); // Reset progress if the API call fails
       }
     } finally {
       setLoading(false);
