@@ -35,7 +35,7 @@
     "db:migrate": "corepack pnpm --filter @genemap/api db:migrate",
     "db:migrate:deploy": "corepack pnpm --filter @genemap/api db:migrate:deploy",
     "db:studio": "corepack pnpm --filter @genemap/api db:studio",
-    "test:backup": "node --test scripts/__tests__/backup-snapshot.test.mjs"
+    "test:backup": "node --test scripts/__tests__/backup-snapshot.test.mjs scripts/__tests__/monitor-railway-deployment.test.mjs scripts/__tests__/publish-android-release.test.mjs"
   },
   "pnpm": {
     "auditConfig": {

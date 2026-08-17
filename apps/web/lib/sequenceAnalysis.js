@@ -52,6 +52,16 @@ export function normalizeDna(raw) {
 }
 
 function requireDna(raw, maximum = MAX_SEQUENCE_LENGTH) {
+  const fastaRecordCount = String(raw ?? '')
+    .split(/\r?\n/)
+    .filter((line) => line.trimStart().startsWith('>'))
+    .length;
+  if (fastaRecordCount > 1) {
+    throw new SequenceInputError(
+      'Enter one FASTA record at a time; multiple records cannot be combined safely.',
+      'multiple_fasta_records',
+    );
+  }
   const normalized = normalizeDna(raw);
   if (!normalized.sequence) {
     throw new SequenceInputError('Enter at least one DNA base.', 'empty_sequence');
