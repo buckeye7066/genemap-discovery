@@ -169,7 +169,7 @@ export default function TopicExplorer() {
   const navigate = useNavigate();
   const { level, levelConfig } = useEducationLevel();
 
-  const topicId = searchParams.get('topic') || '';
+  const topicId = searchParams.get('topic') || ''; // Ensure topicId is initialized to an empty string
   const publicationLevel = normalizeEducationPublicationLevel(level);
   const publicationRequestScope = `${topicId}\u0000${publicationLevel}`;
   const publicationRequestRef = useRef({

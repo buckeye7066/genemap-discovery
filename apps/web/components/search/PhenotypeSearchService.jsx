@@ -205,8 +205,11 @@ export class PhenotypeSearchService {
           publication: recoveryPublication,
           enriched: false,
         };
+      } else {
+        const fallbackMessage = `Failed to retrieve publication artifact: ${getErrorMessage(error)}`;
+        log.error(fallbackMessage);
+        throw new Error(fallbackMessage || "Failed to search for genes. Please try again.");
       }
-      throw new Error(getErrorMessage(error) || "Failed to search for genes. Please try again.");
     }
   }
 

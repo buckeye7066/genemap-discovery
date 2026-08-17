@@ -66,7 +66,7 @@ export default function BannedUsersPage() {
       // or in a separate `preBannedUsers` array (older API). Normalize both,
       // split real bans from pre-bans, and dedup by id so the page renders
       // correctly regardless of which API version is live.
-      const raw = response.bannedUsers || [];
+      const raw = (response && response.bannedUsers) ? response.bannedUsers : [];
       const realBanned = raw
         .filter((u) => !(u.pre_banned ?? u.preBanned))
         .map(normalizeAdminUser);
