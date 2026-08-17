@@ -105,6 +105,7 @@ export async function resolvePublicationGene(symbolValue, { geneLookup } = {}) {
     (ensemblId && !ENSEMBL_GENE_ID.test(ensemblId))
     || (entrezId && !ENTREZ_GENE_ID.test(entrezId))
     || (!ensemblId && !entrezId)
+    || (entrezId && !ENTREZ_GENE_ID.test(entrezId))
   ) return null;
   return {
     symbol,

@@ -55,6 +55,7 @@ export function parseJsonFromLLM(raw, { fallback = null, validate } = {}) {
   try {
     parsed = JSON.parse(candidate);
   } catch {
+    console.warn('Invalid JSON input detected, returning fallback value.');
     return fallback;
   }
 
