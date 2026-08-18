@@ -10,9 +10,7 @@ export default function BanCheck({ children }) {
   const [isBanned, setIsBanned] = useState(false);
 
   useEffect(() => {
-    if (user?.banned === true) {
-      setIsBanned(true);
-    }
+    setIsBanned(user?.banned === true);
   }, [user]);
 
   const handleLogout = () => {
