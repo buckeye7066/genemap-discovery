@@ -23,7 +23,15 @@ export async function createAuditLog(
       },
     });
   } catch (error) {
-    console.error(`[audit] Failed to create audit log (${action}):`, error.message);
+    console.error(
+      JSON.stringify({
+        level: 'error',
+        component: 'audit',
+        message: 'Failed to create audit log',
+        action,
+        required,
+      })
+    );
     if (required) throw error;
     return null;
   }
