@@ -13,12 +13,17 @@ const getAppParamValue = (paramName, { defaultValue = undefined } = {}) => {
 }
 
 const getAppParams = () => {
+	// jsconfig.typecheck.json sets types: [] so Vite's ImportMetaEnv is not
+	// loaded; without this assertion tsc types import.meta.env as {}.
+	const env = /** @type {{ VITE_API_URL?: string, VITE_STRIPE_PUBLIC_KEY?: string, MODE?: string }} */ (
+		import.meta.env || {}
+	);
 	return {
 		apiUrl: getAppParamValue("api_url", { 
-			defaultValue: import.meta.env.VITE_API_URL || '/api'
+			defaultValue: env.VITE_API_URL || '/api'
 		}),
-		stripePublicKey: import.meta.env.VITE_STRIPE_PUBLIC_KEY,
-		environment: import.meta.env.MODE || 'development',
+		stripePublicKey: env.VITE_STRIPE_PUBLIC_KEY,
+		environment: env.MODE || 'development',
 	}
 }
 
