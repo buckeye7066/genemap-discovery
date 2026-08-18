@@ -9,7 +9,7 @@ export default function MelissaBanner() {
   const [show, setShow] = useState(false);
 
   useEffect(() => {
-    if (user?.email === "justus_melissa@yahoo.com") {
+    if (user?.isPremium) {
       const dismissed = localStorage.getItem("melissa_upgrade_banner_dismissed");
       if (!dismissed) {
         setShow(true);
