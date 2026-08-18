@@ -139,8 +139,7 @@ export default function SuperAdminSetupPage() {
 
     try {
       const searchResult = await apiClient.searchUsers(email);
-      const target = (searchResult.users || []).find((u) => u.email?.toLowerCase() === email)
-        || (searchResult.users || [])[0];
+      const target = (searchResult.users || []).find((u) => u.email?.toLowerCase() === email);
 
       if (!target?.id) {
         setError("User not found. The target must register before being promoted.");
@@ -198,8 +197,7 @@ export default function SuperAdminSetupPage() {
 
     try {
       const searchResult = await apiClient.searchUsers(email);
-      const target = (searchResult.users || []).find((u) => u.email?.toLowerCase() === email)
-        || (searchResult.users || [])[0];
+      const target = (searchResult.users || []).find((u) => u.email?.toLowerCase() === email);
 
       if (!target?.id) {
         setError("User not found. The target must register before being comped.");
@@ -235,8 +233,7 @@ export default function SuperAdminSetupPage() {
 
     try {
       const searchResult = await apiClient.searchUsers(email);
-      const target = (searchResult.users || []).find((u) => u.email?.toLowerCase() === email)
-        || (searchResult.users || [])[0];
+      const target = (searchResult.users || []).find((u) => u.email?.toLowerCase() === email);
 
       if (!target?.id) {
         setError("User not found.");

@@ -247,7 +247,10 @@ export default function ProjectManager() {
   const handleUpdateProject = async (projectId, updates) => {
     try {
       const project = projects.find(p => p.id === projectId);
-      
+      if (!project) {
+        throw new Error('Project not found');
+      }
+
       // Determine change type
       let changeType = "metadata_updated";
       if (updates.genes && JSON.stringify(updates.genes) !== JSON.stringify(project.genes)) {
@@ -316,7 +319,7 @@ export default function ProjectManager() {
               <Beaker className="w-5 h-5 text-green-600" />
               Research Projects
             </CardTitle>
-            <Dialog open={createDialogOpen} onOpenChange={(open) => { setCreateDialogOpen(open); if (!open) setCreateError(""); }}>
+            <Dialog open={createDialogOpen} onOpenChange={(open) => { setCreateDialogOpen(open); if (open) setCreateError(""); }}>
               <DialogTrigger asChild>
                 <Button className="bg-green-600 hover:bg-green-700 gap-2">
                   <Plus className="w-4 h-4" />
@@ -433,7 +436,7 @@ export default function ProjectManager() {
                       <div className="flex-1">
                         <h3 className="font-semibold text-slate-900">{project.name}</h3>
                         <p className="text-xs text-slate-500 mt-1">
-                          v{project.current_version || 1} • Updated {new Date(project.updated_date).toLocaleDateString()}
+                          v{project.current_version || 1} • Updated {project.updated_date ? new Date(project.updated_date).toLocaleDateString() : 'Unknown'}
                         </p>
                       </div>
                       <Badge className={getStatusColor(project.status)}>

@@ -44,7 +44,7 @@ export default function PremiumPage() {
   useEffect(() => {
     checkPaymentStatus();
     loadEntitlements();
-  }, []);
+  }, [window.location.search]);
 
   const loadEntitlements = async () => {
     try {
@@ -95,8 +95,8 @@ export default function PremiumPage() {
       } else {
         throw new Error("No checkout URL returned");
       }
-    } catch (err) {
-      setError(err.message || "Failed to start checkout. Please try again.");
+    } catch {
+      setError("Failed to start checkout. Please try again.");
       setIsProcessing(false);
     }
   };
@@ -114,8 +114,8 @@ export default function PremiumPage() {
       } else {
         throw new Error("No portal URL returned");
       }
-    } catch (err) {
-      setError(err.message || "Failed to open customer portal. Please try again.");
+    } catch {
+      setError("Failed to open customer portal. Please try again.");
       setIsProcessing(false);
     }
   };
