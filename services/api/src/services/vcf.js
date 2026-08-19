@@ -46,12 +46,6 @@ function parseSample(formatText, sampleText) {
   return Object.fromEntries(keys.map((key, index) => [key, values[index] ?? null]));
 }
 
-function normalizeChromosome(chromosome) {
-  const value = String(chromosome || '').trim();
-  if (!value) return value;
-  return value.toLowerCase().startsWith('chr') ? value : `chr${value}`;
-}
-
 function inferVariantType(ref, alt) {
   if (typeof ref !== 'string' || typeof alt !== 'string') return null;
   if (ref.length === 1 && alt.length === 1) return 'SNV';
