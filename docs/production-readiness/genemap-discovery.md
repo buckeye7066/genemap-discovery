@@ -4,8 +4,9 @@ Executor: Cursor
 Repository: buckeye7066/genemap-discovery
 Verified default branch: main
 Release SHA under evidence: 3b492e5aae7a12ef4c35cf4a53e9821108b0f57b
-Web target: https://genemap-discovery.vercel.app
-API target: https://genemap-api-production.up.railway.app
+Current main SHA: fc44aaff567615eb7a08481c82e880ddf38842aa (docs-only child of 3b492e5)
+Web target: https://genemap-discovery.vercel.app — **DOWN, HTTP 402**
+API target: https://genemap-api-production.up.railway.app — up, on fc44aaf
 Current phase: EXTERNAL EVIDENCE
 Current release status: BLOCKED
 Updated: 2026-08-19
@@ -16,11 +17,50 @@ is production ready.
 Do not invent processor, backup, Stripe, DPA, or BAA evidence.
 Do not treat a same-Postgres tombstone table as the independent deletion ledger.
 
-## Current checkpoint (2026-08-19 13:10Z)
+## CORRECTION — the web tier went down mid-session (2026-08-19 ~13:18Z)
+
+**An earlier statement in this file, merged in #163, is now wrong and is
+retracted first.** It said of the Vercel account block: *"It does not invalidate
+item 2 … The web tier is up and is on the release SHA."* That was true when
+observed at ~13:00Z. It is no longer true.
+
+**The GeneMap production web app is DOWN.** Measured:
+
+| Time (2026-08-19) | `GET https://genemap-discovery.vercel.app/` |
+|---|---|
+| ~13:00Z | HTTP **200**, `text/html; charset=utf-8` |
+| 13:18Z | HTTP **402** — scheduled Production Smoke run `32257273854` failed here |
+| ~13:43Z | HTTP **402**, `text/plain`, body `Payment required` / `DEPLOYMENT_DISABLED` |
+
+The account block does not merely stop new builds — it **disables serving**. The
+Vercel API still reports the deployment as `READY`; the edge returns 402 anyway.
+
+**Scope is account-wide, not GeneMap-specific.** Also 402 at the same moment:
+`https://www.axiombiolabs.org` (the GrantFlow production domain),
+`https://genemap-discovery-buckeye7066-7954s-projects.vercel.app`, and
+`https://genemap-discovery-git-main-buckeye7066-7954s-projects.vercel.app`. Every
+frontend on Vercel team `team_jGpfNWYX8m7JqvQ33uIeWZsi` is affected.
+
+**Railway is unaffected.** `GET /healthz` returned HTTP 200 with
+`releaseSha: fc44aaff567615eb7a08481c82e880ddf38842aa` — the API followed `main`
+through the merge exactly as designed. So the two tiers have now visibly
+diverged: API on `fc44aaf`, web serving nothing at all.
+
+**This is an owner action.** Unblocking a Vercel account is a billing/account
+matter; no agent can clear it. Until it is cleared:
+
+- Item 2's exact-SHA equality is **historical**, valid as of ~13:00Z on 3b492e5,
+  and cannot be re-observed while the origin returns 402.
+- Item 3 (authenticated production journey) is **doubly blocked** — there is no
+  web app to run a journey against.
+- Any claim that a Vercel-hosted GeneMap surface works must be treated as false
+  until re-probed.
+
+## Checkpoint (2026-08-19 13:10Z)
 
 Release SHA under evidence is **3b492e5**, the merge of #161. Items 1, 2 and 7
-are now evidenced. Items 3, 4, 5 and 6 remain open, so the release stays
-BLOCKED.
+are evidenced *as observed at that time*; read them against the correction
+above. Items 3, 4, 5 and 6 remain open, so the release stays BLOCKED.
 
 ### Item 1 — ledger configured (CLOSED, previous session)
 
@@ -71,20 +111,21 @@ Corroborated: `list_deployments` for the project returns **zero** deployments
 created after `1787142700000` (2026-08-19 ~12:31Z), even though a branch was
 pushed at ~13:2xZ — Vercel accepted the webhook and refused to build.
 
-What this does and does not mean:
+What this meant at the time of writing, and what actually happened:
 
-- It does **not** invalidate item 2. The deployment serving production is still
-  `dpl_G1uPgw4NaqrHPtwH4hWBRn9jwsac` at 3b492e5, `get_project` confirms it as
-  `latestDeployment` with `readyState: READY, target: production`, and
-  `GET https://genemap-discovery.vercel.app/` still returned HTTP 200 HTML.
-  The web tier is up and is on the release SHA.
-- It does mean **the next merge to `main` will not reach the web tier.** The
-  API redeploys via Railway; the web will silently stay on 3b492e5 while `main`
-  moves. That is exactly the "exact SHA" property item 2 exists to guarantee, so
-  it must be cleared before any further web-affecting release.
+- At ~13:00Z it did **not** invalidate item 2: the deployment serving production
+  was `dpl_G1uPgw4NaqrHPtwH4hWBRn9jwsac` at 3b492e5, `get_project` confirmed it
+  as `latestDeployment` with `readyState: READY, target: production`, and
+  `GET https://genemap-discovery.vercel.app/` returned HTTP 200 HTML.
+- **That did not hold.** By 13:18Z the same origin returned HTTP 402
+  `DEPLOYMENT_DISABLED`. The block disables serving, not only building. See the
+  CORRECTION section at the top of this file — it supersedes the optimistic
+  reading below, which was written before the origin went down.
+- It also means the next merge to `main` cannot reach the web tier. The API
+  redeploys via Railway (confirmed: it is now on `fc44aaf`); the web is serving
+  nothing.
 - **Owner action required.** Unblocking a Vercel account is a billing/account
-  matter on the owner's Vercel account; no agent can clear it. Until it is
-  cleared, treat any post-3b492e5 web claim as unproven.
+  matter on the owner's Vercel account; no agent can clear it.
 
 Recorded limitation: the web bundle embeds no self-reported commit SHA (no
 `VITE_COMMIT_SHA` / `releaseSha` anywhere in `apps/web`), so the Vercel
@@ -334,6 +375,25 @@ Every workflow below is `status: completed` — none was counted while
 19 of 19 jobs across the six push/schedule workflows succeeded. No job was
 skipped-as-green.
 
+**Re-verified on the docs-only child commit `fc44aaf`** (the merge of #163),
+which is what `main` now points at. All runs `status: completed`:
+
+| Workflow | Run | Conclusion |
+|---|---|---|
+| CI | 32258967059 | **success** (11/11 jobs) |
+| Web Tests | 32258966665 | **success** |
+| Release language policy | 32258967187 | **success** |
+| Railway Deploy Monitor | 32258967254 | **success** |
+| Education Sources Link Check | 32259111186 | **success** — the fix below, proven |
+| Android build and repo-direct release | not run | correctly path-filtered; `android-build.yml` triggers only on `apps/web/**`, `packages/**`, `scripts/**`, lockfile, `package.json`, or its own file — none touched by a docs-only change |
+
+Production Smoke on `fc44aaf` is **not** recorded as green here. Its 13:18Z run
+on 3b492e5 (`32257273854`) **failed**, at the step
+"Check web security headers", with `curl: (22) The requested URL returned error:
+402` against `https://genemap-discovery.vercel.app`. That is the Vercel outage,
+not a code regression — and Production Smoke will keep failing on every schedule
+until the account is unblocked.
+
 Two workflow files did not run on the release SHA because neither is
 push-triggered:
 
@@ -383,9 +443,16 @@ push-triggered:
 
 Current decision: **BLOCKED**.
 
-Blocked on items 3, 4 (owner sign-off), 5 and 6, plus one new blocker: **the
-Vercel account is blocked for new deployments**, so the web tier will fall
-behind `main` at the next merge. Items 1, 2 and 7 are evidenced as of 3b492e5.
+Blocked on items 3, 4 (owner sign-off), 5 and 6 — **and now on a live outage:
+the Vercel account is blocked and the production web app returns HTTP 402
+`DEPLOYMENT_DISABLED`.** That is the most urgent item on this page and it
+outranks the rest: there is currently no GeneMap web app for a user, or for
+item 3's journey, to reach. It is account-wide (GrantFlow's production domain is
+402 too) and only the owner can clear it.
+
+Items 1, 2 and 7 are evidenced as observed — item 2 as of ~13:00Z on 3b492e5,
+item 7 on both 3b492e5 and the current `main` at fc44aaf. The API tier is
+healthy and tracking `main`.
 Item 3 and the sign-off half of item 4 are owner actions; item 5's remaining
 failures are owner/console facts plus one check that can only be run truthfully
 inside the production runtime; item 6 belongs to the ledger-controls lane.
