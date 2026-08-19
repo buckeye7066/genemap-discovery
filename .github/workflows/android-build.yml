@@ -344,14 +344,29 @@ jobs:
             echo '::error title=AAB configuration missing::base/assets/capacitor.config.json could not be read'
             exit 1
           fi
-          jq -e '(.plugins // {} | has("CapacitorUpdater") | not)' "$RUNNER_TEMP/release-apk-capacitor-config.json" > /dev/null || {
-            echo '::error title=Forbidden APK updater::CapacitorUpdater must be absent'
-            exit 1
-          }
-          jq -e '(.plugins // {} | has("CapacitorUpdater") | not)' "$RUNNER_TEMP/release-aab-capacitor-config.json" > /dev/null || {
-            echo '::error title=Forbidden AAB updater::CapacitorUpdater must be absent'
-            exit 1
-          }
+          # This assertion used to demand CapacitorUpdater be ABSENT. PR #164
+          # shipped the in-app updater the owner asked for on 2026-08-19, so the
+          # plugin is now REQUIRED — but only in the shape that makes it safe:
+          # manual updates from our own pinned feed, every bundle sha256-verified
+          # before it is applied (apps/web/lib/mobileUpdater.js), and never the
+          # Capgo cloud. The forbidden-content checks above (no OTA directory, no
+          # packaged ZIP) are unchanged: the feed is a deploy artifact published
+          # into the Vercel output, never baked into the signed package.
+          for kind in apk aab; do
+            config="$RUNNER_TEMP/release-${kind}-capacitor-config.json"
+            jq -e '(.plugins // {} | has("CapacitorUpdater"))' "$config" > /dev/null || {
+              echo "::error title=Missing ${kind} updater::CapacitorUpdater must be configured so the app can fetch verified web bundles"
+              exit 1
+            }
+            jq -e '(.plugins.CapacitorUpdater.autoUpdate == false)' "$config" > /dev/null || {
+              echo "::error title=Unattended ${kind} updater::CapacitorUpdater.autoUpdate must stay false - updates are user-initiated and verified"
+              exit 1
+            }
+            jq -e '((.plugins.CapacitorUpdater.updateUrl // "") == "") and ((.plugins.CapacitorUpdater.statsUrl // "") == "")' "$config" > /dev/null || {
+              echo "::error title=Third-party ${kind} update endpoint::CapacitorUpdater must not point at the Capgo cloud"
+              exit 1
+            }
+          done
 
           cp "$APK" "GeneMap-${ANDROID_VERSION_NAME}.apk"
           cp "$AAB" "GeneMap-${ANDROID_VERSION_NAME}.aab"
@@ -372,7 +387,7 @@ jobs:
             echo '- AAB web entrypoints: 1'
             echo '- OTA directories: 0'
             echo '- ZIP files: 0'
-            echo '- Runtime web-bundle updater: absent'
+            echo '- Runtime web-bundle updater: manual, self-hosted, sha256-verified'
           } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
