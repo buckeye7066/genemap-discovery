@@ -6,6 +6,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import MobileUpdateCard from '@/components/settings/MobileUpdateCard';
 import { Label } from '@/components/ui/label';
 import {
   AlertCircle,
@@ -243,6 +244,9 @@ export default function AccountSettings() {
             </form>
           </CardContent>
         </Card>
+
+        {/* Renders only inside the native Android build; a no-op on web. */}
+        <MobileUpdateCard />
       </div>
     </div>
   );
