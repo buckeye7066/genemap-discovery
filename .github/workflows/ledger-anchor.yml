@@ -1,0 +1,71 @@
+name: Closure ledger anchor
+
+# Off-platform immutability anchor for the account-deletion ledger.
+#
+# The ledger's hash chain is tamper-EVIDENT but not tamper-PROOF: whoever
+# controls its Railway volume can delete a tombstone and re-chain the rest into
+# a log that verifies perfectly against itself. This workflow closes that hole
+# from the outside by recording the chain head into a file committed to THIS
+# repository — a store the ledger host cannot write to — and by re-checking
+# every previously published anchor against the live ledger on each run.
+#
+# A failing run means the live ledger no longer agrees with history that was
+# published before it could have been rewritten. Treat it as an integrity
+# incident, not a flaky check.
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Daily. Anchoring more often narrows the window in which a rewrite could
+    # happen and be re-anchored before anyone looked.
+    - cron: '17 4 * * *'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ledger-anchor
+  cancel-in-progress: false
+
+jobs:
+  anchor:
+    name: Verify published anchors, then publish a new one
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      LEDGER_ANCHOR_URL: https://genemap-closure-ledger-production.up.railway.app/tombstones/anchor
+      ACCOUNT_CLOSURE_LEDGER_SECRET: ${{ secrets.ACCOUNT_CLOSURE_LEDGER_SECRET }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+
+      - name: Fail fast if the anchor secret is missing
+        run: |
+          if [ -z "$ACCOUNT_CLOSURE_LEDGER_SECRET" ]; then
+            echo "ACCOUNT_CLOSURE_LEDGER_SECRET is not set for this repository."
+            echo "Without it this workflow cannot authenticate the ledger's response,"
+            echo "so a green run would prove nothing. Refusing to pass."
+            exit 1
+          fi
+
+      # Verify BEFORE capturing. Capturing first would happily anchor a chain
+      # that had already been rewritten, laundering the tamper into the record.
+      - name: Verify the live ledger against every published anchor
+        run: node ops/closure-ledger/anchor.mjs verify
+
+      - name: Capture a new anchor
+        run: node ops/closure-ledger/anchor.mjs capture
+
+      - name: Publish the anchor to the repository
+        run: |
+          if git diff --quiet -- ops/closure-ledger/anchors; then
+            echo "No new anchor to publish."
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add ops/closure-ledger/anchors
+          git commit -m 'chore(ledger): publish closure-ledger chain anchor [skip ci]'
+          git push origin HEAD:main
