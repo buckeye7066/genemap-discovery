@@ -3,10 +3,10 @@
 Executor: Cursor (ledger controls pass 2026-08-19: claude-code-gm-ledger)
 Repository: buckeye7066/genemap-discovery
 Verified default branch: main
-Release SHA under evidence: 3b492e5aae7a12ef4c35cf4a53e9821108b0f57b
-Current main SHA: fc44aaff567615eb7a08481c82e880ddf38842aa (docs-only child of 3b492e5)
-Web target: https://genemap-discovery.vercel.app — **DOWN, HTTP 402**
-API target: https://genemap-api-production.up.railway.app — up, on fc44aaf
+Release SHA under evidence: 2afef6598f8f9d64da65ad7c164939c64de67de7 (current main)
+Earlier evidence SHA: 3b492e5aae7a12ef4c35cf4a53e9821108b0f57b
+Web target: https://genemap-discovery.vercel.app — up, on 2afef65
+API target: https://genemap-api-production.up.railway.app — up, on 2afef65
 Current phase: EXTERNAL EVIDENCE
 Current release status: BLOCKED
 Updated: 2026-08-19
@@ -17,7 +17,44 @@ is production ready.
 Do not invent processor, backup, Stripe, DPA, or BAA evidence.
 Do not treat a same-Postgres tombstone table as the independent deletion ledger.
 
-## CORRECTION — the web tier went down mid-session (2026-08-19 ~13:18Z)
+## RESOLVED — the Vercel outage is over, and both tiers are on current main (14:27Z)
+
+The HTTP 402 outage recorded below lasted roughly **13:18Z to 14:24Z**. It is
+cleared. Measured after the fact:
+
+| Probe | Result |
+|---|---|
+| `GET https://genemap-discovery.vercel.app/` | HTTP **200**, `text/html; charset=utf-8` |
+| `GET https://www.axiombiolabs.org` | HTTP **200** |
+| `GET /healthz` | HTTP 200, `releaseSha: 2afef6598f8f9d64da65ad7c164939c64de67de7` |
+| Production Smoke on 2afef65 (run `32263960057`) | **success**, 14:25:49Z → 14:27:06Z |
+
+Vercel flushed the queued builds once unblocked — three production deployments
+were created within three minutes (`dpl_9WJXRshTo3FEvPbBTBh2q7AGktQs` for
+3b492e5 as an explicit redeploy, then dce3865, then 2afef65).
+
+**Item 2 is therefore re-proved on the CURRENT main, not just historically:**
+
+| Field | Value |
+|---|---|
+| Deployment id | `dpl_ES3qpUvZfTk5vG46evbmQQkbRF8E` |
+| `meta.githubCommitSha` | `2afef6598f8f9d64da65ad7c164939c64de67de7` |
+| `origin/main` | `2afef6598f8f9d64da65ad7c164939c64de67de7` — **EQUAL** |
+| `meta.githubCommitRef` / verification | `main` / `verified` |
+| `target` / `readyState` / `aliasError` | `production` / `READY` / `null` |
+| `alias` | includes `genemap-discovery.vercel.app` |
+| Region | `iad1` |
+
+Both tiers now report the same SHA: web deployment `2afef65`, API `/healthz`
+`2afef65`. The divergence recorded below is closed.
+
+**What to keep from the incident, since the record must not read as if it never
+happened:** a blocked Vercel account **disables serving, not merely building** —
+the Vercel API reported the deployment `READY` throughout while the edge
+returned 402 — and the blast radius was every frontend on the team, GrantFlow's
+production domain included. Item 3's browser journey is no longer blocked by it.
+
+## CORRECTION — the web tier went down mid-session (2026-08-19 ~13:18Z, now resolved above)
 
 **An earlier statement in this file, merged in #163, is now wrong and is
 retracted first.** It said of the Vercel account block: *"It does not invalidate
@@ -49,10 +86,11 @@ diverged: API on `fc44aaf`, web serving nothing at all.
 **This is an owner action.** Unblocking a Vercel account is a billing/account
 matter; no agent can clear it. Until it is cleared:
 
-- Item 2's exact-SHA equality is **historical**, valid as of ~13:00Z on 3b492e5,
-  and cannot be re-observed while the origin returns 402.
-- Item 3 (authenticated production journey) is **doubly blocked** — there is no
-  web app to run a journey against.
+- Item 2's exact-SHA equality was **historical** for the duration, valid as of
+  ~13:00Z on 3b492e5 and not re-observable while the origin returned 402. It has
+  since been re-proved on 2afef65 — see RESOLVED above.
+- Item 3 (authenticated production journey) was **doubly blocked** while this
+  held — there was no web app to run a journey against. Resolved 14:24Z.
 - Any claim that a Vercel-hosted GeneMap surface works must be treated as false
   until re-probed.
 
@@ -169,10 +207,12 @@ than disabled.
 *production journey*. An API-level journey is real evidence and the strongest
 available today, but it is not a user completing a task in the product: it
 exercises no routing, no `DemographicCheck` redirect, no rendering, no client
-session handling. The browser half cannot be run at all right now because
-`https://genemap-discovery.vercel.app` returns HTTP 402 (see the CORRECTION at
-the top of this file). **Remaining for item 3: clear the Vercel block, then run
-the same identity through the web app end to end.**
+session handling. The browser half was impossible during the 13:18Z-14:24Z
+Vercel outage; **that obstacle is gone** — the web origin returns 200 again and
+is serving current main (see RESOLVED at the top of this file). **Remaining for
+item 3: run the same owner-authorized identity through the web app end to end
+on the current release SHA and capture the artifact.** Nothing external blocks
+that now; it needs the credentials and a run.
 
 The diagnosis below stands as the map of what automation exists and what the
 owner would still need to supply to make that browser journey repeatable in CI
@@ -517,8 +557,9 @@ push-triggered:
 3. Owner-authorized authenticated production journey on that SHA. **API tier
    EVIDENCED 2026-08-19** with owner-supplied credentials (login, `/auth/me`,
    an authenticated Ensembl-backed gene read, and their unauthenticated 401
-   counterparts). **Web tier still OPEN** — the browser journey cannot be run
-   while `genemap-discovery.vercel.app` returns 402. See item 3 above.
+   counterparts). **Web tier still OPEN** — but no longer externally blocked:
+   the 402 outage is resolved and the web origin serves current main. It now
+   just needs the run. See item 3 above.
 4. Completed processor/privacy register in `docs/PROCESSOR_REGISTER.md`.
    **The register is factually COMPLETE and re-derived at main `abf2e47`; the
    owner's sign-off is not.** Delta since the first pass: **Resend is now an
@@ -572,16 +613,16 @@ synthetic-database run as satisfying it.
 
 Current decision: **BLOCKED**.
 
-Blocked on items 3, 4 (owner sign-off), 5 and 6 — **and now on a live outage:
-the Vercel account is blocked and the production web app returns HTTP 402
-`DEPLOYMENT_DISABLED`.** That is the most urgent item on this page and it
-outranks the rest: there is currently no GeneMap web app for a user, or for
-item 3's journey, to reach. It is account-wide (GrantFlow's production domain is
-402 too) and only the owner can clear it.
+Blocked on items 3 (web half), 4 (owner sign-off), 5 and 6.
 
-Items 1, 2 and 7 are evidenced as observed — item 2 as of ~13:00Z on 3b492e5,
-item 7 on both 3b492e5 and the current `main` at fc44aaf. The API tier is
-healthy and tracking `main`.
+The Vercel 402 outage that briefly outranked all of them is **resolved** — both
+tiers now serve current main `2afef65`, and item 2 is re-proved against that SHA
+rather than left as a historical observation.
+
+Items 1, 2 and 7 are evidenced as observed. Item 7 on the current `main`
+(`2afef65`): CI, Web Tests, Release language policy, Railway Deploy Monitor,
+Android build and repo-direct release, and Production Smoke are all `completed`
+with conclusion `success`.
 Item 3 and the sign-off half of item 4 are owner actions; item 5's remaining
 failures are owner/console facts plus one check that can only be run truthfully
 inside the production runtime; item 6 belongs to the ledger-controls lane.
