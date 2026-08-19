@@ -3,6 +3,7 @@ import Stripe from 'stripe';
 import { AppError, NotFoundError } from '../utils/errors.js';
 import { createAuditLog } from '../utils/audit.js';
 import { createAccountClosureLedger } from './accountClosureLedger.js';
+import { LEDGER_WRITE_FAILURE, emitOperatorAlert } from './operatorAlert.js';
 
 const CLOSED_SUBSCRIPTION_STATUSES = new Set([
   'canceled',
@@ -567,6 +568,7 @@ export async function closeUserAccount({
   actorMode = 'self_service',
   stripeClient = createAccountClosureStripeClient(),
   ledger = createAccountClosureLedger(),
+  alert = emitOperatorAlert,
 }) {
   if (!user?.id) throw new NotFoundError('User not found');
 
@@ -658,16 +660,35 @@ export async function closeUserAccount({
       failureProgress,
       receiptId,
     );
+    const ledgerStage = Boolean(error?.code?.startsWith('ACCOUNT_DELETE_LEDGER_'));
     await recordFailureAudit(prisma, {
       actorUserId,
       actorMode,
       user,
       receiptId,
-      stage: error?.code?.startsWith('ACCOUNT_DELETE_LEDGER_')
-        ? 'external_tombstone'
-        : 'billing_reconciliation',
+      stage: ledgerStage ? 'external_tombstone' : 'billing_reconciliation',
       error: wrapped,
     });
+    if (ledgerStage) {
+      // The failure audit lands in the SAME Postgres the ledger exists to be
+      // independent of, and nobody reads it unprompted. A failed tombstone
+      // write leaves an account the user asked to delete still present, so it
+      // has to reach a person. Awaited, but `alert` never throws.
+      await alert({
+        kind: LEDGER_WRITE_FAILURE,
+        severity: 'critical',
+        summary:
+          'An account deletion was stopped because the restore-independent deletion ledger could not be written. '
+          + 'The account still exists and the deletion is NOT recorded. Investigate the ledger service before retrying.',
+        details: {
+          receiptId,
+          code: error?.code || null,
+          actorMode,
+          checkoutSessionsExpired: failureProgress?.checkoutSessionsExpired?.length || 0,
+          subscriptionsCancelled: failureProgress?.subscriptionsCancelled?.length || 0,
+        },
+      });
+    }
     throw wrapped;
   }
 

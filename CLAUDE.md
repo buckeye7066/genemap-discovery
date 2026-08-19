@@ -56,6 +56,7 @@ Toolchain floor: Node >=24 + corepack/pnpm required (root `engines`) — Node 20
 | Stripe webhooks | `services/api/src/routes/billing.js` |
 | Rate-limit store | `services/api/src/config/rateLimitStore.js` — optional `REDIS_URL` (ioredis) backs it; in-memory otherwise |
 | Error monitoring | **None active.** `services/api/src/config/sentry.js` and `apps/web/lib/sentry.js` are deliberate no-op stubs (`initSentry()` returns `false`, `captureException()` is empty); neither imports `@sentry/*`, and `SENTRY_DSN` / `VITE_SENTRY_DSN` are read nowhere — setting them does nothing. `errorReporter` no longer exists. The only error path is `routes/clientError.js`, which accepts two enum values, logs them, and returns 204 without leaving the process. Verified 2026-08-19 at 3b492e5; regression-locked by `apps/web/lib/__tests__/clinicalPublishingBoundary.test.js:352-359`. |
+| Operator alerting | `services/api/src/services/operatorAlert.js` — structured `[operator-alert]` stderr record always, plus email to `ADMIN_EMAILS` via `services/email.js` (Resend). Never throws, carries no identifying data. Emitted on a failed account-deletion ledger write; reported by `/readyz` as `operatorAlert`. **Alerts must not be routed to the no-op Sentry stubs above.** |
 
 ## Nightly self-test sweep (agents v1)
 

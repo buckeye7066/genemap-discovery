@@ -16,12 +16,16 @@ import { after, before, describe, it } from 'node:test';
 
 import {
   MAX_CLOCK_SKEW_MS,
+  RETENTION_FLOOR_DAYS,
+  RETENTION_MARKER_EVENT,
   TombstoneStore,
   canonicalize,
   createServer,
+  parseRetentionDays,
   validateTombstone,
   verifyRequestSignature,
 } from '../server.mjs';
+import { captureAnchor, readAnchors, verifyAnchors } from '../anchor.mjs';
 import {
   accountClosureLedgerStatus,
   createAccountClosureLedger,
@@ -328,5 +332,211 @@ describe('closure ledger units', () => {
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+function tombstone(receiptId, hashChar = 'a') {
+  return {
+    version: 2,
+    event: 'account_deletion_authorized',
+    receiptId,
+    userIdHash: hashChar.repeat(64),
+    identityKeyId: '2026-08',
+  };
+}
+
+describe('retention and expiry', () => {
+  it('defaults to the six-year floor and refuses any configuration that SHORTENS it', () => {
+    assert.deepEqual(parseRetentionDays(undefined), { valid: true, days: RETENTION_FLOOR_DAYS, reason: null });
+    assert.deepEqual(parseRetentionDays(''), { valid: true, days: RETENTION_FLOOR_DAYS, reason: null });
+    // Lengthening is allowed; a deletion ledger may always keep proof longer.
+    assert.deepEqual(parseRetentionDays('4000'), { valid: true, days: 4000, reason: null });
+    assert.equal(parseRetentionDays(String(RETENTION_FLOOR_DAYS - 1)).valid, false);
+    assert.equal(parseRetentionDays(String(RETENTION_FLOOR_DAYS - 1)).reason, 'below_retention_floor');
+    assert.equal(parseRetentionDays('30').reason, 'below_retention_floor');
+    assert.equal(parseRetentionDays('0').reason, 'not_a_positive_integer');
+    assert.equal(parseRetentionDays('-1').reason, 'not_a_positive_integer');
+    assert.equal(parseRetentionDays('forever').reason, 'not_a_positive_integer');
+    assert.equal(parseRetentionDays('365.5').reason, 'not_a_positive_integer');
+  });
+
+  it('retires a tombstone past retention WITHOUT breaking the hash chain or losing the proof', () => {
+    const dir = tempDir();
+    try {
+      const store = new TombstoneStore(dir, { retentionDays: RETENTION_FLOOR_DAYS });
+      const record = store.append(tombstone('receipt-old'));
+      store.append(tombstone('receipt-new', 'b'));
+      assert.equal(store.verifyChain().valid, true);
+
+      // Nothing is due yet.
+      assert.deepEqual(store.expireDue(), []);
+      assert.equal(store.list().length, 2);
+
+      // Age the first record past retention by moving "now" forward.
+      const wayLater = Date.parse(record.recordedAt) + (RETENTION_FLOOR_DAYS + 1) * 24 * 60 * 60 * 1000;
+      // Only the first record is old enough at this instant? Both were written
+      // in the same millisecond band, so both retire — assert on the mechanism.
+      const retired = store.expireDue(wayLater);
+      assert.deepEqual(retired.sort(), ['receipt-new', 'receipt-old']);
+
+      // THE point of the control: expiry appends, never rewrites.
+      assert.equal(store.verifyChain().valid, true);
+      assert.equal(store.records.length, 4);
+      assert.equal(store.records[0].tombstone.receiptId, 'receipt-old');
+      assert.equal(store.records[2].retention.event, RETENTION_MARKER_EVENT);
+      assert.equal(store.records[2].retention.retentionDays, RETENTION_FLOOR_DAYS);
+
+      // The tombstone leaves the reconciliation projection but the proof that
+      // the deletion happened is still on disk and still chained.
+      assert.deepEqual(store.list(), []);
+      assert.equal(store.list({ includeExpired: true }).length, 2);
+      assert.equal(store.isExpired('receipt-old'), true);
+
+      // Idempotent: a second sweep does not append duplicate markers.
+      assert.deepEqual(store.expireDue(wayLater), []);
+      assert.equal(store.records.length, 4);
+
+      // A restart reads the markers back and reaches the same conclusion.
+      const reloaded = new TombstoneStore(dir, { retentionDays: RETENTION_FLOOR_DAYS });
+      assert.equal(reloaded.verifyChain().valid, true);
+      assert.equal(reloaded.records.length, 4);
+      assert.deepEqual(reloaded.list(), []);
+      assert.equal(reloaded.list({ includeExpired: true }).length, 2);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('still refuses to overwrite an EXPIRED receipt — retirement is not amnesia', () => {
+    const dir = tempDir();
+    try {
+      const store = new TombstoneStore(dir, { retentionDays: RETENTION_FLOOR_DAYS });
+      const record = store.append(tombstone('receipt-expired'));
+      store.expireDue(Date.parse(record.recordedAt) + (RETENTION_FLOOR_DAYS + 1) * 24 * 60 * 60 * 1000);
+      assert.equal(store.isExpired('receipt-expired'), true);
+      assert.notEqual(store.get('receipt-expired'), null);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('detects tampering of a retention marker just like a tombstone', () => {
+    const dir = tempDir();
+    try {
+      const store = new TombstoneStore(dir, { retentionDays: RETENTION_FLOOR_DAYS });
+      const record = store.append(tombstone('receipt-marker'));
+      store.expireDue(Date.parse(record.recordedAt) + (RETENTION_FLOOR_DAYS + 1) * 24 * 60 * 60 * 1000);
+      assert.equal(store.verifyChain().valid, true);
+      store.records[1].retention.receiptId = 'receipt-someone-else';
+      assert.deepEqual(store.verifyChain(), { valid: false, brokenAt: 2 });
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('off-platform anchoring', () => {
+  let dataDir;
+  let anchorFile;
+  let store;
+  let server;
+  let base;
+  let anchorUrl;
+
+  before(async () => {
+    dataDir = tempDir();
+    anchorFile = path.join(tempDir(), 'chain-anchors.jsonl');
+    store = new TombstoneStore(dataDir);
+    server = createServer({ secret: SECRET, store, log: {} });
+    base = await listen(server);
+    anchorUrl = `${base}/tombstones/anchor`;
+  });
+
+  after(async () => {
+    await new Promise((resolve) => server.close(resolve));
+    fs.rmSync(dataDir, { recursive: true, force: true });
+  });
+
+  it('refuses to serve the chain head to an unauthenticated caller', async () => {
+    const response = await fetch(anchorUrl);
+    assert.equal(response.status, 401);
+  });
+
+  it('captures a signed chain head that carries no tombstone content', async () => {
+    store.append(tombstone('anchor-1'));
+    store.append(tombstone('anchor-2', 'b'));
+
+    const anchor = await captureAnchor({ url: anchorUrl, secret: SECRET, file: anchorFile });
+    assert.equal(anchor.headSeq, 2);
+    assert.equal(anchor.headHash, store.lastHash);
+    assert.equal(anchor.tombstones, 2);
+    // An anchor is published in a public repo — it must never carry receipts.
+    assert.equal(JSON.stringify(anchor).includes('anchor-1'), false);
+    assert.equal(readAnchors(anchorFile).length, 1);
+  });
+
+  it('passes verification while history is only APPENDED to', async () => {
+    store.append(tombstone('anchor-3', 'c'));
+    const result = await verifyAnchors({ url: anchorUrl, secret: SECRET, file: anchorFile });
+    assert.equal(result.ok, true, JSON.stringify(result.problems));
+    assert.equal(result.checked, 1);
+    assert.equal(result.head.headSeq, 3);
+  });
+
+  it('DETECTS a rewrite that the ledger\'s own chain check would happily accept', async () => {
+    // Simulate an actor with control of the volume: drop record 1 and re-chain
+    // the rest so the log verifies perfectly against itself.
+    const rewritten = tempDir();
+    try {
+      const forged = new TombstoneStore(rewritten);
+      forged.append(tombstone('anchor-2', 'b'));
+      forged.append(tombstone('anchor-3', 'c'));
+      assert.equal(forged.verifyChain().valid, true, 'a rewritten log self-verifies — that is the whole hole');
+
+      const forgedServer = createServer({ secret: SECRET, store: forged, log: {} });
+      const forgedBase = await listen(forgedServer);
+      try {
+        const result = await verifyAnchors({
+          url: `${forgedBase}/tombstones/anchor`,
+          secret: SECRET,
+          file: anchorFile,
+        });
+        assert.equal(result.ok, false);
+        assert.match(result.problems.join('\n'), /rewritten/);
+      } finally {
+        await new Promise((resolve) => forgedServer.close(resolve));
+      }
+    } finally {
+      fs.rmSync(rewritten, { recursive: true, force: true });
+    }
+  });
+
+  it('DETECTS a truncated log by its head sequence going backwards', async () => {
+    const truncated = tempDir();
+    try {
+      const short = new TombstoneStore(truncated);
+      const shortServer = createServer({ secret: SECRET, store: short, log: {} });
+      const shortBase = await listen(shortServer);
+      try {
+        const result = await verifyAnchors({
+          url: `${shortBase}/tombstones/anchor`,
+          secret: SECRET,
+          file: anchorFile,
+        });
+        assert.equal(result.ok, false);
+        assert.match(result.problems.join('\n'), /truncated or replaced/);
+      } finally {
+        await new Promise((resolve) => shortServer.close(resolve));
+      }
+    } finally {
+      fs.rmSync(truncated, { recursive: true, force: true });
+    }
+  });
+
+  it('refuses an anchor response that is not authenticated by the transport secret', async () => {
+    await assert.rejects(
+      captureAnchor({ url: anchorUrl, secret: 'a-different-secret-of-at-least-thirty-two-chars', file: anchorFile }),
+      /HTTP 401/,
+    );
   });
 });

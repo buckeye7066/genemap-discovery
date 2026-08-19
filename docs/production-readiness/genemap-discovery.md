@@ -1,6 +1,6 @@
 # Axiom GeneMap Discovery: Production Readiness Record
 
-Executor: Cursor
+Executor: Cursor (ledger controls pass 2026-08-19: claude-code-gm-ledger)
 Repository: buckeye7066/genemap-discovery
 Verified default branch: main
 Release SHA under evidence: 3b492e5aae7a12ef4c35cf4a53e9821108b0f57b
@@ -305,11 +305,61 @@ fresh exact-receipt acknowledgements, signed fresh read responses, idempotency,
 refusal to overwrite an existing receipt, and append-only hash-chained storage
 the process refuses to start against when broken.
 
-Still open: retention policy and expiry, off-platform immutability (the chain is
-tamper-EVIDENT, not tamper-PROOF against someone who controls the volume),
-alerting on write failure, and a full quarantined-restore reconciliation drill
-run against an actually restored database. Key rotation is implemented and
-documented but has not been exercised in production.
+Evidenced 2026-08-19 (second ledger pass, this session):
+
+- **Retention policy and expiry.** Tombstones are retained 2192 days (6 years)
+  from `recordedAt`; `LEDGER_RETENTION_DAYS` can only lengthen that and a lower
+  or unparseable value makes the process refuse to boot. Expiry *appends* a
+  retention marker to the same chain and never rewrites or removes the original
+  record, so the chain still verifies and the proof of deletion survives; an
+  expired receipt still cannot be overwritten. Rationale in
+  `docs/DATA_RETENTION.md`. LIVE: `GET /healthz` on the deployed ledger returns
+  `{"status":"ok","records":1,"tombstoneCount":1,"expired":0,"retentionDays":2192}`.
+  Tests: 4 retention cases in `pnpm test:ledger`. Load-bearing proof — deleting
+  the floor check makes the suite fail 1/26 (exit 1); making expiry mutate the
+  record in place instead of appending makes it fail 2/26 (exit 1).
+- **Off-platform immutability — stated precisely.** The chain remains
+  tamper-EVIDENT, not tamper-PROOF; anyone controlling the volume can re-chain
+  it into a log that self-verifies. What is now in place is external anchoring:
+  `ops/closure-ledger/anchor.mjs` publishes the chain head into
+  `ops/closure-ledger/anchors/chain-anchors.jsonl` in this repository — a store
+  the ledger host cannot write to — and re-checks the live ledger's hash at every
+  previously published sequence before publishing a new one, so a rewrite is
+  externally DETECTABLE. `.github/workflows/ledger-anchor.yml` runs it daily and
+  on demand. LIVE: two anchors captured from production and verified against it
+  (`headSeq 1 / e0c8ecea…` then `headSeq 3 / c47d0d14…`); the seq-1 anchor still
+  matched after two further records were appended, which is the append-only
+  property observed rather than asserted. Tamper and truncation detection are
+  tested against a rewritten log that passes the ledger's OWN chain check;
+  removing the hash comparison makes the suite fail 1/26 (exit 1). This is NOT
+  immutability — WORM/object-lock storage is still absent.
+- **Alerting on write failure.** A failed ledger write now reaches a person:
+  `services/api/src/services/operatorAlert.js` always writes a structured
+  `[operator-alert]` record to stderr and emails `ADMIN_EMAILS` through the
+  repository's existing Resend sender. It never throws, so it cannot mask the
+  failure it reports, and it carries no identifying data. `GET /readyz` reports
+  `operatorAlert` so an unconfigured mailbox is visible rather than silent.
+  NOTE: `services/api/src/config/sentry.js` is an intentional NO-OP in this
+  publication build — routing alerts there would have silently dropped them.
+  Tests: 6 cases in `services/api/src/__tests__/operatorAlert.test.js`, including
+  that `closeUserAccount` emits on a ledger failure and does NOT emit on a
+  billing failure or on success; removing the emit fails 1/6 (exit 1).
+- **Key rotation exercised in production.** Rotated the `genemap-api` identity
+  key ring on 2026-08-19 to `2026-08-19-rot1` (new write key) with `2026-08`
+  retained read-only. LIVE on releaseSha 3b492e5: `GET /readyz` returns
+  `status: "ready"`, `degraded: false`, `currentIdentityKeyId:
+  "2026-08-19-rot1"`, `retiredIdentityKeyCount: 1`. A drill driven by the real
+  API client then confirmed a new write recorded under `2026-08-19-rot1`, a
+  signed read that still returns and authenticates retired-key-era tombstones
+  (including the pre-rotation `drill-2026-08-19-readiness-verification`, key id
+  `2026-08`), and `hashIdentityCandidates` resolving one subject against BOTH the
+  new-key and the retired-key tombstone. New secret backed up with the rotation
+  date to `G:\Backups\genemap-account-closure-ledger-secrets-2026-08-19.txt`.
+
+Still open: a full quarantined-restore reconciliation drill run against an
+actually restored database. This is the one ledger control that cannot be closed
+from the repository, because it requires restoring a production database backup
+into an isolated environment. See "Restore-reconciliation drill" below.
 
 ### Item 7 — fresh CI on the exact release SHA (CLOSED 2026-08-19)
 
@@ -374,10 +424,40 @@ push-triggered:
    `verify-production-launch.mjs` with zero failures. **OPEN** — a real file now
    exists locally with observed values only; exit code 1 with the failures
    itemized above. The template that feeds it has been de-fabricated.
-6. The ledger controls listed as still open above.
+6. The quarantined-restore reconciliation drill — the LAST remaining ledger
+   control. The other four (retention/expiry, off-platform anchoring,
+   write-failure alerting, exercised key rotation) were closed 2026-08-19;
+   see "Ledger controls: evidenced vs still open" above.
 7. ~~Fresh post-merge CI/review on the exact release SHA.~~ **DONE 2026-08-19** —
    6 workflows, 19/19 jobs green on 3b492e5; one non-gate scheduled workflow was
    found structurally broken and fixed.
+
+### Restore-reconciliation drill — what is actually needed
+
+This is genuinely blocked on something the repository cannot supply, so it is
+recorded here rather than faked.
+
+`scripts/reconcile-account-closure-ledger.mjs` exists and refuses to run without
+a quarantine acknowledgement and a reachable external ledger. What has never
+happened is running it against a REAL restored database. To do that requires,
+from the owner:
+
+1. a restore of an actual production Postgres backup into a throwaway database
+   that no production service points at — the drill is meaningless against a
+   synthetic database, because the failure it tests for is a restore
+   resurrecting rows the ledger says were deleted;
+2. that restored instance kept network-quarantined (no Stripe, no email, no
+   outbound integrations) for the duration, per `docs/BACKUP.md`;
+3. a `DATABASE_URL` for it plus the ledger transport secret and the full identity
+   key ring including every retired key, so tombstones written under `2026-08`
+   can still be matched;
+4. at least one tombstone in the ledger whose subject actually exists in that
+   restored snapshot — otherwise the run proves only that it found nothing.
+
+Point 1 is the blocker: no backup restore has been performed, and backup cadence,
+retention, and recoverability are themselves unevidenced (`docs/DATA_RETENTION.md`).
+Until an owner performs the restore, this control stays open. Do not record a
+synthetic-database run as satisfying it.
 
 ## Release decision
 

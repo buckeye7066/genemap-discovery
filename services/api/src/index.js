@@ -37,6 +37,7 @@ import {
   reconcilePendingCustomerCleanup,
 } from './services/accountClosure.js';
 import { accountClosureLedgerStatus } from './services/accountClosureLedger.js';
+import { operatorAlertStatus } from './services/operatorAlert.js';
 import {
   PUBLICATION_MODE,
   enforceHiddenPathBoundary,
@@ -206,6 +207,10 @@ fastify.get('/readyz', { config: { rateLimit: false } }, async (request, reply) 
     },
     medicalEncryption: env.hasMedicalEncryption(),
     accountClosureLedger: ledger,
+    // Reported, never degrading: an unconfigured mailbox still leaves the
+    // structured [operator-alert] stderr trail, so it is a visibility gap to
+    // close, not a reason to fail readiness.
+    operatorAlert: operatorAlertStatus(process.env),
     accountClosureCleanup,
     rateLimitStore: rateLimitStoreStatus(rateLimitRedis),
     rateLimitProtection,
