@@ -55,7 +55,7 @@ Toolchain floor: Node >=24 + corepack/pnpm required (root `engines`) — Node 20
 | Shared client | `packages/shared/src/client.ts` |
 | Stripe webhooks | `services/api/src/routes/billing.js` |
 | Rate-limit store | `services/api/src/config/rateLimitStore.js` — optional `REDIS_URL` (ioredis) backs it; in-memory otherwise |
-| Error monitoring | Sentry (`@sentry/node`, `services/api/src/config/sentry.js`) wired into `index.js` + `middleware/errorHandler.js` |
+| Error monitoring | **None active.** `services/api/src/config/sentry.js` and `apps/web/lib/sentry.js` are deliberate no-op stubs (`initSentry()` returns `false`, `captureException()` is empty); neither imports `@sentry/*`, and `SENTRY_DSN` / `VITE_SENTRY_DSN` are read nowhere — setting them does nothing. `errorReporter` no longer exists. The only error path is `routes/clientError.js`, which accepts two enum values, logs them, and returns 204 without leaving the process. Verified 2026-08-19 at 3b492e5; regression-locked by `apps/web/lib/__tests__/clinicalPublishingBoundary.test.js:352-359`. |
 
 ## Nightly self-test sweep (agents v1)
 

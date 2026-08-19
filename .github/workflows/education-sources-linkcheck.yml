@@ -22,8 +22,21 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v7.0.1
+      - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7.0.0
         with:
           node-version: '24'
+          cache: 'pnpm'
+      # The probe is NOT dependency-free: scripts/check-education-sources.mjs
+      # reads the catalog through services/api/src/config/educationCatalog.js,
+      # which imports the @genemap/shared workspace package. Without install +
+      # a shared build the job dies at module resolution with
+      # ERR_MODULE_NOT_FOUND before probing a single URL — so it reported
+      # "failure" while proving nothing about link health. It had been red that
+      # way since 2026-08-10; the 22 curated URLs were in fact all live.
+      - name: Install (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+      - name: Build shared package
+        run: pnpm --filter @genemap/shared build
       - name: Check every curated source URL is live
         run: node scripts/check-education-sources.mjs
