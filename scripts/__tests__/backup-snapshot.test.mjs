@@ -73,9 +73,27 @@ describe('backup snapshot fail-closed contract', { concurrency: false }, () => {
       const archive = created.find((file) => file.endsWith('.tar.gz'));
       assert.ok(archive, `expected a code-only tar.gz; created: ${created.join(', ')}`);
       assert.ok(created.includes(`${archive}.sha256`));
-      assert.equal(statSync(archive).mode & 0o777, 0o600);
+      // The 0600 contract is enforced by `chmod 600` in scripts/backup-snapshot.sh and
+      // asserted here on every POSIX host, including CI (ubuntu-latest).
+      // Windows has no POSIX mode bits: Node synthesizes st_mode from the read-only
+      // attribute alone, so statSync() reports 0o666 for ANY writable file and
+      // chmodSync(0o600) is a no-op. Asserting 0o600 there can only ever fail, which
+      // is what made this suite red on every Windows checkout. Assert the strongest
+      // claim the platform can actually express instead of dropping the check.
+      if (process.platform === 'win32') {
+        assert.ok((statSync(archive).mode & 0o777) !== 0, 'archive is not readable');
+      } else {
+        assert.equal(statSync(archive).mode & 0o777, 0o600);
+      }
 
-      const listing = execFileSync('tar', ['-tzf', archive], { encoding: 'utf8' });
+      // List by basename from inside backups/: GNU tar treats the "C:" in an absolute
+      // Windows path as a remote host spec ("Cannot connect to C: resolve failed"),
+      // so an absolute archive path can never be listed on Windows. A colon-free
+      // relative path is correct on every platform.
+      const listing = execFileSync('tar', ['-tzf', path.basename(archive)], {
+        cwd: path.dirname(archive),
+        encoding: 'utf8',
+      });
       assert.ok(!listing.includes(path.basename(sentinel)), 'untracked sentinel reached backup');
       assert.ok(listing.includes('backup-info.txt'));
     } finally {

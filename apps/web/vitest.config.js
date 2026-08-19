@@ -24,5 +24,13 @@ export default defineConfig({
     include: ['**/__tests__/**/*.{test,spec}.{js,jsx}', '**/*.{test,spec}.{js,jsx}'],
     // Playwright e2e specs (tests/e2e) use @playwright/test, not vitest.
     exclude: [...configDefaults.exclude, 'tests/e2e/**'],
+    // Component suites render whole React trees into a fresh jsdom per file and then
+    // drive them through waitFor/findBy. Vitest's 5s default test timeout and 10s
+    // default hook timeout are below what that costs under full parallelism, which
+    // made the publication suite flake ("Test timed out in 5000ms") on tests that
+    // pass in isolation. Match the API package's bounds so setup cost cannot be
+    // reported as an assertion failure — a genuine hang still fails.
+    testTimeout: 15000,
+    hookTimeout: 30000,
   },
 });
