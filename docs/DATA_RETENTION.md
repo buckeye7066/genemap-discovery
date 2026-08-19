@@ -36,18 +36,23 @@ The following are release blockers, not promises:
 - the permanent-account-closure path now has exact receipts and a bounded
   customer-cleanup retry worker, but the limited content-purge endpoint still
   has no durable retry worker or operator alert;
-- the external deletion-ledger protocol is implemented, but its production
-  operator, URLs, transport-secret custody, identity-key custody and rotation,
-  immutability, retention, alerting, signed write acknowledgements, and a
-  successful write/read/reconciliation drill are not yet evidenced;
+- the external deletion ledger is now deployed and configured (`ops/closure-ledger/`,
+  its own service and volume, never the application Postgres), and a live drill on
+  2026-08-19 evidenced the operator, both HTTPS URLs, transport-secret and
+  identity-key custody, authenticated writes, signed fresh exact-receipt
+  acknowledgements, signed fresh read responses, idempotent replay, and refusal to
+  overwrite an existing receipt. Still unevidenced: retention and expiry,
+  off-platform immutability (the hash chain is tamper-evident, not tamper-proof
+  against control of the volume), alerting on write failure, an exercised key
+  rotation, and a reconciliation drill against an actually restored database;
 - `ConsentRecord` and `DataDeletionRequest` currently cascade with `User`,
   so the schema does not support a claimed six-year evidence record after
   account deletion;
 - repository tooling now refuses a restore-reconciliation run without a
-  quarantine acknowledgement and an external ledger, but no current production
-  drill proves that the configured operator can write, read, authenticate, and
-  reconcile the exact release; restored service must remain quarantined until
-  that drill passes;
+  quarantine acknowledgement and an external ledger. The 2026-08-19 drill proved
+  the configured operator can write, read, and authenticate on the exact release,
+  but it did NOT reconcile against a restored database; restored service must
+  remain quarantined until that half of the drill passes;
 - backup cadence, automatic expiry, immutability, remote operator, key custody,
   recovery access, RPO/RTO, and a current restore drill are not evidenced;
 - provider retention, regions, deletion/export behavior, contracts, and
