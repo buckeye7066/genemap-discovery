@@ -332,22 +332,46 @@ deliberately a point-in-time operational artifact, not source. "It does not
 exist on main" was therefore never the right test; what matters is whether a
 real one can be filled and what it fails on.
 
-A real evidence file was created this session at
-`ops/production-launch-evidence.json` (git-ignored, so it stays local) with
-**only observed values**. Every field that could not be honestly observed was
-left `null` with a written reason, rather than filled to make the gate pass.
-
-Command run:
+**An owner-signed evidence file already exists locally** and was found late in
+this session at `ops/production-launch-evidence.json` in the working checkout —
+dated `2026-07-01`, `reviewedBy: "John White (GeneMap owner,
+buckeye7066@gmail.com)"`. It was not overwritten; it is the owner's own
+attestation and this lane has no business replacing it. **Running the verifier
+against that real file is the true answer to item 5**, and it is much closer to
+passing than a from-scratch file suggests.
 
 ```
 node scripts/verify-production-launch.mjs \
   --api-url=https://genemap-api-production.up.railway.app \
-  --web-url=https://genemap-discovery.vercel.app \
-  --evidence=<abs path>/ops/production-launch-evidence.json
+  --web-url=https://genemap-discovery.vercel.app
 ```
 
-**Real exit code: 1.** 16 PASS, 43 FAIL. The failures fall into three groups,
-and they are not equivalent:
+**Exit code 1. 41 PASS, 18 FAIL** — but 13 of the 18 are the workstation-env
+artifact described in (a) below, and the HTTP section is 5/5 green. Only **five**
+real evidence failures remain, and each is a concrete owner action:
+
+| Failing check | Why | What clears it |
+|---|---|---|
+| `evidence.reviewedAt` | timestamp is **49 days old**; must be ≤ 30 | owner re-signs with today's date |
+| `stripe.lastWebhookTestAt` | **50 days old**; must be ≤ 30 | send one test event from the Stripe dashboard, record the date |
+| `backups.lastSuccessfulBackupAt` | still the literal `CONFIRM — …` placeholder | read the latest Railway Postgres snapshot time (dashboard only, not in the CLI); must be within 2 days |
+| `backups.externalDeletionLedgerConfigured` | **the key is absent** — the file predates the ledger | add `"externalDeletionLedgerConfigured": true`. This one is now genuinely true: `/readyz` reports `accountClosureLedger.configured: true` |
+| `backups.deletionLedgerReconciledAt` | empty | blocked on item 6's quarantined-restore drill |
+
+So item 5 is **four owner actions plus item 6** away, not a rebuild. Three of
+the four are refreshing a timestamp; one is adding a key whose value production
+already proves.
+
+A separate demonstration file was also built during this session, in a scratch
+worktree, containing **only values observed here** with every unobservable field
+left `null` and a written reason. It was used to characterise which checks an
+agent can and cannot honestly satisfy (results in (c) below) and was discarded
+with the worktree; the owner's file is the one that matters.
+
+Against that **demonstration** file (not the owner's), the same command gave
+**exit code 1, 16 PASS / 43 FAIL**. That run is what characterises the three
+groups below — it deliberately asserts nothing an agent cannot see, so its
+failures map exactly onto "what a human must supply":
 
 **(a) Environment section — measures the workstation, not production.** The
 verifier calls `loadEnv(process.env)`, so run from a developer machine it
@@ -414,8 +438,13 @@ that are genuinely true of any GeneMap deployment (runbook path, policy-document
 path, webhook endpoint and its path shape, secret-manager name); every
 attestation now fails until a human consciously asserts it.
 
-**Remaining for item 5:** the owner (or a run inside the production runtime)
-must supply the group-(a) and group-(c) values above. This item stays OPEN.
+**Remaining for item 5**, against the owner's real file rather than the
+demonstration one: the four owner actions in the table above (re-sign
+`reviewedAt`, send and record a Stripe webhook test, read the Railway snapshot
+time into `lastSuccessfulBackupAt`, add `externalDeletionLedgerConfigured: true`),
+plus `deletionLedgerReconciledAt` once item 6's drill runs, plus one execution
+of the verifier **inside the Railway runtime** so the env third stops measuring
+a workstation. This item stays OPEN, but it is a short, concrete list.
 
 ### Item 6 — ledger controls (OPEN, owned by another lane)
 
@@ -571,8 +600,15 @@ push-triggered:
    `initSentry` import in `index.js` both refer to a local no-op stub. See
    item 4 above.
 5. Real `ops/production-launch-evidence.json` with no REPLACE placeholders, and
-   `verify-production-launch.mjs` with zero failures. **OPEN** — a real file now
-   exists locally with observed values only; exit code 1 with the failures
+   `verify-production-launch.mjs` with zero failures. **OPEN, but narrow.** An
+   owner-signed file dated 2026-07-01 already exists locally (the file is
+   git-ignored by design and cannot live on main). Against it the verifier
+   exits 1 with **41 PASS / 18 FAIL**, of which 13 are the workstation-env
+   artifact and the HTTP section is 5/5 green — leaving exactly five real
+   failures: two stale timestamps, one `CONFIRM` placeholder, one missing
+   `externalDeletionLedgerConfigured` key that production already proves true,
+   and `deletionLedgerReconciledAt` which waits on item 6. Earlier text below
+   describes a from-scratch demonstration file; exit code 1 with the failures
    itemized above. The template that feeds it has been de-fabricated.
 6. The quarantined-restore reconciliation drill — the LAST remaining ledger
    control. The other four (retention/expiry, off-platform anchoring,
