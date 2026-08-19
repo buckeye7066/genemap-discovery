@@ -134,10 +134,49 @@ previously noted `/deployment-version.json` 500 is not a GeneMap contract and is
 not evidence either way. The API tier does self-report: `/healthz` and `/readyz`
 both returned `releaseSha: 3b492e5aae7a12ef4c35cf4a53e9821108b0f57b`.
 
-### Item 3 — authenticated production journey (OPEN — owner input required)
+### Item 3 — authenticated production journey (API tier EVIDENCED; web tier still blocked)
 
-Diagnosed this session. **No authorized authenticated production path exists
-today, and none can be created without the owner.** What was checked:
+**Status changed 2026-08-19.** The ledger-controls lane obtained owner-supplied
+credentials and ran an authenticated journey against the live **API** on
+releaseSha `3b492e5aae7a12ef4c35cf4a53e9821108b0f57b`. Reported by that lane:
+`POST /auth/login` 200 as `super_admin` with httpOnly cookies, `GET /auth/me`
+200, `GET /auth/me` with no cookie 401, `GET /genomics/gene/BRCA1` 200 returning
+real Ensembl data, the same endpoint unauthenticated 401, and `/readyz`
+reporting that exact releaseSha with `status: ready`, `degraded: false`. Also
+noted there: `POST /auth/logout` returns 403 without an `x-csrf-token` because
+`index.js` registers `requireCsrf` as a global preHandler — correct behaviour,
+not a defect.
+
+**Attribution, kept honest.** This record's author did not observe the
+authenticated half; those steps required credentials this lane does not hold and
+are recorded **as reported by the ledger-controls lane**, not as independently
+verified. What this lane *did* verify directly, needing no credentials, against
+the live API at main `abf2e47`:
+
+| Probe | Result |
+|---|---|
+| `GET /auth/me` with no cookie | HTTP **401** |
+| `GET /genomics/gene/BRCA1` unauthenticated | HTTP **401** `{"error":"Authentication required"}` |
+| `GET /genomics/variant/search?q=BRCA1` | HTTP **404** `FEATURE_NOT_AVAILABLE`, `publicationMode: education_research` |
+| `GET /readyz` | HTTP 200, `status: ready`, `degraded: false` |
+
+Those independently confirm the auth gate is real, the publication boundary is
+live in production, and — corroborating the register — that
+`GET /genomics/gene/:symbol` is genuinely mounted and merely auth-gated rather
+than disabled.
+
+**Why this item is not fully closed.** The gate asks for an authenticated
+*production journey*. An API-level journey is real evidence and the strongest
+available today, but it is not a user completing a task in the product: it
+exercises no routing, no `DemographicCheck` redirect, no rendering, no client
+session handling. The browser half cannot be run at all right now because
+`https://genemap-discovery.vercel.app` returns HTTP 402 (see the CORRECTION at
+the top of this file). **Remaining for item 3: clear the Vercel block, then run
+the same identity through the web app end to end.**
+
+The diagnosis below stands as the map of what automation exists and what the
+owner would still need to supply to make that browser journey repeatable in CI
+rather than a one-off manual run:
 
 - **EVA.** There is no EVA config in this repo. The manifest lives at
   `C:\Users\firer\GrantFlow\qa\manifests\genemap-discovery.json` and is
@@ -475,11 +514,21 @@ push-triggered:
    alias. **But a new blocker was found doing it: the Vercel account is blocked
    for new deployments**, so this equality will break at the next merge. See
    item 2 above — owner action.
-3. Owner-authorized authenticated production journey on that SHA. **OPEN —
-   blocked on the four owner inputs listed under item 3.**
+3. Owner-authorized authenticated production journey on that SHA. **API tier
+   EVIDENCED 2026-08-19** with owner-supplied credentials (login, `/auth/me`,
+   an authenticated Ensembl-backed gene read, and their unauthenticated 401
+   counterparts). **Web tier still OPEN** — the browser journey cannot be run
+   while `genemap-discovery.vercel.app` returns 402. See item 3 above.
 4. Completed processor/privacy register in `docs/PROCESSOR_REGISTER.md`.
-   **The register is now factually COMPLETE; the owner's sign-off is not.**
-   See item 4 above.
+   **The register is factually COMPLETE and re-derived at main `abf2e47`; the
+   owner's sign-off is not.** Delta since the first pass: **Resend is now an
+   ACTIVE processor** (operator alerting to `ADMIN_EMAILS` via
+   `services/operatorAlert.js`, confirmed live by `/readyz`
+   `operatorAlert.configured: true`), so its DPA/owner/retention items moved
+   from "before activation" to due now. Sentry remains genuinely inert and must
+   **not** be listed as a processor — the installed `@sentry/*` packages and the
+   `initSentry` import in `index.js` both refer to a local no-op stub. See
+   item 4 above.
 5. Real `ops/production-launch-evidence.json` with no REPLACE placeholders, and
    `verify-production-launch.mjs` with zero failures. **OPEN** — a real file now
    exists locally with observed values only; exit code 1 with the failures
