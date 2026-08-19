@@ -1,52 +1,49 @@
 {
+  "_howToUse": "Copy to ops/production-launch-evidence.json (git-ignored) and fill it in. EVERY boolean starts false and every attested field starts REPLACE ON PURPOSE: this file is a record of what a human OBSERVED, and a template that ships pre-attested values turns the launch gate into a rubber stamp. Flip a boolean to true only after you have personally checked that specific thing in the specific console or run that proves it. If you cannot check something, leave it false and let the verifier fail on it — a failing gate you understand is worth more than a passing gate built on values nobody verified.",
+
   "reviewedBy": "REPLACE — name of the person signing off on launch",
   "reviewedAt": "REPLACE — ISO date of sign-off, e.g. 2026-07-01T00:00:00Z",
   "productionSecrets": {
-    "storedInSecretManager": true,
-    "rotatedForLaunch": true,
+    "storedInSecretManager": false,
+    "rotatedForLaunch": false,
     "manager": "Railway (API) + Vercel (web) environment variables"
   },
   "backups": {
-    "automaticBackupsEnabled": true,
-    "retentionDays": 7,
+    "automaticBackupsEnabled": false,
+    "retentionDays": 0,
     "lastSuccessfulBackupAt": "REPLACE — ISO date of most recent automated backup",
-    "restoreTestedAt": "2026-06-30T00:00:00Z",
+    "restoreTestedAt": "REPLACE — ISO date of the most recent completed restore drill (docs/BACKUP.md)",
     "restoreRunbook": "docs/BACKUP.md",
     "externalDeletionLedgerConfigured": false,
     "deletionLedgerReconciledAt": "REPLACE — ISO date of the most recent zero-blocker quarantined ledger reconciliation"
   },
   "monitoring": {
-    "errorTrackingConfigured": true,
-    "logAggregationConfigured": true,
-    "alertingConfigured": true,
+    "errorTrackingConfigured": false,
+    "logAggregationConfigured": false,
+    "alertingConfigured": false,
     "dashboardUrl": "https://railway.app/project/REPLACE",
-    "pagerEscalation": "Owner error-report emails to dr.johnwhite@axiombiolabs.org (see services/api errorReporter); optional Sentry via SENTRY_DSN"
+    "pagerEscalation": "REPLACE — the actual on-call/escalation path for a production incident"
   },
   "stripe": {
-    "liveMode": true,
+    "liveMode": false,
     "webhookEndpoint": "https://genemap-api-production.up.railway.app/billing/webhook",
     "webhookEvents": [
-      "checkout.session.completed",
-      "customer.subscription.created",
-      "customer.subscription.updated",
-      "customer.subscription.deleted",
-      "invoice.payment_succeeded",
-      "invoice.payment_failed"
+      "REPLACE — list the events actually enabled on the Stripe webhook endpoint, read from the Stripe dashboard. Do not copy this list from the events the code happens to handle."
     ],
     "lastWebhookTestAt": "REPLACE — ISO date you last sent a test event from the Stripe dashboard"
   },
   "dataRetention": {
-    "policyApproved": true,
+    "policyApproved": false,
     "policyDocument": "docs/DATA_RETENTION.md",
-    "deletionRequestSlaDays": 30,
-    "backupRetentionDays": 7
+    "deletionRequestSlaDays": 0,
+    "backupRetentionDays": 0
   },
   "legalCompliance": {
-    "legalReviewCompleted": true,
-    "complianceReviewCompleted": true,
+    "legalReviewCompleted": false,
+    "complianceReviewCompleted": false,
     "reviewer": "REPLACE — reviewing attorney / compliance owner",
     "reviewedAt": "REPLACE — ISO date of legal/compliance review",
-    "medicalDisclaimerApproved": true,
-    "baaStatus": "not_required"
+    "medicalDisclaimerApproved": false,
+    "baaStatus": "REPLACE — \"signed\" or \"not_required\"; not_required is the consumer-education posture, change it if GeneMap is offered to a covered entity"
   }
 }

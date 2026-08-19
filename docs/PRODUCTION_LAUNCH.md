@@ -106,9 +106,14 @@ Copy the example evidence file and fill it with production facts. The filled
 file is ignored by git because it can contain internal operational details.
 
 ```bash
-mkdir -p ops
-cp docs/production-launch-evidence.example.json ops/production-launch-evidence.json
+cp ops/production-launch-evidence.example.json ops/production-launch-evidence.json
 ```
+
+Every boolean in the template is `false` and every attested field says
+`REPLACE` deliberately. Flip a value only after you have personally observed the
+thing it asserts, in the console or run that proves it. Leaving a value
+unverified so the gate fails is the correct outcome; a green gate assembled from
+values nobody checked is the exact failure this file exists to prevent.
 
 Do not include secrets in the evidence file. It should contain proof that the
 secrets exist in the right systems, not the secret values themselves.

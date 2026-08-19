@@ -140,7 +140,7 @@ pnpm launch:verify -- \
   --web-url=https://yourdomain.com \
   --evidence=ops/production-launch-evidence.json
 ```
-- [ ] `ops/production-launch-evidence.json` completed from `docs/production-launch-evidence.example.json`
+- [ ] `ops/production-launch-evidence.json` completed from `ops/production-launch-evidence.example.json`, with every value personally observed rather than copied
 - [ ] Production secrets stored in Railway/Vercel/secret manager and rotated for launch
 - [ ] `/healthz` and `/readyz` pass against production, with `medicalEncryption=true`
 - [ ] Stripe live webhook endpoint and required events verified
