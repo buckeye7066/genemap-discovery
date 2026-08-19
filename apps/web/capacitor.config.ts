@@ -13,6 +13,15 @@ const config: CapacitorConfig = {
     preferredContentMode: 'mobile',
   },
   plugins: {
+    // Manual OTA web-bundle updates only, driven by the Settings "App Updates"
+    // card and the launch/resume checker. No Capgo cloud service: autoUpdate
+    // is off and the stats/update endpoints are cleared, so the plugin never
+    // talks to anything but our own pinned feed.
+    CapacitorUpdater: {
+      autoUpdate: false,
+      statsUrl: '',
+      updateUrl: '',
+    },
     SplashScreen: {
       launchShowDuration: 2000,
       launchAutoHide: true,

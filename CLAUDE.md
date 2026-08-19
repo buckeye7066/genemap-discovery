@@ -69,6 +69,46 @@ Toolchain floor: Node >=24 + corepack/pnpm required (root `engines`) — Node 20
 - Flags: `--no-push` (autofix branch stays local), `--no-servers` (never spawn servers), `--skip-e2e`.
 - Trap: probe dev servers via host `localhost`, not `127.0.0.1` — Vite binds only `::1` on this box.
 
+## Mobile OTA updates (Android + iOS)
+
+The installed app can pull the latest production web bundle without a store
+release, and tells the user when one is available.
+
+- **Publish:** `scripts/build-mobile-bundle.mjs` zips `apps/web/dist` to
+  `dist/mobile/bundle-<version>.zip` and writes `dist/mobile/latest.json`
+  (`version`, absolute `url`, **`sha256`**, `minNativeVersion`, `notes`,
+  `builtAt`). It is chained onto the DEPLOY build only — `vercel.json`'s
+  `buildCommand` and `pnpm build:web:deploy` — never onto
+  `pnpm --filter @genemap/web build`, because the native builds run that before
+  `cap sync` and CI (`ci.yml` android-build-smoke) rejects `assets/public/mobile/`
+  or any `.zip` inside the APK. Merge to main -> Vercel builds main -> feed live at
+  `https://genemap-discovery.vercel.app/mobile/latest.json`.
+- **Consume:** `apps/web/lib/mobileUpdater.js` (pure, unit-tested) +
+  `components/settings/MobileUpdateCard.jsx` (Account Settings) +
+  `components/MobileUpdatePrompt.jsx` (in-app banner).
+- **Integrity, fail CLOSED:** a manifest without a valid 64-hex `sha256` is
+  rejected before any download; the checksum is passed to
+  `@capgo/capacitor-updater`'s `download()` (which hashes the file and throws on
+  mismatch) AND re-compared against `BundleInfo.checksum` afterwards. A mismatch
+  deletes the bundle and refuses to apply it. Nothing calls `set()` on unverified
+  bytes. This is what sermonsmith PR #96 removed an updater for; do not weaken it.
+- **Notify:** `lib/mobileUpdateNotifier.js` checks on launch and on
+  resume (`visibilitychange`, so no extra plugin), raises ONE
+  `@capacitor/local-notifications` notice per published version, and dispatches
+  `genemap:mobile-update-available` for the in-app banner. A denied notification
+  permission is silent and never blocks the in-app path.
+- **Native floor:** `minNativeVersion` (ANDROID_VERSION_NAME lineage, default
+  `1.0`) — bump it via `MOBILE_MIN_NATIVE_VERSION` in the same commit as anything
+  needing a new native build. Below the floor the UI says "a new app version is
+  required" and links to signed releases instead of offering a web update.
+- **Traps:** the Capacitor plugin handle is a Proxy that answers `then`, so
+  returning it bare from an `async` function makes the runtime call
+  `CapacitorUpdater.then()` (UNIMPLEMENTED) — `lib/capacitorUpdaterPlugin.js`
+  returns it wrapped, and is also the seam tests mock. The Capacitor CLI on
+  Windows writes BACKSLASH paths into `ios/App/CapApp-SPM/Package.swift`; they
+  must be forward slashes or the macOS build breaks. iOS cannot be built or
+  signed from Windows — that needs a Mac plus an Apple Developer account.
+
 ## Gotchas
 
 - Base44 Deno functions have been removed from the active tree.

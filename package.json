@@ -15,6 +15,8 @@
     "build": "corepack pnpm -r build",
     "build:api": "corepack pnpm --filter @genemap/api build",
     "build:web": "corepack pnpm --filter @genemap/web build",
+    "build:mobile-bundle": "node scripts/build-mobile-bundle.mjs",
+    "build:web:deploy": "corepack pnpm --filter @genemap/shared build && corepack pnpm --filter @genemap/web build && node scripts/build-mobile-bundle.mjs",
     "dev:desktop": "corepack pnpm --filter @genemap/desktop dev",
     "build:desktop": "corepack pnpm build:web && corepack pnpm --filter @genemap/desktop build",
     "build:desktop:win": "corepack pnpm build:web && corepack pnpm --filter @genemap/desktop build:win",
@@ -35,7 +37,7 @@
     "db:migrate": "corepack pnpm --filter @genemap/api db:migrate",
     "db:migrate:deploy": "corepack pnpm --filter @genemap/api db:migrate:deploy",
     "db:studio": "corepack pnpm --filter @genemap/api db:studio",
-    "test:backup": "node --test scripts/__tests__/backup-snapshot.test.mjs scripts/__tests__/monitor-railway-deployment.test.mjs scripts/__tests__/publish-android-release.test.mjs",
+    "test:backup": "node --test scripts/__tests__/backup-snapshot.test.mjs scripts/__tests__/monitor-railway-deployment.test.mjs scripts/__tests__/publish-android-release.test.mjs scripts/__tests__/build-mobile-bundle.test.mjs",
     "test:ledger": "node --test ops/closure-ledger/__tests__/closure-ledger.test.mjs"
   },
   "pnpm": {
@@ -86,6 +88,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",
+    "adm-zip": "^0.6.0",
     "eslint": "^9.39.5",
     "eslint-plugin-react": "^7.37.4",
     "eslint-plugin-react-hooks": "^5.0.0",

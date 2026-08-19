@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/sidebar";
 import { Badge } from "@/components/ui/badge";
 import MobileOptimization from "./components/MobileOptimization";
+import MobileUpdatePrompt from "./components/MobileUpdatePrompt";
 import { useEducationLevel, EDUCATION_LEVELS } from "./lib/EducationLevelContext";
 import { useAuth } from "./lib/AuthContext";
 import { isAdminUser, isSuperAdmin } from "./lib/roles";
@@ -300,10 +301,12 @@ export default function Layout({ children, currentPageName }) {
           </header>
 
           <div className="flex-1 overflow-auto min-h-0">
+            <MobileUpdatePrompt />
+
             <div className="block sm:hidden p-4">
               <MobileOptimization />
             </div>
-            
+
             {children}
 
             <footer className="border-t border-slate-200/70 mt-8 py-4 px-6 text-xs text-slate-400 flex flex-wrap items-center justify-center gap-x-4 gap-y-1">

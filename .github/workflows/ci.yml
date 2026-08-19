@@ -152,8 +152,12 @@ jobs:
           retention-days: 7
 
   android-build-smoke:
-    # PR/push-safe native packaging proof: no signing credentials and no
-    # runtime web-bundle updater. The unset version env exercises local defaults.
+    # PR/push-safe native packaging proof: no signing credentials, and the OTA
+    # update FEED is never baked into the package. The app can fetch a verified
+    # web bundle at runtime (apps/web/lib/mobileUpdater.js), but the feed and
+    # its zips are a deploy artifact published by scripts/build-mobile-bundle.mjs
+    # into the Vercel output — the archive-reject check below keeps them out of
+    # the APK. The unset version env exercises local defaults.
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
