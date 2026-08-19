@@ -2,7 +2,7 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "vite",
   "installCommand": "pnpm install --frozen-lockfile",
-  "buildCommand": "pnpm --filter @genemap/shared build && pnpm --filter @genemap/web build",
+  "buildCommand": "pnpm --filter @genemap/shared build && pnpm --filter @genemap/web build && node scripts/build-mobile-bundle.mjs",
   "outputDirectory": "apps/web/dist",
   "rewrites": [
     {
