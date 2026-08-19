@@ -29,13 +29,14 @@
     "audit": "node scripts/verify-security-exceptions.mjs && corepack pnpm audit --audit-level=low",
     "launch:verify": "node scripts/verify-production-launch.mjs",
     "launch:verify:selftest": "node scripts/verify-production-launch.mjs --self-test",
-    "release:check": "corepack pnpm install --frozen-lockfile && corepack pnpm lint && corepack pnpm typecheck && corepack pnpm test && corepack pnpm test:backup && corepack pnpm launch:verify:selftest && corepack pnpm --filter @genemap/shared build && corepack pnpm build:web && node scripts/verify-publication-bundle.mjs && corepack pnpm run audit",
+    "release:check": "corepack pnpm install --frozen-lockfile && corepack pnpm lint && corepack pnpm typecheck && corepack pnpm test && corepack pnpm test:backup && corepack pnpm test:ledger && corepack pnpm launch:verify:selftest && corepack pnpm --filter @genemap/shared build && corepack pnpm build:web && node scripts/verify-publication-bundle.mjs && corepack pnpm run audit",
     "db:generate": "corepack pnpm --filter @genemap/api db:generate",
     "db:push": "corepack pnpm --filter @genemap/api db:push",
     "db:migrate": "corepack pnpm --filter @genemap/api db:migrate",
     "db:migrate:deploy": "corepack pnpm --filter @genemap/api db:migrate:deploy",
     "db:studio": "corepack pnpm --filter @genemap/api db:studio",
-    "test:backup": "node --test scripts/__tests__/backup-snapshot.test.mjs scripts/__tests__/monitor-railway-deployment.test.mjs scripts/__tests__/publish-android-release.test.mjs"
+    "test:backup": "node --test scripts/__tests__/backup-snapshot.test.mjs scripts/__tests__/monitor-railway-deployment.test.mjs scripts/__tests__/publish-android-release.test.mjs",
+    "test:ledger": "node --test ops/closure-ledger/__tests__/closure-ledger.test.mjs"
   },
   "pnpm": {
     "auditConfig": {
