@@ -64,6 +64,28 @@ held by that exact deployment with no alias error, and
 `GET https://genemap-discovery.vercel.app/` returned HTTP 200
 `text/html; charset=utf-8`. Nothing was redeployed to reach this state.
 
+**New blocker found while proving this — the Vercel account cannot deploy.**
+The `Vercel` check on PR #163 reported **`fail — "Account is blocked."`**,
+linking to `vercel.com/knowledge/why-is-my-account-deployment-blocked`.
+Corroborated: `list_deployments` for the project returns **zero** deployments
+created after `1787142700000` (2026-08-19 ~12:31Z), even though a branch was
+pushed at ~13:2xZ — Vercel accepted the webhook and refused to build.
+
+What this does and does not mean:
+
+- It does **not** invalidate item 2. The deployment serving production is still
+  `dpl_G1uPgw4NaqrHPtwH4hWBRn9jwsac` at 3b492e5, `get_project` confirms it as
+  `latestDeployment` with `readyState: READY, target: production`, and
+  `GET https://genemap-discovery.vercel.app/` still returned HTTP 200 HTML.
+  The web tier is up and is on the release SHA.
+- It does mean **the next merge to `main` will not reach the web tier.** The
+  API redeploys via Railway; the web will silently stay on 3b492e5 while `main`
+  moves. That is exactly the "exact SHA" property item 2 exists to guarantee, so
+  it must be cleared before any further web-affecting release.
+- **Owner action required.** Unblocking a Vercel account is a billing/account
+  matter on the owner's Vercel account; no agent can clear it. Until it is
+  cleared, treat any post-3b492e5 web claim as unproven.
+
 Recorded limitation: the web bundle embeds no self-reported commit SHA (no
 `VITE_COMMIT_SHA` / `releaseSha` anywhere in `apps/web`), so the Vercel
 deployment record is the only available exact-SHA proof for the web tier. The
@@ -340,7 +362,9 @@ push-triggered:
 2. ~~Exact-SHA Vercel web proof for current main.~~ **DONE 2026-08-19** —
    production deployment `dpl_G1uPgw4NaqrHPtwH4hWBRn9jwsac` carries
    `githubCommitSha 3b492e5`, equal to `origin/main`, and holds the production
-   alias.
+   alias. **But a new blocker was found doing it: the Vercel account is blocked
+   for new deployments**, so this equality will break at the next merge. See
+   item 2 above — owner action.
 3. Owner-authorized authenticated production journey on that SHA. **OPEN —
    blocked on the four owner inputs listed under item 3.**
 4. Completed processor/privacy register in `docs/PROCESSOR_REGISTER.md`.
@@ -359,7 +383,9 @@ push-triggered:
 
 Current decision: **BLOCKED**.
 
-Blocked on items 3, 4 (owner sign-off), 5 and 6. Items 1, 2 and 7 are evidenced.
+Blocked on items 3, 4 (owner sign-off), 5 and 6, plus one new blocker: **the
+Vercel account is blocked for new deployments**, so the web tier will fall
+behind `main` at the next merge. Items 1, 2 and 7 are evidenced as of 3b492e5.
 Item 3 and the sign-off half of item 4 are owner actions; item 5's remaining
 failures are owner/console facts plus one check that can only be run truthfully
 inside the production runtime; item 6 belongs to the ledger-controls lane.
