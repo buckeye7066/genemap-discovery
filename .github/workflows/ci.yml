@@ -80,6 +80,11 @@ jobs:
         run: pnpm test:api
       - name: Shared tests (vitest)
         run: pnpm test:shared
+      - name: Account-closure ledger contract tests (node:test)
+        # Drives the real API ledger client against the real ops/closure-ledger
+        # server, so a change to either side's HMAC/idempotency contract fails
+        # here instead of in production account deletion.
+        run: pnpm test:ledger
 
   api-integration-postgres:
     runs-on: ubuntu-latest
