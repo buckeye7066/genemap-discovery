@@ -4,9 +4,11 @@ import { createPrismaMock } from './setup.js';
 import { closeUserAccount } from '../services/accountClosure.js';
 import {
   LEDGER_WRITE_FAILURE,
+  REDACTED,
   emitOperatorAlert,
   operatorAlertRecipients,
   operatorAlertStatus,
+  redactDetails,
 } from '../services/operatorAlert.js';
 
 const ENV = {
@@ -198,5 +200,72 @@ describe('account closure ledger write failure alerting', () => {
       alert: alert2,
     })).rejects.toBeTruthy();
     expect(alert2).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Redaction is ENFORCED, not a caller convention (2026-08-19).
+// This path hands data to an EXTERNAL PROCESSOR (Resend). The alerts most
+// likely to be added next are about account deletion, so "callers must pass
+// only non-identifying details" living in a comment is not a control.
+// ---------------------------------------------------------------------------
+describe('operator alert redaction', () => {
+  it('redacts identifying keys and email-shaped values', () => {
+    const out = redactDetails({
+      receiptId: 'r-123',
+      code: 'ECONNRESET',
+      actorMode: 'self_service',
+      checkoutSessionsExpired: 2,
+      email: 'someone@example.com',
+      userId: 'u-9',
+      nested: { contactEmail: 'a@b.co', stage: 'ledger_write' },
+      note: 'contact jane.doe@genemap.org for details',
+    });
+    // Operational fields survive — an over-eager redactor makes alerts useless.
+    expect(out.receiptId).toBe('r-123');
+    expect(out.code).toBe('ECONNRESET');
+    expect(out.actorMode).toBe('self_service');
+    expect(out.checkoutSessionsExpired).toBe(2);
+    expect(out.nested.stage).toBe('ledger_write');
+    // Identifying material does not.
+    expect(out.email).toBe(REDACTED);
+    expect(out.userId).toBe(REDACTED);
+    expect(out.nested.contactEmail).toBe(REDACTED);
+    expect(out.note).toBe(REDACTED); // email inside free text
+  });
+
+  it('never mails an address even when a caller passes one', async () => {
+    let sent = null;
+    await emitOperatorAlert(
+      {
+        kind: 'test_alert',
+        summary: 'deletion failed for patient@hospital.org',
+        details: { userEmail: 'leak@example.com', receiptId: 'r-1' },
+      },
+      {
+        env: { ADMIN_EMAILS: 'ops@example.com', RESEND_API_KEY: 'k' },
+        sendEmail: async (m) => { sent = m; return { ok: true }; },
+        logger: { error() {} },
+      },
+    );
+    expect(sent).not.toBeNull();
+    // The BODY is what reaches the processor. Redacting only the log line
+    // would be a correction nothing consumes.
+    expect(sent.text).not.toMatch(/leak@example\.com/);
+    expect(sent.text).not.toMatch(/patient@hospital\.org/);
+    expect(sent.text).toMatch(/r-1/); // operational detail still present
+  });
+
+  it('logs the redacted record, not the raw one', async () => {
+    const lines = [];
+    await emitOperatorAlert(
+      { kind: 'k', details: { email: 'x@y.zz' } },
+      {
+        env: {},
+        sendEmail: async () => ({ ok: true }),
+        logger: { error: (l) => lines.push(String(l)) },
+      },
+    );
+    expect(lines.join('\n')).not.toMatch(/x@y\.zz/);
   });
 });

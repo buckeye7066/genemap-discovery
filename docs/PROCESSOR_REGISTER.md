@@ -84,11 +84,21 @@ or `invokeLLM`. Wired into `pnpm release:check`.
 `emitOperatorAlert`'s "non-identifying only" guarantee is a **caller contract in
 a docstring** (`operatorAlert.js:20-21`: *"Callers must pass only
 non-identifying details — receipt ids, error codes, stage names, release SHAs.
-Never an email address, name, or user content."*), not something the function
-enforces. `details` is passed straight through and `JSON.stringify`-ed into the
-email body at `:86`. Today's single caller complies. A future caller that passes
-a user object would export it to Resend with nothing stopping it. If this path
-grows more callers, the contract should become a runtime allowlist or a test.
+Never an email address, name, or user content."*). **CLOSED 2026-08-19: it is now
+ENFORCED at the choke point, not left to caller discipline.** `redactDetails()`
+in `operatorAlert.js` redacts by key name (`email`/`name`/`phone`/`address`/
+`user`/`userId`/`subject`/`patient`/… ) and by value shape (any email-shaped
+string, at any depth, whatever the key is called), and the REDACTED copy is what
+reaches both the stderr record and the outbound email body — the raw `details`
+and raw `summary` are no longer read on the send path. Operational fields
+(`receiptId`, `code`, `actorMode`, counts, stage names) are deliberately
+preserved, because an over-eager redactor makes alerts useless and pushes authors
+back toward passing raw objects. A DENY rule was chosen over an allow-list for
+the same reason. Today's single caller already complied; the control exists for
+the next one. Guard tests: `services/api/src/__tests__/operatorAlert.test.js`
+("operator alert redaction", 3 cases) — mutation-verified: bypassing the
+redaction call fails 2 of them, including the one asserting the MAILED BODY
+carries no address.
 
 ### Removed since the previous review
 

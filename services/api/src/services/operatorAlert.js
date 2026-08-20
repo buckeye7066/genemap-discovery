@@ -19,11 +19,45 @@
  *
  * Callers must pass only non-identifying details — receipt ids, error codes,
  * stage names, release SHAs. Never an email address, name, or user content.
+ * That rule is ENFORCED here by `redactDetails`, not left to caller discipline:
+ * this path hands data to an EXTERNAL PROCESSOR (Resend), the alerts most
+ * likely to be written next are about account deletion, and a convention that
+ * lives in a comment is exactly the shape this repository's INVARIANTS
+ * doctrine says to move to a choke point.
  */
 import { sendEmail as defaultSendEmail } from './email.js';
 import { releaseSha } from '../config/releaseIdentity.js';
 
 export const LEDGER_WRITE_FAILURE = 'account_closure_ledger_write_failed';
+
+/** Keys whose VALUE is identifying by name, whatever it happens to contain. */
+const IDENTIFYING_KEY = /(^|[._-])(email|e_?mail|name|phone|address|ssn|dob|birth|subject|patient|username|user|user_?id|userid|account_?id)([._-]|$)/i;
+/** An email address anywhere inside a value, whatever the key is called. */
+const EMAIL_IN_VALUE = /[^\s@]+@[^\s@]+\.[^\s@]+/;
+export const REDACTED = '[redacted]';
+
+/**
+ * Strip identifying material from an alert's details before it leaves the
+ * platform. Conservative and SHALLOW-RECURSIVE: it redacts by key name and by
+ * value shape, keeps operational fields (receiptId, code, counts, stage names)
+ * untouched, and never throws — an alert must not become a second failure.
+ *
+ * Deliberately a DENY rule, not an allow-list: an allow-list silently drops the
+ * operational detail a new alert adds, which would make future alerts less
+ * useful and push authors back toward passing raw objects.
+ */
+export function redactDetails(value, depth = 0) {
+  if (depth > 4) return REDACTED;
+  if (value === null || value === undefined) return value;
+  if (Array.isArray(value)) return value.map((v) => redactDetails(v, depth + 1));
+  if (typeof value === 'string') return EMAIL_IN_VALUE.test(value) ? REDACTED : value;
+  if (typeof value !== 'object') return value;
+  const out = {};
+  for (const [key, raw] of Object.entries(value)) {
+    out[key] = IDENTIFYING_KEY.test(key) ? REDACTED : redactDetails(raw, depth + 1);
+  }
+  return out;
+}
 
 export function operatorAlertRecipients(env = process.env) {
   return String(env.ADMIN_EMAILS || '')
@@ -54,13 +88,24 @@ export async function emitOperatorAlert(
   { env = process.env, sendEmail = defaultSendEmail, logger = console } = {},
 ) {
   const at = new Date().toISOString();
+  // Redact ONCE, here, so the stderr record and the outbound email can never
+  // disagree about what left the platform.
+  let safeDetails;
+  try {
+    safeDetails = redactDetails(details);
+  } catch {
+    // A details object that cannot be walked is not worth losing the alert
+    // over, but it must not be forwarded unexamined either.
+    safeDetails = { redaction: 'failed', note: 'details omitted' };
+  }
   const record = {
     kind: kind || 'unspecified',
     severity,
-    summary: summary || '',
+    // Free text on the same wire — held to the same value rule.
+    summary: typeof summary === 'string' ? redactDetails(summary) : (summary || ''),
     releaseSha: releaseSha(env),
     at,
-    details,
+    details: safeDetails,
   };
 
   try {
@@ -81,9 +126,12 @@ export async function emitOperatorAlert(
       `Release: ${record.releaseSha}`,
       `At: ${at}`,
       '',
-      summary || '',
+      record.summary,
       '',
-      ...Object.entries(details).map(([key, value]) => `${key}: ${JSON.stringify(value)}`),
+      // record.details is the REDACTED copy. Reading `details` here would
+      // redact the log line and still mail the raw object to the processor —
+      // a correction nothing consumes.
+      ...Object.entries(record.details || {}).map(([key, value]) => `${key}: ${JSON.stringify(value)}`),
     ];
     const result = await sendEmail({
       to: recipients,
