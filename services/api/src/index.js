@@ -74,7 +74,21 @@ fastify.decorate('prisma', prisma);
 fastify.decorate('env', env);
 
 await fastify.register(helmet, {
-  contentSecurityPolicy: false,
+  // GATED (2026-08-20, owner instruction "gate genemap's findings"). This was
+  // `false`, so the API sent NO Content-Security-Policy at all and the
+  // processor register had to record that browser egress was prevented by the
+  // ABSENCE OF CODE rather than by enforcement. The API serves JSON to a
+  // separate origin and renders no HTML of its own, so the tightest possible
+  // policy is also the correct one: nothing may load, connect, or frame.
+  contentSecurityPolicy: {
+    useDefaults: false,
+    directives: {
+      'default-src': ["'none'"],
+      'frame-ancestors': ["'none'"],
+      'base-uri': ["'none'"],
+      'form-action': ["'none'"],
+    },
+  },
   crossOriginEmbedderPolicy: false,
   hsts: { maxAge: 31536000, includeSubDomains: true, preload: true },
   referrerPolicy: { policy: 'no-referrer' },

@@ -100,6 +100,16 @@ function preserveSourceRetrieval(records) {
   );
 }
 
+/**
+ * Ensembl gene lookup is opt-in. Read at call time (not module load) so tests
+ * and a redeploy can flip it without a rebuild. Anything other than the exact
+ * string 'true' is OFF -- an unset or misspelled value must not silently open
+ * an external egress path.
+ */
+function geneLookupEnabled() {
+  return process.env.GENOMICS_GENE_LOOKUP_ENABLED === 'true';
+}
+
 export default async function genomicsRoutes(fastify) {
   fastify.addHook('preHandler', authenticate);
 
@@ -205,7 +215,20 @@ export default async function genomicsRoutes(fastify) {
   });
 
   // ─── Gene Lookup ───────────────────────────────────────────────
+  // GATED OFF BY DEFAULT (2026-08-20, owner instruction "gate genemap's
+  // findings"). This route sends the caller's gene symbol to Ensembl
+  // (rest.ensembl.org). The processor register recorded it as an ACTIVE,
+  // undisclosed egress path reachable by ANY authenticated user, while NO
+  // client in this repo calls it -- verified across apps/, packages/ and
+  // services/: the only `/gene/` hits are outbound NCBI reference LINKS, and
+  // the single test reference asserts route-label formatting, not behaviour.
+  // An egress path nothing uses is pure disclosure surface, so it is off
+  // unless deliberately enabled. Set GENOMICS_GENE_LOOKUP_ENABLED=true to
+  // restore it -- and disclose Ensembl in docs/PROCESSOR_REGISTER.md if you do.
   fastify.get('/gene/:symbol', async (request) => {
+    if (!geneLookupEnabled()) {
+      throw new NotFoundError('Gene lookup is disabled on this deployment');
+    }
     const { symbol } = request.params;
     const data = await lookupGene(symbol);
     if (!data) throw new NotFoundError('Gene not found');

@@ -1,4 +1,17 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+/* Google Fonts REMOVED 2026-08-20. An @import here made every visitor's
+   browser fetch a stylesheet and font files from Google's font CDN,
+   sending IP, User-Agent and Referer to a third party -- while
+   docs/PROCESSOR_REGISTER.md stated those references had been removed and
+   that the product uses NO CDN. The register's guard test checked
+   index.HTML; the import lived one file over, here, so the claim read as
+   verified while the egress was live. Found by loading the real
+   production bundle under the proposed CSP -- it was the ONLY violation
+   reported. The font-family below already falls back to system-ui, so
+   removing it degrades typography, never function. To get Inter back,
+   SELF-HOST the woff2 files; do not re-add the CDN. (The hostnames are
+   deliberately not spelled here: the guard bans the literal strings
+   anywhere in this file, which is stricter and harder to evade than a
+   rule that tries to tell code from comments.) */
 
 @tailwind base;
 @tailwind components;
