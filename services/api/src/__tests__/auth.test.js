@@ -289,6 +289,17 @@ describe('POST /auth/logout', () => {
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body);
     expect(body.success).toBe(true);
+
+    // This test was named "and clear cookies" and asserted NOTHING about
+    // cookies, which is why a logout that cleared none of them shipped.
+    // Measured live 2026-08-19: POST /auth/logout returned 200 while the
+    // browser kept accessToken, refreshToken AND csrfToken, and /auth/me
+    // kept returning 200.
+    const setCookies = [res.headers['set-cookie'] || []].flat();
+    const cleared = setCookies.join(' | ');
+    for (const name of ['accessToken', 'refreshToken', 'csrfToken']) {
+      expect(cleared).toContain(`${name}=`);
+    }
   });
 
   it('should reject unauthenticated logout', async () => {
