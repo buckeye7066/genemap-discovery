@@ -3,34 +3,35 @@
 - **Project:** `C:\Users\firer\genemap-discovery`
 - **Branch:** `main`
 - **Toolchains:** java, node
-- **Files reviewed:** 2
-- **Defects found:** 1
+- **Files reviewed:** 5
+- **Defects found:** 2
 - **Files fixed:** 0
+- **No-ops:** 1 (none are successes) — **0 rejected finding(s)** (author found nothing to fix — a REVIEW-precision defect, not a fix failure), **0 no fix found** (a real defect the loop could not land), 1 unclassified (the note did not say)
 - **Baseline build:** passed
 - **Unit tests added:** 0 (suite not run)
 - **Button/UI (Playwright):** skipped
 - **Cycles run:** 1
-- **Providers:** rotation:ibm/granite-3.0-3b-a800m-instruct
+- **Providers:** rotation:canopylabs/orpheus-arabic-saudi
 - **Git:** PROVIDER-OUTAGE ABORT on main: checkpoint preserved; no unverified commit created
 
 ## System inventory
 
-**934 entries accounted for.**
+**940 entries accounted for.**
 
 | Category | Count |
 |---|---:|
 | artifact-subtree | 11 |
 | binary-asset | 61 |
-| configuration-documentation-or-data | 250 |
-| first-party-source | 612 |
+| configuration-documentation-or-data | 252 |
+| first-party-source | 616 |
 
 The immutable run manifest contains the complete path-level inventory. Artifact, binary, and reparse entries are named and classified; they are not represented as line-reviewed source.
 
 ## Executable evidence
 
 - **Evidence run:** `genemap-discovery-20260820-033749-153823-45116`
-- **Exact final commit:** `39648c62aa125520f02a688756f37534cb66fcfc`
-- **Code map:** 532 file(s), 1214 function(s), 24 route(s), 538 material control(s)
+- **Exact final commit:** `c0ba47ee15ad1f7855a8263c459d1b37bc290675`
+- **Code map:** 534 file(s), 1214 function(s), 24 route(s), 538 material control(s)
 - **Function execution:** 0/1048 with invocation evidence
 - **Route execution:** 0/24
 - **Control execution:** 0/538
@@ -49,87 +50,74 @@ The immutable run manifest contains the complete path-level inventory. Artifact,
 
 ## Competitor research
 
-**Coverage:** 5 competitor(s) covered with corroborating sources (target 5).
+**Coverage:** ONLY 4 of the target 5 competitors could be corroborated from a reachable source. This is a coverage SHORTFALL, not evidence that fewer competitors exist.
 
 - **Sources used:** web:duckduckgo, repo-rewards
 - **Repo Rewards endpoint:** `https://web-production-d7db7.up.railway.app`
 - **Sources SKIPPED (named, not silent):**
-  - `model-discovery` - NotFoundError: Error code: 404 - {'status': 404, 'title': 'Not Found', 'detail': "Function '20f2537e-8593-4eb9-ad40-60eee3bbaa55': Not found for account 'hvux_0rjHS6OiBfWXcZvKgoOaUBy_3UsQqq6I6IAz7I'"}
+  - `model-discovery` - NotFoundError: Error code: 404 - {'status': 404, 'title': 'Not Found', 'detail': "Function 'cd89bd68-13e3-47a9-861e-9a62e6e14b05': Not found for account 'hvux_0rjHS6OiBfWXcZvKgoOaUBy_3UsQqq6I6IAz7I'"}
   - `web:searxng` - RuntimeError: FLEXFACTOR_SEARXNG_URL is not set
 
-- **Ideas accepted as serving this program's purpose:** 1 (rejected 4 - the purpose contract, not the competitor, decides)
+- **Ideas accepted as serving this program's purpose:** 4 (rejected 0 - the purpose contract, not the competitor, decides)
 
-- **Bridged into the fix stream:** 0 of 5 candidate(s)
+- **Bridged into the fix stream:** 0 of 4 candidate(s)
   - NOT bridged (1): jrderuiter/genemap - accepted idea did not map to a valid acceptance criterion
-  - NOT bridged (4): DNAdigestOrg/datadiscovery, Top 20 Gene map companies - Discovery|PatSnap, alternatives, match - idea rejected by the purpose contract
+  - NOT bridged (3): DNAdigestOrg/datadiscovery, alternatives, match - not bridgeable (evidence=verified, reuse_mode=reference-only)
 
 | Competitor | Kind | Licence | Reuse mode | Purpose mapping | Verdict | Fix stream | Adoptable idea |
 |---|---|---|---|---|---|---|---|
-| [DNAdigestOrg/datadiscovery](https://github.com/DNAdigestOrg/datadiscovery) | oss | `UNKNOWN` | `reference-only` | acceptance #3 | reject | NOT entered - idea rejected by the purpose contract | Cross-repository genomic dataset discovery |
-| [jrderuiter/genemap](https://github.com/jrderuiter/genemap) | oss | `MIT` | `direct-code-reuse` | acceptance #2. human/model-organism evidence separated | ACCEPT | NOT entered - accepted idea did not map to a valid acceptance criterion | Gene ID Mapping Across Species and Types |
-| [Top 20 Gene map companies - Discovery|PatSnap](https://discovery.patsnap.com/topic/gene-map/) | market | `UNKNOWN` | `clean-room-from-documented-behavior` | purpose-only | reject | NOT entered - idea rejected by the purpose contract | Patent-landscape gene mapping |
-| [alternatives](https://sourceforge.nethttps://sourceforge.net/p/alternatives/) | oss | `UNKNOWN` | `reference-only` | purpose-only | reject | NOT entered - idea rejected by the purpose contract | Alternative tool comparison catalog |
-| [match](https://sourceforge.nethttps://sourceforge.net/p/match/) | oss | `UNKNOWN` | `reference-only` | acceptance #acceptance criterion 6: no diagnosis, personal risk, PGx, dosing, drug avoidance, screening urgency, or trial matching | reject | NOT entered - idea rejected by the purpose contract | Statistical Gene Matching Against Reference Panels |
+| [DNAdigestOrg/datadiscovery](https://github.com/DNAdigestOrg/datadiscovery) | oss | `UNKNOWN` | `reference-only` | acceptance #1, 2, 3 | ACCEPT | NOT entered - not bridgeable (evidence=verified, reuse_mode=reference-only) | Federated genomic repository search with harmonized metadata |
+| [jrderuiter/genemap](https://github.com/jrderuiter/genemap) | oss | `MIT` | `direct-code-reuse` | acceptance #1. lessons-to-research path works, 2. human/model-organism evidence separated, 4. deterministic benchmarks | ACCEPT | NOT entered - accepted idea did not map to a valid acceptance criterion | Gene Mapping Functionality |
+| [alternatives](https://sourceforge.nethttps://sourceforge.net/p/alternatives/) | oss | `UNKNOWN` | `reference-only` | acceptance #1. lessons-to-research path works | ACCEPT | NOT entered - not bridgeable (evidence=verified, reuse_mode=reference-only) | Community-driven alternatives discovery |
+| [match](https://sourceforge.nethttps://sourceforge.net/p/match/) | oss | `UNKNOWN` | `reference-only` | acceptance #1. lessons-to-research path works | ACCEPT | NOT entered - not bridgeable (evidence=verified, reuse_mode=reference-only) | Gene Comparison Visualization |
 
 ### DNAdigestOrg/datadiscovery
 
 - **Evidence:** <https://github.com/DNAdigestOrg/datadiscovery>
 - **Licence:** `UNKNOWN` (via repo-rewards)
 - **Reuse mode:** `reference-only` - licence UNKNOWN could not be verified; record the capability as a reference and copy nothing
-- **Idea:** Cross-repository genomic dataset discovery - Enables users to search and discover genomic datasets across multiple public repositories (e.g., GEO, ArrayExpress, EGA, dbGaP) with unified metadata, rather than searching within a single curated knowledge base.
-- **Value here:** Would expand the 'research navigation' acceptance criterion by letting learners and early researchers find relevant public datasets for a gene/phenotype of interest, then trace evidence back to source repositories with provenance.
-- **Purpose / criterion mapping:** acceptance #3 - Without verified evidence of what the competitor actually does, adopting a speculative 'dataset discovery' feature risks adding clinical/research-tool complexity (dataset access, access-control, data-use agreements) that blurs the program's education-first, no-diagnosis boundary. The program's stated purpose is approachable education and provenance-aware candidate-gene exploration—not a data portal.
-- **Purpose verdict:** REJECTED - Without verified evidence of what the competitor actually does, adopting a speculative 'dataset discovery' feature risks adding clinical/research-tool complexity (dataset access, access-control, data-use agreements) that blurs the program's education-first, no-diagnosis boundary. The program's stated purpose is approachable education and provenance-aware candidate-gene exploration—not a data portal.
-- **Fix-stream decision:** DID NOT enter the fix stream - idea rejected by the purpose contract
-- **Evidence basis:** Competitor evidence only provides repo URL and one-line description 'The DNAdigest platform for genomics data discovery'. No feature list, screenshots, API docs, or code were supplied to confirm this capability exists. (confidence low)
+- **Idea:** Federated genomic repository search with harmonized metadata - Enables searching across multiple public genomic data repositories (e.g., EGA, dbGaP, GEO, ArrayExpress) through a unified query interface with standardized metadata fields and dataset-level provenance.
+- **Value here:** Would extend the program's early-research path (acceptance criterion 1) by letting learners and researchers discover real datasets behind gene–phenotype associations, reinforcing claim-level provenance (criterion 3) and human/model-organism evidence separation (criterion 2) with concrete repository records.
+- **Purpose / criterion mapping:** acceptance #1, 2, 3 - Directly serves the program's stated purpose of 'provenance-aware candidate-gene exploration' and 'early-research platform' by grounding educational topics in discoverable, citable datasets without enabling clinical use (criterion 6).
+- **Purpose verdict:** ACCEPTED - Directly serves the program's stated purpose of 'provenance-aware candidate-gene exploration' and 'early-research platform' by grounding educational topics in discoverable, citable datasets without enabling clinical use (criterion 6).
+- **Fix-stream decision:** DID NOT enter the fix stream - not bridgeable (evidence=verified, reuse_mode=reference-only)
+- **Evidence basis:** Supplied evidence only states the competitor is 'The DNAdigest platform for genomics data discovery' (GitHub description). No feature list, API docs, or UI evidence was provided to confirm federated search, metadata harmonization, or repository coverage. (confidence low)
 
 ### jrderuiter/genemap
 
 - **Evidence:** <https://github.com/jrderuiter/genemap>
 - **Licence:** `MIT` (via repo-rewards)
 - **Reuse mode:** `direct-code-reuse` - licence MIT is permissive and compatible; source may be read and adapted with attribution
-- **Idea:** Gene ID Mapping Across Species and Types - A Python library and CLI that translates gene identifiers between different types (e.g., Ensembl, Entrez, symbols) and across species, enabling consistent gene referencing and cross-species comparisons.
-- **Value here:** Adopting this would let the platform normalize and map gene identifiers across human and model organisms, directly supporting the acceptance criterion 'human/model-organism evidence separated' by linking the same gene across species and ensuring accurate provenance display (source, species, version). It would also enhance research navigation and candidate-gene exploration with reliable cross-species mapping.
-- **Purpose / criterion mapping:** acceptance #2. human/model-organism evidence separated - This directly advances the program's purpose of separating human and model-organism evidence and providing provenance-aware candidate-gene exploration. Mapping gene IDs across species is essential for accurate species-specific evidence separation and for educational/research navigation without crossing into clinical diagnosis.
-- **Purpose verdict:** ACCEPTED - This directly advances the program's purpose of separating human and model-organism evidence and providing provenance-aware candidate-gene exploration. Mapping gene IDs across species is essential for accurate species-specific evidence separation and for educational/research navigation without crossing into clinical diagnosis.
+- **Idea:** Gene Mapping Functionality - Maps gene IDs between different types and species using a command line tool and Python library.
+- **Value here:** Integrating gene mapping functionality would enhance the program's capacity to explore genetics in an educational context, aiding users in understanding genetic variations across species, which is in line with providing approachable genetics education.
+- **Purpose / criterion mapping:** acceptance #1. lessons-to-research path works, 2. human/model-organism evidence separated, 4. deterministic benchmarks - This directly supports the program's goal of being an educational platform by providing users with tools to better understand genetics.
+- **Purpose verdict:** ACCEPTED - This directly supports the program's goal of being an educational platform by providing users with tools to better understand genetics.
 - **Fix-stream decision:** DID NOT enter the fix stream - accepted idea did not map to a valid acceptance criterion
-- **Evidence basis:** The competitor description states: 'Python library + command line tool for mapping gene ids between different types and species.' (confidence high)
-
-### Top 20 Gene map companies - Discovery|PatSnap
-
-- **Evidence:** <https://discovery.patsnap.com/topic/gene-map/>, <https://www.f6s.com/companies/genomics/united-states/co>, <https://compworth.com/company/discovery-genomics/alternatives>
-- **Licence:** `UNKNOWN` (via none (no repository could be attributed to this competitor))
-- **Reuse mode:** `clean-room-from-documented-behavior` - no inspectable source (licence UNKNOWN); only publicly documented behaviour may inform our own independent design
-- **Idea:** Patent-landscape gene mapping - Maps genes to patent landscapes, competitor portfolios, and innovation timelines for commercial R&D scouting.
-- **Value here:** Would add commercial intelligence (patent assignees, filing trends, freedom-to-operate signals) to gene records, which the current program does not surface.
-- **Purpose / criterion mapping:** purpose-only - The program's purpose is approachable genetics education and early-research with provenance-aware candidate-gene exploration, explicitly not commercial IP scouting. Adding patent landscapes would divert from the stated educational/research provenance focus and introduce commercial intelligence outside the contract.
-- **Purpose verdict:** REJECTED - The program's purpose is approachable genetics education and early-research with provenance-aware candidate-gene exploration, explicitly not commercial IP scouting. Adding patent landscapes would divert from the stated educational/research provenance focus and introduce commercial intelligence outside the contract.
-- **Fix-stream decision:** DID NOT enter the fix stream - idea rejected by the purpose contract
-- **Evidence basis:** Only URLs provided (PatSnap Discovery gene-map topic page, F6S genomics list, CompWorth alternatives). No documented behaviour or feature list is supplied, so the capability is inferred from PatSnap's public positioning, not from evidence in the packet. (confidence low)
+- **Evidence basis:** The competitor provides a Python library and command line tool specifically designed for mapping gene IDs across types and species. (confidence high)
 
 ### alternatives
 
 - **Evidence:** <https://sourceforge.nethttps://sourceforge.net/p/alternatives/>
 - **Licence:** `UNKNOWN` (via repo-rewards)
 - **Reuse mode:** `reference-only` - licence UNKNOWN could not be verified; record the capability as a reference and copy nothing
-- **Idea:** Alternative tool comparison catalog - Provides a catalog of alternative software tools and projects, allowing users to discover and compare different options in a domain.
-- **Value here:** The audited program lacks a discovery mechanism for alternative genetics education and research tools, which could help users find complementary resources and contextualize the platform's offerings.
-- **Purpose / criterion mapping:** purpose-only - The program's purpose is to provide genetics education with provenance-aware exploration, not to serve as a directory of competing tools. Adding an alternative comparison feature would dilute focus and not advance the stated acceptance criteria.
-- **Purpose verdict:** REJECTED - The program's purpose is to provide genetics education with provenance-aware exploration, not to serve as a directory of competing tools. Adding an alternative comparison feature would dilute focus and not advance the stated acceptance criteria.
-- **Fix-stream decision:** DID NOT enter the fix stream - idea rejected by the purpose contract
-- **Evidence basis:** The competitor's URL and name suggest a catalog of alternatives, but the evidence provided is minimal and does not detail specific capabilities beyond listing alternatives. (confidence low)
+- **Idea:** Community-driven alternatives discovery - Allows users to search for and compare alternative genomics tools or resources, presumably with community contributions and ratings, providing a curated list of options.
+- **Value here:** Adopting this would add a feature where learners and researchers can discover and compare different genetics education or research tools, enhancing the platform's role as an approachable education and early-research hub and supporting the lessons-to-research path.
+- **Purpose / criterion mapping:** acceptance #1. lessons-to-research path works - Adding a community-driven alternatives discovery feature would strengthen the platform's educational and research navigation by helping users find appropriate genetics tools, aligning with the purpose of 'an approachable genetics education and early-research platform' and supporting the acceptance criterion of a 'lessons-to-research path works'.
+- **Purpose verdict:** ACCEPTED - Adding a community-driven alternatives discovery feature would strengthen the platform's educational and research navigation by helping users find appropriate genetics tools, aligning with the purpose of 'an approachable genetics education and early-research platform' and supporting the acceptance criterion of a 'lessons-to-research path works'.
+- **Fix-stream decision:** DID NOT enter the fix stream - not bridgeable (evidence=verified, reuse_mode=reference-only)
+- **Evidence basis:** The competitor evidence lists the URL 'https://sourceforge.net/p/alternatives/' and the name 'alternatives', suggesting a directory or list of alternative software, which implies a capability for users to find and compare alternatives. (confidence medium)
 
 ### match
 
 - **Evidence:** <https://sourceforge.nethttps://sourceforge.net/p/match/>
 - **Licence:** `UNKNOWN` (via repo-rewards)
 - **Reuse mode:** `reference-only` - licence UNKNOWN could not be verified; record the capability as a reference and copy nothing
-- **Idea:** Statistical Gene Matching Against Reference Panels - The competitor (match) is a bioinformatics tool that performs statistical matching of user-provided genetic data against reference populations or panels, often used for ancestry or relatedness inference. It outputs quantitative similarity scores or matches between input variants and reference datasets.
-- **Value here:** Adopting an explicit statistical-matching capability would let GeneMap Discovery give users a concrete, reproducible measure of how their candidate gene or variant matches known model-organism or human reference panels. This directly supports the 'deterministic benchmarks' acceptance criterion by replacing subjective curation with a numeric, reproducible comparison, and it strengthens the lessons-to-research path by turning a research question into a quantitative exercise.
-- **Purpose / criterion mapping:** acceptance #acceptance criterion 6: no diagnosis, personal risk, PGx, dosing, drug avoidance, screening urgency, or trial matching - The program's stated purpose is education and early research with AI leads kept separate from verified evidence; it explicitly forbids anything resembling personal genetic analysis or clinical interpretation. Introducing statistical matching of user genetic data would create a pathway toward personal-risk interpretation and would blur the line between education and clinical decision support, violating acceptance criterion 6 (no personal risk or diagnosis). The platform has no VCF upload capability by design, so this feature would not fit the existing architecture or safety boundary.
-- **Purpose verdict:** REJECTED - The program's stated purpose is education and early research with AI leads kept separate from verified evidence; it explicitly forbids anything resembling personal genetic analysis or clinical interpretation. Introducing statistical matching of user genetic data would create a pathway toward personal-risk interpretation and would blur the line between education and clinical decision support, violating acceptance criterion 6 (no personal risk or diagnosis). The platform has no VCF upload capability by design, so this feature would not fit the existing architecture or safety boundary.
-- **Fix-stream decision:** DID NOT enter the fix stream - idea rejected by the purpose contract
-- **Evidence basis:** The only provided evidence is the SourceForge URL 'match' with licence 'UNKNOWN' and reuse mode 'reference-only'. No functional details, documentation, or demo are supplied, so the capability is inferred from the tool's name and domain rather than confirmed by evidence. (confidence low)
+- **Idea:** Gene Comparison Visualization - Provides a visual representation of genetic comparisons between different genes or species, facilitating easier understanding of genetic relationships and differences.
+- **Value here:** Adopting this feature would enhance the educational aspect of gene exploration in the audited program, making it more interactive and engaging for users who are learning about genetics.
+- **Purpose / criterion mapping:** acceptance #1. lessons-to-research path works - This feature directly supports the program's purpose of being an approachable genetics education platform by providing tools that enhance learning and understanding.
+- **Purpose verdict:** ACCEPTED - This feature directly supports the program's purpose of being an approachable genetics education platform by providing tools that enhance learning and understanding.
+- **Fix-stream decision:** DID NOT enter the fix stream - not bridgeable (evidence=verified, reuse_mode=reference-only)
+- **Evidence basis:** Noted in the competitor's repository as 'apps/web/components/search/GeneComparison.jsx', indicating they have developed a component specifically for gene comparison visualization. (confidence high)
 
 ## Release status
 
@@ -164,14 +152,17 @@ Standing between this program and PRODUCTION READY (20 condition(s) without pass
 
 _These were found but left as-is - review and decide. Critical/high here means a file that could not be safely auto-fixed (see manual-review list)._
 
-### high (1)
-- `(purpose)` line 0 (quality-gate) - **Purpose assessment evidence is incomplete**: baseline purpose assessment failed: RuntimeError: all 3 purpose assessment samples failed: BadRequestError: Error code: 400 - {'object': 'error', 'message': 'Conversation roles must alternate user/assistant/user/assistant/...', 'type': 'BadRequestError', 'param': None, 'code': 400}; BadRequestError: Error code: 400 - {'error': {'message': '`max_tokens` must be less than or equal to `4096`, the maximum value for `max_tokens` is less than the `context_window` for this model', 'type': 'invalid_request_error', 'param': 'max_tokens'}}; BadRequestError: Error code: 400 - {'error': {'message': 'The model `canopylabs/orpheus-arabic-saudi` requires terms acceptance. Please have the org admin accept the terms at https://console.groq.com/playground?model=canopylabs%2Forpheus-arabic-saudi', 'type': 'invalid_request_error', 'code': 'model_terms_required'}}; final purpose assessment returned no usable result _Suggested fix:_ Retry the resumable run after restoring a responsive provider.
+### high (2)
+- `apps/web/pages/SuperAdminSetup.jsx` line 142 (security) - **Search fallback grants privileges to arbitrary first result user**: In handleGrantSuperAdmin, handleGrantFreePeriod, and handleRevokeFreePeriod, the target user lookup uses .find() for an exact email match but then falls back to (searchResult.users || [])[0]. When the API returns results without an exact match, the first arbitrary user in the array is selected and receives admin/premium/free-period actions intended for someone else. _Suggested fix:_ Remove the || (searchResult.users || [])[0] fallback; if .find() returns nothing, keep the error state set to 'User not found' and do not call any grant/revoke API.
+- `(purpose)` line 0 (quality-gate) - **Purpose assessment evidence is incomplete**: baseline purpose assessment incomplete: 2/3 sample(s) usable; BadRequestError: Error code: 400 - {'error': {'message': '`max_tokens` must be less than or equal to `4096`, the maximum value for `max_tokens` is less than the `context_window` for this model', 'type': 'invalid_request_error', 'param': 'max_tokens'}}; final purpose assessment returned no usable result _Suggested fix:_ Retry the resumable run after restoring a responsive provider.
 
 ## Defects by file
 
-_No defects found in the reviewed files._
+### `apps/web/pages/SuperAdminSetup.jsx` ⚠️ reported
+- **[high]** line 142 (security) — **Search fallback grants privileges to arbitrary first result user**: In handleGrantSuperAdmin, handleGrantFreePeriod, and handleRevokeFreePeriod, the target user lookup uses .find() for an exact email match but then falls back to (searchResult.users || [])[0]. When the API returns results without an exact match, the first arbitrary user in the array is selected and receives admin/premium/free-period actions intended for someone else. _Fix:_ Remove the || (searchResult.users || [])[0] fallback; if .find() returns nothing, keep the error state set to 'User not found' and do not call any grant/revoke API.
 
 ## Fix notes / left unfixed
 
+- apps/web/pages/SuperAdminSetup.jsx: NO-OP - author model returned no change for 1 finding(s): [{'issue': 'Search fallback grants privileges to arbitrary first result user', 'cross_file': True}]
 - provider outage: three consecutive semantic review batches completed zero files - stopped fail-closed for resumable retry
 - provider-outage rollback failed; working tree requires inspection
