@@ -110,8 +110,22 @@ function validateGenerationOptions(options) {
   if (!hasOnlyKeys(options, GENERATION_OPTION_KEYS)) {
     throw new ValidationError('generation options contain unsupported fields');
   }
-  if (options.provider != null && !['openai', 'anthropic'].includes(options.provider)) {
-    throw new ValidationError('provider must be openai or anthropic');
+  if (options.provider != null) {
+    // GATED (2026-08-20, owner instruction "gate genemap's findings").
+    // A caller-selectable provider let a BROWSER client route this request to
+    // Anthropic regardless of the deployment's LLM_TEXT_PROVIDER -- so the
+    // processor register could not honestly say which processor receives user
+    // text. The deployment now decides. Rejecting is deliberate: silently
+    // ignoring the field would leave the caller believing it chose, which is
+    // the same class of false claim this gate exists to remove.
+    if (process.env.LLM_ALLOW_CALLER_PROVIDER !== 'true') {
+      throw new ValidationError(
+        'provider is chosen by the deployment (LLM_TEXT_PROVIDER) and cannot be set by the caller',
+      );
+    }
+    if (!['openai', 'anthropic'].includes(options.provider)) {
+      throw new ValidationError('provider must be openai or anthropic');
+    }
   }
   for (const field of ['temperature', 'maxTokens']) {
     if (options[field] != null

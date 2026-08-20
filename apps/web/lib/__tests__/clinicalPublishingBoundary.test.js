@@ -271,9 +271,25 @@ describe('clinical publishing boundary', () => {
   });
 
   it('does not initiate unused third-party font connections', () => {
-    const webShell = read('../../index.html');
-    expect(webShell).not.toContain('fonts.googleapis.com');
-    expect(webShell).not.toContain('fonts.gstatic.com');
+    // This checked index.HTML only, and on 2026-08-20 the shell was genuinely
+    // clean -- while index.CSS carried
+    //   @import url('https://fonts.googleapis.com/css2?family=Inter...')
+    // so every visitor's browser contacted Google while the processor register
+    // read as verified. A guard that inspects one file cannot speak for the
+    // whole browser graph, so it now covers every source that can pull a
+    // subresource. Found by loading the real production bundle under the
+    // proposed CSP; the font was the ONLY violation.
+    const FONT_HOSTS = ['fonts.googleapis.com', 'fonts.gstatic.com'];
+    const surfaces = {
+      'index.html': read('../../index.html'),
+      'index.css': read('../../index.css'),
+      'main.jsx': read('../../main.jsx'),
+    };
+    for (const [name, contents] of Object.entries(surfaces)) {
+      for (const host of FONT_HOSTS) {
+        expect(contents, `${name} must not reference ${host}`).not.toContain(host);
+      }
+    }
   });
 
   it('does not import the retired clinical persona registry into the browser graph', () => {
