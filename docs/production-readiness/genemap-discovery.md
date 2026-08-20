@@ -9,7 +9,7 @@ Earlier evidence SHA: 3b492e5aae7a12ef4c35cf4a53e9821108b0f57b
 Web target: https://genemap-discovery.vercel.app — up, on 2afef65
 API target: https://genemap-api-production.up.railway.app — up, on 2afef65
 Current phase: EXTERNAL EVIDENCE
-Current release status: BLOCKED
+Current release status: BLOCKED (item 4 owner sign-off only)
 Updated: 2026-08-20
 
 This file records the software and evidence state. It is not proof that GeneMap
@@ -144,7 +144,9 @@ matter; no agent can clear it. Until it is cleared:
 
 Release SHA under evidence is **3b492e5**, the merge of #161. Items 1, 2 and 7
 are evidenced *as observed at that time*; read them against the correction
-above. Items 3, 4, 5 and 6 remain open, so the release stays BLOCKED.
+above. Items 3, 5 and 6 are now CLOSED; only item 4 (owner sign-off on the
+processor/privacy register) remains open, so the release stays BLOCKED on that
+single owner action.
 
 ### Item 1 — ledger configured (CLOSED, previous session)
 
@@ -218,7 +220,49 @@ previously noted `/deployment-version.json` 500 is not a GeneMap contract and is
 not evidence either way. The API tier does self-report: `/healthz` and `/readyz`
 both returned `releaseSha: 3b492e5aae7a12ef4c35cf4a53e9821108b0f57b`.
 
-### Item 3 — authenticated production journey (API tier EVIDENCED; web tier still blocked)
+### Item 3 — authenticated production journey (CLOSED 2026-08-20 — WEB tier now evidenced)
+
+**CLOSED 2026-08-20.** The web-tier journey was run end to end against the
+release SHA `43d9697` by this lane, with owner-supplied credentials, through a
+real browser (Playwright, Chromium) — **8 of 8 steps passed**:
+
+| Step | Result |
+| --- | --- |
+| `/Login` renders a sign-in form | PASS — HTTP 200 |
+| signed in (left `/Login`) | PASS — landed on `/` |
+| DemographicCheck gate cleared | PASS — not redirected (already collected) |
+| `GET /auth/me` returns this user with a real id | PASS — 200, `id=08d8df9b…`, `role=super_admin` |
+| education surface reachable | PASS — `/learngenetics` |
+| opened a topic | PASS |
+| session + place persist across reload | PASS — `/auth/me` 200 after reload |
+| **logout invalidates the session** | **PASS — `/auth/me` after logout = 401** |
+
+Artifacts: Playwright trace zip, video, and a full-page authenticated
+screenshot.
+
+**The logout step is why this took a second pass, and it found a real defect.**
+On the first run it failed: clicking "Sign Out" produced `POST /auth/logout`
+200 while the browser still held `accessToken`, `refreshToken` AND `csrfToken`,
+and `GET /auth/me` still returned **200** — the user stayed signed in. Root
+cause: cookies are SET with `Secure; SameSite=None` (the deployment is
+cross-origin — web on Vercel, API on Railway) but were CLEARED with only
+`{path, domain}`, and a browser removes a cookie only when the clearing
+`Set-Cookie` matches how it was set; `csrfToken` was never cleared at all; and
+`Profile.jsx` called logout fire-and-forget, bypassing AuthContext. Fixed in
+PR #173 (merged, `43d9697`) and verified live — `Set-Cookie` now carries
+`Secure; SameSite=None` on all three and `/auth/me` returns 401.
+
+**Two honest notes on scope.** The LLM-backed education paths (quiz/explain)
+were deliberately NOT exercised — this document flags them as spending real
+Anthropic/OpenAI budget under separate owner scope; their absence is reported,
+not hidden. And one earlier 7/8 result was a defect in the JOURNEY SCRIPT, not
+the product: it looked for the sign-out control on `/` when the control lives
+on `/Profile`.
+
+---
+
+#### Item 3 — original record (API tier), kept for provenance
+
 
 **Status changed 2026-08-19.** The ledger-controls lane obtained owner-supplied
 credentials and ran an authenticated journey against the live **API** on
@@ -709,12 +753,14 @@ push-triggered:
    alias. **But a new blocker was found doing it: the Vercel account is blocked
    for new deployments**, so this equality will break at the next merge. See
    item 2 above — owner action.
-3. Owner-authorized authenticated production journey on that SHA. **API tier
-   EVIDENCED 2026-08-19** with owner-supplied credentials (login, `/auth/me`,
-   an authenticated Ensembl-backed gene read, and their unauthenticated 401
-   counterparts). **Web tier still OPEN** — but no longer externally blocked:
-   the 402 outage is resolved and the web origin serves current main. It now
-   just needs the run. See item 3 above.
+3. ~~Owner-authorized authenticated production journey on that SHA.~~
+   **DONE 2026-08-20 — BOTH TIERS.** API tier evidenced 2026-08-19; **web tier
+   evidenced 2026-08-20 on release SHA `43d9697`, 8/8 steps through a real
+   browser**, with Playwright trace/video/screenshot artifacts. The logout step
+   failed on the first pass and exposed a real security defect (logout did not
+   invalidate the session) — fixed in PR #173 and re-verified: `/auth/me` after
+   logout now returns 401. LLM-backed education paths deliberately out of scope
+   (real spend). See item 3 above.
 4. Completed processor/privacy register in `docs/PROCESSOR_REGISTER.md`.
    **The register is factually COMPLETE and re-derived at main `abf2e47`; the
    owner's sign-off is not.** Delta since the first pass: **Resend is now an
