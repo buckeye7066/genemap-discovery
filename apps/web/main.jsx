@@ -7,13 +7,16 @@ import { initSentry } from '@/lib/sentry.js'
 import { isNativeApp } from '@/lib/platform.js'
 import { startMobileUpdateNotifier } from '@/lib/mobileUpdateNotifier.js'
 
-// Optional Sentry (no-op unless VITE_SENTRY_DSN is set). Init before render so
-// it can capture errors thrown during the first paint.
+// initSentry() is a deliberate NO-OP STUB that always returns false and captures
+// nothing. VITE_SENTRY_DSN is read nowhere, so there is no env var that turns
+// this on. Browser exception export stays disabled: stacks can carry user text.
 initSentry()
 
 
 // Capture uncaught errors and unhandled promise rejections once, at bootstrap,
-// and report them to the backend (which emails the owner for non-admin users).
+// and report them to the backend. POST /report-client-error accepts two enum
+// values, logs them, and returns 204 -- it emails NO ONE. The only mail path in
+// the product is operatorAlert -> ADMIN_EMAILS on a ledger-write failure.
 if (typeof window !== 'undefined') {
   window.addEventListener('error', (event) => {
     // Browsers mute cross-origin script errors (WHATWG "muted errors"): when a
