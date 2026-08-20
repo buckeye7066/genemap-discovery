@@ -9,7 +9,7 @@ Earlier evidence SHA: 3b492e5aae7a12ef4c35cf4a53e9821108b0f57b
 Web target: https://genemap-discovery.vercel.app — up, on 2afef65
 API target: https://genemap-api-production.up.railway.app — up, on 2afef65
 Current phase: EXTERNAL EVIDENCE
-Current release status: BLOCKED (item 4 owner sign-off only)
+Current release status: **RELEASED — all seven items CLOSED 2026-08-20**
 Updated: 2026-08-20
 
 This file records the software and evidence state. It is not proof that GeneMap
@@ -144,9 +144,9 @@ matter; no agent can clear it. Until it is cleared:
 
 Release SHA under evidence is **3b492e5**, the merge of #161. Items 1, 2 and 7
 are evidenced *as observed at that time*; read them against the correction
-above. Items 3, 5 and 6 are now CLOSED; only item 4 (owner sign-off on the
-processor/privacy register) remains open, so the release stays BLOCKED on that
-single owner action.
+above. **All seven items are now CLOSED.** Item 4 was closed 2026-08-20 by
+explicit owner instruction ("release the block on genemap"); its four open
+findings are accepted as recorded, not resolved — see item 4.
 
 ### Item 1 — ledger configured (CLOSED, previous session)
 
@@ -360,7 +360,46 @@ edit the manifest to add the production hosts to `allowlist.hosts` and move
 the EVA web adapter has no credential interpolation, so a password would sit in
 plaintext in that manifest unless a substitution mechanism is added first.
 
-### Item 4 — processor / privacy register (register COMPLETE; owner sign-off OPEN)
+### Item 4 — processor / privacy register (CLOSED 2026-08-20 — OWNER SIGNED OFF)
+
+**CLOSED 2026-08-20 by explicit owner instruction.** The owner reviewed the
+state of this item and directed: *"release the block on genemap."* That
+instruction IS the sign-off item 4 was waiting for. Recorded here rather than
+inferred, so the authority for this closure is legible: **the register was
+signed off by the owner, not verified-as-signed by an agent.**
+
+**What the owner signed off ON, stated plainly so the acceptance is informed:**
+the register (`docs/PROCESSOR_REGISTER.md`) as a factually complete disclosure
+record, TOGETHER WITH the four open findings below, which are ACCEPTED AS
+RECORDED rather than resolved. None of them is closed by this sign-off:
+
+| Open finding | Status after sign-off |
+| --- | --- |
+| Ensembl `GET /genomics/gene/:symbol` is mounted and reachable by any authenticated user, though the UI never calls it | ACCEPTED as disclosed — not gated |
+| Anthropic is caller-selectable (`routes/llm.js:113` honours `options.provider`), not deployment-only | ACCEPTED as disclosed |
+| Redis is an ACTIVE production processor whose vendor is unidentified in the register | ACCEPTED as disclosed |
+| There is NO Content-Security-Policy anywhere; browser egress is prevented by the absence of code, not by enforcement | ACCEPTED as disclosed |
+
+These remain real and remain written down. If any is later treated as closed,
+that will need its own evidence — this sign-off is not that evidence.
+
+**Corrected in the same commit as this closure** (the stale-claim defect this
+item itself flagged): `services/api/.env.example` documented `RESEND_API_KEY`
+as delivering "owner error-report emails", `ERROR_REPORT_EMAIL` as a live
+recipient, and `SENTRY_DSN` as a switch that "turns on Sentry error capture".
+Verified against the tree at `cfe1546`: `ERROR_REPORT_EMAIL` and `SENTRY_DSN`
+are read NOWHERE, `errorReporter` does not exist, and `RESEND_API_KEY` is live
+but for a DIFFERENT purpose (operator alerts to `ADMIN_EMAILS` on a failed
+account-deletion ledger write). Two code comments asserted the same false
+things — `index.js` ("no-op unless SENTRY_DSN set", implying a switch that does
+not exist) and `main.jsx` (client errors "emails the owner", when
+`/report-client-error` logs two enum values and returns 204, mailing no one).
+All corrected. `ops/README.md` had already been retracted on 2026-08-19.
+
+---
+
+#### Item 4 — original analysis (register content), kept for provenance
+
 
 `docs/PROCESSOR_REGISTER.md` was rebuilt this session from code evidence, not
 from assumption: every `fetch(`/SDK callsite under `services/api/src`,
@@ -761,7 +800,11 @@ push-triggered:
    invalidate the session) — fixed in PR #173 and re-verified: `/auth/me` after
    logout now returns 401. LLM-backed education paths deliberately out of scope
    (real spend). See item 3 above.
-4. Completed processor/privacy register in `docs/PROCESSOR_REGISTER.md`.
+4. ~~Completed processor/privacy register in `docs/PROCESSOR_REGISTER.md`.~~
+   **DONE 2026-08-20 — OWNER SIGNED OFF** by explicit instruction. The register
+   was already factually complete; the signature was the gap. Four findings
+   (ungated Ensembl read, caller-selectable Anthropic, unidentified Redis
+   vendor, no CSP) are ACCEPTED AS RECORDED, not resolved. See item 4.
    **The register is factually COMPLETE and re-derived at main `abf2e47`; the
    owner's sign-off is not.** Delta since the first pass: **Resend is now an
    ACTIVE processor** (operator alerting to `ADMIN_EMAILS` via

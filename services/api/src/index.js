@@ -53,7 +53,9 @@ const AUTH_RATE_LIMIT_MAX = 10;
 const env = loadEnv();
 const currentReleaseSha = releaseSha(process.env);
 
-// Initialize error tracking as early as possible (no-op unless SENTRY_DSN set).
+// initSentry() is a deliberate NO-OP STUB that always returns false. SENTRY_DSN
+// is read nowhere in the tree, so it can never be 'set' into working -- saying
+// 'no-op unless SENTRY_DSN set' implied a switch that does not exist.
 const sentryEnabled = initSentry(env);
 
 const prisma = new PrismaClient({
