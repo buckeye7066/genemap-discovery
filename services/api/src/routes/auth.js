@@ -451,6 +451,10 @@ export default async function authRoutes(fastify) {
     reply
       .clearCookie('accessToken', getClearCookieOptions())
       .clearCookie('refreshToken', getClearCookieOptions())
+      // The CSRF cookie was left behind: routes/account.js already clears all
+      // three on deletion, logout cleared only two. A stale double-submit
+      // token must not survive a sign-out on a shared device.
+      .clearCookie('csrfToken', getClearCookieOptions())
       .send({ success: true });
   });
 

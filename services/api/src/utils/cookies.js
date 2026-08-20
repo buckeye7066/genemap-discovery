@@ -50,13 +50,23 @@ export function getCsrfCookieOptions({ maxAge } = {}) {
 }
 
 /**
- * Returns the path-only options used for clearing cookies. We pass back
- * the same domain that was used to set them so `clearCookie` actually
- * matches in cross-origin deployments.
+ * Options for CLEARING a cookie.
+ *
+ * A browser only removes a cookie when the clearing `Set-Cookie` matches the
+ * attributes it was SET with. This returned `{ path, domain }` only — no
+ * `secure`, no `sameSite` — so on the cross-origin production deployment
+ * (web on Vercel, API on Railway, cookies issued `SameSite=None; Secure`)
+ * the clear did not match and the browser KEPT the session.
+ *
+ * Measured live 2026-08-19 against production: clicking "Sign Out" produced
+ * `POST /auth/logout -> 200`, and afterwards the browser still held
+ * accessToken, refreshToken AND csrfToken, with `GET /auth/me` still
+ * returning 200. The server said it logged you out and you stayed logged in
+ * — on a shared device the next person has the account.
+ *
+ * It therefore mirrors baseOptions() exactly. `maxAge`/`expires` are set by
+ * fastify-cookie's clearCookie itself and must not be supplied here.
  */
 export function getClearCookieOptions() {
-  return {
-    path: '/',
-    domain: process.env.COOKIE_DOMAIN || undefined,
-  };
+  return { ...baseOptions() };
 }

@@ -37,7 +37,7 @@ import {
 } from "lucide-react";
 
 export default function ProfilePage() {
-  const { user, isLoadingAuth } = useAuth();
+  const { user, isLoadingAuth, logout } = useAuth();
   const [fullName, setFullName] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [mailingListOptIn, setMailingListOptIn] = useState(false);
@@ -178,8 +178,13 @@ export default function ProfilePage() {
     }
   };
 
-  const handleLogout = () => {
-    apiClient.logout();
+  const handleLogout = async () => {
+    // Use the CONTEXT's logout, not apiClient directly: it awaits the request
+    // and then calls clearSession(), so the UI cannot keep rendering a signed-in
+    // shell after the server has ended the session. The previous version was
+    // fire-and-forget — no await, no clearSession — so a failed or slow logout
+    // left the user looking signed in with no error shown anywhere.
+    await logout();
   };
 
   if (isLoadingAuth) {
