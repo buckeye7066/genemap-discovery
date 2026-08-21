@@ -128,7 +128,7 @@ export default function ContactSupport() {
 
       setTimeout(() => setSuccess(false), 5000);
     } catch (err) {
-      setError(err.message || "Failed to send message");
+      setError("Failed to send message. Please try again.");
     } finally {
       setIsSubmitting(false);
     }

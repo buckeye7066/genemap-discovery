@@ -274,7 +274,7 @@ export default function ProjectCollaboration({ project, onUpdate }) {
                       </div>
                     </div>
                   </div>
-                  {collab.invited_by === user?.email && collab.status !== 'revoked' && (
+                  {(collab.invited_by === user?.email || project.created_by === user?.email) && collab.status !== 'revoked' && (
                     <Button
                       variant="ghost"
                       size="sm"

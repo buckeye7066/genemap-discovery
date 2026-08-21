@@ -1,3 +1,5 @@
+import { publicationConceptById } from './publicationConceptCatalog.js';
+
 export const MANDATED_RESEARCH_EXAMPLES = Object.freeze([
   'I have WES data from 50 patients with early-onset symptoms and need to identify genetic variants across the cohort.',
   'I have an anonymized aggregate cohort of 200 patients with genotype, symptom-frequency, and treatment-response variables for population-level association research.',
@@ -50,4 +52,3 @@ export function parseAggregateResearchExample(text) {
   const index = MANDATED_RESEARCH_EXAMPLES.indexOf(String(text).trim());
   return index === -1 ? null : JSON.parse(JSON.stringify(EXAMPLE_TASK_INPUTS[index]));
 }
-import { publicationConceptById } from './publicationConceptCatalog.js';

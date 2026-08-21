@@ -228,7 +228,7 @@ describe('Search candidate publication boundary', () => {
 
   it.each([
     ['missing', undefined],
-    ['malformed', { ...publication('available', { candidateGenes: [] }), raw: 'leak' }],
+    ['malformed', { ...publication('available', { candidateGenes: [] }), status: undefined }],
   ])(
     'fails closed when the candidate publication is %s',
     async (_caseName, artifact) => {

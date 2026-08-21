@@ -465,7 +465,12 @@ export default async function authRoutes(fastify) {
       throw new UnauthorizedError('No refresh token');
     }
 
-    const payload = verifyRefreshToken(refreshToken);
+    let payload;
+    try {
+      payload = verifyRefreshToken(refreshToken);
+    } catch {
+      throw new UnauthorizedError('Invalid refresh token');
+    }
     if (!payload?.userId) {
       throw new UnauthorizedError('Invalid refresh token');
     }
@@ -488,7 +493,9 @@ export default async function authRoutes(fastify) {
     const newHash = await hashRefreshToken(newRefresh);
     const newExpires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
-    await prisma.session.delete({ where: { id: matched.id } }).catch(() => null);
+    await prisma.session.delete({ where: { id: matched.id } }).catch((err) => {
+      request.log?.warn?.({ err: err?.message, sessionId: matched.id }, 'failed to delete old session');
+    });
     await prisma.session.create({
       data: { userId: user.id, refreshTokenHash: newHash, expiresAt: newExpires },
     });

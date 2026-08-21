@@ -69,7 +69,7 @@ export default function DemographicCollectionPage() {
     try {
       const updatedUser = await apiClient.updateProfile({
         fullName: fullName.trim(),
-        phoneNumber: phoneNumber,
+        phoneNumber: phoneNumber.trim(),
         mailingListOptIn: mailingListOptIn,
         demographicsCollected: true
       });

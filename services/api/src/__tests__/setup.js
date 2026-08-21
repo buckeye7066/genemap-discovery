@@ -12,7 +12,9 @@ import crypto from 'crypto';
 process.env.JWT_SECRET = 'test-jwt-secret-that-is-long-enough';
 process.env.JWT_REFRESH_SECRET = 'test-jwt-refresh-secret-that-is-long-enough';
 process.env.COOKIE_SECRET = 'test-cookie-secret';
-process.env.CORS_ORIGINS = '*';
+// Test-only: restrict CORS to the local dev origin so tests still exercise
+// same-origin/CORS validation. This setup file is never used in production builds.
+process.env.CORS_ORIGINS = 'http://localhost:5173';
 process.env.NODE_ENV = 'test';
 process.env.LOG_LEVEL = 'silent';
 // No MEDICAL_DATA_ENCRYPTION_KEY — encryption gracefully degrades in tests
