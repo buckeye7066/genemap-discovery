@@ -3,50 +3,52 @@
 - **Project:** `C:\Users\firer\genemap-discovery`
 - **Branch:** `main`
 - **Toolchains:** java, node
-- **Files reviewed:** 5
-- **Defects found:** 2
+- **Files reviewed:** 0 of 368 candidate(s)
+- **FILE ACCOUNTING: 368 candidate(s) = 0 reviewed + 339 never_attempted + 24 review_incomplete + 5 skipped_known_clean**
+- **ZERO WORK: not one of 368 candidate file(s) was reviewed. This run did nothing; treat it as a FAILURE, not a clean repo.**
+- **Defects found:** 1
 - **Files fixed:** 0
-- **No-ops:** 1 (none are successes) — **0 rejected finding(s)** (author found nothing to fix — a REVIEW-precision defect, not a fix failure), **0 no fix found** (a real defect the loop could not land), 1 unclassified (the note did not say)
-- **Baseline build:** passed
+- **Errors recorded:** 54 (see the Errors section below; ledger at `C:\Users\firer\.flexfactor\runs\genemap-discovery-20260824-005059-902569-21424\errors.md`)
+- **Baseline build:** FAILED
 - **Unit tests added:** 0 (suite not run)
 - **Button/UI (Playwright):** skipped
 - **Cycles run:** 1
-- **Providers:** rotation:canopylabs/orpheus-arabic-saudi
+- **Providers:** rotation:groq/compound-mini
 - **Git:** PROVIDER-OUTAGE ABORT on main: checkpoint preserved; no unverified commit created
 
 ## System inventory
 
-**940 entries accounted for.**
+**949 entries accounted for.**
 
 | Category | Count |
 |---|---:|
 | artifact-subtree | 11 |
-| binary-asset | 61 |
-| configuration-documentation-or-data | 252 |
-| first-party-source | 616 |
+| binary-asset | 62 |
+| configuration-documentation-or-data | 259 |
+| first-party-source | 617 |
 
 The immutable run manifest contains the complete path-level inventory. Artifact, binary, and reparse entries are named and classified; they are not represented as line-reviewed source.
 
 ## Executable evidence
 
-- **Evidence run:** `genemap-discovery-20260820-033749-153823-45116`
-- **Exact final commit:** `c0ba47ee15ad1f7855a8263c459d1b37bc290675`
-- **Code map:** 534 file(s), 1214 function(s), 24 route(s), 538 material control(s)
-- **Function execution:** 0/1048 with invocation evidence
+- **Evidence run:** `genemap-discovery-20260824-005059-902569-21424`
+- **Exact final commit:** `93385bf4bc609f0672514e2051e7833236d4554f`
+- **Code map:** 538 file(s), 1216 function(s), 24 route(s), 538 material control(s)
+- **Function execution:** 0/1049 with invocation evidence
 - **Route execution:** 0/24
 - **Control execution:** 0/538
-- **Changed-file rescan:** 0/0 (complete)
-- **Blast radius:** 0 affected file(s); analysis ran
-- **Normalized gates:** 4 pass, 3 fail, 2 blocked
+- **Changed-file rescan:** 1/1 (complete)
+- **Blast radius:** 1 affected file(s); analysis ran
+- **Normalized gates:** 3 pass, 4 fail, 2 blocked
 
-- **Blast Radius:** `C:\Users\firer\.flexfactor\evidence\e29c9d26f8adcf57\genemap-discovery-20260820-033749-153823-45116\blast-radius.json`
-- **Changed File Rescan:** `C:\Users\firer\.flexfactor\evidence\e29c9d26f8adcf57\genemap-discovery-20260820-033749-153823-45116\changed-file-rescan.json`
-- **Code Index:** `C:\Users\firer\.flexfactor\evidence\e29c9d26f8adcf57\genemap-discovery-20260820-033749-153823-45116\code-index.json`
-- **Coverage Ledger:** `C:\Users\firer\.flexfactor\evidence\e29c9d26f8adcf57\genemap-discovery-20260820-033749-153823-45116\coverage-ledger.json`
-- **Manifest:** `C:\Users\firer\.flexfactor\evidence\e29c9d26f8adcf57\genemap-discovery-20260820-033749-153823-45116\manifest.json`
-- **Purpose Graph:** `C:\Users\firer\.flexfactor\evidence\e29c9d26f8adcf57\genemap-discovery-20260820-033749-153823-45116\purpose-graph.json`
-- **Quality Gates:** `C:\Users\firer\.flexfactor\evidence\e29c9d26f8adcf57\genemap-discovery-20260820-033749-153823-45116\quality-gates.json`
-- **Sarif:** `C:\Users\firer\.flexfactor\evidence\e29c9d26f8adcf57\genemap-discovery-20260820-033749-153823-45116\results.sarif`
+- **Blast Radius:** `C:\Users\firer\.flexfactor\evidence\e29c9d26f8adcf57\genemap-discovery-20260824-005059-902569-21424\blast-radius.json`
+- **Changed File Rescan:** `C:\Users\firer\.flexfactor\evidence\e29c9d26f8adcf57\genemap-discovery-20260824-005059-902569-21424\changed-file-rescan.json`
+- **Code Index:** `C:\Users\firer\.flexfactor\evidence\e29c9d26f8adcf57\genemap-discovery-20260824-005059-902569-21424\code-index.json`
+- **Coverage Ledger:** `C:\Users\firer\.flexfactor\evidence\e29c9d26f8adcf57\genemap-discovery-20260824-005059-902569-21424\coverage-ledger.json`
+- **Manifest:** `C:\Users\firer\.flexfactor\evidence\e29c9d26f8adcf57\genemap-discovery-20260824-005059-902569-21424\manifest.json`
+- **Purpose Graph:** `C:\Users\firer\.flexfactor\evidence\e29c9d26f8adcf57\genemap-discovery-20260824-005059-902569-21424\purpose-graph.json`
+- **Quality Gates:** `C:\Users\firer\.flexfactor\evidence\e29c9d26f8adcf57\genemap-discovery-20260824-005059-902569-21424\quality-gates.json`
+- **Sarif:** `C:\Users\firer\.flexfactor\evidence\e29c9d26f8adcf57\genemap-discovery-20260824-005059-902569-21424\results.sarif`
 
 ## Competitor research
 
@@ -55,69 +57,88 @@ The immutable run manifest contains the complete path-level inventory. Artifact,
 - **Sources used:** web:duckduckgo, repo-rewards
 - **Repo Rewards endpoint:** `https://web-production-d7db7.up.railway.app`
 - **Sources SKIPPED (named, not silent):**
-  - `model-discovery` - NotFoundError: Error code: 404 - {'status': 404, 'title': 'Not Found', 'detail': "Function 'cd89bd68-13e3-47a9-861e-9a62e6e14b05': Not found for account 'hvux_0rjHS6OiBfWXcZvKgoOaUBy_3UsQqq6I6IAz7I'"}
+  - `idea:DNAdigestOrg/datadiscovery` - model returned an incomplete idea (missing why_valuable) - forced to accept=False for DNAdigestOrg/datadiscovery
+  - `idea:alternatives` - model returned an incomplete idea (missing why_valuable) - forced to accept=False for alternatives
+  - `idea:jrderuiter/genemap` - model returned an incomplete idea (missing why_valuable) - forced to accept=False for jrderuiter/genemap
+  - `idea:match` - model returned an incomplete idea (missing why_valuable) - forced to accept=False for match
+  - `model-discovery` - BadRequestError: Error code: 400 - {'object': 'error', 'message': 'Expected exactly one message.', 'type': 'BadRequestError', 'param': None, 'code': 400}
   - `web:searxng` - RuntimeError: FLEXFACTOR_SEARXNG_URL is not set
 
-- **Ideas accepted as serving this program's purpose:** 4 (rejected 0 - the purpose contract, not the competitor, decides)
+- **Ideas accepted as serving this program's purpose:** 0 (rejected 4 - the purpose contract, not the competitor, decides)
 
 - **Bridged into the fix stream:** 0 of 4 candidate(s)
-  - NOT bridged (1): jrderuiter/genemap - accepted idea did not map to a valid acceptance criterion
-  - NOT bridged (3): DNAdigestOrg/datadiscovery, alternatives, match - not bridgeable (evidence=verified, reuse_mode=reference-only)
+  - NOT bridged (4): DNAdigestOrg/datadiscovery, alternatives, jrderuiter/genemap, match - idea rejected by the purpose contract
 
 | Competitor | Kind | Licence | Reuse mode | Purpose mapping | Verdict | Fix stream | Adoptable idea |
 |---|---|---|---|---|---|---|---|
-| [DNAdigestOrg/datadiscovery](https://github.com/DNAdigestOrg/datadiscovery) | oss | `UNKNOWN` | `reference-only` | acceptance #1, 2, 3 | ACCEPT | NOT entered - not bridgeable (evidence=verified, reuse_mode=reference-only) | Federated genomic repository search with harmonized metadata |
-| [jrderuiter/genemap](https://github.com/jrderuiter/genemap) | oss | `MIT` | `direct-code-reuse` | acceptance #1. lessons-to-research path works, 2. human/model-organism evidence separated, 4. deterministic benchmarks | ACCEPT | NOT entered - accepted idea did not map to a valid acceptance criterion | Gene Mapping Functionality |
-| [alternatives](https://sourceforge.nethttps://sourceforge.net/p/alternatives/) | oss | `UNKNOWN` | `reference-only` | acceptance #1. lessons-to-research path works | ACCEPT | NOT entered - not bridgeable (evidence=verified, reuse_mode=reference-only) | Community-driven alternatives discovery |
-| [match](https://sourceforge.nethttps://sourceforge.net/p/match/) | oss | `UNKNOWN` | `reference-only` | acceptance #1. lessons-to-research path works | ACCEPT | NOT entered - not bridgeable (evidence=verified, reuse_mode=reference-only) | Gene Comparison Visualization |
+| [DNAdigestOrg/datadiscovery](https://github.com/DNAdigestOrg/datadiscovery) | oss | `UNKNOWN` | `reference-only` | purpose-only | reject | NOT entered - idea rejected by the purpose contract | (idea extraction failed) |
+| [jrderuiter/genemap](https://github.com/jrderuiter/genemap) | oss | `MIT` | `direct-code-reuse` | purpose-only | reject | NOT entered - idea rejected by the purpose contract | (idea extraction failed) |
+| [alternatives](https://sourceforge.nethttps://sourceforge.net/p/alternatives/) | oss | `UNKNOWN` | `reference-only` | purpose-only | reject | NOT entered - idea rejected by the purpose contract | (idea extraction failed) |
+| [match](https://sourceforge.nethttps://sourceforge.net/p/match/) | oss | `UNKNOWN` | `reference-only` | purpose-only | reject | NOT entered - idea rejected by the purpose contract | (idea extraction failed) |
 
 ### DNAdigestOrg/datadiscovery
 
 - **Evidence:** <https://github.com/DNAdigestOrg/datadiscovery>
 - **Licence:** `UNKNOWN` (via repo-rewards)
 - **Reuse mode:** `reference-only` - licence UNKNOWN could not be verified; record the capability as a reference and copy nothing
-- **Idea:** Federated genomic repository search with harmonized metadata - Enables searching across multiple public genomic data repositories (e.g., EGA, dbGaP, GEO, ArrayExpress) through a unified query interface with standardized metadata fields and dataset-level provenance.
-- **Value here:** Would extend the program's early-research path (acceptance criterion 1) by letting learners and researchers discover real datasets behind gene–phenotype associations, reinforcing claim-level provenance (criterion 3) and human/model-organism evidence separation (criterion 2) with concrete repository records.
-- **Purpose / criterion mapping:** acceptance #1, 2, 3 - Directly serves the program's stated purpose of 'provenance-aware candidate-gene exploration' and 'early-research platform' by grounding educational topics in discoverable, citable datasets without enabling clinical use (criterion 6).
-- **Purpose verdict:** ACCEPTED - Directly serves the program's stated purpose of 'provenance-aware candidate-gene exploration' and 'early-research platform' by grounding educational topics in discoverable, citable datasets without enabling clinical use (criterion 6).
-- **Fix-stream decision:** DID NOT enter the fix stream - not bridgeable (evidence=verified, reuse_mode=reference-only)
-- **Evidence basis:** Supplied evidence only states the competitor is 'The DNAdigest platform for genomics data discovery' (GitHub description). No feature list, API docs, or UI evidence was provided to confirm federated search, metadata harmonization, or repository coverage. (confidence low)
+- **Idea:** (idea extraction failed) - 
+- **Value here:** 
+- **Purpose / criterion mapping:** purpose-only - NOT ACTED ON: model returned an incomplete idea (missing why_valuable) - forced to accept=False. not judged: C:\Users\firer\AppData\Roaming\npm\codex.CMD: exited 1: hook: UserPromptSubmit
+hook: UserPromptSubmit Completed
+ERROR: {"type":"error","status":400,"error":{"type":"invalid_request_error","message":"The 'gpt-5.6-sol' model is not supported when using Codex with a ChatGPT account."}}
+ERROR: {"type":"error","status":400,"error":{"type":"invalid_request_error","message":"The 'gpt-5.6-sol' model is not supported when using Codex with a ChatGPT account."}}
+
+- **Purpose verdict:** REJECTED - NOT ACTED ON: model returned an incomplete idea (missing why_valuable) - forced to accept=False. not judged: C:\Users\firer\AppData\Roaming\npm\codex.CMD: exited 1: hook: UserPromptSubmit
+hook: UserPromptSubmit Completed
+ERROR: {"type":"error","status":400,"error":{"type":"invalid_request_error","message":"The 'gpt-5.6-sol' model is not supported when using Codex with a ChatGPT account."}}
+ERROR: {"type":"error","status":400,"error":{"type":"invalid_request_error","message":"The 'gpt-5.6-sol' model is not supported when using Codex with a ChatGPT account."}}
+
+- **Fix-stream decision:** DID NOT enter the fix stream - idea rejected by the purpose contract
+- **Evidence basis:**  (confidence ?)
 
 ### jrderuiter/genemap
 
 - **Evidence:** <https://github.com/jrderuiter/genemap>
 - **Licence:** `MIT` (via repo-rewards)
 - **Reuse mode:** `direct-code-reuse` - licence MIT is permissive and compatible; source may be read and adapted with attribution
-- **Idea:** Gene Mapping Functionality - Maps gene IDs between different types and species using a command line tool and Python library.
-- **Value here:** Integrating gene mapping functionality would enhance the program's capacity to explore genetics in an educational context, aiding users in understanding genetic variations across species, which is in line with providing approachable genetics education.
-- **Purpose / criterion mapping:** acceptance #1. lessons-to-research path works, 2. human/model-organism evidence separated, 4. deterministic benchmarks - This directly supports the program's goal of being an educational platform by providing users with tools to better understand genetics.
-- **Purpose verdict:** ACCEPTED - This directly supports the program's goal of being an educational platform by providing users with tools to better understand genetics.
-- **Fix-stream decision:** DID NOT enter the fix stream - accepted idea did not map to a valid acceptance criterion
-- **Evidence basis:** The competitor provides a Python library and command line tool specifically designed for mapping gene IDs across types and species. (confidence high)
+- **Idea:** (idea extraction failed) - 
+- **Value here:** 
+- **Purpose / criterion mapping:** purpose-only - NOT ACTED ON: model returned an incomplete idea (missing why_valuable) - forced to accept=False. not judged: C:\Users\firer\AppData\Roaming\npm\codex.CMD: exited 1: hook: UserPromptSubmit
+hook: UserPromptSubmit Completed
+ERROR: {"type":"error","status":400,"error":{"type":"invalid_request_error","message":"The 'gpt-5.6-sol' model is not supported when using Codex with a ChatGPT account."}}
+ERROR: {"type":"error","status":400,"error":{"type":"invalid_request_error","message":"The 'gpt-5.6-sol' model is not supported when using Codex with a ChatGPT account."}}
+
+- **Purpose verdict:** REJECTED - NOT ACTED ON: model returned an incomplete idea (missing why_valuable) - forced to accept=False. not judged: C:\Users\firer\AppData\Roaming\npm\codex.CMD: exited 1: hook: UserPromptSubmit
+hook: UserPromptSubmit Completed
+ERROR: {"type":"error","status":400,"error":{"type":"invalid_request_error","message":"The 'gpt-5.6-sol' model is not supported when using Codex with a ChatGPT account."}}
+ERROR: {"type":"error","status":400,"error":{"type":"invalid_request_error","message":"The 'gpt-5.6-sol' model is not supported when using Codex with a ChatGPT account."}}
+
+- **Fix-stream decision:** DID NOT enter the fix stream - idea rejected by the purpose contract
+- **Evidence basis:**  (confidence ?)
 
 ### alternatives
 
 - **Evidence:** <https://sourceforge.nethttps://sourceforge.net/p/alternatives/>
 - **Licence:** `UNKNOWN` (via repo-rewards)
 - **Reuse mode:** `reference-only` - licence UNKNOWN could not be verified; record the capability as a reference and copy nothing
-- **Idea:** Community-driven alternatives discovery - Allows users to search for and compare alternative genomics tools or resources, presumably with community contributions and ratings, providing a curated list of options.
-- **Value here:** Adopting this would add a feature where learners and researchers can discover and compare different genetics education or research tools, enhancing the platform's role as an approachable education and early-research hub and supporting the lessons-to-research path.
-- **Purpose / criterion mapping:** acceptance #1. lessons-to-research path works - Adding a community-driven alternatives discovery feature would strengthen the platform's educational and research navigation by helping users find appropriate genetics tools, aligning with the purpose of 'an approachable genetics education and early-research platform' and supporting the acceptance criterion of a 'lessons-to-research path works'.
-- **Purpose verdict:** ACCEPTED - Adding a community-driven alternatives discovery feature would strengthen the platform's educational and research navigation by helping users find appropriate genetics tools, aligning with the purpose of 'an approachable genetics education and early-research platform' and supporting the acceptance criterion of a 'lessons-to-research path works'.
-- **Fix-stream decision:** DID NOT enter the fix stream - not bridgeable (evidence=verified, reuse_mode=reference-only)
-- **Evidence basis:** The competitor evidence lists the URL 'https://sourceforge.net/p/alternatives/' and the name 'alternatives', suggesting a directory or list of alternative software, which implies a capability for users to find and compare alternatives. (confidence medium)
+- **Idea:** (idea extraction failed) - 
+- **Value here:** 
+- **Purpose / criterion mapping:** purpose-only - NOT ACTED ON: model returned an incomplete idea (missing why_valuable) - forced to accept=False. not judged: C:\Users\firer\.local\bin\claude.EXE: exceeded 600s and was killed
+- **Purpose verdict:** REJECTED - NOT ACTED ON: model returned an incomplete idea (missing why_valuable) - forced to accept=False. not judged: C:\Users\firer\.local\bin\claude.EXE: exceeded 600s and was killed
+- **Fix-stream decision:** DID NOT enter the fix stream - idea rejected by the purpose contract
+- **Evidence basis:**  (confidence ?)
 
 ### match
 
 - **Evidence:** <https://sourceforge.nethttps://sourceforge.net/p/match/>
 - **Licence:** `UNKNOWN` (via repo-rewards)
 - **Reuse mode:** `reference-only` - licence UNKNOWN could not be verified; record the capability as a reference and copy nothing
-- **Idea:** Gene Comparison Visualization - Provides a visual representation of genetic comparisons between different genes or species, facilitating easier understanding of genetic relationships and differences.
-- **Value here:** Adopting this feature would enhance the educational aspect of gene exploration in the audited program, making it more interactive and engaging for users who are learning about genetics.
-- **Purpose / criterion mapping:** acceptance #1. lessons-to-research path works - This feature directly supports the program's purpose of being an approachable genetics education platform by providing tools that enhance learning and understanding.
-- **Purpose verdict:** ACCEPTED - This feature directly supports the program's purpose of being an approachable genetics education platform by providing tools that enhance learning and understanding.
-- **Fix-stream decision:** DID NOT enter the fix stream - not bridgeable (evidence=verified, reuse_mode=reference-only)
-- **Evidence basis:** Noted in the competitor's repository as 'apps/web/components/search/GeneComparison.jsx', indicating they have developed a component specifically for gene comparison visualization. (confidence high)
+- **Idea:** (idea extraction failed) - 
+- **Value here:** 
+- **Purpose / criterion mapping:** purpose-only - NOT ACTED ON: model returned an incomplete idea (missing why_valuable) - forced to accept=False. not judged: C:\Users\firer\.local\bin\claude.EXE: exceeded 600s and was killed
+- **Purpose verdict:** REJECTED - NOT ACTED ON: model returned an incomplete idea (missing why_valuable) - forced to accept=False. not judged: C:\Users\firer\.local\bin\claude.EXE: exceeded 600s and was killed
+- **Fix-stream decision:** DID NOT enter the fix stream - idea rejected by the purpose contract
+- **Evidence basis:**  (confidence ?)
 
 ## Release status
 
@@ -152,17 +173,1207 @@ Standing between this program and PRODUCTION READY (20 condition(s) without pass
 
 _These were found but left as-is - review and decide. Critical/high here means a file that could not be safely auto-fixed (see manual-review list)._
 
-### high (2)
-- `apps/web/pages/SuperAdminSetup.jsx` line 142 (security) - **Search fallback grants privileges to arbitrary first result user**: In handleGrantSuperAdmin, handleGrantFreePeriod, and handleRevokeFreePeriod, the target user lookup uses .find() for an exact email match but then falls back to (searchResult.users || [])[0]. When the API returns results without an exact match, the first arbitrary user in the array is selected and receives admin/premium/free-period actions intended for someone else. _Suggested fix:_ Remove the || (searchResult.users || [])[0] fallback; if .find() returns nothing, keep the error state set to 'User not found' and do not call any grant/revoke API.
-- `(purpose)` line 0 (quality-gate) - **Purpose assessment evidence is incomplete**: baseline purpose assessment incomplete: 2/3 sample(s) usable; BadRequestError: Error code: 400 - {'error': {'message': '`max_tokens` must be less than or equal to `4096`, the maximum value for `max_tokens` is less than the `context_window` for this model', 'type': 'invalid_request_error', 'param': 'max_tokens'}}; final purpose assessment returned no usable result _Suggested fix:_ Retry the resumable run after restoring a responsive provider.
+### high (1)
+- `(purpose)` line 0 (quality-gate) - **Purpose assessment evidence is incomplete**: baseline purpose assessment incomplete: 1/3 sample(s) usable; RotationError: every light pool failed this call; last error was RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit exceeded: free-models-per-day. Add 10 credits to unlock 1000 free model requests per day', 'code': 429, 'metadata': {'headers': {'X-RateLimit-Limit': '50', 'X-RateLimit-Remaining': '0', 'X-RateLimit-Reset': '1787616000000'}, 'limit_source': 'openrouter_free_tier_daily', 'remedy_hint': 'Wait for the daily reset (see X-RateLimit-Reset), or purchase credits to raise your free-model daily limit.', 'provider_name': None}}, 'user_id': 'user_3GWU0JMa1TcZebCavX9qtXxTXSU'}; BadRequestError: Error code: 400 - {'object': 'error', 'message': 'Expected exactly one message.', 'type': 'BadRequestError', 'param': None, 'code': 400}; final purpose assessment returned no usable result _Suggested fix:_ Retry the resumable run after restoring a responsive provider.
 
 ## Defects by file
 
-### `apps/web/pages/SuperAdminSetup.jsx` ⚠️ reported
-- **[high]** line 142 (security) — **Search fallback grants privileges to arbitrary first result user**: In handleGrantSuperAdmin, handleGrantFreePeriod, and handleRevokeFreePeriod, the target user lookup uses .find() for an exact email match but then falls back to (searchResult.users || [])[0]. When the API returns results without an exact match, the first arbitrary user in the array is selected and receives admin/premium/free-period actions intended for someone else. _Fix:_ Remove the || (searchResult.users || [])[0] fallback; if .find() returns nothing, keep the error state set to 'User not found' and do not call any grant/revoke API.
+_No defects found in the reviewed files._
 
 ## Fix notes / left unfixed
 
-- apps/web/pages/SuperAdminSetup.jsx: NO-OP - author model returned no change for 1 finding(s): [{'issue': 'Search fallback grants privileges to arbitrary first result user', 'cross_file': True}]
-- provider outage: three consecutive semantic review batches completed zero files - stopped fail-closed for resumable retry
-- provider-outage rollback failed; working tree requires inspection
+- publication failure made no progress and did not name another repairable source file
+- baseline publication suite is red and bounded repair did not fix it; review continued, publication stays blocked
+- review made no progress: three consecutive semantic review batches completed ZERO files (0 of 368 candidate file(s) reviewed all run). This is a provider/route fault, NOT evidence the repo is clean - stopped fail-closed for resumable retry
+- tree NOT rolled back: --allow-dirty means uncommitted content here may be the owner's, not this run's
+
+
+## Errors (54)
+
+| # | phase | kind | error | responsible |
+|---|---|---|---|---|
+| 1 | rotation | provider | BadRequestError: Error code: 400 - {'object': 'error', 'message': 'Expected exactly one me | flexfactor.py:2411 |
+| 2 | rotation | provider | APIStatusError: Error code: 413 - {'error': {'message': 'Request Entity Too Large', 'type' | flexfactor.py:2411 |
+| 3 | rotation | provider | PermissionDeniedError: Error code: 403 - {'error': {'message': 'thinkingmachines/inkling-s | flexfactor.py:2411 |
+| 4 | rotation | provider | PermissionDeniedError: Error code: 403 - {'error': {'message': 'thinkingmachines/inkling:f | flexfactor.py:2411 |
+| 5 | rotation | provider | TimeoutError: timed out | flexfactor.py:2701 |
+| 6 | rotation | provider | PermissionDeniedError: Error code: 403 - {'error': {'message': 'thinkingmachines/inkling-s | flexfactor.py:2411 |
+| 7 | rotation | provider | PermissionDeniedError: Error code: 403 - {'error': {'message': 'thinkingmachines/inkling:f | flexfactor.py:2411 |
+| 8 | rotation | provider | BadRequestError: Error code: 400 - {'error': {'message': 'Please reduce the length of the  | flexfactor.py:2411 |
+| 9 | rotation | provider | RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit exceeded: free-models- | flexfactor.py:2411 |
+| 10 | rotation | provider | RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit exceeded: free-models- | flexfactor.py:2411 |
+| 11 | rotation | provider | RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit exceeded: free-models- | flexfactor.py:2411 |
+| 12 | rotation | provider | RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit exceeded: free-models- | flexfactor.py:2411 |
+| 13 | rotation | provider | RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit exceeded: free-models- | flexfactor.py:2411 |
+| 14 | rotation | provider | RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit exceeded: free-models- | flexfactor.py:2411 |
+| 15 | rotation | provider | RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit exceeded: free-models- | flexfactor.py:2411 |
+| 16 | rotation | provider | RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit exceeded: free-models- | flexfactor.py:2411 |
+| 17 | rotation | provider | RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit exceeded: free-models- | flexfactor.py:2411 |
+| 18 | rotation | provider | RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit exceeded: free-models- | flexfactor.py:2411 |
+| 19 | rotation | provider | RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit exceeded: free-models- | flexfactor.py:2411 |
+| 20 | rotation | provider | BadRequestError: Error code: 400 - {'object': 'error', 'message': 'Expected exactly one me | flexfactor.py:2411 |
+| 21 | rotation | provider | APIStatusError: Error code: 413 - {'error': {'message': 'Request Entity Too Large', 'type' | flexfactor.py:2411 |
+| 22 | rotation | provider | RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit exceeded: free-models- | flexfactor.py:2411 |
+| 23 | rotation | provider | RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit exceeded: free-models- | flexfactor.py:2411 |
+| 24 | rotation | provider | RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit exceeded: free-models- | flexfactor.py:2411 |
+| 25 | rotation | provider | RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit exceeded: free-models- | flexfactor.py:2411 |
+| 26 | rotation | provider | RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit exceeded: free-models- | flexfactor.py:2411 |
+| 27 | rotation | provider | RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit exceeded: free-models- | flexfactor.py:2411 |
+| 28 | rotation | provider | RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit exceeded: free-models- | flexfactor.py:2411 |
+| 29 | rotation | provider | RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit exceeded: free-models- | flexfactor.py:2411 |
+| 30 | rotation | provider | RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit exceeded: free-models- | flexfactor.py:2411 |
+| 31 | rotation | provider | RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit exceeded: free-models- | flexfactor.py:2411 |
+| 32 | rotation | provider | PermissionDeniedError: Error code: 403 - {'error': {'message': 'thinkingmachines/inkling-s | flexfactor.py:2411 |
+| 33 | rotation | provider | RateLimitError: Error code: 429 - [{'error': {'code': 429, 'message': 'You exceeded your c | flexfactor.py:2411 |
+| 34 | rotation | provider | RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit exceeded: free-models- | flexfactor.py:2411 |
+| 35 | rotation | provider | PermissionDeniedError: Error code: 403 - {'error': {'message': 'thinkingmachines/inkling:f | flexfactor.py:2411 |
+| 36 | rotation | provider | RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `met | flexfactor.py:2411 |
+| 37 | rotation | provider | BadRequestError: Error code: 400 - {'error': "This model's maximum context length is 4096  | flexfactor.py:2411 |
+| 38 | rotation | provider | RuntimeError: Structured output matched no schema key (decoy/unrelated JSON object; expect | flexfactor.py:2987 |
+| 39 | rotation | environment | NotFoundError: Error code: 404 - {'error': {'message': 'Model not found', 'type': 'Not Fou | flexfactor.py:2411 |
+| 40 | rotation | provider | BadRequestError: Error code: 400 - {'object': 'error', 'message': 'Expected exactly one me | flexfactor.py:2411 |
+| 41 | rotation | provider | NotFoundError: Error code: 404 - {'status': 404, 'title': 'Not Found', 'detail': "Function | flexfactor.py:2411 |
+| 42 | rotation | provider | RuntimeError: Structured output matched no schema key (decoy/unrelated JSON object; expect | flexfactor.py:2987 |
+| 43 | rotation | provider | RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit exceeded: free-models- | flexfactor.py:2411 |
+| 44 | rotation | provider | RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit exceeded: free-models- | flexfactor.py:2411 |
+| 45 | rotation | provider | RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit exceeded: free-models- | flexfactor.py:2411 |
+| 46 | rotation | provider | RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit exceeded: free-models- | flexfactor.py:2411 |
+| 47 | rotation | provider | RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit exceeded: free-models- | flexfactor.py:2411 |
+| 48 | rotation | provider | RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit exceeded: free-models- | flexfactor.py:2411 |
+| 49 | rotation | provider | RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit exceeded: free-models- | flexfactor.py:2411 |
+| 50 | rotation | provider | RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit exceeded: free-models- | flexfactor.py:2411 |
+| 51 | rotation | provider | RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit exceeded: free-models- | flexfactor.py:2411 |
+| 52 | rotation | provider | TimeoutError: timed out | flexfactor.py:2701 |
+| 53 | rotation | provider | TimeoutError: timed out | flexfactor.py:2701 |
+| 54 | baseline-gate | program-defect | review made no progress: three consecutive semantic review batches completed ZERO files (0 | - |
+
+Counts by kind: environment 1, program-defect 1, provider 52
+
+### 1. rotation — provider
+
+**Error**
+
+```
+BadRequestError: Error code: 400 - {'object': 'error', 'message': 'Expected exactly one message.', 'type': 'BadRequestError', 'param': None, 'code': 400}
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2411` in `_chat_create()`
+
+```python
+return client.chat.completions.create(**kwargs)
+```
+- Route: `nvidia_nim/nvidia/nemoretriever-parse`
+
+**Suggested fix** (none)
+
+no known fix; start from the responsible code above
+
+### 2. rotation — provider
+
+**Error**
+
+```
+APIStatusError: Error code: 413 - {'error': {'message': 'Request Entity Too Large', 'type': 'invalid_request_error', 'code': 'request_too_large'}}
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2411` in `_chat_create()`
+
+```python
+return client.chat.completions.create(**kwargs)
+```
+- Route: `groq/groq/compound-mini`
+
+**Suggested fix** (none)
+
+no known fix; start from the responsible code above
+
+### 3. rotation — provider
+
+**Error**
+
+```
+PermissionDeniedError: Error code: 403 - {'error': {'message': 'thinkingmachines/inkling-small:free is only available on agentic harnesses. Try plugging it into a coding agent or productivity app listed on https://openrouter.ai/apps', 'code': 403}}
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2411` in `_chat_create()`
+
+```python
+return client.chat.completions.create(**kwargs)
+```
+- Route: `openrouter/thinkingmachines/inkling-small:free`
+
+**Suggested fix** (signature)
+
+This route is gated or not permitted for the key in use. Rotation skips it after strikes; to stop retrying it, exclude it (FLEXFACTOR_ROTATION_EXCLUDE=<fragment>) or have AI Time's catalog mark it disabled.
+
+### 4. rotation — provider
+
+**Error**
+
+```
+PermissionDeniedError: Error code: 403 - {'error': {'message': 'thinkingmachines/inkling:free is only available on agentic harnesses. Try plugging it into a coding agent or productivity app listed on https://openrouter.ai/apps', 'code': 403}}
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2411` in `_chat_create()`
+
+```python
+return client.chat.completions.create(**kwargs)
+```
+- Route: `openrouter/thinkingmachines/inkling:free`
+
+**Suggested fix** (signature)
+
+This route is gated or not permitted for the key in use. Rotation skips it after strikes; to stop retrying it, exclude it (FLEXFACTOR_ROTATION_EXCLUDE=<fragment>) or have AI Time's catalog mark it disabled.
+
+### 5. rotation — provider
+
+**Error**
+
+```
+TimeoutError: timed out
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2701` in `_chat()`
+
+```python
+with self._opener.open(req, timeout=_ollama_http_timeout()) as resp:
+```
+- Route: `ollama/qwen2.5-coder:7b`
+
+**Suggested fix** (none)
+
+no known fix; start from the responsible code above
+
+### 6. rotation — provider
+
+**Error**
+
+```
+PermissionDeniedError: Error code: 403 - {'error': {'message': 'thinkingmachines/inkling-small:free is only available on agentic harnesses. Try plugging it into a coding agent or productivity app listed on https://openrouter.ai/apps', 'code': 403}}
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2411` in `_chat_create()`
+
+```python
+return client.chat.completions.create(**kwargs)
+```
+- Route: `openrouter/thinkingmachines/inkling-small:free`
+
+**Suggested fix** (signature)
+
+This route is gated or not permitted for the key in use. Rotation skips it after strikes; to stop retrying it, exclude it (FLEXFACTOR_ROTATION_EXCLUDE=<fragment>) or have AI Time's catalog mark it disabled.
+
+### 7. rotation — provider
+
+**Error**
+
+```
+PermissionDeniedError: Error code: 403 - {'error': {'message': 'thinkingmachines/inkling:free is only available on agentic harnesses. Try plugging it into a coding agent or productivity app listed on https://openrouter.ai/apps', 'code': 403}}
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2411` in `_chat_create()`
+
+```python
+return client.chat.completions.create(**kwargs)
+```
+- Route: `openrouter/thinkingmachines/inkling:free`
+
+**Suggested fix** (signature)
+
+This route is gated or not permitted for the key in use. Rotation skips it after strikes; to stop retrying it, exclude it (FLEXFACTOR_ROTATION_EXCLUDE=<fragment>) or have AI Time's catalog mark it disabled.
+
+### 8. rotation — provider
+
+**Error**
+
+```
+BadRequestError: Error code: 400 - {'error': {'message': 'Please reduce the length of the messages or completion.', 'type': 'invalid_request_error', 'param': 'messages'}}
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2411` in `_chat_create()`
+
+```python
+return client.chat.completions.create(**kwargs)
+```
+- Route: `groq/allam-2-7b`
+
+**Suggested fix** (none)
+
+no known fix; start from the responsible code above
+
+### 9. rotation — provider
+
+**Error**
+
+```
+RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit exceeded: free-models-per-day. Add 10 credits to unlock 1000 free model requests per day', 'code': 429, 'metadata': {'headers': {'X-RateLimit-Limit': '50', 'X-RateLimit-Remaining': '0', 'X-RateLimit-Reset': '1787616000000'}, 'limit_source': 'openrouter_free_tier_daily', 'remedy_hint': 'Wait for the daily reset (see X-RateLimit-Reset), or purchase credits to raise your free-model daily limit.', 'provider_name': None}}, 'user_id': 'user_3GWU0JMa1TcZebCavX9qtXxTXSU'}
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2411` in `_chat_create()`
+
+```python
+return client.chat.completions.create(**kwargs)
+```
+- Route: `openrouter/cohere/north-mini-code:free`
+
+**Suggested fix** (signature)
+
+Rate-limited. The rotator cools the pool down and moves on; nothing to fix unless it recurs on every pool, which means the free tiers are exhausted for now.
+
+### 10. rotation — provider
+
+**Error**
+
+```
+RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit exceeded: free-models-per-day. Add 10 credits to unlock 1000 free model requests per day', 'code': 429, 'metadata': {'headers': {'X-RateLimit-Limit': '50', 'X-RateLimit-Remaining': '0', 'X-RateLimit-Reset': '1787616000000'}, 'limit_source': 'openrouter_free_tier_daily', 'remedy_hint': 'Wait for the daily reset (see X-RateLimit-Reset), or purchase credits to raise your free-model daily limit.', 'provider_name': None}}, 'user_id': 'user_3GWU0JMa1TcZebCavX9qtXxTXSU'}
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2411` in `_chat_create()`
+
+```python
+return client.chat.completions.create(**kwargs)
+```
+- Route: `openrouter/poolside/laguna-s-2.1:free`
+
+**Suggested fix** (signature)
+
+Rate-limited. The rotator cools the pool down and moves on; nothing to fix unless it recurs on every pool, which means the free tiers are exhausted for now.
+
+### 11. rotation — provider
+
+**Error**
+
+```
+RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit exceeded: free-models-per-day. Add 10 credits to unlock 1000 free model requests per day', 'code': 429, 'metadata': {'headers': {'X-RateLimit-Limit': '50', 'X-RateLimit-Remaining': '0', 'X-RateLimit-Reset': '1787616000000'}, 'limit_source': 'openrouter_free_tier_daily', 'remedy_hint': 'Wait for the daily reset (see X-RateLimit-Reset), or purchase credits to raise your free-model daily limit.', 'provider_name': None}}, 'user_id': 'user_3GWU0JMa1TcZebCavX9qtXxTXSU'}
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2411` in `_chat_create()`
+
+```python
+return client.chat.completions.create(**kwargs)
+```
+- Route: `openrouter/nvidia/nemotron-3.5-lightning:free`
+
+**Suggested fix** (signature)
+
+Rate-limited. The rotator cools the pool down and moves on; nothing to fix unless it recurs on every pool, which means the free tiers are exhausted for now.
+
+### 12. rotation — provider
+
+**Error**
+
+```
+RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit exceeded: free-models-per-day. Add 10 credits to unlock 1000 free model requests per day', 'code': 429, 'metadata': {'headers': {'X-RateLimit-Limit': '50', 'X-RateLimit-Remaining': '0', 'X-RateLimit-Reset': '1787616000000'}, 'limit_source': 'openrouter_free_tier_daily', 'remedy_hint': 'Wait for the daily reset (see X-RateLimit-Reset), or purchase credits to raise your free-model daily limit.', 'provider_name': None}}, 'user_id': 'user_3GWU0JMa1TcZebCavX9qtXxTXSU'}
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2411` in `_chat_create()`
+
+```python
+return client.chat.completions.create(**kwargs)
+```
+- Route: `openrouter/dots-studio/dots-3-note-preview:free`
+
+**Suggested fix** (signature)
+
+Rate-limited. The rotator cools the pool down and moves on; nothing to fix unless it recurs on every pool, which means the free tiers are exhausted for now.
+
+### 13. rotation — provider
+
+**Error**
+
+```
+RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit exceeded: free-models-per-day. Add 10 credits to unlock 1000 free model requests per day', 'code': 429, 'metadata': {'headers': {'X-RateLimit-Limit': '50', 'X-RateLimit-Remaining': '0', 'X-RateLimit-Reset': '1787616000000'}, 'limit_source': 'openrouter_free_tier_daily', 'remedy_hint': 'Wait for the daily reset (see X-RateLimit-Reset), or purchase credits to raise your free-model daily limit.', 'provider_name': None}}, 'user_id': 'user_3GWU0JMa1TcZebCavX9qtXxTXSU'}
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2411` in `_chat_create()`
+
+```python
+return client.chat.completions.create(**kwargs)
+```
+- Route: `openrouter/nvidia/nemotron-3-nano-30b-a3b:free`
+
+**Suggested fix** (signature)
+
+Rate-limited. The rotator cools the pool down and moves on; nothing to fix unless it recurs on every pool, which means the free tiers are exhausted for now.
+
+### 14. rotation — provider
+
+**Error**
+
+```
+RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit exceeded: free-models-per-day. Add 10 credits to unlock 1000 free model requests per day', 'code': 429, 'metadata': {'headers': {'X-RateLimit-Limit': '50', 'X-RateLimit-Remaining': '0', 'X-RateLimit-Reset': '1787616000000'}, 'limit_source': 'openrouter_free_tier_daily', 'remedy_hint': 'Wait for the daily reset (see X-RateLimit-Reset), or purchase credits to raise your free-model daily limit.', 'provider_name': None}}, 'user_id': 'user_3GWU0JMa1TcZebCavX9qtXxTXSU'}
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2411` in `_chat_create()`
+
+```python
+return client.chat.completions.create(**kwargs)
+```
+- Route: `openrouter/nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free`
+
+**Suggested fix** (signature)
+
+Rate-limited. The rotator cools the pool down and moves on; nothing to fix unless it recurs on every pool, which means the free tiers are exhausted for now.
+
+### 15. rotation — provider
+
+**Error**
+
+```
+RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit exceeded: free-models-per-day. Add 10 credits to unlock 1000 free model requests per day', 'code': 429, 'metadata': {'headers': {'X-RateLimit-Limit': '50', 'X-RateLimit-Remaining': '0', 'X-RateLimit-Reset': '1787616000000'}, 'limit_source': 'openrouter_free_tier_daily', 'remedy_hint': 'Wait for the daily reset (see X-RateLimit-Reset), or purchase credits to raise your free-model daily limit.', 'provider_name': None}}, 'user_id': 'user_3GWU0JMa1TcZebCavX9qtXxTXSU'}
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2411` in `_chat_create()`
+
+```python
+return client.chat.completions.create(**kwargs)
+```
+- Route: `openrouter/nvidia/nemotron-nano-12b-v2-vl:free`
+
+**Suggested fix** (signature)
+
+Rate-limited. The rotator cools the pool down and moves on; nothing to fix unless it recurs on every pool, which means the free tiers are exhausted for now.
+
+### 16. rotation — provider
+
+**Error**
+
+```
+RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit exceeded: free-models-per-day. Add 10 credits to unlock 1000 free model requests per day', 'code': 429, 'metadata': {'headers': {'X-RateLimit-Limit': '50', 'X-RateLimit-Remaining': '0', 'X-RateLimit-Reset': '1787616000000'}, 'limit_source': 'openrouter_free_tier_daily', 'remedy_hint': 'Wait for the daily reset (see X-RateLimit-Reset), or purchase credits to raise your free-model daily limit.', 'provider_name': None}}, 'user_id': 'user_3GWU0JMa1TcZebCavX9qtXxTXSU'}
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2411` in `_chat_create()`
+
+```python
+return client.chat.completions.create(**kwargs)
+```
+- Route: `openrouter/liquid/lfm-2.5-2.6b:free`
+
+**Suggested fix** (signature)
+
+Rate-limited. The rotator cools the pool down and moves on; nothing to fix unless it recurs on every pool, which means the free tiers are exhausted for now.
+
+### 17. rotation — provider
+
+**Error**
+
+```
+RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit exceeded: free-models-per-day. Add 10 credits to unlock 1000 free model requests per day', 'code': 429, 'metadata': {'headers': {'X-RateLimit-Limit': '50', 'X-RateLimit-Remaining': '0', 'X-RateLimit-Reset': '1787616000000'}, 'limit_source': 'openrouter_free_tier_daily', 'remedy_hint': 'Wait for the daily reset (see X-RateLimit-Reset), or purchase credits to raise your free-model daily limit.', 'provider_name': None}}, 'user_id': 'user_3GWU0JMa1TcZebCavX9qtXxTXSU'}
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2411` in `_chat_create()`
+
+```python
+return client.chat.completions.create(**kwargs)
+```
+- Route: `openrouter/nvidia/nemotron-nano-9b-v2:free`
+
+**Suggested fix** (signature)
+
+Rate-limited. The rotator cools the pool down and moves on; nothing to fix unless it recurs on every pool, which means the free tiers are exhausted for now.
+
+### 18. rotation — provider
+
+**Error**
+
+```
+RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit exceeded: free-models-per-day. Add 10 credits to unlock 1000 free model requests per day', 'code': 429, 'metadata': {'headers': {'X-RateLimit-Limit': '50', 'X-RateLimit-Remaining': '0', 'X-RateLimit-Reset': '1787616000000'}, 'limit_source': 'openrouter_free_tier_daily', 'remedy_hint': 'Wait for the daily reset (see X-RateLimit-Reset), or purchase credits to raise your free-model daily limit.', 'provider_name': None}}, 'user_id': 'user_3GWU0JMa1TcZebCavX9qtXxTXSU'}
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2411` in `_chat_create()`
+
+```python
+return client.chat.completions.create(**kwargs)
+```
+- Route: `openrouter/poolside/laguna-xs-2.1:free`
+
+**Suggested fix** (signature)
+
+Rate-limited. The rotator cools the pool down and moves on; nothing to fix unless it recurs on every pool, which means the free tiers are exhausted for now.
+
+### 19. rotation — provider
+
+**Error**
+
+```
+RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit exceeded: free-models-per-day. Add 10 credits to unlock 1000 free model requests per day', 'code': 429, 'metadata': {'headers': {'X-RateLimit-Limit': '50', 'X-RateLimit-Remaining': '0', 'X-RateLimit-Reset': '1787616000000'}, 'limit_source': 'openrouter_free_tier_daily', 'remedy_hint': 'Wait for the daily reset (see X-RateLimit-Reset), or purchase credits to raise your free-model daily limit.', 'provider_name': None}}, 'user_id': 'user_3GWU0JMa1TcZebCavX9qtXxTXSU'}
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2411` in `_chat_create()`
+
+```python
+return client.chat.completions.create(**kwargs)
+```
+- Route: `openrouter/z-ai/glm-5.2:free`
+
+**Suggested fix** (signature)
+
+Rate-limited. The rotator cools the pool down and moves on; nothing to fix unless it recurs on every pool, which means the free tiers are exhausted for now.
+
+### 20. rotation — provider
+
+**Error**
+
+```
+BadRequestError: Error code: 400 - {'object': 'error', 'message': 'Expected exactly one message.', 'type': 'BadRequestError', 'param': None, 'code': 400}
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2411` in `_chat_create()`
+
+```python
+return client.chat.completions.create(**kwargs)
+```
+- Route: `nvidia_nim/nvidia/nemoretriever-parse`
+
+**Suggested fix** (none)
+
+no known fix; start from the responsible code above
+
+### 21. rotation — provider
+
+**Error**
+
+```
+APIStatusError: Error code: 413 - {'error': {'message': 'Request Entity Too Large', 'type': 'invalid_request_error', 'code': 'request_too_large'}}
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2411` in `_chat_create()`
+
+```python
+return client.chat.completions.create(**kwargs)
+```
+- Route: `groq/groq/compound`
+
+**Suggested fix** (none)
+
+no known fix; start from the responsible code above
+
+### 22. rotation — provider
+
+**Error**
+
+```
+RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit exceeded: free-models-per-day. Add 10 credits to unlock 1000 free model requests per day', 'code': 429, 'metadata': {'headers': {'X-RateLimit-Limit': '50', 'X-RateLimit-Remaining': '0', 'X-RateLimit-Reset': '1787616000000'}, 'limit_source': 'openrouter_free_tier_daily', 'remedy_hint': 'Wait for the daily reset (see X-RateLimit-Reset), or purchase credits to raise your free-model daily limit.', 'provider_name': None}}, 'user_id': 'user_3GWU0JMa1TcZebCavX9qtXxTXSU'}
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2411` in `_chat_create()`
+
+```python
+return client.chat.completions.create(**kwargs)
+```
+- Route: `openrouter/poolside/laguna-s-2.1:free`
+
+**Suggested fix** (signature)
+
+Rate-limited. The rotator cools the pool down and moves on; nothing to fix unless it recurs on every pool, which means the free tiers are exhausted for now.
+
+### 23. rotation — provider
+
+**Error**
+
+```
+RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit exceeded: free-models-per-day. Add 10 credits to unlock 1000 free model requests per day', 'code': 429, 'metadata': {'headers': {'X-RateLimit-Limit': '50', 'X-RateLimit-Remaining': '0', 'X-RateLimit-Reset': '1787616000000'}, 'limit_source': 'openrouter_free_tier_daily', 'remedy_hint': 'Wait for the daily reset (see X-RateLimit-Reset), or purchase credits to raise your free-model daily limit.', 'provider_name': None}}, 'user_id': 'user_3GWU0JMa1TcZebCavX9qtXxTXSU'}
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2411` in `_chat_create()`
+
+```python
+return client.chat.completions.create(**kwargs)
+```
+- Route: `openrouter/nvidia/nemotron-3.5-lightning:free`
+
+**Suggested fix** (signature)
+
+Rate-limited. The rotator cools the pool down and moves on; nothing to fix unless it recurs on every pool, which means the free tiers are exhausted for now.
+
+### 24. rotation — provider
+
+**Error**
+
+```
+RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit exceeded: free-models-per-day. Add 10 credits to unlock 1000 free model requests per day', 'code': 429, 'metadata': {'headers': {'X-RateLimit-Limit': '50', 'X-RateLimit-Remaining': '0', 'X-RateLimit-Reset': '1787616000000'}, 'limit_source': 'openrouter_free_tier_daily', 'remedy_hint': 'Wait for the daily reset (see X-RateLimit-Reset), or purchase credits to raise your free-model daily limit.', 'provider_name': None}}, 'user_id': 'user_3GWU0JMa1TcZebCavX9qtXxTXSU'}
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2411` in `_chat_create()`
+
+```python
+return client.chat.completions.create(**kwargs)
+```
+- Route: `openrouter/dots-studio/dots-3-note-preview:free`
+
+**Suggested fix** (signature)
+
+Rate-limited. The rotator cools the pool down and moves on; nothing to fix unless it recurs on every pool, which means the free tiers are exhausted for now.
+
+### 25. rotation — provider
+
+**Error**
+
+```
+RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit exceeded: free-models-per-day. Add 10 credits to unlock 1000 free model requests per day', 'code': 429, 'metadata': {'headers': {'X-RateLimit-Limit': '50', 'X-RateLimit-Remaining': '0', 'X-RateLimit-Reset': '1787616000000'}, 'limit_source': 'openrouter_free_tier_daily', 'remedy_hint': 'Wait for the daily reset (see X-RateLimit-Reset), or purchase credits to raise your free-model daily limit.', 'provider_name': None}}, 'user_id': 'user_3GWU0JMa1TcZebCavX9qtXxTXSU'}
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2411` in `_chat_create()`
+
+```python
+return client.chat.completions.create(**kwargs)
+```
+- Route: `openrouter/nvidia/nemotron-3-nano-30b-a3b:free`
+
+**Suggested fix** (signature)
+
+Rate-limited. The rotator cools the pool down and moves on; nothing to fix unless it recurs on every pool, which means the free tiers are exhausted for now.
+
+### 26. rotation — provider
+
+**Error**
+
+```
+RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit exceeded: free-models-per-day. Add 10 credits to unlock 1000 free model requests per day', 'code': 429, 'metadata': {'headers': {'X-RateLimit-Limit': '50', 'X-RateLimit-Remaining': '0', 'X-RateLimit-Reset': '1787616000000'}, 'limit_source': 'openrouter_free_tier_daily', 'remedy_hint': 'Wait for the daily reset (see X-RateLimit-Reset), or purchase credits to raise your free-model daily limit.', 'provider_name': None}}, 'user_id': 'user_3GWU0JMa1TcZebCavX9qtXxTXSU'}
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2411` in `_chat_create()`
+
+```python
+return client.chat.completions.create(**kwargs)
+```
+- Route: `openrouter/nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free`
+
+**Suggested fix** (signature)
+
+Rate-limited. The rotator cools the pool down and moves on; nothing to fix unless it recurs on every pool, which means the free tiers are exhausted for now.
+
+### 27. rotation — provider
+
+**Error**
+
+```
+RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit exceeded: free-models-per-day. Add 10 credits to unlock 1000 free model requests per day', 'code': 429, 'metadata': {'headers': {'X-RateLimit-Limit': '50', 'X-RateLimit-Remaining': '0', 'X-RateLimit-Reset': '1787616000000'}, 'limit_source': 'openrouter_free_tier_daily', 'remedy_hint': 'Wait for the daily reset (see X-RateLimit-Reset), or purchase credits to raise your free-model daily limit.', 'provider_name': None}}, 'user_id': 'user_3GWU0JMa1TcZebCavX9qtXxTXSU'}
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2411` in `_chat_create()`
+
+```python
+return client.chat.completions.create(**kwargs)
+```
+- Route: `openrouter/nvidia/nemotron-nano-12b-v2-vl:free`
+
+**Suggested fix** (signature)
+
+Rate-limited. The rotator cools the pool down and moves on; nothing to fix unless it recurs on every pool, which means the free tiers are exhausted for now.
+
+### 28. rotation — provider
+
+**Error**
+
+```
+RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit exceeded: free-models-per-day. Add 10 credits to unlock 1000 free model requests per day', 'code': 429, 'metadata': {'headers': {'X-RateLimit-Limit': '50', 'X-RateLimit-Remaining': '0', 'X-RateLimit-Reset': '1787616000000'}, 'limit_source': 'openrouter_free_tier_daily', 'remedy_hint': 'Wait for the daily reset (see X-RateLimit-Reset), or purchase credits to raise your free-model daily limit.', 'provider_name': None}}, 'user_id': 'user_3GWU0JMa1TcZebCavX9qtXxTXSU'}
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2411` in `_chat_create()`
+
+```python
+return client.chat.completions.create(**kwargs)
+```
+- Route: `openrouter/liquid/lfm-2.5-2.6b:free`
+
+**Suggested fix** (signature)
+
+Rate-limited. The rotator cools the pool down and moves on; nothing to fix unless it recurs on every pool, which means the free tiers are exhausted for now.
+
+### 29. rotation — provider
+
+**Error**
+
+```
+RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit exceeded: free-models-per-day. Add 10 credits to unlock 1000 free model requests per day', 'code': 429, 'metadata': {'headers': {'X-RateLimit-Limit': '50', 'X-RateLimit-Remaining': '0', 'X-RateLimit-Reset': '1787616000000'}, 'limit_source': 'openrouter_free_tier_daily', 'remedy_hint': 'Wait for the daily reset (see X-RateLimit-Reset), or purchase credits to raise your free-model daily limit.', 'provider_name': None}}, 'user_id': 'user_3GWU0JMa1TcZebCavX9qtXxTXSU'}
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2411` in `_chat_create()`
+
+```python
+return client.chat.completions.create(**kwargs)
+```
+- Route: `openrouter/nvidia/nemotron-nano-9b-v2:free`
+
+**Suggested fix** (signature)
+
+Rate-limited. The rotator cools the pool down and moves on; nothing to fix unless it recurs on every pool, which means the free tiers are exhausted for now.
+
+### 30. rotation — provider
+
+**Error**
+
+```
+RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit exceeded: free-models-per-day. Add 10 credits to unlock 1000 free model requests per day', 'code': 429, 'metadata': {'headers': {'X-RateLimit-Limit': '50', 'X-RateLimit-Remaining': '0', 'X-RateLimit-Reset': '1787616000000'}, 'limit_source': 'openrouter_free_tier_daily', 'remedy_hint': 'Wait for the daily reset (see X-RateLimit-Reset), or purchase credits to raise your free-model daily limit.', 'provider_name': None}}, 'user_id': 'user_3GWU0JMa1TcZebCavX9qtXxTXSU'}
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2411` in `_chat_create()`
+
+```python
+return client.chat.completions.create(**kwargs)
+```
+- Route: `openrouter/poolside/laguna-xs-2.1:free`
+
+**Suggested fix** (signature)
+
+Rate-limited. The rotator cools the pool down and moves on; nothing to fix unless it recurs on every pool, which means the free tiers are exhausted for now.
+
+### 31. rotation — provider
+
+**Error**
+
+```
+RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit exceeded: free-models-per-day. Add 10 credits to unlock 1000 free model requests per day', 'code': 429, 'metadata': {'headers': {'X-RateLimit-Limit': '50', 'X-RateLimit-Remaining': '0', 'X-RateLimit-Reset': '1787616000000'}, 'limit_source': 'openrouter_free_tier_daily', 'remedy_hint': 'Wait for the daily reset (see X-RateLimit-Reset), or purchase credits to raise your free-model daily limit.', 'provider_name': None}}, 'user_id': 'user_3GWU0JMa1TcZebCavX9qtXxTXSU'}
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2411` in `_chat_create()`
+
+```python
+return client.chat.completions.create(**kwargs)
+```
+- Route: `openrouter/z-ai/glm-5.2:free`
+
+**Suggested fix** (signature)
+
+Rate-limited. The rotator cools the pool down and moves on; nothing to fix unless it recurs on every pool, which means the free tiers are exhausted for now.
+
+### 32. rotation — provider
+
+**Error**
+
+```
+PermissionDeniedError: Error code: 403 - {'error': {'message': 'thinkingmachines/inkling-small:free is only available on agentic harnesses. Try plugging it into a coding agent or productivity app listed on https://openrouter.ai/apps', 'code': 403}}
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2411` in `_chat_create()`
+
+```python
+return client.chat.completions.create(**kwargs)
+```
+- Route: `openrouter/thinkingmachines/inkling-small:free`
+
+**Suggested fix** (signature)
+
+This route is gated or not permitted for the key in use. Rotation skips it after strikes; to stop retrying it, exclude it (FLEXFACTOR_ROTATION_EXCLUDE=<fragment>) or have AI Time's catalog mark it disabled.
+
+### 33. rotation — provider
+
+**Error**
+
+```
+RateLimitError: Error code: 429 - [{'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 0, model: gemini-3.1-pro\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 0, model: gemini-3.1-pro\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_input_token_count, limit: 0, model: gemini-3.1-pro\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_input_token_count, limit: 0, model: gemini-3.1-pro\nPlease retry in 57.265388155s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerDayPerProjectPerModel-FreeTier', 'quotaDimensions': {'model': 'gemini-3.1-pro', 'location': 'global'}}, {'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'model': 'gemini-3.1-pro', 'location': 'global'}}, {'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_input_token_count', 'quotaId': 'GenerateContentInputTokensPerModelPerMinute-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-3.1-pro'}}, {'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_input_token_count', 'quotaId': 'GenerateContent
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2411` in `_chat_create()`
+
+```python
+return client.chat.completions.create(**kwargs)
+```
+- Route: `gemini/gemini-3.1-pro-preview-customtools`
+
+**Suggested fix** (signature)
+
+Rate-limited. The rotator cools the pool down and moves on; nothing to fix unless it recurs on every pool, which means the free tiers are exhausted for now.
+
+### 34. rotation — provider
+
+**Error**
+
+```
+RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit exceeded: free-models-per-day. Add 10 credits to unlock 1000 free model requests per day', 'code': 429, 'metadata': {'headers': {'X-RateLimit-Limit': '50', 'X-RateLimit-Remaining': '0', 'X-RateLimit-Reset': '1787616000000'}, 'limit_source': 'openrouter_free_tier_daily', 'remedy_hint': 'Wait for the daily reset (see X-RateLimit-Reset), or purchase credits to raise your free-model daily limit.', 'provider_name': None}}, 'user_id': 'user_3GWU0JMa1TcZebCavX9qtXxTXSU'}
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2411` in `_chat_create()`
+
+```python
+return client.chat.completions.create(**kwargs)
+```
+- Route: `openrouter/cohere/north-mini-code:free`
+
+**Suggested fix** (signature)
+
+Rate-limited. The rotator cools the pool down and moves on; nothing to fix unless it recurs on every pool, which means the free tiers are exhausted for now.
+
+### 35. rotation — provider
+
+**Error**
+
+```
+PermissionDeniedError: Error code: 403 - {'error': {'message': 'thinkingmachines/inkling:free is only available on agentic harnesses. Try plugging it into a coding agent or productivity app listed on https://openrouter.ai/apps', 'code': 403}}
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2411` in `_chat_create()`
+
+```python
+return client.chat.completions.create(**kwargs)
+```
+- Route: `openrouter/thinkingmachines/inkling:free`
+
+**Suggested fix** (signature)
+
+This route is gated or not permitted for the key in use. Rotation skips it after strikes; to stop retrying it, exclude it (FLEXFACTOR_ROTATION_EXCLUDE=<fragment>) or have AI Time's catalog mark it disabled.
+
+### 36. rotation — provider
+
+**Error**
+
+```
+RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `meta-llama/llama-4-scout-17b-16e-instruct` in organization `org_01kxhxdkh3e7nasshjpfbkzh11` service tier `on_demand` on tokens per minute (TPM): Limit 30000, Used 14339, Requested 18006. Please try again in 4.689999999s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'compound', 'code': 'rate_limit_exceeded'}}
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2411` in `_chat_create()`
+
+```python
+return client.chat.completions.create(**kwargs)
+```
+- Route: `groq/groq/compound`
+
+**Suggested fix** (signature)
+
+Rate-limited. The rotator cools the pool down and moves on; nothing to fix unless it recurs on every pool, which means the free tiers are exhausted for now.
+
+### 37. rotation — provider
+
+**Error**
+
+```
+BadRequestError: Error code: 400 - {'error': "This model's maximum context length is 4096 tokens. However, you requested 34628 tokens (18628 in the messages, 16000 in the completion). Please reduce the length of the messages or completion."}
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2411` in `_chat_create()`
+
+```python
+return client.chat.completions.create(**kwargs)
+```
+- Route: `nvidia_nim/nvidia/nemotron-mini-4b-instruct`
+
+**Suggested fix** (signature)
+
+The route's output/context ceiling is below what was requested. FlexFactor learns the ceiling from this 400 and retries once; if it recurs, the prompt unit must shrink (fewer findings per call) or the route should be excluded for large files.
+
+### 38. rotation — provider
+
+**Error**
+
+```
+RuntimeError: Structured output matched no schema key (decoy/unrelated JSON object; expected one of ['reviews']); len=2902 head='{"findings": [\n    {\n        "line": 142,\n        "severity": "medium",\n        "category": "correctness",\n        "title": "Incomplete error handling in publication artifact validation",\n        "pro'
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2987` in `_check_structured_type()`
+
+```python
+raise RuntimeError(
+```
+- Route: `nvidia_nim/nvidia/nemotron-nano-12b-v2-vl`
+
+**Suggested fix** (none)
+
+no known fix; start from the responsible code above
+
+### 39. rotation — environment
+
+**Error**
+
+```
+NotFoundError: Error code: 404 - {'error': {'message': 'Model not found', 'type': 'Not Found', 'code': 404}}
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2411` in `_chat_create()`
+
+```python
+return client.chat.completions.create(**kwargs)
+```
+- Route: `nvidia_nim/nvidia/nemotron-nano-3-30b-a3b`
+
+**Suggested fix** (signature)
+
+The route names a model Ollama does not have. `ollama pull <tag>`, then refresh the catalog with `python -m aitime.catalog`.
+
+### 40. rotation — provider
+
+**Error**
+
+```
+BadRequestError: Error code: 400 - {'object': 'error', 'message': 'Expected exactly one message. Expected exactly one message.', 'type': 'BadRequestError', 'param': None, 'code': 400}
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2411` in `_chat_create()`
+
+```python
+return client.chat.completions.create(**kwargs)
+```
+- Route: `nvidia_nim/nvidia/nemotron-parse`
+
+**Suggested fix** (none)
+
+no known fix; start from the responsible code above
+
+### 41. rotation — provider
+
+**Error**
+
+```
+NotFoundError: Error code: 404 - {'status': 404, 'title': 'Not Found', 'detail': "Function 'f35337fa-b4dd-4996-bcba-5476ee01171d': Not found for account 'hvux_0rjHS6OiBfWXcZvKgoOaUBy_3UsQqq6I6IAz7I'"}
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2411` in `_chat_create()`
+
+```python
+return client.chat.completions.create(**kwargs)
+```
+- Route: `nvidia_nim/nvidia/riva-translate-4b-instruct`
+
+**Suggested fix** (none)
+
+no known fix; start from the responsible code above
+
+### 42. rotation — provider
+
+**Error**
+
+```
+RuntimeError: Structured output matched no schema key (decoy/unrelated JSON object; expected one of ['reviews']); len=1087 head='\n\n{"findings": [{"line": 302, "severity": "high", "category": "security", "title": "Insecure LLM Output Handling", "problem": "The sanitizePublicationArtifact function may not properly sanitize LLM-ge'
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2987` in `_check_structured_type()`
+
+```python
+raise RuntimeError(
+```
+- Route: `nvidia_nim/nvidia/nvidia-nemotron-nano-9b-v2`
+
+**Suggested fix** (none)
+
+no known fix; start from the responsible code above
+
+### 43. rotation — provider
+
+**Error**
+
+```
+RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit exceeded: free-models-per-day. Add 10 credits to unlock 1000 free model requests per day', 'code': 429, 'metadata': {'headers': {'X-RateLimit-Limit': '50', 'X-RateLimit-Remaining': '0', 'X-RateLimit-Reset': '1787616000000'}, 'limit_source': 'openrouter_free_tier_daily', 'remedy_hint': 'Wait for the daily reset (see X-RateLimit-Reset), or purchase credits to raise your free-model daily limit.', 'provider_name': None}}, 'user_id': 'user_3GWU0JMa1TcZebCavX9qtXxTXSU'}
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2411` in `_chat_create()`
+
+```python
+return client.chat.completions.create(**kwargs)
+```
+- Route: `openrouter/nvidia/nemotron-3.5-lightning:free`
+
+**Suggested fix** (signature)
+
+Rate-limited. The rotator cools the pool down and moves on; nothing to fix unless it recurs on every pool, which means the free tiers are exhausted for now.
+
+### 44. rotation — provider
+
+**Error**
+
+```
+RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit exceeded: free-models-per-day. Add 10 credits to unlock 1000 free model requests per day', 'code': 429, 'metadata': {'headers': {'X-RateLimit-Limit': '50', 'X-RateLimit-Remaining': '0', 'X-RateLimit-Reset': '1787616000000'}, 'limit_source': 'openrouter_free_tier_daily', 'remedy_hint': 'Wait for the daily reset (see X-RateLimit-Reset), or purchase credits to raise your free-model daily limit.', 'provider_name': None}}, 'user_id': 'user_3GWU0JMa1TcZebCavX9qtXxTXSU'}
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2411` in `_chat_create()`
+
+```python
+return client.chat.completions.create(**kwargs)
+```
+- Route: `openrouter/dots-studio/dots-3-note-preview:free`
+
+**Suggested fix** (signature)
+
+Rate-limited. The rotator cools the pool down and moves on; nothing to fix unless it recurs on every pool, which means the free tiers are exhausted for now.
+
+### 45. rotation — provider
+
+**Error**
+
+```
+RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit exceeded: free-models-per-day. Add 10 credits to unlock 1000 free model requests per day', 'code': 429, 'metadata': {'headers': {'X-RateLimit-Limit': '50', 'X-RateLimit-Remaining': '0', 'X-RateLimit-Reset': '1787616000000'}, 'limit_source': 'openrouter_free_tier_daily', 'remedy_hint': 'Wait for the daily reset (see X-RateLimit-Reset), or purchase credits to raise your free-model daily limit.', 'provider_name': None}}, 'user_id': 'user_3GWU0JMa1TcZebCavX9qtXxTXSU'}
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2411` in `_chat_create()`
+
+```python
+return client.chat.completions.create(**kwargs)
+```
+- Route: `openrouter/nvidia/nemotron-3-nano-30b-a3b:free`
+
+**Suggested fix** (signature)
+
+Rate-limited. The rotator cools the pool down and moves on; nothing to fix unless it recurs on every pool, which means the free tiers are exhausted for now.
+
+### 46. rotation — provider
+
+**Error**
+
+```
+RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit exceeded: free-models-per-day. Add 10 credits to unlock 1000 free model requests per day', 'code': 429, 'metadata': {'headers': {'X-RateLimit-Limit': '50', 'X-RateLimit-Remaining': '0', 'X-RateLimit-Reset': '1787616000000'}, 'limit_source': 'openrouter_free_tier_daily', 'remedy_hint': 'Wait for the daily reset (see X-RateLimit-Reset), or purchase credits to raise your free-model daily limit.', 'provider_name': None}}, 'user_id': 'user_3GWU0JMa1TcZebCavX9qtXxTXSU'}
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2411` in `_chat_create()`
+
+```python
+return client.chat.completions.create(**kwargs)
+```
+- Route: `openrouter/nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free`
+
+**Suggested fix** (signature)
+
+Rate-limited. The rotator cools the pool down and moves on; nothing to fix unless it recurs on every pool, which means the free tiers are exhausted for now.
+
+### 47. rotation — provider
+
+**Error**
+
+```
+RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit exceeded: free-models-per-day. Add 10 credits to unlock 1000 free model requests per day', 'code': 429, 'metadata': {'headers': {'X-RateLimit-Limit': '50', 'X-RateLimit-Remaining': '0', 'X-RateLimit-Reset': '1787616000000'}, 'limit_source': 'openrouter_free_tier_daily', 'remedy_hint': 'Wait for the daily reset (see X-RateLimit-Reset), or purchase credits to raise your free-model daily limit.', 'provider_name': None}}, 'user_id': 'user_3GWU0JMa1TcZebCavX9qtXxTXSU'}
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2411` in `_chat_create()`
+
+```python
+return client.chat.completions.create(**kwargs)
+```
+- Route: `openrouter/nvidia/nemotron-nano-12b-v2-vl:free`
+
+**Suggested fix** (signature)
+
+Rate-limited. The rotator cools the pool down and moves on; nothing to fix unless it recurs on every pool, which means the free tiers are exhausted for now.
+
+### 48. rotation — provider
+
+**Error**
+
+```
+RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit exceeded: free-models-per-day. Add 10 credits to unlock 1000 free model requests per day', 'code': 429, 'metadata': {'headers': {'X-RateLimit-Limit': '50', 'X-RateLimit-Remaining': '0', 'X-RateLimit-Reset': '1787616000000'}, 'limit_source': 'openrouter_free_tier_daily', 'remedy_hint': 'Wait for the daily reset (see X-RateLimit-Reset), or purchase credits to raise your free-model daily limit.', 'provider_name': None}}, 'user_id': 'user_3GWU0JMa1TcZebCavX9qtXxTXSU'}
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2411` in `_chat_create()`
+
+```python
+return client.chat.completions.create(**kwargs)
+```
+- Route: `openrouter/liquid/lfm-2.5-2.6b:free`
+
+**Suggested fix** (signature)
+
+Rate-limited. The rotator cools the pool down and moves on; nothing to fix unless it recurs on every pool, which means the free tiers are exhausted for now.
+
+### 49. rotation — provider
+
+**Error**
+
+```
+RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit exceeded: free-models-per-day. Add 10 credits to unlock 1000 free model requests per day', 'code': 429, 'metadata': {'headers': {'X-RateLimit-Limit': '50', 'X-RateLimit-Remaining': '0', 'X-RateLimit-Reset': '1787616000000'}, 'limit_source': 'openrouter_free_tier_daily', 'remedy_hint': 'Wait for the daily reset (see X-RateLimit-Reset), or purchase credits to raise your free-model daily limit.', 'provider_name': None}}, 'user_id': 'user_3GWU0JMa1TcZebCavX9qtXxTXSU'}
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2411` in `_chat_create()`
+
+```python
+return client.chat.completions.create(**kwargs)
+```
+- Route: `openrouter/nvidia/nemotron-nano-9b-v2:free`
+
+**Suggested fix** (signature)
+
+Rate-limited. The rotator cools the pool down and moves on; nothing to fix unless it recurs on every pool, which means the free tiers are exhausted for now.
+
+### 50. rotation — provider
+
+**Error**
+
+```
+RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit exceeded: free-models-per-day. Add 10 credits to unlock 1000 free model requests per day', 'code': 429, 'metadata': {'headers': {'X-RateLimit-Limit': '50', 'X-RateLimit-Remaining': '0', 'X-RateLimit-Reset': '1787616000000'}, 'limit_source': 'openrouter_free_tier_daily', 'remedy_hint': 'Wait for the daily reset (see X-RateLimit-Reset), or purchase credits to raise your free-model daily limit.', 'provider_name': None}}, 'user_id': 'user_3GWU0JMa1TcZebCavX9qtXxTXSU'}
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2411` in `_chat_create()`
+
+```python
+return client.chat.completions.create(**kwargs)
+```
+- Route: `openrouter/poolside/laguna-xs-2.1:free`
+
+**Suggested fix** (signature)
+
+Rate-limited. The rotator cools the pool down and moves on; nothing to fix unless it recurs on every pool, which means the free tiers are exhausted for now.
+
+### 51. rotation — provider
+
+**Error**
+
+```
+RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit exceeded: free-models-per-day. Add 10 credits to unlock 1000 free model requests per day', 'code': 429, 'metadata': {'headers': {'X-RateLimit-Limit': '50', 'X-RateLimit-Remaining': '0', 'X-RateLimit-Reset': '1787616000000'}, 'limit_source': 'openrouter_free_tier_daily', 'remedy_hint': 'Wait for the daily reset (see X-RateLimit-Reset), or purchase credits to raise your free-model daily limit.', 'provider_name': None}}, 'user_id': 'user_3GWU0JMa1TcZebCavX9qtXxTXSU'}
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2411` in `_chat_create()`
+
+```python
+return client.chat.completions.create(**kwargs)
+```
+- Route: `openrouter/z-ai/glm-5.2:free`
+
+**Suggested fix** (signature)
+
+Rate-limited. The rotator cools the pool down and moves on; nothing to fix unless it recurs on every pool, which means the free tiers are exhausted for now.
+
+### 52. rotation — provider
+
+**Error**
+
+```
+TimeoutError: timed out
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2701` in `_chat()`
+
+```python
+with self._opener.open(req, timeout=_ollama_http_timeout()) as resp:
+```
+- Route: `ollama/deepseek-r1:8b`
+
+**Suggested fix** (none)
+
+no known fix; start from the responsible code above
+
+### 53. rotation — provider
+
+**Error**
+
+```
+TimeoutError: timed out
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2701` in `_chat()`
+
+```python
+with self._opener.open(req, timeout=_ollama_http_timeout()) as resp:
+```
+- Route: `ollama/gemma4:26b`
+
+**Suggested fix** (none)
+
+no known fix; start from the responsible code above
+
+### 54. baseline-gate — program-defect
+
+**Error**
+
+```
+review made no progress: three consecutive semantic review batches completed ZERO files (0 of 368 candidate file(s) reviewed all run). This is a provider/route fault, NOT evidence the repo is clean - stopped fail-closed for resumable retry
+```
+
+**Responsible code**
+
+- Not attributable to a specific line from the evidence recorded.
+
+**Suggested fix** (model)
+
+model suggestion, unverified: The error message does not include any file name, line number, or stack trace indicating where the failure occurred. To propose a concrete code fix, we need the relevant logs or the portion of the review orchestration code that handles batch processing (e.g., the function that fetches candidate files and iterates over them). Please provide the offending module/file and any surrounding error context so a targeted correction can be suggested.
