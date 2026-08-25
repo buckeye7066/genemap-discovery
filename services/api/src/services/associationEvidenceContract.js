@@ -1,3 +1,4 @@
+import { sanitizeScoreComponents } from '@genemap/shared';
 import { getAssociationEvidence } from './associationEvidence.js';
 import { enrichGenesWithStatus } from './genomicDatabases.js';
 
@@ -9,7 +10,7 @@ const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/u;
 const ISO_DATE_TIME = /^\d{4}-\d{2}-\d{2}T/u;
 const PROVIDER_DEADLINE_MS = 5_000;
 const ORTHOLOG_CANDIDATE_LIMIT = 8;
-const EVIDENCE_CLASSES = new Set(['human_verified', 'animal_model', 'computational']);
+const EVIDENCE_CLASSES = new Set(['human_verified', 'animal_model', 'computational', 'literature']);
 const EVIDENCE_TYPES = new Set([
   'gene_disease_association',
   'gene_phenotype_association',
@@ -74,9 +75,34 @@ function safeDateTime(value) {
   return date && ISO_DATE_TIME.test(date) && Number.isFinite(Date.parse(date)) ? date : null;
 }
 
+// A source release identifier is an OPAQUE TOKEN, not a date.
+//
+// This used to accept only YYYY-MM-DD, so a real upstream release - Open
+// Targets "26.06", a semver "0.1.0", a KG build tag - was silently discarded
+// and the UI then said "Not recorded". That is provenance LOSS reported as
+// ABSENCE: a false statement about our own data, and precisely the class of
+// defect this product exists to avoid.
+//
+// So: validate the SHAPE, never the format. Bounded length, printable ASCII
+// only, no whitespace, no markup or quote characters that could escape a
+// rendering context. Do not parse it, do not normalise it, do not attempt to
+// turn it into a date. "Not recorded" must from now on mean the source stated
+// no version - never that we rejected the one it gave us.
+const RELEASE_VERSION = /^[A-Za-z0-9][A-Za-z0-9._+:-]{0,63}$/u;
+
 function safeReleaseVersion(value) {
-  const release = cleanText(value, 32);
-  return release && validDateOnly(release) ? release : null;
+  if (typeof value !== 'string') return null;
+  // REJECT, never repair. Truncating an over-long value or stripping control
+  // characters out of one would record a version the source never stated -
+  // a fabricated identifier wearing the source's name. Take it verbatim or
+  // take nothing.
+  if (value.length > 64) return null;
+  // Matching control characters is the entire point here: they must be
+  // REJECTED, not stripped into a value the source never stated.
+  // eslint-disable-next-line no-control-regex
+  if (/[\u0000-\u001f\u007f-\u009f]/u.test(value)) return null;
+  const release = value.trim();
+  return release && RELEASE_VERSION.test(release) ? release : null;
 }
 
 function syntacticSymbol(value) {
@@ -107,6 +133,19 @@ function safeTaxon(value) {
   return 'unspecified';
 }
 
+// DELIBERATE, AND VERIFIED. DO NOT "FIX" THIS.
+//
+// Upstream `evidenceStrength()` in associationEvidence.js derives 'strong' from
+// GeneMap's OWN heuristic (evidence_count >= 2, or a causal predicate). No
+// source hands us that grade. Publishing it would mean GeneMap inventing an
+// evidence grade and presenting it as though a database had assigned it, so the
+// publication boundary collapses everything that is not explicitly unknown down
+// to 'supporting'.
+//
+// This is NOT the same question as the decomposed source scores added in
+// `sanitizeScoreComponents`: those are numbers the SOURCE published, carried
+// with the source, class and provenance needed to interpret them. A
+// GeneMap-computed ordinal has no such provenance and stays out.
 function safeEvidenceStrength(value) {
   return value === 'unknown' || value == null ? 'unknown' : 'supporting';
 }
@@ -122,21 +161,55 @@ function sanitizeClaim(value) {
   if (evidenceClass === 'human_verified' && taxon !== '9606') return null;
   if (evidenceClass === 'animal_model' && (taxon === '9606' || taxon === 'unspecified')) return null;
 
+  const releaseVersion = safeReleaseVersion(value.releaseVersion);
+  const retrievalDate = safeDate(value.retrievalDate);
+
   return {
     source,
-    recordId: cleanText(value.recordId, 256),
+    recordId: safeIdentifier(value.recordId, 256),
     claim,
+    subject: safeClaimEntity(value.subject),
+    object: safeClaimEntity(value.object),
     taxon,
     species: cleanText(value.species, 256) || 'Unspecified',
     evidenceClass,
     evidenceType,
     evidenceStrength: safeEvidenceStrength(value.evidenceStrength),
-    releaseVersion: safeReleaseVersion(value.releaseVersion),
+    // Source-published score parts. Refused wholesale unless this claim can say
+    // where it came from, which release, and when - see sanitizeScoreComponents.
+    scoreComponents: sanitizeScoreComponents(value.scoreComponents, {
+      source,
+      releaseVersion,
+      retrievalDate,
+    }),
+    releaseVersion,
     referenceAssembly: null,
-    retrievalDate: safeDate(value.retrievalDate),
+    retrievalDate,
     directLink: safeUrl(value.directLink),
     isAiLead: false,
   };
+}
+
+const CLAIM_ENTITY_KINDS = new Set(['gene', 'phenotype', 'disease', 'pathway', 'variant']);
+
+// A subject/object is only useful if it can be looked up, so an entity missing
+// its kind, id, or label is dropped entirely rather than half-rendered.
+// An identifier is not prose: truncating it yields a DIFFERENT identifier that
+// resolves to nothing, which is a fabricated id wearing the source's name.
+// Same reject-don't-repair rule as safeReleaseVersion. Prose fields (claim,
+// species) are still bounded by cleanText, where clipping is honest display.
+function safeIdentifier(value, maxLength) {
+  if (typeof value === 'string' && value.length > maxLength) return null;
+  return cleanText(value, maxLength);
+}
+
+function safeClaimEntity(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  if (!CLAIM_ENTITY_KINDS.has(value.kind)) return null;
+  const id = cleanText(value.id, 128);
+  const label = cleanText(value.label, 256);
+  if (!id || !label) return null;
+  return { kind: value.kind, id, label };
 }
 
 function sanitizeQuery(value) {
@@ -344,6 +417,8 @@ export const __test = {
   safeDateTime,
   safeEvidenceStrength,
   safeReleaseVersion,
+  safeClaimEntity,
+  safeIdentifier,
   safeTaxon,
   safeUrl,
   sanitizeClaim,

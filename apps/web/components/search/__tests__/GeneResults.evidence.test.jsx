@@ -134,6 +134,36 @@ describe('GeneResults evidence merge', () => {
       human: 1,
       animal: 0,
       computational: 0,
+      literature: 0,
+      aiLead: 1,
+    });
+  });
+
+  it('counts literature-derived evidence as its own category, not as computational', () => {
+    // Text mining establishes that two things were discussed together, not that
+    // a relationship was demonstrated. Folding it into "computed evidence"
+    // would overstate the computational column and hide the literature one.
+    const literatureClaim = {
+      ...humanAssociation('SCN1A'),
+      recordId: 'literature-1',
+      evidenceClass: 'literature',
+      claim: 'SCN1A and the query co-occur in published text',
+    };
+    const merged = __test.mergeAssociationEvidence([
+      { symbol: 'SCN1A', associationClaims: [aiLead('SCN1A')] },
+    ], {
+      sourceStatus: 'available',
+      claimsByGene: { SCN1A: [literatureClaim] },
+    });
+
+    expect(merged[0].evidencePartition.literature).toHaveLength(1);
+    expect(merged[0].evidencePartition.computational).toHaveLength(0);
+    expect(merged[0].evidencePartition.human).toHaveLength(0);
+    expect(__test.summarizeEvidence(merged)).toEqual({
+      human: 0,
+      animal: 0,
+      computational: 0,
+      literature: 1,
       aiLead: 1,
     });
   });

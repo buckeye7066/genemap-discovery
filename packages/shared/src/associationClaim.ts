@@ -12,6 +12,12 @@ export type EvidenceClass =
   | 'human_verified'
   | 'animal_model'
   | 'computational'
+  // Text-mined or citation-derived, e.g. an Open Targets `literature` datatype
+  // score. Kept apart from `computational` because a reader must be able to
+  // tell "an algorithm aggregated other evidence" from "this came out of
+  // published text", and apart from `human_verified` because co-occurrence in
+  // a paper is not a curated assertion.
+  | 'literature'
   | 'external_followup';
 
 export type EvidenceStrength = 'none' | 'lead' | 'supporting' | 'strong' | 'unknown';
@@ -27,6 +33,15 @@ export interface AssociationClaim {
   source: string;
   recordId: string | null;
   claim: string;
+  /** Machine-checkable ends of the statement, when the adapter knows them. */
+  subject: ClaimEntity | null;
+  object: ClaimEntity | null;
+  /**
+   * The source's own score, broken into the parts that produced it. Empty when
+   * the source publishes no numbers, or when its numbers arrived without the
+   * provenance required to interpret them - see `sanitizeScoreComponents`.
+   */
+  scoreComponents: EvidenceScoreComponent[];
   taxon: TaxonCode;
   species: string;
   evidenceClass: EvidenceClass;
@@ -44,6 +59,9 @@ export const EVIDENCE_CLASS_RANK: Record<EvidenceClass, number> = {
   human_verified: 400,
   computational: 300,
   animal_model: 200,
+  // Below a curated model-organism assertion: text mining establishes that two
+  // things were discussed together, not that a relationship was demonstrated.
+  literature: 150,
   external_followup: 100,
   ai_lead: 0,
 };
@@ -77,13 +95,196 @@ export function safeExternalHttpUrl(value: string | null | undefined): string | 
   }
 }
 
+// ─── Structured subject / object identity ───────────────────────────────────
+//
+// `claim` is a sentence for a human. These are the machine-checkable ends of
+// the same statement, so a screen can group, link, and deduplicate without
+// parsing prose. Null when the adapter genuinely does not know them - never
+// guessed from the sentence.
+
+export const CLAIM_ENTITY_KINDS = ['gene', 'phenotype', 'disease', 'pathway', 'variant'] as const;
+export type ClaimEntityKind = typeof CLAIM_ENTITY_KINDS[number];
+
+export interface ClaimEntity {
+  kind: ClaimEntityKind;
+  /** Namespaced exactly as the source namespaces it: HP:0001250, MONDO:0007739, ENSG00000197386. */
+  id: string;
+  label: string;
+}
+
+export function isClaimEntity(value: unknown): value is ClaimEntity {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const entity = value as Partial<ClaimEntity>;
+  return (
+    typeof entity.kind === 'string'
+    && (CLAIM_ENTITY_KINDS as readonly string[]).includes(entity.kind)
+    && typeof entity.id === 'string' && entity.id.trim().length > 0
+    && typeof entity.label === 'string' && entity.label.trim().length > 0
+  );
+}
+
+// ─── Decomposed source scores ───────────────────────────────────────────────
+//
+// THE OPEN TARGETS RULE, ENFORCED IN CODE.
+//
+// A rolled-up confidence number tells a reader nothing they can check. A score
+// broken into its parts, each naming the kind of evidence behind it, does.
+// That is why the decomposition is publishable where the bare aggregate is not.
+//
+// A component may only reach the browser carrying (a) its own evidence class
+// and (b) the provenance of the claim it belongs to - source, release version,
+// retrieval date. `sanitizeScoreComponents` refuses the whole set otherwise:
+// an unattributable number is exactly what this contract exists to keep out.
+//
+// This governs SOURCE-PROVIDED scores only. A model's self-score is not
+// evidence and is still deleted by `stripLlmSelfScores`.
+
+export interface EvidenceScoreComponent {
+  /** The source's own component id, e.g. "genetic_association", "animal_model". */
+  id: string;
+  label: string;
+  /** Finite number on the stated scale. Never produced from a missing value. */
+  score: number;
+  /** Which evidence class this part represents, so a UI can keep it distinct. */
+  evidenceClass: EvidenceClass;
+  /** Names the scale so a number is never misread as a universal probability. */
+  scale: string;
+}
+
+/** Provenance a score set must be able to point at before it may be shown. */
+export interface ScoreProvenanceContext {
+  source?: string | null;
+  releaseVersion?: string | null;
+  retrievalDate?: string | null;
+}
+
+export const OPEN_TARGETS_SCORE_SCALE = 'open_targets_datatype_score_0_1';
+
+const OPEN_TARGETS_DATATYPE_LABELS: Record<string, string> = {
+  genetic_association: 'Genetic association',
+  genetic_literature: 'Genetic literature',
+  somatic_mutation: 'Somatic mutation',
+  known_drug: 'Known drug',
+  clinical: 'Clinical',
+  animal_model: 'Animal model',
+  literature: 'Literature',
+  rna_expression: 'RNA expression',
+  affected_pathway: 'Affected pathway',
+};
+
+/**
+ * Map an Open Targets datatype id onto the evidence class a reader should see.
+ * Unknown ids fall back to `computational`: an aggregation we cannot attribute
+ * is still an aggregation, and must never be promoted to human evidence.
+ */
+export function openTargetsDatatypeEvidenceClass(datatypeId: string): EvidenceClass {
+  switch (datatypeId) {
+    case 'genetic_association':
+    case 'somatic_mutation':
+    case 'known_drug':
+    case 'clinical':
+      return 'human_verified';
+    case 'animal_model':
+      return 'animal_model';
+    case 'literature':
+    case 'genetic_literature':
+      return 'literature';
+    default:
+      return 'computational';
+  }
+}
+
+export function openTargetsDatatypeLabel(datatypeId: string): string {
+  return OPEN_TARGETS_DATATYPE_LABELS[datatypeId]
+    || datatypeId.replace(/_/gu, ' ').replace(/^./u, (c) => c.toUpperCase());
+}
+
+const SCORE_COMPONENT_ID = /^[a-z0-9][a-z0-9_]{0,63}$/u;
+const MAX_SCORE_COMPONENTS = 12;
+
+/**
+ * A missing score is NOT zero.
+ *
+ * `Number(null)` is 0 and `Number.isFinite(0)` is true, so a naive coercion
+ * turns "this source said nothing" into a confident 0.00 on screen. Only an
+ * actual finite number in range is accepted here.
+ */
+export function isRenderableScore(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1;
+}
+
+/**
+ * Keep only components that can be interpreted and audited.
+ *
+ * Returns [] - refusing the entire set - when the owning claim cannot say where
+ * it came from, which release, and when. Partial provenance is not a partial
+ * permission: a number nobody can trace is worse than no number.
+ */
+export function sanitizeScoreComponents(
+  components: unknown,
+  provenance: ScoreProvenanceContext,
+): EvidenceScoreComponent[] {
+  const traceable = (['source', 'releaseVersion', 'retrievalDate'] as const)
+    .every((field) => {
+      const value = provenance?.[field];
+      return typeof value === 'string' && value.trim().length > 0;
+    });
+  if (!traceable || !Array.isArray(components)) return [];
+
+  const seen = new Set<string>();
+  const kept: EvidenceScoreComponent[] = [];
+  for (const raw of components) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) continue;
+    const candidate = raw as Partial<EvidenceScoreComponent>;
+    const id = typeof candidate.id === 'string' ? candidate.id.trim().toLowerCase() : '';
+    if (!SCORE_COMPONENT_ID.test(id) || seen.has(id)) continue;
+    if (!isRenderableScore(candidate.score)) continue;
+    const evidenceClass = candidate.evidenceClass && EVIDENCE_CLASS_RANK[candidate.evidenceClass] !== undefined
+      ? candidate.evidenceClass
+      : null;
+    if (!evidenceClass) continue;
+    const scale = typeof candidate.scale === 'string' && candidate.scale.trim() ? candidate.scale.trim() : null;
+    if (!scale) continue;
+    seen.add(id);
+    kept.push({
+      id,
+      label: typeof candidate.label === 'string' && candidate.label.trim()
+        ? candidate.label.trim().slice(0, 64)
+        : openTargetsDatatypeLabel(id),
+      score: candidate.score,
+      evidenceClass,
+      scale,
+    });
+    if (kept.length >= MAX_SCORE_COMPONENTS) break;
+  }
+  return kept;
+}
+
+/** Group components by evidence class so a UI can keep the five kinds distinct. */
+export function groupScoreComponents(components: EvidenceScoreComponent[] | null | undefined) {
+  const groups = new Map<EvidenceClass, EvidenceScoreComponent[]>();
+  for (const component of components || []) {
+    const bucket = groups.get(component.evidenceClass) || [];
+    bucket.push(component);
+    groups.set(component.evidenceClass, bucket);
+  }
+  return groups;
+}
+
 /** Create a normalized claim with stable species, link, and AI-lead fields. */
 export function createAssociationClaim(
-  partial: Omit<AssociationClaim, 'species' | 'isAiLead' | 'retrievalDate' | 'referenceAssembly'> & {
+  partial: Omit<
+    AssociationClaim,
+    'species' | 'isAiLead' | 'retrievalDate' | 'referenceAssembly'
+    | 'subject' | 'object' | 'scoreComponents'
+  > & {
     species?: string;
     isAiLead?: boolean;
     retrievalDate?: string | null;
     referenceAssembly?: string | null;
+    subject?: ClaimEntity | null;
+    object?: ClaimEntity | null;
+    scoreComponents?: EvidenceScoreComponent[];
   },
 ): AssociationClaim {
   const evidenceClass = partial.evidenceClass;
@@ -91,6 +292,9 @@ export function createAssociationClaim(
     source: partial.source,
     recordId: partial.recordId ?? null,
     claim: partial.claim,
+    subject: isClaimEntity(partial.subject) ? partial.subject : null,
+    object: isClaimEntity(partial.object) ? partial.object : null,
+    scoreComponents: Array.isArray(partial.scoreComponents) ? partial.scoreComponents : [],
     taxon: partial.taxon,
     species: partial.species || SPECIES_LABEL[partial.taxon] || SPECIES_LABEL.unspecified,
     evidenceClass,
@@ -288,6 +492,7 @@ export function partitionClaimsBySpecies(claims: AssociationClaim[]) {
   const human: AssociationClaim[] = [];
   const animal: AssociationClaim[] = [];
   const computational: AssociationClaim[] = [];
+  const literature: AssociationClaim[] = [];
   const aiLeads: AssociationClaim[] = [];
   const external: AssociationClaim[] = [];
   const metadata: AssociationClaim[] = [];
@@ -305,8 +510,9 @@ export function partitionClaimsBySpecies(claims: AssociationClaim[]) {
     }
     if (claim.evidenceClass === 'animal_model' || claim.taxon === '10090') animal.push(claim);
     else if (claim.evidenceClass === 'computational') computational.push(claim);
+    else if (claim.evidenceClass === 'literature') literature.push(claim);
     else human.push(claim);
   }
 
-  return { human, animal, computational, aiLeads, external, metadata };
+  return { human, animal, computational, literature, aiLeads, external, metadata };
 }

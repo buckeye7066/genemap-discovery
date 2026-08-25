@@ -1,4 +1,9 @@
 import {
+  OPEN_TARGETS_SCORE_SCALE,
+  openTargetsDatatypeEvidenceClass,
+  openTargetsDatatypeLabel,
+} from '@genemap/shared';
+import {
   parsePublicationTaskInput,
 } from '../config/publicationTaskContracts.js';
 import {
@@ -492,6 +497,7 @@ async function fetchOpenTargetsClaims({ query, symbols, fetchImpl }) {
   }
   const graphQl = `
     query GeneMapDiseaseTargets($diseaseId: String!) {
+      meta { dataVersion { year month iteration } }
       disease(efoId: $diseaseId) {
         id
         name
@@ -541,6 +547,8 @@ async function fetchOpenTargetsClaims({ query, symbols, fetchImpl }) {
   const totalValue = Number(associatedTargets?.count);
   const total = Number.isFinite(totalValue) && totalValue >= 0 ? totalValue : null;
   const truncated = total != null ? total > rows.length : rows.length >= MAX_OPEN_TARGET_ROWS;
+  const releaseVersion = openTargetsDataVersion(payload?.data?.meta?.dataVersion);
+  const retrievalDate = response.retrievedAt?.slice(0, 10) || null;
   const expected = new Set(symbols);
   const claimsByGene = {};
   for (const row of rows) {
@@ -548,18 +556,40 @@ async function fetchOpenTargetsClaims({ query, symbols, fetchImpl }) {
     if (!symbol || !expected.has(symbol)) continue;
     const score = Number(row?.score);
     if (!Number.isFinite(score) || score <= 0) continue;
+
+    // THE DECOMPOSITION. Open Targets publishes an aggregate association score
+    // AND the per-datatype scores that produce it. The aggregate alone is an
+    // unexplained number, so we surface the PARTS - each carrying the evidence
+    // class it represents - and let the reader see what produced the ranking.
+    // The publication boundary refuses the whole set unless this claim can also
+    // state its source, release and retrieval date (sanitizeScoreComponents).
+    const scoreComponents = openTargetsScoreComponents(row?.datatypeScores);
+
     claimsByGene[symbol] = [{
       source: 'Open Targets Platform GraphQL API v4',
       recordId: firstString(row?.target?.id),
       claim: `Open Targets aggregates human genetic, literature, pathway, model, and other source evidence for ${symbol} and ${query.canonicalLabel}; this computed association is a research comparison signal, not a clinical conclusion`,
+      subject: {
+        kind: 'gene',
+        id: firstString(row?.target?.id) || symbol,
+        label: symbol,
+      },
+      object: {
+        kind: query.kind === 'hpo' ? 'phenotype' : 'disease',
+        id: query.identifier,
+        label: query.canonicalLabel || query.identifier,
+      },
       taxon: '9606',
       species: 'Homo sapiens',
       evidenceClass: 'computational',
       evidenceType: 'computed_target_disease_association',
       evidenceStrength: 'supporting',
-      releaseVersion: null,
+      scoreComponents,
+      // The source's own data release, captured rather than discarded. Without
+      // it the decomposed scores are refused downstream, and rightly so.
+      releaseVersion,
       referenceAssembly: null,
-      retrievalDate: response.retrievedAt?.slice(0, 10) || null,
+      retrievalDate,
       directLink: `https://platform.opentargets.org/disease/${encodeURIComponent(diseaseId)}/associations`,
       isAiLead: false,
     }];
@@ -567,11 +597,46 @@ async function fetchOpenTargetsClaims({ query, symbols, fetchImpl }) {
   return {
     applicable: true,
     ok: true,
+    releaseVersion,
     claimsByGene,
     retrievedAt: response.retrievedAt,
     truncated,
     total,
   };
+}
+
+// "26.06" from { year: "26", month: "06" }. Returns null when Open Targets does
+// not state a release - never a placeholder, and never today's date.
+function openTargetsDataVersion(dataVersion) {
+  const year = firstString(dataVersion?.year);
+  const month = firstString(dataVersion?.month);
+  if (!year || !month) return null;
+  const iteration = firstString(dataVersion?.iteration);
+  const base = `${year}.${month}`;
+  return iteration ? `${base}.${iteration}` : base;
+}
+
+// Map Open Targets datatype scores onto the shared evidence-class vocabulary so
+// each part stays visibly distinct downstream. A component whose score is not a
+// real finite number is DROPPED, never coerced: Number(null) is 0, and a 0.00
+// on screen reads as "measured and found to be nothing" rather than "absent".
+function openTargetsScoreComponents(datatypeScores) {
+  if (!Array.isArray(datatypeScores)) return [];
+  const components = [];
+  for (const entry of datatypeScores) {
+    const id = firstString(entry?.id);
+    if (!id) continue;
+    const score = entry?.score;
+    if (typeof score !== 'number' || !Number.isFinite(score)) continue;
+    components.push({
+      id,
+      label: openTargetsDatatypeLabel(id),
+      score,
+      evidenceClass: openTargetsDatatypeEvidenceClass(id),
+      scale: OPEN_TARGETS_SCORE_SCALE,
+    });
+  }
+  return components;
 }
 
 function parseVersion(payload) {
@@ -859,7 +924,10 @@ export async function getAssociationEvidence(reference, symbols, dependencies = 
       },
       openTargets: {
         apiVersion: 'v4',
-        releaseVersion: null,
+        // The data release Open Targets states for itself. Was hardcoded null,
+        // so the source panel reported "Not recorded" for a version we were
+        // being handed on every request.
+        releaseVersion: openTargets.releaseVersion ?? null,
         status: sourceHealth(openTargets),
         truncated: openTargets.truncated,
         retrievedAt: openTargets.retrievedAt,

@@ -25,6 +25,7 @@ import {
 import { exportGeneReport, exportJSON, copyShareableLink } from "../../lib/exportUtils";
 import {
   claimProvenanceRole,
+  groupScoreComponents,
   deriveRankingBasisFromClaims,
   partitionClaimsBySpecies,
   safeExternalHttpUrl,
@@ -38,6 +39,78 @@ import PublicationState, { hasReusablePublicationContent } from "../shared/Publi
 const loggedGeneViews = new Set();
 const MAX_ACTIVITY_ATTEMPTS = 3;
 const ACTIVITY_RETRY_BASE_MS = 250;
+
+// One colour vocabulary for the evidence classes, so a score component reads as
+// the SAME kind of thing as the claim badge carrying that class. Keeping these
+// visually distinct is the whole point: a reader must be able to see that a
+// ranking was driven by animal-model evidence rather than human evidence.
+const EVIDENCE_CLASS_STYLE = {
+  human_verified: { bar: 'bg-emerald-500', text: 'text-emerald-900', label: 'Human' },
+  animal_model: { bar: 'bg-orange-500', text: 'text-orange-900', label: 'Animal model' },
+  literature: { bar: 'bg-violet-500', text: 'text-violet-900', label: 'Literature' },
+  computational: { bar: 'bg-sky-500', text: 'text-sky-900', label: 'Computational' },
+  external_followup: { bar: 'bg-slate-400', text: 'text-slate-700', label: 'Follow-up' },
+  ai_lead: { bar: 'bg-amber-500', text: 'text-amber-900', label: 'AI lead' },
+};
+
+function evidenceClassStyle(evidenceClass) {
+  return EVIDENCE_CLASS_STYLE[evidenceClass] || EVIDENCE_CLASS_STYLE.computational;
+}
+
+/**
+ * Render a source's score AS ITS PARTS.
+ *
+ * The rolled-up aggregate never reaches this component - the API refuses to
+ * publish one. What arrives is the decomposition, each part naming the evidence
+ * class behind it, so a reader can see what produced the ranking instead of
+ * being handed one unexplained number.
+ *
+ * A component that the source did not state is simply absent. It is never drawn
+ * as a 0.00 bar, which would read as "measured and found to be nothing".
+ */
+function ScoreDecomposition({ components, scale }) {
+  if (!Array.isArray(components) || components.length === 0) return null;
+  const groups = groupScoreComponents(components);
+  return (
+    <div className="mt-2 rounded border border-slate-200 bg-slate-50 p-2">
+      <p className="text-[11px] font-medium text-slate-700">
+        What produced this score
+      </p>
+      <p className="text-[10px] text-slate-500 mb-2">
+        Source-published components, not a GeneMap calculation. Only the parts the
+        source actually stated are shown{scale ? ` (scale: ${scale})` : ''}.
+      </p>
+      <ul className="space-y-1.5">
+        {[...groups.entries()].map(([evidenceClass, parts]) => {
+          const style = evidenceClassStyle(evidenceClass);
+          return parts.map((component) => (
+            <li key={`${evidenceClass}-${component.id}`} className="flex items-center gap-2">
+              <span className={`w-28 shrink-0 text-[10px] font-medium ${style.text}`}>
+                {component.label}
+              </span>
+              <span
+                className="h-1.5 flex-1 rounded bg-slate-200 overflow-hidden"
+                role="img"
+                aria-label={`${component.label}: ${component.score.toFixed(2)} from ${style.label} evidence`}
+              >
+                <span
+                  className={`block h-full rounded ${style.bar}`}
+                  style={{ width: `${Math.round(component.score * 100)}%` }}
+                />
+              </span>
+              <span className="w-9 shrink-0 text-right text-[10px] tabular-nums text-slate-700">
+                {component.score.toFixed(2)}
+              </span>
+              <Badge variant="outline" className={`text-[9px] ${style.text}`}>
+                {style.label}
+              </Badge>
+            </li>
+          ));
+        })}
+      </ul>
+    </div>
+  );
+}
 
 function displayClaimValue(value, fallback = 'Not recorded') {
   if (value === null || value === undefined || String(value).trim() === '') return fallback;
@@ -296,6 +369,10 @@ function GeneCard({ gene, rank, isSelected = false, onSelect = null }) {
                       <div><dt className="inline font-medium">Adapter retrieval date: </dt><dd className="inline">{displayClaimValue(claim.retrievalDate)}</dd></div>
                       <div><dt className="inline font-medium">AI lead: </dt><dd className="inline">{aiLeadStatus(claim)}</dd></div>
                     </dl>
+                    <ScoreDecomposition
+                      components={claim.scoreComponents}
+                      scale={claim.scoreComponents?.[0]?.scale || null}
+                    />
                     {safeLink ? (
                       <a
                         href={safeLink}

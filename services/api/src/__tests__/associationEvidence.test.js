@@ -139,7 +139,7 @@ describe('association evidence adapters', () => {
     expect(result.sourceStatus).toBe('available');
   });
 
-  it('adds an Open Targets association as a distinct computed signal without exposing its score', async () => {
+  it('publishes the Open Targets score DECOMPOSED, each part carrying its evidence class', async () => {
     const fetchImpl = vi.fn(async (input, options = {}) => {
       const url = urlString(input);
       if (url.endsWith('/entity/MONDO%3A0009061')) {
@@ -178,6 +178,7 @@ describe('association evidence adapters', () => {
         expect(requestBody.variables).toEqual({ diseaseId: 'MONDO_0009061' });
         return jsonResponse({
           data: {
+            meta: { dataVersion: { year: '26', month: '06', iteration: null } },
             disease: {
               id: 'MONDO_0009061',
               name: 'cystic fibrosis',
@@ -189,7 +190,15 @@ describe('association evidence adapters', () => {
                     approvedName: 'CF transmembrane conductance regulator',
                   },
                   score: 0.987654,
-                  datatypeScores: [{ id: 'genetic_association', score: 0.95 }],
+                  datatypeScores: [
+                    { id: 'genetic_association', score: 0.95 },
+                    { id: 'animal_model', score: 0.42 },
+                    { id: 'literature', score: 0.61 },
+                    // A component with no real number must be DROPPED, not
+                    // coerced: Number(null) is 0, and 0.00 on screen reads as
+                    // "measured as nothing" rather than "not stated".
+                    { id: 'rna_expression', score: null },
+                  ],
                 }],
               },
             },
@@ -214,12 +223,79 @@ describe('association evidence adapters', () => {
         source: 'Open Targets Platform GraphQL API v4',
         evidenceClass: 'computational',
         evidenceType: 'computed_target_disease_association',
-        releaseVersion: null,
+        // Was null: the adapter discarded the release it had been given.
+        releaseVersion: '26.06',
         taxon: '9606',
       }),
     ]));
+    const openTargets = result.claimsByGene.CFTR
+      .find((claim) => claim.source === 'Open Targets Platform GraphQL API v4');
+
+    // THE RULE THIS TEST PINS (replacing the old blanket score suppression):
+    // a source-published score component may reach the browser ONLY carrying
+    // its evidence class, and only on a claim that can state where it came
+    // from, which release, and when. A decomposed score is not an unexplained
+    // one - that is exactly why it is publishable where the bare aggregate is
+    // not. See services/api/src/services/associationEvidenceContract.js.
+    expect(openTargets.releaseVersion).toBe('26.06');
+    expect(openTargets.retrievalDate).toEqual(expect.any(String));
+    expect(openTargets.scoreComponents).toEqual([
+      { id: 'genetic_association', label: 'Genetic association', score: 0.95, evidenceClass: 'human_verified', scale: 'open_targets_datatype_score_0_1' },
+      { id: 'animal_model', label: 'Animal model', score: 0.42, evidenceClass: 'animal_model', scale: 'open_targets_datatype_score_0_1' },
+      { id: 'literature', label: 'Literature', score: 0.61, evidenceClass: 'literature', scale: 'open_targets_datatype_score_0_1' },
+    ]);
+
+    // An absent component is absent. It never becomes a confident 0.00.
+    expect(openTargets.scoreComponents.map((c) => c.id)).not.toContain('rna_expression');
+    expect(openTargets.scoreComponents.every((c) => c.score > 0)).toBe(true);
+
+    // The ROLLED-UP aggregate stays out: it is the unexplained number.
     expect(JSON.stringify(result)).not.toContain('0.987654');
-    expect(JSON.stringify(result)).not.toContain('0.95');
+
+    // The subject/object are machine-checkable, not parsed out of the sentence.
+    expect(openTargets.subject).toEqual({ kind: 'gene', id: 'ENSG00000001626', label: 'CFTR' });
+    expect(openTargets.object).toEqual({ kind: 'disease', id: 'MONDO:0009061', label: 'cystic fibrosis' });
+  });
+
+  it('refuses score components on a claim that cannot state its provenance', async () => {
+    // The other half of the rule: numbers are publishable BECAUSE they are
+    // traceable. Strip the release and the whole component set must go, rather
+    // than leaking an unattributable number.
+    const { sanitizeAssociationEvidence } = await import('../services/associationEvidenceContract.js');
+    const traceable = {
+      source: 'Open Targets Platform GraphQL API v4',
+      claim: 'A traceable computed association.',
+      taxon: '9606',
+      evidenceClass: 'computational',
+      evidenceType: 'computed_target_disease_association',
+      releaseVersion: '26.06',
+      retrievalDate: '2026-08-25',
+      scoreComponents: [{
+        id: 'genetic_association', label: 'Genetic association', score: 0.95,
+        evidenceClass: 'human_verified', scale: 'open_targets_datatype_score_0_1',
+      }],
+    };
+    const base = {
+      query: { kind: 'mondo', identifier: 'MONDO:0009061', canonicalLabel: 'cystic fibrosis' },
+      retrievedAt: '2026-08-25T00:00:00.000Z',
+      sourceStatus: 'available',
+    };
+
+    const kept = sanitizeAssociationEvidence(
+      { ...base, claimsByGene: { CFTR: [traceable] } }, ['CFTR'],
+    );
+    expect(kept.claimsByGene.CFTR[0].scoreComponents).toHaveLength(1);
+
+    for (const missing of ['source', 'releaseVersion', 'retrievalDate']) {
+      const untraceable = sanitizeAssociationEvidence(
+        { ...base, claimsByGene: { CFTR: [{ ...traceable, [missing]: null }] } },
+        ['CFTR'],
+      );
+      const claim = untraceable.claimsByGene.CFTR[0];
+      if (!claim) continue; // a claim with no source is dropped outright
+      expect(claim.scoreComponents, `missing ${missing} must refuse the score set`).toEqual([]);
+      expect(JSON.stringify(untraceable)).not.toContain('0.95');
+    }
   });
 
   it('does not match a non-human gene by symbol without an explicit ortholog grid', () => {
