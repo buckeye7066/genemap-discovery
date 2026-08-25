@@ -516,3 +516,144 @@ export function partitionClaimsBySpecies(claims: AssociationClaim[]) {
 
   return { human, animal, computational, literature, aiLeads, external, metadata };
 }
+
+// ─── Why this gene? What would change this ranking? ─────────────────────────
+//
+// THE DECOMPOSABLE-RANKING RULE, TURNED ON GENEMAP ITSELF.
+//
+// Slice 1 established that a SOURCE's score may only be shown broken into the
+// parts that produced it. GeneMap's own rank is held to the same standard, and
+// arguably a stricter one: the source at least publishes its numbers, whereas
+// these ordinals are GeneMap's editorial policy about which kinds of evidence
+// outrank which. So they are surfaced with their inputs AND attributed to
+// GeneMap, never dressed up as something a database asserted.
+//
+// Two questions a reader must be able to answer:
+//   "Why this gene?"                  -> which claim decided the rank, and what
+//                                        every other claim contributed.
+//   "What would change this ranking?" -> which kinds of evidence would move it,
+//                                        stated as a structural fact about the
+//                                        ordinal policy, not as a prediction.
+//
+// Nothing here invents a number. `contribution` is `claimSortKey`, which is
+// EVIDENCE_CLASS_RANK, which is a fixed table declared above. Claims that
+// contribute nothing are shown WITH the reason they contribute nothing —
+// silently dropping them is what makes a ranking feel arbitrary.
+
+/** Who computed a ranking input. Never blank: an unattributed number is the defect. */
+export const RANKING_ATTRIBUTION =
+  'GeneMap ranking policy — an editorial ordering of evidence kinds, not a score published by any source.';
+
+export type RankingExclusionReason =
+  | 'ai_research_lead'
+  | 'external_followup'
+  | 'no_evidence_strength'
+  | 'not_an_association';
+
+export const RANKING_EXCLUSION_TEXT: Readonly<Record<RankingExclusionReason, string>> = Object.freeze({
+  ai_research_lead: 'Generated research lead — not retrieved from any source, so it cannot raise a rank.',
+  external_followup: 'A follow-up link. GeneMap has not retrieved the destination record.',
+  no_evidence_strength: 'The source recorded no supporting strength for this association.',
+  not_an_association: 'Identity, ontology, or database-link metadata — it verifies the gene, not the association.',
+});
+
+export interface RankingContribution {
+  source: string;
+  evidenceClass: EvidenceClass;
+  evidenceType: string;
+  /** The ordinal this claim contributed. 0 means it could not raise the rank. */
+  contribution: number;
+  counted: boolean;
+  /** Present exactly when `counted` is false. Why it contributed nothing. */
+  excludedBecause: RankingExclusionReason | null;
+  /** True for the claim that set the rank. Ties resolve to the first seen. */
+  decisive: boolean;
+}
+
+export interface RankingImprovement {
+  evidenceClass: EvidenceClass;
+  wouldReach: number;
+  /** Plain statement of the structural fact. Not a promise that such evidence exists. */
+  statement: string;
+}
+
+export interface RankingExplanation {
+  /** The class the rank rests on. 'ai_lead' means nothing retrieved supports it yet. */
+  basis: EvidenceClass;
+  score: number;
+  attribution: string;
+  contributions: RankingContribution[];
+  /** Ordered strongest-first. Empty when already at the top of the policy. */
+  improvements: RankingImprovement[];
+  /** True when no claim contributed anything — the honest "nothing supports this yet". */
+  restsOnNothingRetrieved: boolean;
+}
+
+function exclusionReason(claim: AssociationClaim): RankingExclusionReason | null {
+  if (claim.isAiLead || claim.evidenceClass === 'ai_lead') return 'ai_research_lead';
+  if (claim.evidenceClass === 'external_followup') return 'external_followup';
+  if (NON_ASSOCIATION_EVIDENCE_TYPES.has(claim.evidenceType)) return 'not_an_association';
+  if (claim.evidenceStrength === 'none') return 'no_evidence_strength';
+  return null;
+}
+
+/**
+ * Decompose the rank GeneMap gave one gene.
+ *
+ * Every claim appears, including the ones worth nothing — those are the answer
+ * to "what would change this ranking?" as much as the missing classes are.
+ */
+export function explainGeneRanking(
+  claims: AssociationClaim[] | null | undefined,
+): RankingExplanation {
+  const list = Array.isArray(claims) ? claims : [];
+  const scored = list.map((claim) => ({ claim, contribution: claimSortKey(claim) }));
+  const score = scored.reduce((best, item) => Math.max(best, item.contribution), 0);
+
+  let decisiveTaken = false;
+  const contributions: RankingContribution[] = scored.map(({ claim, contribution }) => {
+    const counted = contribution > 0;
+    const decisive = counted && contribution === score && !decisiveTaken;
+    if (decisive) decisiveTaken = true;
+    return {
+      source: claim.source,
+      evidenceClass: claim.evidenceClass,
+      evidenceType: claim.evidenceType,
+      contribution,
+      counted,
+      excludedBecause: counted ? null : exclusionReason(claim),
+      decisive,
+    };
+  });
+
+  const basis = deriveRankingBasisFromClaims(list);
+
+  // Structural, not speculative: these are the classes the policy ranks above
+  // where this gene currently sits. Saying so is a fact about the table.
+  const improvements: RankingImprovement[] = (Object.keys(EVIDENCE_CLASS_RANK) as EvidenceClass[])
+    .filter((evidenceClass) => evidenceClass !== 'ai_lead' && EVIDENCE_CLASS_RANK[evidenceClass] > score)
+    .sort((a, b) => EVIDENCE_CLASS_RANK[b] - EVIDENCE_CLASS_RANK[a])
+    .map((evidenceClass) => ({
+      evidenceClass,
+      wouldReach: EVIDENCE_CLASS_RANK[evidenceClass],
+      statement: `A retrieved ${RANKING_CLASS_PHRASE[evidenceClass]} for this gene and query would rank it above its current position.`,
+    }));
+
+  return {
+    basis,
+    score,
+    attribution: RANKING_ATTRIBUTION,
+    contributions,
+    improvements,
+    restsOnNothingRetrieved: score === 0,
+  };
+}
+
+const RANKING_CLASS_PHRASE: Readonly<Record<EvidenceClass, string>> = Object.freeze({
+  human_verified: 'human association record from a named source',
+  computational: 'computed association from a named source',
+  animal_model: 'model-organism association record',
+  literature: 'literature-derived association',
+  external_followup: 'follow-up database record',
+  ai_lead: 'generated research lead',
+});

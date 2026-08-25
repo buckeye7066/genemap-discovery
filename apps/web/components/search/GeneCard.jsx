@@ -26,6 +26,8 @@ import { exportGeneReport, exportJSON, copyShareableLink } from "../../lib/expor
 import {
   claimProvenanceRole,
   groupScoreComponents,
+  explainGeneRanking,
+  RANKING_EXCLUSION_TEXT,
   deriveRankingBasisFromClaims,
   partitionClaimsBySpecies,
   safeExternalHttpUrl,
@@ -108,6 +110,81 @@ function ScoreDecomposition({ components, scale }) {
           ));
         })}
       </ul>
+    </div>
+  );
+}
+
+/**
+ * "Why this gene?" and "What would change this ranking?"
+ *
+ * GeneMap's rank is GeneMap's opinion about which kinds of evidence outrank
+ * which. It is therefore shown the same way a source score is: broken into the
+ * inputs that produced it, and attributed to whoever produced it. Claims that
+ * contributed nothing are listed WITH the reason - a rank whose losers are
+ * hidden reads as arbitrary even when it is correct.
+ */
+function RankingExplanation({ claims }) {
+  const explanation = explainGeneRanking(claims);
+  if (explanation.contributions.length === 0) return null;
+
+  return (
+    <div className="mt-3 border-t border-slate-200 pt-3">
+      <h5 className="text-xs font-semibold text-slate-900">Why this gene?</h5>
+      <p className="text-[11px] text-slate-500 mb-2">{explanation.attribution}</p>
+
+      {explanation.restsOnNothingRetrieved && (
+        <p className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded p-2 mb-2">
+          Nothing retrieved supports this gene for this query yet. It is on the list as a
+          research lead only.
+        </p>
+      )}
+
+      <ul className="space-y-1">
+        {explanation.contributions.map((row, idx) => (
+          <li
+            key={`${row.source}-${row.evidenceType}-${idx}`}
+            className="flex items-start gap-2 text-[11px]"
+          >
+            <span
+              className={`w-9 shrink-0 text-right tabular-nums font-medium ${
+                row.counted ? evidenceClassStyle(row.evidenceClass).text : 'text-slate-400'
+              }`}
+            >
+              {row.contribution}
+            </span>
+            <span className="flex-1">
+              <span className={row.counted ? 'text-slate-800' : 'text-slate-500'}>
+                {displayClaimValue(row.source)}
+              </span>
+              {row.decisive && (
+                <Badge className="ml-1 text-[9px] bg-slate-900 text-white border-slate-900">
+                  set the rank
+                </Badge>
+              )}
+              {!row.counted && row.excludedBecause && (
+                <span className="block text-slate-500">
+                  {RANKING_EXCLUSION_TEXT[row.excludedBecause]}
+                </span>
+              )}
+            </span>
+          </li>
+        ))}
+      </ul>
+
+      {explanation.improvements.length > 0 && (
+        <>
+          <h5 className="text-xs font-semibold text-slate-900 mt-3">
+            What would change this ranking?
+          </h5>
+          <ul className="mt-1 space-y-1">
+            {explanation.improvements.map((improvement) => (
+              <li key={improvement.evidenceClass} className="text-[11px] text-slate-600">
+                {improvement.statement}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
     </div>
   );
 }
@@ -314,6 +391,7 @@ function GeneCard({ gene, rank, isSelected = false, onSelect = null }) {
                       {candidateExplanation}
                     </p>
                   )}
+                  <RankingExplanation claims={claims} />
                 </div>
               </div>
             </div>
