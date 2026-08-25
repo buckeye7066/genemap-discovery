@@ -557,23 +557,63 @@ export const RANKING_EXCLUSION_TEXT: Readonly<Record<RankingExclusionReason, str
   not_an_association: 'Identity, ontology, or database-link metadata — it verifies the gene, not the association.',
 });
 
+/**
+ * THE RANK IS A MAXIMUM, NOT A SUM.
+ *
+ * `claimSortKey` takes the single highest-ranking claim. So a claim can be
+ * genuine, retrieved, and still change nothing about the outcome. Calling every
+ * positive claim a "contribution" would make a max-based policy look additive -
+ * the exact misrepresentation this panel exists to prevent. Each claim
+ * therefore states its ROLE in the decision, not just a number.
+ */
+export type RankingRole =
+  /** At the maximum. Removing every claim with this role would lower the rank. */
+  | 'determines_rank'
+  /** Real retrieved evidence, but outranked - removing it changes nothing. */
+  | 'considered_lower'
+  /** Structurally incapable of raising the rank; see `excludedBecause`. */
+  | 'cannot_contribute';
+
+export const RANKING_ROLE_TEXT: Readonly<Record<RankingRole, string>> = Object.freeze({
+  determines_rank: 'Sets the rank',
+  considered_lower: 'Counted, but outranked - removing it would not change the rank',
+  cannot_contribute: 'Cannot affect the rank',
+});
+
 export interface RankingContribution {
   source: string;
   evidenceClass: EvidenceClass;
   evidenceType: string;
-  /** The ordinal this claim contributed. 0 means it could not raise the rank. */
+  /** The source's record id where it has one, so repeated sources stay distinguishable. */
+  recordId: string | null;
+  /** This claim's ordinal under the policy. 0 means it cannot raise the rank. */
   contribution: number;
-  counted: boolean;
-  /** Present exactly when `counted` is false. Why it contributed nothing. */
+  role: RankingRole;
+  /** Present exactly when role is 'cannot_contribute'. */
   excludedBecause: RankingExclusionReason | null;
-  /** True for the claim that set the rank. Ties resolve to the first seen. */
-  decisive: boolean;
 }
+
+/**
+ * Classes that can actually produce a non-zero ordinal.
+ *
+ * `claimSortKey` zeroes `external_followup` and `ai_lead` UNCONDITIONALLY,
+ * regardless of their entry in EVIDENCE_CLASS_RANK. Offering "a retrieved
+ * follow-up database record would raise this" is therefore a FALSE statement -
+ * adding exactly that record cannot move the score. Kept in sync with
+ * claimSortKey by a test, not by hope.
+ */
+export const RANKABLE_EVIDENCE_CLASSES = Object.freeze(
+  ['human_verified', 'computational', 'animal_model', 'literature'] as const,
+);
 
 export interface RankingImprovement {
   evidenceClass: EvidenceClass;
   wouldReach: number;
-  /** Plain statement of the structural fact. Not a promise that such evidence exists. */
+  /**
+   * A structural fact about the ordering. NOT a promise that such evidence
+   * exists, and NOT a claim about list position - this function sees one gene's
+   * claims and cannot know what the other candidates hold.
+   */
   statement: string;
 }
 
@@ -585,6 +625,11 @@ export interface RankingExplanation {
   contributions: RankingContribution[];
   /** Ordered strongest-first. Empty when already at the top of the policy. */
   improvements: RankingImprovement[];
+  /**
+   * Says out loud that a higher tier is not the same as a higher list position,
+   * because ordering depends on every other candidate too.
+   */
+  positionCaveat: string;
   /** True when no claim contributed anything — the honest "nothing supports this yet". */
   restsOnNothingRetrieved: boolean;
 }
@@ -610,19 +655,23 @@ export function explainGeneRanking(
   const scored = list.map((claim) => ({ claim, contribution: claimSortKey(claim) }));
   const score = scored.reduce((best, item) => Math.max(best, item.contribution), 0);
 
-  let decisiveTaken = false;
   const contributions: RankingContribution[] = scored.map(({ claim, contribution }) => {
-    const counted = contribution > 0;
-    const decisive = counted && contribution === score && !decisiveTaken;
-    if (decisive) decisiveTaken = true;
+    // Ties ALL count as determining: if two claims sit at the maximum, neither
+    // one alone "set" the rank, and singling out the first seen would invent a
+    // precedence the policy does not have.
+    const role: RankingRole = contribution <= 0
+      ? 'cannot_contribute'
+      : contribution === score
+        ? 'determines_rank'
+        : 'considered_lower';
     return {
       source: claim.source,
       evidenceClass: claim.evidenceClass,
       evidenceType: claim.evidenceType,
+      recordId: claim.recordId ?? null,
       contribution,
-      counted,
-      excludedBecause: counted ? null : exclusionReason(claim),
-      decisive,
+      role,
+      excludedBecause: role === 'cannot_contribute' ? exclusionReason(claim) : null,
     };
   });
 
@@ -630,13 +679,14 @@ export function explainGeneRanking(
 
   // Structural, not speculative: these are the classes the policy ranks above
   // where this gene currently sits. Saying so is a fact about the table.
-  const improvements: RankingImprovement[] = (Object.keys(EVIDENCE_CLASS_RANK) as EvidenceClass[])
-    .filter((evidenceClass) => evidenceClass !== 'ai_lead' && EVIDENCE_CLASS_RANK[evidenceClass] > score)
+  const improvements: RankingImprovement[] = RANKABLE_EVIDENCE_CLASSES
+    .filter((evidenceClass) => EVIDENCE_CLASS_RANK[evidenceClass] > score)
+    .slice()
     .sort((a, b) => EVIDENCE_CLASS_RANK[b] - EVIDENCE_CLASS_RANK[a])
     .map((evidenceClass) => ({
       evidenceClass,
       wouldReach: EVIDENCE_CLASS_RANK[evidenceClass],
-      statement: `A retrieved ${RANKING_CLASS_PHRASE[evidenceClass]} for this gene and query would rank it above its current position.`,
+      statement: `A retrieved ${RANKING_CLASS_PHRASE[evidenceClass]} for this gene and query would raise its evidence tier.`,
     }));
 
   return {
@@ -645,6 +695,8 @@ export function explainGeneRanking(
     attribution: RANKING_ATTRIBUTION,
     contributions,
     improvements,
+    positionCaveat:
+      'A higher evidence tier does not guarantee a higher position in this list - ordering also depends on what the other candidates have.',
     restsOnNothingRetrieved: score === 0,
   };
 }

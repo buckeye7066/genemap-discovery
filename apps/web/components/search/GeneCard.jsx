@@ -28,6 +28,7 @@ import {
   groupScoreComponents,
   explainGeneRanking,
   RANKING_EXCLUSION_TEXT,
+  RANKING_ROLE_TEXT,
   deriveRankingBasisFromClaims,
   partitionClaimsBySpecies,
   safeExternalHttpUrl,
@@ -139,36 +140,58 @@ function RankingExplanation({ claims }) {
         </p>
       )}
 
+      {/* The rank is the HIGHEST-ranking claim, not a total. Saying so stops the
+          list below from reading as an additive breakdown. */}
+      <p className="text-[11px] text-slate-500 mb-2">
+        The rank is the highest-ranking claim, not a total of them.
+      </p>
+
       <ul className="space-y-1">
-        {explanation.contributions.map((row, idx) => (
-          <li
-            key={`${row.source}-${row.evidenceType}-${idx}`}
-            className="flex items-start gap-2 text-[11px]"
-          >
-            <span
-              className={`w-9 shrink-0 text-right tabular-nums font-medium ${
-                row.counted ? evidenceClassStyle(row.evidenceClass).text : 'text-slate-400'
-              }`}
+        {explanation.contributions.map((row, idx) => {
+          const determines = row.role === 'determines_rank';
+          const inert = row.role === 'cannot_contribute';
+          return (
+            <li
+              key={`${row.source}-${row.evidenceType}-${row.recordId || idx}`}
+              className="flex items-start gap-2 text-[11px]"
             >
-              {row.contribution}
-            </span>
-            <span className="flex-1">
-              <span className={row.counted ? 'text-slate-800' : 'text-slate-500'}>
-                {displayClaimValue(row.source)}
+              <span
+                className={`w-9 shrink-0 text-right tabular-nums font-medium ${
+                  inert ? 'text-slate-400' : evidenceClassStyle(row.evidenceClass).text
+                }`}
+              >
+                {row.contribution}
               </span>
-              {row.decisive && (
-                <Badge className="ml-1 text-[9px] bg-slate-900 text-white border-slate-900">
-                  set the rank
-                </Badge>
-              )}
-              {!row.counted && row.excludedBecause && (
-                <span className="block text-slate-500">
-                  {RANKING_EXCLUSION_TEXT[row.excludedBecause]}
+              <span className="flex-1">
+                <span className={inert ? 'text-slate-500' : 'text-slate-800'}>
+                  {displayClaimValue(row.source)}
                 </span>
-              )}
-            </span>
-          </li>
-        ))}
+                {/* One provider can return several claims (the Monarch
+                    ortholog grid returns up to three under one name), so the
+                    source alone cannot identify a row. */}
+                <span className="text-slate-500">
+                  {' · '}{displayClaimValue(row.evidenceType)}
+                  {row.recordId ? ` · ${row.recordId}` : ''}
+                </span>
+                {determines && (
+                  <Badge className="ml-1 text-[9px] bg-slate-900 text-white border-slate-900">
+                    {RANKING_ROLE_TEXT.determines_rank}
+                  </Badge>
+                )}
+                {row.role === 'considered_lower' && (
+                  <span className="block text-slate-500">
+                    {RANKING_ROLE_TEXT.considered_lower}
+                  </span>
+                )}
+                {inert && row.excludedBecause && (
+                  <span className="block text-slate-500">
+                    {RANKING_EXCLUSION_TEXT[row.excludedBecause]}
+                  </span>
+                )}
+              </span>
+            </li>
+          );
+        })}
       </ul>
 
       {explanation.improvements.length > 0 && (
@@ -183,6 +206,9 @@ function RankingExplanation({ claims }) {
               </li>
             ))}
           </ul>
+          <p className="mt-1 text-[11px] text-slate-500 italic">
+            {explanation.positionCaveat}
+          </p>
         </>
       )}
     </div>
