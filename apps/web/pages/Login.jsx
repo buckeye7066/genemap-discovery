@@ -143,7 +143,7 @@ export default function Login() {
               <Button
                 type="button"
                 variant={isRegister ? "ghost" : "default"}
-                className={isRegister ? "!text-slate-300" : "bg-cyan-500 text-slate-950 hover:bg-cyan-400"}
+                className={`min-h-11 ${isRegister ? "!text-slate-300" : "bg-cyan-500 text-slate-950 hover:bg-cyan-400"}`}
                 aria-pressed={!isRegister}
                 onClick={() => changeMode("login")}
               >
@@ -153,7 +153,7 @@ export default function Login() {
               <Button
                 type="button"
                 variant={isRegister ? "default" : "ghost"}
-                className={isRegister ? "bg-cyan-500 text-slate-950 hover:bg-cyan-400" : "!text-slate-300"}
+                className={`min-h-11 ${isRegister ? "bg-cyan-500 text-slate-950 hover:bg-cyan-400" : "!text-slate-300"}`}
                 aria-pressed={isRegister}
                 onClick={() => changeMode("register")}
               >
@@ -186,7 +186,7 @@ export default function Login() {
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
                   required
-                  className="border-slate-700 bg-slate-950 text-white"
+                  className="min-h-11 border-slate-700 bg-slate-950 text-base text-white"
                 />
               </div>
               <div className="space-y-2">
@@ -200,7 +200,7 @@ export default function Login() {
                   onChange={(event) => setPassword(event.target.value)}
                   required
                   aria-describedby={isRegister ? "password-help" : undefined}
-                  className="border-slate-700 bg-slate-950 text-white"
+                  className="min-h-11 border-slate-700 bg-slate-950 text-base text-white"
                 />
                 {isRegister && (
                   <p id="password-help" className="text-xs text-slate-400">
@@ -211,7 +211,7 @@ export default function Login() {
               <Button
                 type="submit"
                 disabled={isSubmitting}
-                className="w-full bg-cyan-500 text-slate-950 hover:bg-cyan-400"
+                className="min-h-11 w-full bg-cyan-500 text-slate-950 hover:bg-cyan-400"
               >
                 {isSubmitting ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />

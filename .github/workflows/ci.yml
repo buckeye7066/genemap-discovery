@@ -10,6 +10,9 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 env:
   # Test-only env so the API/test setup files do not throw at import time.
   # Production secrets are NEVER set in CI.

@@ -36,6 +36,9 @@ export default defineConfig({
     actionTimeout: 10_000,
   },
   projects: [
-    { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
+    { name: 'desktop-chromium', use: { ...devices['Desktop Chrome'] } },
+    { name: 'desktop-webkit', use: { ...devices['Desktop Safari'] } },
+    { name: 'mobile-safari', use: { ...devices['iPhone 13'] } },
+    { name: 'mobile-chrome', use: { ...devices['Pixel 5'] } },
   ],
 });

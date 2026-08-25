@@ -4,6 +4,7 @@ import {
   safeExternalHttpUrl,
 } from '../../../packages/shared/src/associationClaim.js';
 import { isCanonicalPublicationArtifact } from '@genemap/shared/publicationStatus';
+import { copyText, downloadBlob } from './browserFiles';
 
 /**
  * Export utilities for GeneMap Discovery
@@ -601,23 +602,7 @@ export async function copyShareableLink(data, type = 'gene') {
     ? buildGeneShareText(data)
     : `GeneMap Discovery Analysis\n${JSON.stringify(publicationSafeExportData(data), null, 2).substring(0, 500)}`;
 
-  try {
-    await navigator.clipboard.writeText(text);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function downloadBlob(blob, filename) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  URL.revokeObjectURL(url);
-  a.remove();
+  return copyText(text);
 }
 
 function escapeHtml(str) {

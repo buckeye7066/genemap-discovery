@@ -33,6 +33,7 @@ import {
   XCircle
 } from "lucide-react";
 import { Link } from "react-router-dom";
+import { downloadBlob } from "@/lib/browserFiles";
 import { createPageUrl } from "@/utils";
 import RenewalNotifications from "../components/institutional/RenewalNotifications";
 
@@ -189,14 +190,7 @@ export default function InstitutionalAdminPage() {
     };
 
     const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `usage-report-${selectedLicense.organizationName}-${Date.now()}.json`;
-    document.body.appendChild(a);
-    a.click();
-    window.URL.revokeObjectURL(url);
-    a.remove();
+    downloadBlob(blob, `usage-report-${selectedLicense.organizationName}-${Date.now()}.json`);
   };
 
   const getLicenseStatusBadge = (status) => {

@@ -60,3 +60,25 @@ test.describe('Security headers', () => {
     expect(headers['strict-transport-security']).toBeTruthy();
   });
 });
+
+test('mobile Safari and Android profiles keep the login form usable without overflow', async ({ page }, testInfo) => {
+  test.skip(!testInfo.project.name.startsWith('mobile-'), 'mobile viewport contract');
+
+  await page.goto('/login');
+  const form = page.locator('form');
+  await expect(form).toBeVisible();
+
+  const metrics = await page.evaluate(() => {
+    const targets = [...document.querySelectorAll('form input, form button')]
+      .filter((element) => getComputedStyle(element).display !== 'none')
+      .map((element) => element.getBoundingClientRect());
+    return {
+      documentWidth: document.documentElement.scrollWidth,
+      viewportWidth: document.documentElement.clientWidth,
+      smallestTargetHeight: Math.min(...targets.map((rect) => rect.height)),
+    };
+  });
+
+  expect(metrics.documentWidth).toBe(metrics.viewportWidth);
+  expect(metrics.smallestTargetHeight).toBeGreaterThanOrEqual(44);
+});
