@@ -13,9 +13,10 @@ import tempfile
 import unicodedata
 
 
-ROLE = "review" + "er"
-MANUAL_TOKEN = "man" + "ual"
-APPROVAL_TOKEN = "approv" + "al"
+ROLE = bytes.fromhex("72 65 76 69 65 77 65 72").decode("ascii")
+MANUAL_TOKEN = bytes.fromhex("6d 61 6e 75 61 6c").decode("ascii")
+APPROVAL_TOKEN = bytes.fromhex("61 70 70 72 6f 76 61 6c").decode("ascii")
+COMPLETION_TOKEN = bytes.fromhex("73 69 67 6e 6f 66 66").decode("ascii")
 SEPARATOR_RUN = r"[\s_\-\u2010-\u2015]*"
 PATTERNS = (
     (
@@ -67,6 +68,19 @@ _BOM_ENCODINGS = (
     (codecs.BOM_UTF16_BE, "utf-16"),
 )
 
+_SOURCE_BOUNDARY_JOINERS = re.compile(
+    r"""
+    (?:
+        </?(?:[A-Za-z][^<>]{0,2000})?>
+        |
+        ["'`]\s*[)\]}]*\s*\+\s*[(\[{]*\s*["'`]
+        |
+        ["'`]\s*}\s*{\s*["'`]
+    )
+    """,
+    re.VERBOSE,
+)
+
 
 def normalize_text(text: str) -> str:
     """Normalize one complete file before matching separator-tolerant phrases."""
@@ -76,9 +90,22 @@ def normalize_text(text: str) -> str:
     return re.sub(r"[\s_\-\u2010-\u2015]+", " ", normalized)
 
 
+def source_boundary_projection(text: str) -> str:
+    """Join text fragments separated only by common rendered-source syntax."""
+
+    return _SOURCE_BOUNDARY_JOINERS.sub("", text)
+
+
 def prohibited_labels(text: str) -> list[str]:
-    normalized = normalize_text(text)
-    return [label for label, pattern in PATTERNS if pattern.search(normalized)]
+    variants = {
+        normalize_text(text),
+        normalize_text(source_boundary_projection(text)),
+    }
+    return [
+        label
+        for label, pattern in PATTERNS
+        if any(pattern.search(variant) for variant in variants)
+    ]
 
 
 def _looks_like_text(text: str) -> bool:
@@ -231,7 +258,25 @@ def _run_index_self_test(scanner_source: str) -> None:
             ("owner " + MANUAL_TOKEN + "\n" + APPROVAL_TOKEN).encode("utf-16")
         )
         missing_path = repo_root / "missing.txt"
-        missing_path.write_text("owner sign" + "-\n" + "off", encoding="utf-8")
+        missing_path.write_text(
+            "owner " + COMPLETION_TOKEN[:4] + "-\n" + COMPLETION_TOKEN[4:],
+            encoding="utf-8",
+        )
+        jsx_path = repo_root / "rendered.jsx"
+        jsx_path.write_text(
+            f"<span>{COMPLETION_TOKEN[:4]}</span>"
+            f"<span>{COMPLETION_TOKEN[4:]}</span>",
+            encoding="utf-8",
+        )
+        concatenated_path = repo_root / "concatenated.js"
+        concatenated_path.write_text(
+            "const status = "
+            + repr(COMPLETION_TOKEN[:4])
+            + " + "
+            + repr(COMPLETION_TOKEN[4:])
+            + ";",
+            encoding="utf-8",
+        )
         (repo_root / "binary.dat").write_bytes(b"\x89PNG\r\n\x1a\n\xff\xd8\xff\xe0")
 
         subprocess.run(
@@ -245,7 +290,12 @@ def _run_index_self_test(scanner_source: str) -> None:
 
         tracked_paths = {path for path, _, _ in tracked_index_entries(repo_root)}
         violations = dict(scan_repository(repo_root))
-        expected_paths = {"encoded.txt", "missing.txt"}
+        expected_paths = {
+            "concatenated.js",
+            "encoded.txt",
+            "missing.txt",
+            "rendered.jsx",
+        }
         if not expected_paths.issubset(violations):
             missing = sorted(expected_paths - violations.keys())
             raise AssertionError("index scan missed: " + ", ".join(missing))
@@ -258,20 +308,41 @@ def _run_index_self_test(scanner_source: str) -> None:
 def run_self_test() -> None:
     human_gate = MANUAL_TOKEN + "_" + APPROVAL_TOKEN
     positive_probes = {
-        "line break": "owner sign" + "\n" + "off required",
-        "underscore": "owner signed" + "_" + "off required",
-        "hyphen and line break": "owner signing" + "-\n" + "off required",
-        "unicode hyphen": "owner sign" + "\u2011" + "off required",
-        "zero width control": "owner sign" + "\u200b" + "off required",
+        "line break": "owner " + COMPLETION_TOKEN[:4] + "\n" + COMPLETION_TOKEN[4:] + " required",
+        "underscore": (
+            "owner " + COMPLETION_TOKEN[:4] + "ed_" + COMPLETION_TOKEN[4:] + " required"
+        ),
+        "hyphen and line break": (
+            "owner " + COMPLETION_TOKEN[:4] + "ing-\n" + COMPLETION_TOKEN[4:] + " required"
+        ),
+        "unicode hyphen": "owner " + COMPLETION_TOKEN[:4] + "\u2011" + COMPLETION_TOKEN[4:] + " required",
+        "zero width control": "owner " + COMPLETION_TOKEN[:4] + "\u200b" + COMPLETION_TOKEN[4:] + " required",
         "role separator": "required" + "_\n" + ROLE,
         "human gate": human_gate + " required",
         "human gate line break": MANUAL_TOKEN + "\n" + APPROVAL_TOKEN,
+        "JSX element boundary": (
+            f"<span>{COMPLETION_TOKEN[:4]}</span>"
+            f"<strong>{COMPLETION_TOKEN[4:]}</strong>"
+        ),
+        "string concatenation boundary": (
+            repr(COMPLETION_TOKEN[:4]) + " + " + repr(COMPLETION_TOKEN[4:])
+        ),
+        "JSX expression boundary": (
+            "{" + repr(COMPLETION_TOKEN[:4]) + "}"
+            "{" + repr(COMPLETION_TOKEN[4:]) + "}"
+        ),
+        "human gate JSX boundary": (
+            f"<span>{MANUAL_TOKEN}</span><span>{APPROVAL_TOKEN}</span>"
+        ),
     }
     negative_probes = {
         "cryptographic signature": "The commit is cryptographically signed.",
         "evidence record": "The operator records deployment evidence.",
         "scientific review": "Review source design and uncertainty.",
         "ordinary action": "Create one manual backup before cutover.",
+        "informed consent": "Confirm informed consent before collecting participant data.",
+        "destructive action": "Confirm the exact record before irreversible deletion.",
+        "safety boundary": "Acknowledge the safety warning before continuing.",
     }
 
     missed = [name for name, probe in positive_probes.items() if not prohibited_labels(probe)]
