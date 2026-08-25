@@ -87,7 +87,10 @@ export default function LearningPath() {
   const goToResearch = () => {
     const params = new URLSearchParams();
     if (lastMasteredTopic) {
-      params.set('q', lastMasteredTopic.title);
+      // Search.jsx reads `query` (as do the Dashboard and History links).
+      // Emitting `q` here meant the lesson context was silently dropped on
+      // arrival and the search box came up empty.
+      params.set('query', lastMasteredTopic.title);
       params.set('from', 'learning-path');
       params.set('topic', lastMasteredTopic.id);
     }

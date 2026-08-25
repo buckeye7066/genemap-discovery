@@ -412,11 +412,27 @@ export interface Project {
   updatedAt?: string;
 }
 
+/** The restorable state of a project — exactly what PUT /entities/projects/:id accepts. */
+export interface ProjectSnapshot {
+  title: string;
+  description?: string | null;
+  status?: string | null;
+  genes?: string[];
+  metadata?: Record<string, unknown> | null;
+}
+
 export interface ProjectVersion {
   id: string;
   projectId: string;
   version: number;
+  /** The DELTA that produced this version (the update's request body). Not restorable state. */
   changes: unknown;
+  /**
+   * Full project state AT this version. `null` means the row predates snapshot
+   * capture (migration 20260825120000) and CANNOT be restored — callers must
+   * say so rather than appear to succeed. Never inferred or backfilled.
+   */
+  snapshot?: ProjectSnapshot | null;
   notes?: string | null;
   createdBy: string;
   createdAt: string;

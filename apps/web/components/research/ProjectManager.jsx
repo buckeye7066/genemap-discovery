@@ -52,8 +52,11 @@ function ProjectAnnotations({ project }) {
 
   const loadAnnotations = async () => {
     try {
-      const res = await apiClient.getProjectAnnotations(project.id);
-      setAnnotations(res.annotations || []);
+      // apiClient.getProjectAnnotations() already unwraps to Annotation[].
+      // Reading `.annotations` off that array yielded undefined, so the list
+      // was permanently empty.
+      const list = await apiClient.getProjectAnnotations(project.id);
+      setAnnotations(Array.isArray(list) ? list : []);
     } catch (err) {
       console.error("Error loading annotations:", err);
     }
@@ -187,7 +190,7 @@ export default function ProjectManager() {
   const [isCreating, setIsCreating] = useState(false);
   const { user } = useAuth();
   const [newProject, setNewProject] = useState({
-    name: "",
+    title: "",
     description: "",
     genes: "",
     phenotypes: "",
@@ -210,9 +213,9 @@ export default function ProjectManager() {
   };
 
   const handleCreateProject = async () => {
-    if (!newProject.name.trim()) {
+    if (!newProject.title.trim()) {
       // Give explicit feedback instead of silently doing nothing when the
-      // required name is blank.
+      // required title is blank.
       setCreateError("Please enter a project name to continue.");
       return;
     }
@@ -220,19 +223,23 @@ export default function ProjectManager() {
     setIsCreating(true);
 
     try {
+      // Matches POST /entities/projects exactly. `phenotypes` and `tags` are
+      // not columns — they go in `metadata`, which the server does persist.
+      // Sent as top-level keys they were silently discarded.
       const projectData = {
-        name: newProject.name,
+        title: newProject.title,
         description: newProject.description,
         genes: newProject.genes.split(/[\s,]+/).filter(Boolean),
-        phenotypes: newProject.phenotypes.split(/[\s,]+/).filter(Boolean),
-        tags: newProject.tags.split(/[\s,]+/).filter(Boolean),
         status: "active",
-        current_version: 1
+        metadata: {
+          phenotypes: newProject.phenotypes.split(/[\s,]+/).filter(Boolean),
+          tags: newProject.tags.split(/[\s,]+/).filter(Boolean),
+        },
       };
 
       await apiClient.createProject(projectData);
 
-      setNewProject({ name: "", description: "", genes: "", phenotypes: "", tags: "" });
+      setNewProject({ title: "", description: "", genes: "", phenotypes: "", tags: "" });
       setCreateDialogOpen(false);
       await loadProjects();
 
@@ -251,27 +258,18 @@ export default function ProjectManager() {
         throw new Error('Project not found');
       }
 
-      // Determine change type
-      let changeType = "metadata_updated";
-      if (updates.genes && JSON.stringify(updates.genes) !== JSON.stringify(project.genes)) {
-        changeType = "genes_updated";
-      } else if (updates.notes && updates.notes !== project.notes) {
-        changeType = "notes_updated";
-      } else if (updates.status && updates.status !== project.status) {
-        changeType = "status_changed";
-      }
-
-      const newVersion = (project.current_version || 1) + 1;
-      
-      await apiClient.updateProject(projectId, {
-        ...updates,
-        current_version: newVersion
-      });
+      // Version numbering and the change note are derived SERVER-side from the
+      // update body (PUT /entities/projects/:id writes the next version row
+      // itself). The client used to compute a `current_version` and send it;
+      // the server does not accept that key, so it was silently discarded on
+      // every update while the UI acted as though it had been applied.
+      await apiClient.updateProject(projectId, updates);
 
       await loadProjects();
-      
+
     } catch (err) {
       console.error("Error updating project:", err);
+      throw err;
     }
   };
 
@@ -332,17 +330,17 @@ export default function ProjectManager() {
                 </DialogHeader>
                 <div className="space-y-4 pt-4">
                   <div>
-                    <Label htmlFor="project-name">Project Name *</Label>
+                    <Label htmlFor="project-title">Project Name *</Label>
                     <Input
-                      id="project-name"
+                      id="project-title"
                       placeholder="e.g., BRCA1 Variant Study"
-                      value={newProject.name}
+                      value={newProject.title}
                       onChange={(e) => {
-                        setNewProject({ ...newProject, name: e.target.value });
+                        setNewProject({ ...newProject, title: e.target.value });
                         if (createError) setCreateError("");
                       }}
-                      aria-invalid={!!createError && !newProject.name.trim()}
-                      className={`mt-1 ${createError && !newProject.name.trim() ? 'border-red-400 focus-visible:ring-red-400' : ''}`}
+                      aria-invalid={!!createError && !newProject.title.trim()}
+                      className={`mt-1 ${createError && !newProject.title.trim() ? 'border-red-400 focus-visible:ring-red-400' : ''}`}
                     />
                   </div>
 
@@ -434,9 +432,15 @@ export default function ProjectManager() {
                   <CardContent className="pt-6">
                     <div className="flex items-start justify-between mb-3">
                       <div className="flex-1">
-                        <h3 className="font-semibold text-slate-900">{project.name}</h3>
+                        <h3 className="font-semibold text-slate-900">{project.title}</h3>
                         <p className="text-xs text-slate-500 mt-1">
-                          v{project.current_version || 1} • Updated {project.updated_date ? new Date(project.updated_date).toLocaleDateString() : 'Unknown'}
+                          {/* Version count comes from the API's _count relation.
+                              When it is absent we say nothing rather than
+                              printing a made-up "v1". */}
+                          {typeof project._count?.versions === 'number' && (
+                            <>v{project._count.versions} • </>
+                          )}
+                          Updated {project.updatedAt ? new Date(project.updatedAt).toLocaleDateString() : 'Unknown'}
                         </p>
                       </div>
                       <Badge className={getStatusColor(project.status)}>
@@ -465,7 +469,7 @@ export default function ProjectManager() {
                       </div>
                     )}
 
-                    {project.is_collaborative && (
+                    {project.collaborators?.length > 0 && (
                       <Badge className="bg-blue-100 text-blue-800 text-xs">
                         <Users className="w-3 h-3 mr-1" />
                         Collaborative
@@ -530,21 +534,21 @@ export default function ProjectManager() {
                     className="w-full gap-2"
                     onClick={() => {
                       const projectSummary = {
-                        name: selectedProject.name,
+                        title: selectedProject.title,
                         description: selectedProject.description,
                         genes: selectedProject.genes,
-                        phenotypes: selectedProject.phenotypes,
+                        phenotypes: selectedProject.metadata?.phenotypes,
                         status: selectedProject.status,
-                        version: selectedProject.current_version,
-                        created: selectedProject.created_date,
-                        updated: selectedProject.updated_date
+                        version: selectedProject._count?.versions,
+                        created: selectedProject.createdAt,
+                        updated: selectedProject.updatedAt
                       };
                       
                       const blob = new Blob([JSON.stringify(projectSummary, null, 2)], { type: 'application/json' });
                       const url = window.URL.createObjectURL(blob);
                       const a = document.createElement('a');
                       a.href = url;
-                      a.download = `${selectedProject.name.replace(/\s+/g, '-')}-summary.json`;
+                      a.download = `${selectedProject.title.replace(/\s+/g, '-')}-summary.json`;
                       document.body.appendChild(a);
                       a.click();
                       window.URL.revokeObjectURL(url);
