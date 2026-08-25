@@ -80,9 +80,17 @@ versions for every other known advisory.
 ### Static / bundled path — PASS
 
 The full React app builds and runs locally via `pnpm dev:web`. The primary
-gene-mapping flow is exercised by the Playwright E2E suite
-(`apps/web/tests/e2e`) and the 1 759 unit/integration tests covering search,
-VCF upload, genomic enrichment, education, and results rendering.
+candidate-gene flow is exercised by the Playwright E2E suite
+(`apps/web/tests/e2e`) and the unit/integration suite covering search, genomic
+enrichment, education, and results rendering.
+
+> **Correction, 2026-08-25.** This paragraph previously listed "VCF upload" among
+> the covered flows and quoted a fixed test count. VCF upload is **not** a
+> capability of the publishable build — `/genomics/vcf/*` is a hidden path prefix
+> that returns `404 FEATURE_NOT_AVAILABLE` before authentication. See
+> [PROJECT-BRIEF.md §5](PROJECT-BRIEF.md#5-gated-capabilities-present-in-code-off-in-the-published-build).
+> The test count is dropped rather than restated, because a number in a document
+> goes stale silently.
 
 ### Live end-to-end path — not verified in this audit
 
@@ -92,8 +100,14 @@ PostgreSQL database. This environment is external to the CI sandbox.
 
 **Where it would break if backend is down:**
 - Login / registration (POST `/auth/login`, `/auth/register`) — would return 503
-- Gene search (GET `/genomics/search`) — would return 503
-- VCF upload (POST `/genomics/vcf`) — would return 503
+- Concept autocomplete (GET `/genomics/publication-concepts/search`) — would return 503
+- Candidate-gene search (POST `/llm/invoke`) and gene enrichment (POST `/genomics/enrich`) — would return 503
+- Education explain / quiz / tutor (POST `/education/explain`, `/quiz`, `/chat`) — would return 503
+
+> **Correction, 2026-08-25.** This list previously named `GET /genomics/search`
+> (no such route exists) and `POST /genomics/vcf`. `/genomics/vcf/*` is a hidden
+> path prefix: it returns `404 FEATURE_NOT_AVAILABLE` whether the backend is up
+> or down, so it is not a backend-availability failure mode at all.
 
 The app renders a graceful error boundary for API failures; no crash or blank
 screen occurs.

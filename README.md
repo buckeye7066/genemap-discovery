@@ -4,6 +4,8 @@ An approachable genetics-education and early-research platform for reviewed lear
 
 The publishable build is education and exploratory research only. It does not accept personal medical records or VCF uploads and does not provide diagnosis, personal risk, pharmacogenomics, treatment, dosing, drug-avoidance, screening, urgency, or trial-matching guidance.
 
+**[PROJECT-BRIEF.md](PROJECT-BRIEF.md) is the authoritative description of what this build ships.** Several capabilities exist in backend code but are switched off for publication; they are listed there in §5 with the reason each one is gated. Backend code existing is not a reason to enable a route.
+
 ## Architecture
 
 This is a pnpm-workspaces monorepo containing:
@@ -213,12 +215,39 @@ VITE_API_URL=http://localhost:3000
 - `POST /billing/institutional-checkout` - create institutional checkout
 - `POST /billing/webhook` - Stripe webhook handler
 
+### Genetics education (model-invoking)
+
+- `GET /education/topics` - reviewed topic catalog (no model)
+- `POST /education/explain` - catalog topic only; server owns the task
+- `POST /education/quiz` - catalog topic only; server owns the task
+- `POST /education/chat` - bounded tutor; structured `genetics_education` task
+- `GET`/`POST /education/progress`, `GET /education/entitlements` (no model)
+
+### Structured research generation
+
+- `POST /llm/invoke` - the only general generation route. Accepts a versioned
+  structured task (`aggregate_genomics_research`, `candidate_gene_research`,
+  `research_hypothesis`, `learning_activity_summary`) and rejects raw prompt
+  text, message histories, and any body key outside
+  `{publicationTask, taskInput, options}`.
+
 ### Published genetics lookup
 
-- `GET /genomics/gene/:symbol`
-- `GET /genomics/phenotype/search`
+- `GET /genomics/publication-concepts/search` - deterministic curated HPO/MONDO search
+- `GET /genomics/phenotype/search` - HPO phenotype search
+- `POST /genomics/enrich` - MyGene.info/Ensembl/NCBI gene records + HPO validation
+- `POST /genomics/association-evidence` - source-labelled association tuples
 
-Variant, ClinVar, VCF, medical-data, conversation, and clinical-trial routes are intentionally unavailable in the education/research publication mode.
+### Gated in the published build
+
+- `GET /genomics/gene/:symbol` - **off** unless `GENOMICS_GENE_LOOKUP_ENABLED=true`;
+  the handler returns "Gene lookup is disabled on this deployment".
+- `POST /education/image` - always returns an `unavailable` artifact
+  (`image_output_verification_unavailable`); it never invokes a model.
+- `POST /llm/chat`, `POST /llm/image` - retired stubs; 403 at the publication
+  boundary before the handler runs.
+
+Variant, ClinVar, VCF, medical-data, conversation, and clinical-trial routes are intentionally unavailable in the education/research publication mode: they return `404 FEATURE_NOT_AVAILABLE` from an `onRequest` hook, before authentication. See [PROJECT-BRIEF.md §5](PROJECT-BRIEF.md#5-gated-capabilities-present-in-code-off-in-the-published-build) for the full gated list and the reason for each.
 
 ### Health
 
