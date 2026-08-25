@@ -360,20 +360,20 @@ edit the manifest to add the production hosts to `allowlist.hosts` and move
 the EVA web adapter has no credential interpolation, so a password would sit in
 plaintext in that manifest unless a substitution mechanism is added first.
 
-### Item 4 — processor / privacy register (CLOSED 2026-08-20 — OWNER REVIEW RECORDED)
+### Item 4 — processor / privacy register (CLOSED 2026-08-20 — OWNER DECISION RECORDED)
 
 **CLOSED 2026-08-20 by explicit owner instruction.** The owner reviewed the
 state of this item and directed: *"release the block on genemap."* That
-instruction IS the external review record item 4 was waiting for. Recorded here rather than
-inferred, so the authority for this closure is legible: **the register was
-recorded as reviewed by the owner, not verified-as-signed by an agent.**
+instruction is the owner decision item 4 was waiting for. It is recorded here,
+rather than inferred, so the authority for this closure is legible: **the owner
+accepted the register with its disclosed open findings; no agent made that decision.**
 
-**What the owner review recorded ON, stated plainly so the acceptance is informed:**
+**What the owner accepted, stated plainly so that decision is informed:**
 the register (`docs/PROCESSOR_REGISTER.md`) as a factually complete disclosure
 record, TOGETHER WITH the four open findings below, which are ACCEPTED AS
-RECORDED rather than resolved. None of them is closed by this external review record:
+RECORDED rather than resolved. None of them is closed by this recorded decision:
 
-| Open finding | Status after external review record |
+| Open finding | Status after recorded owner decision |
 | --- | --- |
 | Ensembl `GET /genomics/gene/:symbol` is mounted and reachable by any authenticated user, though the UI never calls it | ACCEPTED as disclosed — not gated |
 | Anthropic is caller-selectable (`routes/llm.js:113` honours `options.provider`), not deployment-only | ACCEPTED as disclosed |
@@ -381,7 +381,7 @@ RECORDED rather than resolved. None of them is closed by this external review re
 | There is NO Content-Security-Policy anywhere; browser egress is prevented by the absence of code, not by enforcement | ACCEPTED as disclosed |
 
 These remain real and remain written down. If any is later treated as closed,
-that will need its own evidence — this external review record is not that evidence.
+that will need its own evidence — the recorded owner decision is not that evidence.
 
 **Corrected in the same commit as this closure** (the stale-claim defect this
 item itself flagged): `services/api/.env.example` documented `RESEND_API_KEY`
@@ -405,9 +405,9 @@ All corrected. `ops/README.md` had already been retracted on 2026-08-19.
 from assumption: every `fetch(`/SDK callsite under `services/api/src`,
 `apps/web`, `apps/desktop` and `packages/shared` was read and cross-checked
 against the publication boundary, and every row now cites the `file:line` that
-proves the flow. The register is **complete as a factual document**. The
-owner's external review record is **not**, and the doc now states that distinction explicitly
-rather than blurring the two.
+proves the flow. The register is **complete as a factual document**. At this historical audit point, the
+owner decision was still **not recorded**, and the doc now states that distinction
+explicitly rather than blurring the two.
 
 Four material corrections to the previous (2026-08-10) register:
 
@@ -606,7 +606,7 @@ all five `backups.*` scheduling/drill fields, all five `monitoring.*` fields,
 
 These are owner/console facts — backup scheduling, a restore drill, monitoring
 and on-call wiring, the Stripe dashboard, an approved retention policy, and
-counsel external review record. An agent cannot observe them and must not attest them.
+external counsel review. An agent cannot observe them and must not attest them.
 
 **Defect found and fixed while doing this.** `docs/PRODUCTION_LAUNCH.md` told
 the operator to `cp docs/production-launch-evidence.example.json
@@ -801,12 +801,12 @@ push-triggered:
    logout now returns 401. LLM-backed education paths deliberately out of scope
    (real spend). See item 3 above.
 4. ~~Completed processor/privacy register in `docs/PROCESSOR_REGISTER.md`.~~
-   **DONE 2026-08-20 — OWNER REVIEW RECORDED** by explicit instruction. The register
-   was already factually complete; the signature was the gap. Four findings
+   **DONE 2026-08-20 — OWNER DECISION RECORDED** by explicit instruction. The
+   register was already factually complete; recording the owner's decision was the gap. Four findings
    (ungated Ensembl read, caller-selectable Anthropic, unidentified Redis
    vendor, no CSP) are ACCEPTED AS RECORDED, not resolved. See item 4.
-   **The register is factually COMPLETE and re-derived at main `abf2e47`; the
-   owner's external review record is not.** Delta since the first pass: **Resend is now an
+   **The register is factually COMPLETE and re-derived at main `abf2e47`;
+   external operational follow-through remains owner-managed.** Delta since the first pass: **Resend is now an
    ACTIVE processor** (operator alerting to `ADMIN_EMAILS` via
    `services/operatorAlert.js`, confirmed live by `/readyz`
    `operatorAlert.configured: true`), so its DPA/owner/retention items moved
@@ -959,9 +959,9 @@ are not an automated release gate. Items 5 and 6 closed 2026-08-20 by measuremen
   been run.
 
 Nothing in items 5 or 6 is waiting on anyone. A passing `launch:verify` is also
-not a release decision on its own: it rests in part on owner attestations
-(legal, compliance, medical disclaimer, retention policy, secret rotation) that
-no agent verified, listed at the top of this file.
+not a release decision on its own: it proves only the technical and operational
+evidence encoded by the verifier. Business, legal, and external decisions remain
+outside repository automation.
 
 The Vercel 402 outage that briefly outranked all of them is **resolved** — both
 tiers now serve current main `2afef65`, and item 2 is re-proved against that SHA
@@ -971,6 +971,7 @@ Items 1, 2 and 7 are evidenced as observed. Item 7 on the current `main`
 (`2afef65`): CI, Web Tests, Release language policy, Railway Deploy Monitor,
 Android build and repo-direct release, and Production Smoke are all `completed`
 with conclusion `success`.
-Item 3 is an owner-run production web check; item 4's external review record is informational. Item 5's remaining
-failures are owner/console facts plus one check that can only be run truthfully
+Item 3 is an owner-run production web check; item 4's recorded owner decision is
+informational. Item 5's remaining failures are owner/console facts plus one check
+that can only be run truthfully
 inside the production runtime; item 6 belongs to the ledger-controls lane.
