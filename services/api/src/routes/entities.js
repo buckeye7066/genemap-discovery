@@ -488,6 +488,18 @@ export default async function entityRoutes(fastify) {
   });
 
   // ─── Research Projects ──────────────────────────────────────
+
+  // The restorable state of a project. Exactly the fields PUT /projects/:id
+  // accepts, so a snapshot can be fed straight back through the update path
+  // with nothing missing and nothing invented.
+  const projectSnapshot = (project) => ({
+    title: project.title,
+    description: project.description ?? null,
+    status: project.status ?? null,
+    genes: project.genes ?? [],
+    metadata: project.metadata ?? null,
+  });
+
   fastify.get('/projects', async (request) => {
     const projects = await prisma.researchProject.findMany({
       where: {
@@ -497,6 +509,10 @@ export default async function entityRoutes(fastify) {
         ],
       },
       include: {
+        // The owner, so the collaboration panel can name them. Previously the
+        // UI read a nonexistent `created_by` and rendered undefined. Everyone
+        // who can read this row is already the owner or a collaborator on it.
+        user: { select: { email: true, displayName: true } },
         collaborators: { include: { user: { select: { email: true, displayName: true } } } },
         _count: { select: { versions: true } },
       },
@@ -528,6 +544,7 @@ export default async function entityRoutes(fastify) {
         projectId: project.id,
         version: 1,
         changes: { type: 'initial', title },
+        snapshot: projectSnapshot(project),
         notes: 'Project created',
         createdBy: request.user.userId,
       },
@@ -569,6 +586,10 @@ export default async function entityRoutes(fastify) {
         projectId: id,
         version: (lastVersion?.version || 0) + 1,
         changes: request.body,
+        // The state AFTER the update, so restoring THIS version reproduces
+        // what the project looked like at this point. `changes` is the delta
+        // that got us here and is kept for the human-readable history.
+        snapshot: projectSnapshot(project),
         notes: `Updated: ${Object.keys(request.body).join(', ')}`,
         createdBy: request.user.userId,
       },

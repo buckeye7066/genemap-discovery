@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { apiClient } from "@genemap/shared";
 import { useAuth } from "../lib/AuthContext";
+import { EDUCATION_LEVELS } from "../lib/EducationLevelContext";
 import MobileUpdateCard from "../components/MobileUpdateCard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -417,13 +418,16 @@ export default function ProfilePage() {
                       <SelectTrigger id="education" className="mt-1">
                         <SelectValue placeholder="Select your education level" />
                       </SelectTrigger>
+                      {/* Derived from EDUCATION_LEVELS so this list cannot drift
+                          from the levels the education system actually accepts.
+                          It used to offer phd / medical / researcher, none of
+                          which EducationLevelContext recognizes - saving one
+                          left the level unset, so the level picker re-prompted
+                          on every visit. */}
                       <SelectContent>
-                        <SelectItem value="high_school">High School</SelectItem>
-                        <SelectItem value="undergraduate">Undergraduate</SelectItem>
-                        <SelectItem value="graduate">Graduate</SelectItem>
-                        <SelectItem value="phd">PhD</SelectItem>
-                        <SelectItem value="medical">Medical Professional</SelectItem>
-                        <SelectItem value="researcher">Research Scientist</SelectItem>
+                        {Object.values(EDUCATION_LEVELS).map((lvl) => (
+                          <SelectItem key={lvl.id} value={lvl.id}>{lvl.label}</SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>

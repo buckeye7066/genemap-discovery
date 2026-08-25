@@ -304,6 +304,13 @@ model ProjectVersion {
   projectId String   @map("project_id")
   version   Int
   changes   Json
+  // Full project state AT this version, so a restore has something real to
+  // apply. `changes` is a delta (the update's request body) and cannot be
+  // replayed into a state. NULL means the row predates snapshot capture
+  // (migration 20260825120000) and is NOT restorable — the UI must say so
+  // rather than appear to succeed. Never backfilled: there is nothing
+  // truthful to backfill it with.
+  snapshot  Json?
   notes     String?
   createdBy String   @map("created_by")
   createdAt DateTime @default(now()) @map("created_at")

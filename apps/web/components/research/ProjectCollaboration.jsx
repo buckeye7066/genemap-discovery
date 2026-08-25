@@ -41,6 +41,10 @@ export default function ProjectCollaboration({ project, onUpdate }) {
   const [isInviting, setIsInviting] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const { user } = useAuth();
+  // Only the owner may add or remove collaborators; the server enforces this
+  // too (requireProjectAccess(..., ['owner'])). Hiding the control keeps the
+  // UI from offering an action that will always 403.
+  const isOwner = Boolean(user?.email) && project.user?.email === user.email;
 
   useEffect(() => {
     loadCollaborators();
@@ -60,24 +64,14 @@ export default function ProjectCollaboration({ project, onUpdate }) {
 
     setIsInviting(true);
     try {
-      // Set permissions based on role
-      const permissions = {
-        owner: { can_edit: true, can_share: true, can_delete: true },
-        editor: { can_edit: true, can_share: false, can_delete: false },
-        viewer: { can_edit: false, can_share: false, can_delete: false }
-      };
-
+      // POST /entities/projects/:id/collaborators takes exactly { userEmail, role }.
+      // This used to send `user_email` (400 every time) plus a `permissions`
+      // object the server has no column for. `role` IS the permission model,
+      // and it is validated server-side against COLLABORATOR_ROLES.
       await apiClient.addCollaborator(project.id, {
-        user_email: inviteEmail.trim(),
+        userEmail: inviteEmail.trim(),
         role: inviteRole,
-        permissions: permissions[inviteRole]
       });
-
-      if (!project.is_collaborative) {
-        await apiClient.updateProject(project.id, {
-          is_collaborative: true
-        });
-      }
 
       setInviteEmail("");
       setInviteRole("viewer");
@@ -115,15 +109,10 @@ export default function ProjectCollaboration({ project, onUpdate }) {
     return styles[role] || styles.viewer;
   };
 
-  const getStatusIcon = (status) => {
-    switch (status) {
-      case 'active': return <CheckCircle className="w-4 h-4 text-green-600" />;
-      case 'pending': return <Clock className="w-4 h-4 text-amber-600" />;
-      case 'declined': return <XCircle className="w-4 h-4 text-red-600" />;
-      case 'revoked': return <XCircle className="w-4 h-4 text-slate-600" />;
-      default: return null;
-    }
-  };
+  // NOTE: there is deliberately no getStatusIcon() any more. It switched over
+  // pending / declined / revoked states that the collaborator model does not
+  // have — POST /collaborators upserts a live membership row, so the only two
+  // states are "is a collaborator" and "is not".
 
   return (
     <Card className="shadow-lg">
@@ -245,7 +234,9 @@ export default function ProjectCollaboration({ project, onUpdate }) {
                     <Crown className="w-4 h-4 text-white" />
                   </div>
                   <div>
-                    <p className="font-semibold text-slate-900 text-sm">{project.created_by}</p>
+                    <p className="font-semibold text-slate-900 text-sm">
+                      {project.user?.displayName || project.user?.email || 'Project owner'}
+                    </p>
                     <p className="text-xs text-slate-600">Project Owner</p>
                   </div>
                 </div>
@@ -258,23 +249,23 @@ export default function ProjectCollaboration({ project, onUpdate }) {
               <div key={idx} className="p-3 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3 flex-1">
-                    {getStatusIcon(collab.status)}
+                    <CheckCircle className="w-4 h-4 text-green-600" />
                     <div className="flex-1">
-                      <p className="font-medium text-slate-900 text-sm">{collab.user_email}</p>
+                      {/* A collaborator row IS the membership: the server creates
+                          it directly, so there is no pending/revoked lifecycle
+                          and no `status` column to render. The email comes from
+                          the included user relation, not a `user_email` field. */}
+                      <p className="font-medium text-slate-900 text-sm">
+                        {collab.user?.displayName || collab.user?.email || 'Collaborator'}
+                      </p>
                       <div className="flex items-center gap-2 mt-1">
                         <Badge className={`text-xs ${getRoleBadge(collab.role)}`}>
                           {collab.role}
                         </Badge>
-                        <Badge variant="outline" className="text-xs">
-                          {collab.status}
-                        </Badge>
-                        <span className="text-xs text-slate-500">
-                          by {collab.invited_by === user?.email ? 'you' : collab.invited_by}
-                        </span>
                       </div>
                     </div>
                   </div>
-                  {(collab.invited_by === user?.email || project.created_by === user?.email) && collab.status !== 'revoked' && (
+                  {isOwner && (
                     <Button
                       variant="ghost"
                       size="sm"
@@ -290,11 +281,11 @@ export default function ProjectCollaboration({ project, onUpdate }) {
           </div>
         )}
 
-        {project.is_collaborative && (
+        {collaborators.length > 0 && (
           <Alert className="mt-4 bg-green-50 border-green-200">
             <CheckCircle className="h-4 w-4 text-green-600" />
             <AlertDescription className="text-green-900 text-sm">
-              <strong>Collaborative Project:</strong> {collaborators.filter(c => c.status === 'active').length} active team member(s)
+              <strong>Collaborative Project:</strong> {collaborators.length} team member(s)
             </AlertDescription>
           </Alert>
         )}
