@@ -74,17 +74,26 @@ const genes = [
         isAiLead: false,
       },
       {
-        source: 'Open Targets',
-        recordId: 'literature:SCN2A:1',
-        claim: 'SCN2A and the query co-occur in published text',
+        source: 'Open Targets Platform GraphQL API v4',
+        recordId: 'ENSG00000136531',
+        claim: 'Open Targets aggregates source datatypes for SCN2A and Seizure',
+        subject: { kind: 'gene', id: 'ENSG00000136531', label: 'SCN2A' },
+        object: { kind: 'disease', id: 'MONDO:0005027', label: 'Seizure disorder' },
         taxon: '9606',
         species: 'Homo sapiens',
-        evidenceClass: 'literature',
-        evidenceType: 'literature',
+        evidenceClass: 'computational',
+        evidenceType: 'computed_target_disease_association',
         evidenceStrength: 'supporting',
+        scoreComponents: [{
+          id: 'literature',
+          label: 'Literature',
+          score: 0.42,
+          evidenceClass: 'literature',
+          scale: 'open_targets_datatype_score_0_1',
+        }],
         releaseVersion: '26.06',
-        retrievalDate: '2026-08-09',
-        directLink: 'https://example.org/scn2a-literature',
+        retrievalDate: '2026-08-25',
+        directLink: 'https://platform.opentargets.org/disease/MONDO_0005027/associations',
         isAiLead: false,
       },
     ],
@@ -100,8 +109,13 @@ describe('GeneComparison claim-level evidence', () => {
     expect(screen.getAllByText(/human association/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/model-organism/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/metadata/i).length).toBeGreaterThan(0);
-    expect(screen.getByText('Literature claims').closest('div')).toHaveTextContent('1');
-    expect(screen.getByText(/SCN2A and the query co-occur/i)).toBeInTheDocument();
+    expect(screen.getByText('Literature evidence').closest('div')).toHaveTextContent('1 score component');
+    expect(screen.getByText(/Open Targets aggregates source datatypes for SCN2A/i)).toBeInTheDocument();
+    expect(screen.getByText(/Literature: 0.42 · class literature/i)).toBeInTheDocument();
+    expect(__test.literatureEvidenceLabel({
+      directClaims: 0,
+      positiveScoreComponents: 1,
+    })).toBe('1 score component');
     expect(__test.rankingLabel('literature')).toBe('Literature-derived association evidence');
     expect(screen.getByText(/SCN1A has a source-recorded association/i)).toBeInTheDocument();
     expect(screen.getByText(/Mouse ortholog phenotype overlaps/i)).toBeInTheDocument();

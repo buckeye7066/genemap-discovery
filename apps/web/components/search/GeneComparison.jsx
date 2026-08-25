@@ -7,6 +7,7 @@ import { GitCompare, X, Dna, MapPin, Info, ExternalLink } from "lucide-react";
 import {
   claimProvenanceRole,
   deriveRankingBasisFromClaims,
+  evidenceClassPresence,
   partitionClaimsBySpecies,
   safeExternalHttpUrl,
 } from "../../../../packages/shared/src/associationClaim.ts";
@@ -61,6 +62,17 @@ function retrievalLabel(claim) {
   return claim.retrievalDate || 'retrieval date not recorded';
 }
 
+function literatureEvidenceLabel(presence = {}) {
+  const claims = presence.directClaims || 0;
+  const components = presence.positiveScoreComponents || 0;
+  const parts = [];
+  if (claims > 0) parts.push(`${claims} claim${claims === 1 ? '' : 's'}`);
+  if (components > 0) {
+    parts.push(`${components} score component${components === 1 ? '' : 's'}`);
+  }
+  return parts.length > 0 ? parts.join(' + ') : '0';
+}
+
 function claimGroups(gene) {
   const claims = Array.isArray(gene?.associationClaims) ? gene.associationClaims : [];
   const partition = gene?.evidencePartition || partitionClaimsBySpecies(claims);
@@ -86,6 +98,7 @@ export default function GeneComparison({ genes = [], onClose }) {
         explanation: (candidateReusable ? normalizeText(gene?.explanation) : '')
           || (profileReusable ? normalizeText(gene?.aiSummary) : ''),
         rankingBasis: gene?.rankingBasis || deriveRankingBasisFromClaims(groups.claims),
+        literaturePresence: evidenceClassPresence(groups.claims, 'literature'),
         ...groups,
       };
     });
@@ -101,9 +114,16 @@ export default function GeneComparison({ genes = [], onClose }) {
       acc.human += row.partition.human?.length || 0;
       acc.animal += row.partition.animal?.length || 0;
       acc.computational += row.partition.computational?.length || 0;
-      acc.literature += row.partition.literature?.length || 0;
+      acc.literatureClaims += row.literaturePresence.directClaims;
+      acc.literatureComponents += row.literaturePresence.positiveScoreComponents;
       return acc;
-    }, { human: 0, animal: 0, computational: 0, literature: 0 });
+    }, {
+      human: 0,
+      animal: 0,
+      computational: 0,
+      literatureClaims: 0,
+      literatureComponents: 0,
+    });
 
     return { rows, sharedPhenotypes, totals };
   }, [genes]);
@@ -143,7 +163,7 @@ export default function GeneComparison({ genes = [], onClose }) {
               Gene Evidence Comparison
             </CardTitle>
             <p className="text-sm text-slate-600 mt-1">
-              Human, model-organism, literature-derived, computed, AI-lead, and source-metadata records remain separate.
+              Human, model-organism, and computed claims stay separate; literature-derived source score parts remain labeled inside their computed claim.
             </p>
           </div>
           {onClose && (
@@ -172,8 +192,13 @@ export default function GeneComparison({ genes = [], onClose }) {
               <p className="text-2xl font-bold text-blue-900">{comparison.totals.computational}</p>
             </div>
             <div className="rounded-md border border-violet-200 bg-violet-50 p-4">
-              <p className="text-xs font-medium uppercase text-violet-700">Literature claims</p>
-              <p className="text-2xl font-bold text-violet-900">{comparison.totals.literature}</p>
+              <p className="text-xs font-medium uppercase text-violet-700">Literature evidence</p>
+              <p className="text-lg font-bold text-violet-900">
+                {literatureEvidenceLabel({
+                  directClaims: comparison.totals.literatureClaims,
+                  positiveScoreComponents: comparison.totals.literatureComponents,
+                })}
+              </p>
             </div>
           </div>
 
@@ -186,7 +211,7 @@ export default function GeneComparison({ genes = [], onClose }) {
                   <th className="px-4 py-3 text-left font-semibold text-slate-700">Human</th>
                   <th className="px-4 py-3 text-left font-semibold text-slate-700">Model organism</th>
                   <th className="px-4 py-3 text-left font-semibold text-slate-700">Computed</th>
-                  <th className="px-4 py-3 text-left font-semibold text-slate-700">Literature</th>
+                  <th className="px-4 py-3 text-left font-semibold text-slate-700">Literature evidence</th>
                   <th className="px-4 py-3 text-left font-semibold text-slate-700">Location</th>
                 </tr>
               </thead>
@@ -201,7 +226,7 @@ export default function GeneComparison({ genes = [], onClose }) {
                     <td className="px-4 py-3 align-top">{row.partition.human?.length || 0}</td>
                     <td className="px-4 py-3 align-top">{row.partition.animal?.length || 0}</td>
                     <td className="px-4 py-3 align-top">{row.partition.computational?.length || 0}</td>
-                    <td className="px-4 py-3 align-top">{row.partition.literature?.length || 0}</td>
+                    <td className="px-4 py-3 align-top">{literatureEvidenceLabel(row.literaturePresence)}</td>
                     <td className="px-4 py-3 align-top">
                       <span className="inline-flex items-center gap-1">
                         <MapPin className="w-3 h-3 text-slate-400" />
@@ -244,6 +269,28 @@ export default function GeneComparison({ genes = [], onClose }) {
                               <div><dt className="inline font-semibold">Release:</dt> <dd className="inline">{sourceVersion(claim)}</dd></div>
                               <div><dt className="inline font-semibold">Retrieved:</dt> <dd className="inline">{retrievalLabel(claim)}</dd></div>
                             </dl>
+                            {Array.isArray(claim.scoreComponents) && claim.scoreComponents.length > 0 && (
+                              <div className="mt-3 rounded border border-slate-200 bg-white p-2">
+                                <p className="text-xs font-semibold text-slate-700">
+                                  Source score components
+                                </p>
+                                <p className="text-[11px] text-slate-500">
+                                  Source-published parts of this computed claim, not calibrated probabilities.
+                                </p>
+                                <ul className="mt-1 space-y-1 text-xs text-slate-700">
+                                  {claim.scoreComponents.map((component, componentIndex) => (
+                                    <li key={`${component.id || 'component'}:${componentIndex}`}>
+                                      {component.label || component.id || 'Unlabeled component'}:{' '}
+                                      {Number.isFinite(component.score)
+                                        ? component.score.toFixed(2)
+                                        : 'not recorded'}
+                                      {' · '}class {component.evidenceClass || 'not recorded'}
+                                      {' · '}scale {component.scale || 'not recorded'}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
                             {directLink ? (
                               <a
                                 href={directLink}
@@ -350,5 +397,6 @@ export default function GeneComparison({ genes = [], onClose }) {
 export const __test = {
   claimGroups,
   geneSymbol,
+  literatureEvidenceLabel,
   rankingLabel,
 };

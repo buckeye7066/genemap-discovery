@@ -5,7 +5,9 @@ import {
   claimSortKey,
   createAssociationClaim,
   deriveRankingBasisFromClaims,
+  evidenceClassPresence,
   externalFollowupClaim,
+  hasEvidenceClassSignal,
   humanGeneIdentityClaim,
   hpoPhenotypeClaim,
   partitionClaimsBySpecies,
@@ -165,6 +167,48 @@ describe('associationClaim', () => {
     expect(parts.computational).toEqual([computationalAssociation]);
     expect(parts.metadata).toEqual([identity, hpo, followup]);
     expect(parts.external).toEqual([hpo, followup]);
+  });
+
+  it('detects positive literature score parts without reclassifying the Open Targets claim', () => {
+    const openTargetsClaim = createAssociationClaim({
+      source: 'Open Targets Platform GraphQL API v4',
+      recordId: 'ENSG00000144285',
+      claim: 'Open Targets aggregates source datatypes for SCN1A and Seizure',
+      taxon: '9606',
+      evidenceClass: 'computational',
+      evidenceType: 'computed_target_disease_association',
+      evidenceStrength: 'supporting',
+      releaseVersion: '26.06',
+      retrievalDate: '2026-08-25',
+      directLink: 'https://platform.opentargets.org/disease/MONDO_0005027/associations',
+      scoreComponents: [
+        {
+          id: 'genetic_association',
+          label: 'Genetic association',
+          score: 0.81,
+          evidenceClass: 'human_verified',
+          scale: 'open_targets_datatype_score_0_1',
+        },
+        {
+          id: 'literature',
+          label: 'Literature',
+          score: 0.42,
+          evidenceClass: 'literature',
+          scale: 'open_targets_datatype_score_0_1',
+        },
+      ],
+    });
+
+    const partition = partitionClaimsBySpecies([openTargetsClaim]);
+    expect(partition.computational).toEqual([openTargetsClaim]);
+    expect(partition.literature).toEqual([]);
+    expect(evidenceClassPresence([openTargetsClaim], 'literature')).toEqual({
+      directClaims: 0,
+      positiveScoreComponents: 1,
+    });
+    expect(hasEvidenceClassSignal([openTargetsClaim], 'literature')).toBe(true);
+    expect(hasEvidenceClassSignal([openTargetsClaim], 'human_verified')).toBe(true);
+    expect(deriveRankingBasisFromClaims([openTargetsClaim])).toBe('computational');
   });
 
   it('gives AI-lead state precedence over contradictory verified fields', () => {

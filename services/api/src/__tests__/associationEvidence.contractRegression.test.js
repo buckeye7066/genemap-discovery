@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { __test } from '../services/associationEvidenceContract.js';
+import {
+  __test,
+  sanitizeAssociationEvidence,
+} from '../services/associationEvidenceContract.js';
 
 const HPO_QUERY = {
   kind: 'hpo',
@@ -37,6 +40,61 @@ describe('association evidence release bounds', () => {
       candidateLimit: 8,
       candidatesRequested: 15,
       candidatesSkipped: 7,
+    });
+  });
+
+  it('preserves Open Targets literature as a positive score part on its computed claim', () => {
+    const result = sanitizeAssociationEvidence({
+      query: HPO_QUERY,
+      retrievedAt: '2026-08-25T12:00:00.000Z',
+      sourceStatus: 'available',
+      sources: {
+        myGene: { status: 'available' },
+        monarch: { status: 'available' },
+        openTargets: {
+          status: 'available',
+          apiVersion: 'v4',
+          releaseVersion: '26.06',
+          retrievedAt: '2026-08-25T12:00:00.000Z',
+        },
+      },
+      claimsByGene: {
+        SCN1A: [{
+          source: 'Open Targets Platform GraphQL API v4',
+          recordId: 'ENSG00000144285',
+          claim: 'Open Targets aggregates source datatypes for SCN1A and Seizure',
+          subject: { kind: 'gene', id: 'ENSG00000144285', label: 'SCN1A' },
+          object: { kind: 'disease', id: 'MONDO:0005027', label: 'Seizure disorder' },
+          taxon: '9606',
+          species: 'Homo sapiens',
+          evidenceClass: 'computational',
+          evidenceType: 'computed_target_disease_association',
+          evidenceStrength: 'supporting',
+          scoreComponents: [{
+            id: 'literature',
+            label: 'Literature',
+            score: 0.42,
+            evidenceClass: 'literature',
+            scale: 'open_targets_datatype_score_0_1',
+          }],
+          releaseVersion: '26.06',
+          retrievalDate: '2026-08-25',
+          directLink: 'https://platform.opentargets.org/disease/MONDO_0005027/associations',
+          isAiLead: false,
+        }],
+      },
+    }, ['SCN1A']);
+
+    expect(result.claimsByGene.SCN1A).toHaveLength(1);
+    expect(result.claimsByGene.SCN1A[0]).toMatchObject({
+      evidenceClass: 'computational',
+      evidenceType: 'computed_target_disease_association',
+      scoreComponents: [{
+        id: 'literature',
+        score: 0.42,
+        evidenceClass: 'literature',
+        scale: 'open_targets_datatype_score_0_1',
+      }],
     });
   });
 

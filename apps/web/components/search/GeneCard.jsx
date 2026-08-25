@@ -30,6 +30,7 @@ import {
   RANKING_EXCLUSION_TEXT,
   RANKING_ROLE_TEXT,
   deriveRankingBasisFromClaims,
+  evidenceClassPresence,
   partitionClaimsBySpecies,
   safeExternalHttpUrl,
 } from "../../../../packages/shared/src/associationClaim.ts";
@@ -237,7 +238,7 @@ function provenanceRoleLabel(claim) {
   return 'Identity / ontology / follow-up metadata';
 }
 
-function groundedEvidenceSummary(partition = {}) {
+function groundedEvidenceSummary(partition = {}, claims = []) {
   const associationCount = (list) =>
     (list || []).filter((c) => claimProvenanceRole(c) === 'association_evidence').length;
   const entries = [
@@ -246,10 +247,15 @@ function groundedEvidenceSummary(partition = {}) {
     ['computed', associationCount(partition.computational)],
     ['literature-derived', associationCount(partition.literature)],
   ].filter(([, count]) => count > 0);
-  if (entries.length === 0) return null;
-  return entries
-    .map(([label, count]) => `${count} ${label} claim${count === 1 ? '' : 's'}`)
-    .join(', ');
+  const summary = entries
+    .map(([label, count]) => `${count} ${label} claim${count === 1 ? '' : 's'}`);
+  const literatureParts = evidenceClassPresence(claims, 'literature').positiveScoreComponents;
+  if (literatureParts > 0) {
+    summary.push(
+      `${literatureParts} literature-derived score component${literatureParts === 1 ? '' : 's'}`,
+    );
+  }
+  return summary.length > 0 ? summary.join(', ') : null;
 }
 
 function GeneCard({ gene, rank, isSelected = false, onSelect = null }) {
@@ -305,7 +311,7 @@ function GeneCard({ gene, rank, isSelected = false, onSelect = null }) {
   // contradictory evidenceClass/taxon fields in both data and fallback paths.
   const partition = gene.evidencePartition || partitionClaimsBySpecies(claims);
   const rankingBasis = gene.rankingBasis || deriveRankingBasisFromClaims(claims);
-  const sourceEvidenceSummary = groundedEvidenceSummary(partition);
+  const sourceEvidenceSummary = groundedEvidenceSummary(partition, claims);
   const rankingLabel = rankingBasis === 'human_verified'
     ? 'Human-verified association evidence'
     : rankingBasis === 'computational'

@@ -17,9 +17,10 @@ not a market-share claim.
 
 - Source-level association rows, species separation, versions, retrieval dates,
   source links, score decomposition, comparison, and safe exports are present.
-- This change completes the `literature` evidence class across cards, filters,
-  comparison totals/tables, copied text, and printable exports. A literature-only
-  gene must never fall through to “unverified AI lead.”
+- Open Targets literature evidence is a datatype score component inside a
+  computed association claim. Cards, filters, comparisons, copied text, and
+  printable exports now expose that positive component without reclassifying
+  its owning claim or presenting a source score as a calibrated probability.
 - Interactive gene networks remain deliberately deferred because GeneMap has no
   deterministic network adapter with claim-level provenance.
 - Clinical interpretation, personal variant analysis, diagnostic grades, and

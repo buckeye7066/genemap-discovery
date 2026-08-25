@@ -344,6 +344,16 @@ function provenanceRoleLabel(claim) {
   return 'Identity / ontology / follow-up metadata';
 }
 
+function sourceScoreComponents(claim) {
+  return Array.isArray(claim?.scoreComponents)
+    ? claim.scoreComponents.filter((component) => (
+      component
+      && typeof component === 'object'
+      && Number.isFinite(component.score)
+    ))
+    : [];
+}
+
 function associationClaimContent(claim, index) {
   const safeLink = safeExternalHttpUrl(claim?.directLink);
   const recordId = displayValue(claim?.recordId);
@@ -355,6 +365,7 @@ function associationClaimContent(claim, index) {
   const species = displayValue(claim?.species);
   const taxon = displayValue(claim?.taxon);
   const retrievalDate = displayValue(claim?.retrievalDate);
+  const scoreComponents = sourceScoreComponents(claim);
 
   return `
     <div class="claim">
@@ -372,6 +383,11 @@ function associationClaimContent(claim, index) {
         <tr><th>Taxon</th><td>${escapeHtml(taxon)}</td></tr>
         <tr><th>Retrieved</th><td>${escapeHtml(retrievalDate)}</td></tr>
         <tr><th>AI Lead</th><td>${escapeHtml(aiLeadValue(claim))}</td></tr>
+        ${scoreComponents.length > 0 ? `
+        <tr><th>Source Score Components</th><td>
+          <ul>${scoreComponents.map((component) => `<li>${escapeHtml(displayValue(component.label || component.id, 'Unlabeled component'))}: ${escapeHtml(component.score.toFixed(2))} · class ${escapeHtml(displayValue(component.evidenceClass))} · scale ${escapeHtml(displayValue(component.scale))}</li>`).join('')}</ul>
+          <p>Source-published parts of this computed claim, not calibrated probabilities.</p>
+        </td></tr>` : ''}
         <tr><th>Source Record</th><td>${safeLink
           ? `<a href="${escapeHtml(safeLink)}" target="_blank" rel="noopener noreferrer">Open source record</a>`
           : 'No validated HTTP(S) link recorded'}</td></tr>
@@ -579,6 +595,15 @@ export function buildGeneShareText(data = {}) {
         `ai_lead=${aiLeadValue(claim)}`,
         sourceLink ? `link=${sourceLink}` : 'link=not recorded',
       ].join(' | '));
+      for (const component of sourceScoreComponents(claim)) {
+        lines.push([
+          `   source_score_component=${displayValue(component.label || component.id, 'Unlabeled component')}`,
+          `component_id=${displayValue(component.id)}`,
+          `score=${component.score.toFixed(2)}`,
+          `component_evidence=${displayValue(component.evidenceClass)}`,
+          `scale=${displayValue(component.scale)}`,
+        ].join(' | '));
+      }
     });
   } else {
     lines.push('Evidence and source provenance: none supplied; candidate labels remain unverified research leads.');

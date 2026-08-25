@@ -171,31 +171,44 @@ describe('GeneCard claim-level provenance', () => {
       human: [associationClaim],
       animal: [{ ...associationClaim, taxon: '10090' }],
       computational: [{ ...associationClaim, evidenceClass: 'computational' }],
-      literature: [{ ...associationClaim, evidenceClass: 'literature' }],
+      literature: [],
       metadata: [identityClaim],
-    })).toBe('1 human claim, 1 model-organism claim, 1 computed claim, 1 literature-derived claim');
+    })).toBe('1 human claim, 1 model-organism claim, 1 computed claim');
     expect(__test.groundedEvidenceSummary({ metadata: [identityClaim], aiLeads: [aiClaim] })).toBeNull();
   });
 
-  it('labels a literature-only source record as literature evidence rather than an AI lead', () => {
-    const literatureClaim = {
+  it('surfaces an API-shaped literature score part without reclassifying its computed claim', () => {
+    const openTargetsClaim = {
       ...associationClaim,
-      source: 'Open Targets',
-      recordId: 'literature:RUNX1:1',
-      claim: 'RUNX1 and the bounded query co-occur in published text',
-      evidenceClass: 'literature',
-      evidenceType: 'literature',
+      source: 'Open Targets Platform GraphQL API v4',
+      recordId: 'ENSG00000159216',
+      claim: 'Open Targets aggregates source datatypes for RUNX1 and the bounded query',
+      evidenceClass: 'computational',
+      evidenceType: 'computed_target_disease_association',
+      scoreComponents: [{
+        id: 'literature',
+        label: 'Literature',
+        score: 0.42,
+        evidenceClass: 'literature',
+        scale: 'open_targets_datatype_score_0_1',
+      }],
+      releaseVersion: '26.06',
+      retrievalDate: '2026-08-25',
+      directLink: 'https://platform.opentargets.org/disease/MONDO_0005027/associations',
     };
 
     render(<GeneCard gene={{
       ...gene,
       symbol: 'LIT1',
-      associationClaims: [literatureClaim],
+      associationClaims: [openTargetsClaim],
       evidencePartition: undefined,
     }} rank={1} />);
 
-    expect(screen.getByText('Literature-derived association evidence')).toBeInTheDocument();
-    expect(screen.getByText(/1 literature-derived claim/)).toBeInTheDocument();
+    expect(screen.getByText('Computational association evidence')).toBeInTheDocument();
+    expect(screen.getByText(/1 computed claim, 1 literature-derived score component/)).toBeInTheDocument();
+    expect(screen.getByRole('img', {
+      name: 'Literature: 0.42 from Literature evidence',
+    })).toBeInTheDocument();
     expect(screen.queryByText('AI research lead')).not.toBeInTheDocument();
   });
 

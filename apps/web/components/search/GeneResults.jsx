@@ -17,6 +17,7 @@ import { fetchAssociationEvidence } from "@/lib/associationEvidenceClient";
 import { resolvePublicationSearchReference } from "@/lib/publicationConceptCatalog";
 import {
   deriveRankingBasisFromClaims,
+  evidenceClassPresence,
   partitionClaimsBySpecies,
   rankGenesByProvenance,
   claimSortKey,
@@ -87,9 +88,10 @@ function summarizeEvidence(genes) {
     if ((partition.human || []).some((claim) => claimSortKey(claim) > 0)) counts.human += 1;
     if ((partition.animal || []).some((claim) => claimSortKey(claim) > 0)) counts.animal += 1;
     if ((partition.computational || []).some((claim) => claimSortKey(claim) > 0)) counts.computational += 1;
-    // Text-mined evidence is its own class, not a flavour of computational. An
-    // uncounted bucket would make this summary quietly understate the evidence.
-    if ((partition.literature || []).some((claim) => claimSortKey(claim) > 0)) counts.literature += 1;
+    // Open Targets carries text-mined evidence inside a computed claim's
+    // datatype score parts. Count the signal without reclassifying its owner.
+    const literature = evidenceClassPresence(gene.associationClaims || [], 'literature');
+    if (literature.directClaims + literature.positiveScoreComponents > 0) counts.literature += 1;
     if (partition.aiLeads?.length) counts.aiLead += 1;
   }
   return counts;
@@ -102,7 +104,8 @@ function geneMatchesEvidenceBasis(gene, evidenceBasis = 'all') {
   const hasHuman = (partition.human || []).some((claim) => claimSortKey(claim) > 0);
   const hasAnimal = (partition.animal || []).some((claim) => claimSortKey(claim) > 0);
   const hasComputational = (partition.computational || []).some((claim) => claimSortKey(claim) > 0);
-  const hasLiterature = (partition.literature || []).some((claim) => claimSortKey(claim) > 0);
+  const literature = evidenceClassPresence(claims, 'literature');
+  const hasLiterature = literature.directClaims + literature.positiveScoreComponents > 0;
 
   if (evidenceBasis === 'human') return hasHuman;
   if (evidenceBasis === 'animal') return hasAnimal;
@@ -298,7 +301,7 @@ export default function GeneResults({
           {evidenceState.status === 'loading' && (
             <div className="flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900" role="status">
               <Loader2 className="h-4 w-4 animate-spin" />
-              Checking source-grounded human, model-organism, literature-derived, and computational associations…
+              Checking source-grounded human, model-organism, and computed associations, including literature-derived source score parts…
             </div>
           )}
           {evidenceState.status === 'available' && (
@@ -383,7 +386,7 @@ export default function GeneResults({
           <h4 className="font-medium text-slate-900 mb-3">How to interpret these results</h4>
           <ul className="text-sm text-slate-600 space-y-1">
             <li>• The candidate list begins as bounded AI research leads, not findings or diagnoses.</li>
-            <li>• Human, model-organism, literature-derived, and computed claims are shown separately and may disagree.</li>
+            <li>• Human, model-organism, and computed claims stay separate; literature-derived source score parts remain labeled inside their computed claim.</li>
             <li>• Identity records and HPO term validation do not prove a gene-query association.</li>
             <li>• Missing source version, record, date, or link remains visibly “Not recorded.”</li>
             <li>• Open each source record and review study design, context, contradictions, and limitations.</li>

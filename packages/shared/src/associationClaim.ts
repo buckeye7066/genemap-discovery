@@ -430,6 +430,53 @@ export function claimProvenanceRole(claim: AssociationClaim): ClaimProvenanceRol
   return claimSortKey(claim) > 0 ? 'association_evidence' : 'source_metadata';
 }
 
+export interface EvidenceClassPresence {
+  /** Association claims whose primary class is this class. */
+  directClaims: number;
+  /** Positive source-published score parts carrying this class. */
+  positiveScoreComponents: number;
+}
+
+/**
+ * Find one evidence class without changing the class or ranking of its owning claim.
+ *
+ * Open Targets publishes one computed association claim with datatype score
+ * components inside it. A positive literature component must therefore be
+ * discoverable without pretending that the computed aggregate is a standalone
+ * literature claim (or promoting it to curated human evidence).
+ */
+export function evidenceClassPresence(
+  claims: AssociationClaim[] | null | undefined,
+  evidenceClass: EvidenceClass,
+): EvidenceClassPresence {
+  const presence: EvidenceClassPresence = {
+    directClaims: 0,
+    positiveScoreComponents: 0,
+  };
+  for (const claim of claims || []) {
+    if (claimProvenanceRole(claim) !== 'association_evidence') continue;
+    if (claim.evidenceClass === evidenceClass) presence.directClaims += 1;
+    for (const component of claim.scoreComponents || []) {
+      if (
+        component.evidenceClass === evidenceClass
+        && isRenderableScore(component.score)
+        && component.score > 0
+      ) {
+        presence.positiveScoreComponents += 1;
+      }
+    }
+  }
+  return presence;
+}
+
+export function hasEvidenceClassSignal(
+  claims: AssociationClaim[] | null | undefined,
+  evidenceClass: EvidenceClass,
+): boolean {
+  const presence = evidenceClassPresence(claims, evidenceClass);
+  return presence.directClaims + presence.positiveScoreComponents > 0;
+}
+
 /**
  * Resolve the ranking basis used by cards, printable reports, and copied text.
  * Metadata-only claims never upgrade an AI candidate to verified association.

@@ -949,21 +949,42 @@ describe('gene report provenance', () => {
     expect(associationOverview.content).toContain('Computational association evidence');
     expect(buildGeneShareText(associationGene)).toContain('Ranking: Computational association evidence');
 
-    const literatureGene = {
+    const openTargetsGene = {
       ...gene,
       associationClaims: [{
         ...associationClaim,
-        source: 'Open Targets',
-        recordId: 'LITERATURE:1',
-        claim: 'RUNX1 and the bounded query co-occur in published text',
-        evidenceClass: 'literature',
-        evidenceType: 'literature',
+        source: 'Open Targets Platform GraphQL API v4',
+        recordId: 'ENSG00000159216',
+        claim: 'Open Targets aggregates source datatypes for RUNX1 and the bounded query',
+        subject: { kind: 'gene', id: 'ENSG00000159216', label: 'RUNX1' },
+        object: { kind: 'disease', id: 'MONDO:0005027', label: 'Seizure disorder' },
+        evidenceClass: 'computational',
+        evidenceType: 'computed_target_disease_association',
+        scoreComponents: [{
+          id: 'literature',
+          label: 'Literature',
+          score: 0.42,
+          evidenceClass: 'literature',
+          scale: 'open_targets_datatype_score_0_1',
+        }],
+        releaseVersion: '26.06',
+        retrievalDate: '2026-08-25',
+        directLink: 'https://platform.opentargets.org/disease/MONDO_0005027/associations',
       }],
     };
-    const literatureOverview = buildGeneReportSections(literatureGene)
-      .find(section => section.title === 'Gene Overview');
-    expect(literatureOverview.content).toContain('Literature-derived association evidence');
-    expect(buildGeneShareText(literatureGene)).toContain('Ranking: Literature-derived association evidence');
+    const openTargetsSections = buildGeneReportSections(openTargetsGene);
+    const openTargetsOverview = openTargetsSections.find(section => section.title === 'Gene Overview');
+    const openTargetsProvenance = openTargetsSections
+      .find(section => section.title === 'Evidence and Source Provenance');
+    const openTargetsShare = buildGeneShareText(openTargetsGene);
+
+    expect(openTargetsOverview.content).toContain('Computational association evidence');
+    expect(openTargetsProvenance.content).toContain('Source Score Components');
+    expect(openTargetsProvenance.content).toContain('Literature: 0.42 · class literature');
+    expect(openTargetsProvenance.content).toContain('open_targets_datatype_score_0_1');
+    expect(openTargetsShare).toContain('Ranking: Computational association evidence');
+    expect(openTargetsShare).toContain('source_score_component=Literature');
+    expect(openTargetsShare).toContain('component_evidence=literature');
   });
 
   it('labels disease and phenotype lists as candidates rather than verified associations', () => {
