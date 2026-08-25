@@ -7,6 +7,7 @@ import {
   Database,
   Loader2,
   Microscope,
+  BookOpen,
   MousePointer2,
   ShieldQuestion,
 } from "lucide-react";
@@ -77,6 +78,7 @@ function summarizeEvidence(genes) {
     human: 0,
     animal: 0,
     computational: 0,
+    literature: 0,
     aiLead: 0,
   };
   for (const gene of genes || []) {
@@ -85,6 +87,9 @@ function summarizeEvidence(genes) {
     if ((partition.human || []).some((claim) => claimSortKey(claim) > 0)) counts.human += 1;
     if ((partition.animal || []).some((claim) => claimSortKey(claim) > 0)) counts.animal += 1;
     if ((partition.computational || []).some((claim) => claimSortKey(claim) > 0)) counts.computational += 1;
+    // Text-mined evidence is its own class, not a flavour of computational. An
+    // uncounted bucket would make this summary quietly understate the evidence.
+    if ((partition.literature || []).some((claim) => claimSortKey(claim) > 0)) counts.literature += 1;
     if (partition.aiLeads?.length) counts.aiLead += 1;
   }
   return counts;
@@ -273,6 +278,10 @@ export default function GeneResults({
             <Badge variant="outline" className="bg-blue-50 text-blue-800 border-blue-200">
               <Microscope className="w-3 h-3 mr-1" />
               {evidenceSummary.computational} with computed evidence
+            </Badge>
+            <Badge variant="outline" className="bg-rose-50 text-rose-800 border-rose-200">
+              <BookOpen className="w-3 h-3 mr-1" />
+              {evidenceSummary.literature} with literature-derived evidence
             </Badge>
             {onGeneSelect && (
               <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">
