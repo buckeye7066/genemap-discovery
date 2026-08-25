@@ -50,7 +50,7 @@ PATTERNS = (
     ),
     ("required role", re.compile(rf"\brequired{SEPARATOR_RUN}{ROLE}s?\b", re.I)),
     ("authenticated role", re.compile(rf"\b{ROLE}{SEPARATOR_RUN}authenticated\b", re.I)),
-    ("human completion phrase", re.compile(rf"\bsign(?:s|ed|ing)?{SEPARATOR_RUN}off\b", re.I)),
+    ("human completion phrase", re.compile(rf"\bsign(?:s|ed|ing)?{SEPARATOR_RUN}offs?\b", re.I)),
     (
         "human approval phrase",
         re.compile(
@@ -297,6 +297,10 @@ def run_self_test() -> None:
         "third person": (
             "owner " + COMPLETION_TOKEN[:4] + "s " + COMPLETION_TOKEN[4:] + " required"
         ),
+        "spaced plural": (
+            "owner " + COMPLETION_TOKEN[:4] + " " + COMPLETION_TOKEN[4:] + "s required"
+        ),
+        "compact plural": "owner " + COMPLETION_TOKEN + "s required",
         "unicode hyphen": "owner " + COMPLETION_TOKEN[:4] + "\u2011" + COMPLETION_TOKEN[4:] + " required",
         "zero width control": "owner " + COMPLETION_TOKEN[:4] + "\u200b" + COMPLETION_TOKEN[4:] + " required",
         "role separator": "required" + "_\n" + ROLE,
