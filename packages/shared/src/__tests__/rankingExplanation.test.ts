@@ -182,9 +182,9 @@ describe('explainGeneRanking — findings from code review', () => {
     }
   });
 
-  it('marks every tied claim at the maximum as determining, not just the first', () => {
-    // Two claims at the same top ordinal: neither one alone "set" the rank, and
-    // singling out the first seen would invent a precedence the policy lacks.
+  it('labels tied maximum claims as tied, never as individual rank setters', () => {
+    // Two claims at the same top ordinal jointly preserve the maximum. Removing
+    // either one leaves the rank unchanged, so neither claim alone "sets" it.
     const a = createAssociationClaim({
       source: 'Monarch Initiative', recordId: 'a', claim: 'a', taxon: '9606',
       evidenceClass: 'human_verified', evidenceType: 'gene_disease_association',
@@ -193,7 +193,8 @@ describe('explainGeneRanking — findings from code review', () => {
     const b = { ...a, recordId: 'b', source: 'ClinGen' };
 
     const explanation = explainGeneRanking([a, b]);
-    expect(explanation.contributions.filter((c) => c.role === 'determines_rank')).toHaveLength(2);
+    expect(explanation.contributions.filter((c) => c.role === 'tied_for_rank')).toHaveLength(2);
+    expect(explanation.contributions.filter((c) => c.role === 'determines_rank')).toHaveLength(0);
   });
 
   it('carries a record id so repeated sources stay distinguishable', () => {
@@ -209,5 +210,25 @@ describe('explainGeneRanking — findings from code review', () => {
     const explanation = explainGeneRanking([grid('mgi-1'), grid('mgi-2')]);
     expect(explanation.contributions.map((c) => c.recordId)).toEqual(['mgi-1', 'mgi-2']);
     expect(explanation.contributions.every((c) => c.evidenceType === 'ortholog_phenotype_inference')).toBe(true);
+  });
+
+  it('carries claim text as the visible fallback identity when record ids are absent', () => {
+    const grid = (claimText: string) => createAssociationClaim({
+      source: 'Monarch Initiative ortholog-phenotype grid', recordId: null, claim: claimText,
+      taxon: '10090', evidenceClass: 'animal_model',
+      evidenceType: 'ortholog_phenotype_inference', evidenceStrength: 'supporting',
+      releaseVersion: '2026-06-08',
+    } as Parameters<typeof createAssociationClaim>[0]);
+
+    const explanation = explainGeneRanking([
+      grid('SCN1A mouse ortholog supports seizure phenotype A.'),
+      grid('SCN1A mouse ortholog supports seizure phenotype B.'),
+    ]);
+
+    expect(explanation.contributions.map((c) => c.recordId)).toEqual([null, null]);
+    expect(explanation.contributions.map((c) => c.claim)).toEqual([
+      'SCN1A mouse ortholog supports seizure phenotype A.',
+      'SCN1A mouse ortholog supports seizure phenotype B.',
+    ]);
   });
 });
