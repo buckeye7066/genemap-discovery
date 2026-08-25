@@ -50,7 +50,7 @@ PATTERNS = (
     ),
     ("required role", re.compile(rf"\brequired{SEPARATOR_RUN}{ROLE}s?\b", re.I)),
     ("authenticated role", re.compile(rf"\b{ROLE}{SEPARATOR_RUN}authenticated\b", re.I)),
-    ("human completion phrase", re.compile(rf"\bsign(?:ed|ing)?{SEPARATOR_RUN}off\b", re.I)),
+    ("human completion phrase", re.compile(rf"\bsign(?:s|ed|ing)?{SEPARATOR_RUN}off\b", re.I)),
     (
         "human approval phrase",
         re.compile(
@@ -111,68 +111,48 @@ def prohibited_labels(text: str) -> list[str]:
 def _looks_like_text(text: str) -> bool:
     if not text:
         return True
+    if "\0" in text:
+        return False
+    if text.count("\ufffd") / len(text) > 0.02:
+        return False
     allowed_controls = {"\n", "\r", "\t", "\f"}
     readable = sum(char.isprintable() or char in allowed_controls for char in text)
     return readable / len(text) >= 0.85
 
 
-def _zero_fraction(data: bytes, offset: int, stride: int) -> float:
-    values = data[offset::stride]
-    if not values:
-        return 0.0
-    return sum(value == 0 for value in values) / len(values)
-
-
-def decode_text_blob(data: bytes, path: str = "tracked blob") -> str | None:
-    """Decode common Unicode text first; return None only for likely binary data."""
+def decode_text_candidates(data: bytes, path: str = "tracked blob") -> list[str]:
+    """Return every plausible common-Unicode decoding of a tracked blob."""
 
     for bom, encoding in _BOM_ENCODINGS:
         if data.startswith(bom):
             try:
-                return data.decode(encoding)
+                decoded = data.decode(encoding)
             except UnicodeDecodeError as error:
                 raise RuntimeError(f"{path}: invalid {encoding} text") from error
-
-    try:
-        utf8 = data.decode("utf-8")
-    except UnicodeDecodeError:
-        utf8 = None
-    if utf8 is not None and _looks_like_text(utf8):
-        return utf8
-
-    candidates: list[tuple[float, str]] = []
-    if len(data) % 4 == 0 and data:
-        candidates.extend([
-            (
-                sum(_zero_fraction(data, offset, 4) for offset in (1, 2, 3)) / 3,
-                "utf-32-le",
-            ),
-            (
-                sum(_zero_fraction(data, offset, 4) for offset in (0, 1, 2)) / 3,
-                "utf-32-be",
-            ),
-        ])
-    if len(data) % 2 == 0 and data:
-        candidates.extend([
-            (_zero_fraction(data, 1, 2), "utf-16-le"),
-            (_zero_fraction(data, 0, 2), "utf-16-be"),
-        ])
-
-    for confidence, encoding in sorted(candidates, reverse=True):
-        if confidence < 0.2:
-            continue
-        try:
-            decoded = data.decode(encoding)
-        except UnicodeDecodeError:
-            continue
-        if _looks_like_text(decoded):
-            return decoded
+            return [decoded] if _looks_like_text(decoded) else []
 
     if b"\0" in data:
-        return None
+        decoded_candidates: list[str] = []
+        for encoding in ("utf-32-le", "utf-32-be", "utf-16-le", "utf-16-be"):
+            try:
+                decoded = data.decode(encoding, "strict")
+            except (UnicodeDecodeError, UnicodeError):
+                continue
+            if _looks_like_text(decoded) and decoded not in decoded_candidates:
+                decoded_candidates.append(decoded)
+        return decoded_candidates
 
-    fallback = data.decode("utf-8", "replace")
-    return fallback if _looks_like_text(fallback) else None
+    fallback = data.decode("utf-8", "replace") if data else ""
+    return [fallback] if _looks_like_text(fallback) else []
+
+
+def prohibited_blob_labels(data: bytes, path: str = "tracked blob") -> list[str]:
+    found = {
+        label
+        for candidate in decode_text_candidates(data, path)
+        for label in prohibited_labels(candidate)
+    }
+    return [label for label, _ in PATTERNS if label in found]
 
 
 def tracked_index_entries(repo_root: pathlib.Path | str = ".") -> list[tuple[str, str, str]]:
@@ -229,10 +209,7 @@ def scan_repository(repo_root: pathlib.Path | str = ".") -> list[tuple[str, list
         data = blob_cache[cache_key]
         if data is None:
             continue
-        text = decode_text_blob(data, path)
-        if text is None:
-            continue
-        labels = prohibited_labels(text)
+        labels = prohibited_blob_labels(data, path)
         if labels:
             violations.append((path, labels))
     return violations
@@ -277,7 +254,9 @@ def _run_index_self_test(scanner_source: str) -> None:
             + ";",
             encoding="utf-8",
         )
-        (repo_root / "binary.dat").write_bytes(b"\x89PNG\r\n\x1a\n\xff\xd8\xff\xe0")
+        (repo_root / "binary.dat").write_bytes(
+            b"\xff" * 96 + b" " + COMPLETION_TOKEN.encode("ascii") + b" "
+        )
 
         subprocess.run(
             ["git", "add", "--all"],
@@ -314,6 +293,9 @@ def run_self_test() -> None:
         ),
         "hyphen and line break": (
             "owner " + COMPLETION_TOKEN[:4] + "ing-\n" + COMPLETION_TOKEN[4:] + " required"
+        ),
+        "third person": (
+            "owner " + COMPLETION_TOKEN[:4] + "s " + COMPLETION_TOKEN[4:] + " required"
         ),
         "unicode hyphen": "owner " + COMPLETION_TOKEN[:4] + "\u2011" + COMPLETION_TOKEN[4:] + " required",
         "zero width control": "owner " + COMPLETION_TOKEN[:4] + "\u200b" + COMPLETION_TOKEN[4:] + " required",
@@ -361,11 +343,23 @@ def run_self_test() -> None:
         + ("owner " + human_gate).encode("utf-32-be"),
         "utf-32 LE": ("owner " + human_gate).encode("utf-32-le"),
         "utf-32 BE": ("owner " + human_gate).encode("utf-32-be"),
+        "CJK-masked BOM-less UTF-16": (
+            (chr(0x4E41) * 256 + " " + human_gate).encode("utf-16-le")
+        ),
     }
     for name, payload in encoded_cases.items():
-        decoded = decode_text_blob(payload, name)
-        if decoded is None or not prohibited_labels(decoded):
+        decoded = decode_text_candidates(payload, name)
+        if not any(prohibited_labels(candidate) for candidate in decoded):
             missed.append(name)
+
+    replacement_heavy_binary = (
+        b"\xff" * 96 + b" " + COMPLETION_TOKEN.encode("ascii") + b" "
+    )
+    if (
+        decode_text_candidates(replacement_heavy_binary, "replacement-heavy binary")
+        or prohibited_blob_labels(replacement_heavy_binary, "replacement-heavy binary")
+    ):
+        false_positives.append("replacement-heavy binary")
 
     source = pathlib.Path(__file__).read_text(encoding="utf-8")
     if prohibited_labels(source):
