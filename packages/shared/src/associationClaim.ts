@@ -567,8 +567,10 @@ export const RANKING_EXCLUSION_TEXT: Readonly<Record<RankingExclusionReason, str
  * therefore states its ROLE in the decision, not just a number.
  */
 export type RankingRole =
-  /** At the maximum. Removing every claim with this role would lower the rank. */
+  /** The unique maximum. Removing this claim lowers the rank. */
   | 'determines_rank'
+  /** Shares the maximum with another claim; no one tied claim sets the rank alone. */
+  | 'tied_for_rank'
   /** Real retrieved evidence, but outranked - removing it changes nothing. */
   | 'considered_lower'
   /** Structurally incapable of raising the rank; see `excludedBecause`. */
@@ -576,6 +578,7 @@ export type RankingRole =
 
 export const RANKING_ROLE_TEXT: Readonly<Record<RankingRole, string>> = Object.freeze({
   determines_rank: 'Sets the rank',
+  tied_for_rank: 'Tied for the highest evidence tier',
   considered_lower: 'Counted, but outranked - removing it would not change the rank',
   cannot_contribute: 'Cannot affect the rank',
 });
@@ -586,6 +589,8 @@ export interface RankingContribution {
   evidenceType: string;
   /** The source's record id where it has one, so repeated sources stay distinguishable. */
   recordId: string | null;
+  /** Human-readable claim identity used when a source has no record id. */
+  claim: string;
   /** This claim's ordinal under the policy. 0 means it cannot raise the rank. */
   contribution: number;
   role: RankingRole;
@@ -654,21 +659,24 @@ export function explainGeneRanking(
   const list = Array.isArray(claims) ? claims : [];
   const scored = list.map((claim) => ({ claim, contribution: claimSortKey(claim) }));
   const score = scored.reduce((best, item) => Math.max(best, item.contribution), 0);
+  const maxClaimCount = scored.filter(
+    ({ contribution }) => contribution > 0 && contribution === score,
+  ).length;
 
   const contributions: RankingContribution[] = scored.map(({ claim, contribution }) => {
-    // Ties ALL count as determining: if two claims sit at the maximum, neither
-    // one alone "set" the rank, and singling out the first seen would invent a
-    // precedence the policy does not have.
     const role: RankingRole = contribution <= 0
       ? 'cannot_contribute'
-      : contribution === score
+      : contribution === score && maxClaimCount === 1
         ? 'determines_rank'
-        : 'considered_lower';
+        : contribution === score
+          ? 'tied_for_rank'
+          : 'considered_lower';
     return {
       source: claim.source,
       evidenceClass: claim.evidenceClass,
       evidenceType: claim.evidenceType,
       recordId: claim.recordId ?? null,
+      claim: claim.claim,
       contribution,
       role,
       excludedBecause: role === 'cannot_contribute' ? exclusionReason(claim) : null,

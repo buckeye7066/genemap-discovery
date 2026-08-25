@@ -149,10 +149,13 @@ function RankingExplanation({ claims }) {
       <ul className="space-y-1">
         {explanation.contributions.map((row, idx) => {
           const determines = row.role === 'determines_rank';
+          const tied = row.role === 'tied_for_rank';
+          const topTier = determines || tied;
           const inert = row.role === 'cannot_contribute';
+          const identity = row.recordId || row.claim;
           return (
             <li
-              key={`${row.source}-${row.evidenceType}-${row.recordId || idx}`}
+              key={`${row.source}-${row.evidenceType}-${identity || idx}`}
               className="flex items-start gap-2 text-[11px]"
             >
               <span
@@ -167,15 +170,16 @@ function RankingExplanation({ claims }) {
                   {displayClaimValue(row.source)}
                 </span>
                 {/* One provider can return several claims (the Monarch
-                    ortholog grid returns up to three under one name), so the
-                    source alone cannot identify a row. */}
+                    ortholog grid returns up to three under one name), so every
+                    row carries a record id or the claim text as a visible
+                    fallback identity. */}
                 <span className="text-slate-500">
                   {' · '}{displayClaimValue(row.evidenceType)}
-                  {row.recordId ? ` · ${row.recordId}` : ''}
+                  {' · '}{displayClaimValue(identity, 'Claim identity not recorded')}
                 </span>
-                {determines && (
+                {topTier && (
                   <Badge className="ml-1 text-[9px] bg-slate-900 text-white border-slate-900">
-                    {RANKING_ROLE_TEXT.determines_rank}
+                    {RANKING_ROLE_TEXT[row.role]}
                   </Badge>
                 )}
                 {row.role === 'considered_lower' && (
