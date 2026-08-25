@@ -53,8 +53,8 @@ const VALID_ENV = {
 };
 
 const VALID_EVIDENCE = {
-  reviewedBy: 'Launch Reviewer',
-  reviewedAt: '2026-06-27T10:00:00.000Z',
+  recordedBy: 'Evidence Recorder',
+  recordedAt: '2026-06-27T10:00:00.000Z',
   productionSecrets: {
     storedInSecretManager: true,
     rotatedForLaunch: true,
@@ -90,18 +90,10 @@ const VALID_EVIDENCE = {
     lastWebhookTestAt: '2026-06-26T09:00:00.000Z',
   },
   dataRetention: {
-    policyApproved: true,
+    policyConfigured: true,
     policyDocument: 'docs/DATA_RETENTION.md',
     deletionRequestSlaDays: 30,
     backupRetentionDays: 30,
-  },
-  legalCompliance: {
-    legalReviewCompleted: true,
-    complianceReviewCompleted: true,
-    reviewer: 'Counsel / Compliance Owner',
-    reviewedAt: '2026-06-15T09:00:00.000Z',
-    medicalDisclaimerApproved: true,
-    baaStatus: 'not_required',
   },
 };
 
@@ -172,6 +164,16 @@ describe('production launch verification', () => {
 
   it('accepts complete operational launch evidence', () => {
     const checks = validateEvidence(VALID_EVIDENCE, { now: NOW });
+    expect(failures(checks)).toEqual([]);
+  });
+
+  it('keeps external legal decisions outside automated evidence checks', () => {
+    const checks = validateEvidence({
+      ...VALID_EVIDENCE,
+      legalCompliance: { legalReviewCompleted: false },
+    }, { now: NOW });
+
+    expect(checks.some((check) => check.id.startsWith('legal.'))).toBe(false);
     expect(failures(checks)).toEqual([]);
   });
 
