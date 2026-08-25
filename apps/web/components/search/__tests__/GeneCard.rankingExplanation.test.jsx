@@ -82,12 +82,42 @@ describe('GeneCard ranking explanation', () => {
     ).toHaveTextContent(/not a score published by any source/i);
   });
 
-  it('marks which claim set the rank', () => {
+  it('marks which claim sets the rank, and says the others were outranked', () => {
     renderCard([animalClaim, humanClaim]);
-    const decisive = within(panel()).getByText(/set the rank/i).closest('li');
-    expect(decisive).toHaveTextContent('Monarch Initiative');
-    // Exactly one claim can be decisive.
-    expect(within(panel()).getAllByText(/set the rank/i)).toHaveLength(1);
+    const determining = within(panel()).getByText(/sets the rank/i).closest('li');
+    expect(determining).toHaveTextContent('Monarch Initiative');
+    expect(within(panel()).getAllByText(/sets the rank/i)).toHaveLength(1);
+
+    // THE RANK IS A MAX, NOT A SUM. The animal-model claim is real evidence but
+    // did not change the outcome, and must not read as though it added to it.
+    expect(
+      within(panel()).getByText(/removing it would not change the rank/i),
+    ).toBeInTheDocument();
+    expect(
+      within(panel()).getByText(/the rank is the highest-ranking claim, not a total/i),
+    ).toBeInTheDocument();
+  });
+
+  it('identifies each row beyond its source, so repeated providers stay distinct', () => {
+    // The Monarch ortholog grid can emit several claims under one source name.
+    const grid = (recordId) => ({ ...animalClaim, recordId, claim: recordId });
+    renderCard([grid('mgi-1'), grid('mgi-2')]);
+    expect(within(panel()).getByText(/mgi-1/)).toBeInTheDocument();
+    expect(within(panel()).getByText(/mgi-2/)).toBeInTheDocument();
+    expect(within(panel()).getAllByText(/ortholog_phenotype_inference/).length).toBe(2);
+  });
+
+  it('does not promise a better list position', () => {
+    renderCard([animalClaim]);
+    expect(screen.getByText(/does not guarantee a higher position in this list/i)).toBeInTheDocument();
+    expect(screen.queryByText(/would rank it above its current position/i)).not.toBeInTheDocument();
+  });
+
+  it('never offers an improvement the ranking policy scores as zero', () => {
+    renderCard([aiLead]);
+    expect(screen.getByText(/what would change this ranking\?/i)).toBeInTheDocument();
+    // external_followup ranks 100 but claimSortKey zeroes it unconditionally.
+    expect(screen.queryByText(/follow-up database record/i)).not.toBeInTheDocument();
   });
 
   it('lists a claim that contributed nothing, with the reason', () => {

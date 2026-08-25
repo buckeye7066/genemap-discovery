@@ -1,12 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
   EVIDENCE_CLASS_RANK,
+  RANKABLE_EVIDENCE_CLASSES,
   RANKING_ATTRIBUTION,
   RANKING_EXCLUSION_TEXT,
   aiLeadClaim,
+  claimSortKey,
   createAssociationClaim,
   explainGeneRanking,
   type AssociationClaim,
+  type EvidenceClass,
 } from '../associationClaim';
 
 /**
@@ -46,18 +49,20 @@ describe('explainGeneRanking — why this gene?', () => {
     expect(explanation.score).toBe(EVIDENCE_CLASS_RANK.human_verified);
     expect(explanation.basis).toBe('human_verified');
 
-    const decisive = explanation.contributions.filter((c) => c.decisive);
-    expect(decisive).toHaveLength(1);
-    expect(decisive[0].source).toBe('Monarch Initiative');
+    const determining = explanation.contributions.filter((c) => c.role === 'determines_rank');
+    expect(determining).toHaveLength(1);
+    expect(determining[0].source).toBe('Monarch Initiative');
 
-    // The animal-model claim still appears, with what it actually contributed.
+    // THE RANK IS A MAX, NOT A SUM. The animal-model claim is real retrieved
+    // evidence, but removing it would not change the rank - so it must NOT be
+    // presented as having contributed to the outcome.
     const animalRow = explanation.contributions.find((c) => c.evidenceClass === 'animal_model');
     expect(animalRow).toMatchObject({
-      counted: true,
+      role: 'considered_lower',
       contribution: EVIDENCE_CLASS_RANK.animal_model,
-      decisive: false,
       excludedBecause: null,
     });
+    expect(explainGeneRanking([human]).score).toBe(explanation.score);
   });
 
   it('attributes the ordinal to GeneMap, not to a source', () => {
@@ -76,7 +81,7 @@ describe('explainGeneRanking — why this gene?', () => {
     ]);
 
     expect(explanation.contributions).toHaveLength(3);
-    expect(explanation.contributions.every((c) => c.counted === false)).toBe(true);
+    expect(explanation.contributions.every((c) => c.role === 'cannot_contribute')).toBe(true);
     expect(explanation.contributions.every((c) => c.contribution === 0)).toBe(true);
 
     const reasons = explanation.contributions.map((c) => c.excludedBecause);
@@ -132,9 +137,77 @@ describe('explainGeneRanking — what would change this ranking?', () => {
     const explanation = explainGeneRanking([aiLeadClaim('SCN1A', 'seizures')]);
     expect(explanation.improvements.length).toBeGreaterThan(0);
     for (const improvement of explanation.improvements) {
-      expect(improvement.statement).toMatch(/^A retrieved .+ would rank it above its current position\.$/);
+      expect(improvement.statement).toMatch(/^A retrieved .+ would raise its evidence tier\.$/);
       // No claim about what is out there, only about what the ordering does.
       expect(improvement.statement).not.toMatch(/likely|probably|should exist|we expect|there is/i);
+      // And NO claim about LIST POSITION: this function sees one gene's claims
+      // and cannot know what the other candidates hold.
+      expect(improvement.statement).not.toMatch(/position|above .* current|higher in the list|rank it above/i);
     }
+    expect(explanation.positionCaveat).toMatch(/does not guarantee a higher position/i);
+  });
+});
+
+describe('explainGeneRanking — findings from code review', () => {
+  it('never offers an improvement that claimSortKey would score as zero', () => {
+    // external_followup ranks 100 in EVIDENCE_CLASS_RANK but claimSortKey zeroes
+    // it UNCONDITIONALLY. Offering it as an improvement was a false statement:
+    // adding exactly that record cannot move the score.
+    const explanation = explainGeneRanking([aiLeadClaim('SCN1A', 'seizures')]);
+    expect(explanation.score).toBe(0);
+    expect(explanation.improvements.map((i) => i.evidenceClass)).not.toContain('external_followup');
+    expect(explanation.improvements.map((i) => i.evidenceClass)).not.toContain('ai_lead');
+  });
+
+  it('keeps RANKABLE_EVIDENCE_CLASSES in step with what claimSortKey can actually score', () => {
+    // The drift guard: if claimSortKey starts (or stops) zeroing a class, this
+    // fails rather than letting the panel quietly promise the impossible.
+    const canScore = (evidenceClass: EvidenceClass) => claimSortKey(createAssociationClaim({
+      source: 'probe',
+      recordId: null,
+      claim: 'probe',
+      taxon: evidenceClass === 'animal_model' ? '10090' : '9606',
+      evidenceClass,
+      evidenceType: 'gene_disease_association',
+      evidenceStrength: 'supporting',
+      releaseVersion: null,
+    } as Parameters<typeof createAssociationClaim>[0])) > 0;
+
+    // Derived from the authoritative table, so a NEW class is covered automatically.
+    for (const evidenceClass of Object.keys(EVIDENCE_CLASS_RANK) as EvidenceClass[]) {
+      expect(
+        (RANKABLE_EVIDENCE_CLASSES as readonly string[]).includes(evidenceClass),
+        `${evidenceClass}: RANKABLE_EVIDENCE_CLASSES disagrees with claimSortKey`,
+      ).toBe(canScore(evidenceClass));
+    }
+  });
+
+  it('marks every tied claim at the maximum as determining, not just the first', () => {
+    // Two claims at the same top ordinal: neither one alone "set" the rank, and
+    // singling out the first seen would invent a precedence the policy lacks.
+    const a = createAssociationClaim({
+      source: 'Monarch Initiative', recordId: 'a', claim: 'a', taxon: '9606',
+      evidenceClass: 'human_verified', evidenceType: 'gene_disease_association',
+      evidenceStrength: 'supporting', releaseVersion: '2026-06-08',
+    } as Parameters<typeof createAssociationClaim>[0]);
+    const b = { ...a, recordId: 'b', source: 'ClinGen' };
+
+    const explanation = explainGeneRanking([a, b]);
+    expect(explanation.contributions.filter((c) => c.role === 'determines_rank')).toHaveLength(2);
+  });
+
+  it('carries a record id so repeated sources stay distinguishable', () => {
+    // The Monarch ortholog grid can emit several claims under one source name;
+    // rendering only the source made those rows indistinguishable.
+    const grid = (recordId: string) => createAssociationClaim({
+      source: 'Monarch Initiative ortholog-phenotype grid', recordId, claim: recordId,
+      taxon: '10090', evidenceClass: 'animal_model',
+      evidenceType: 'ortholog_phenotype_inference', evidenceStrength: 'supporting',
+      releaseVersion: '2026-06-08',
+    } as Parameters<typeof createAssociationClaim>[0]);
+
+    const explanation = explainGeneRanking([grid('mgi-1'), grid('mgi-2')]);
+    expect(explanation.contributions.map((c) => c.recordId)).toEqual(['mgi-1', 'mgi-2']);
+    expect(explanation.contributions.every((c) => c.evidenceType === 'ortholog_phenotype_inference')).toBe(true);
   });
 });
