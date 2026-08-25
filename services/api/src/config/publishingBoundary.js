@@ -263,4 +263,11 @@ export const __test = {
   safeDecodePath,
   HIDDEN_PATH_PREFIXES,
   hiddenPathBoundaryDecision,
+  // Read-only views of the authorization registries, so the boundary-coverage
+  // sweep (src/__tests__/routeBoundaryCoverage.test.js) can assert against the
+  // real registries instead of a hand-copied duplicate that would silently
+  // drift. Copies, not the live Maps/Sets: a reader cannot register a route.
+  routeOwnedTaskPaths: () => new Set(ROUTE_OWNED_TASKS.keys()),
+  clientTaskRoutePaths: () => new Set(CLIENT_TASK_ROUTES.keys()),
+  safeNonGenerationRoutePaths: () => new Set(SAFE_NON_GENERATION_EDUCATION_ROUTES),
 };

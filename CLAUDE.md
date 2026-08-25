@@ -1,6 +1,48 @@
 # CLAUDE.md - GeneMap Discovery
 
-Genomic analysis platform. pnpm-workspaces monorepo migrated off Base44.
+Genetics **education and exploratory-research** platform (LEARN / DISCOVER /
+RESEARCH). pnpm-workspaces monorepo migrated off Base44.
+
+It is **not** a diagnostic, medical-record, pharmacogenomic, treatment,
+screening, or clinical-trial product. Read
+**[PROJECT-BRIEF.md](PROJECT-BRIEF.md)** before assuming a capability ships:
+several exist in backend code but are gated off for publication, and §5 of that
+brief lists each one with its reason. Backend code existing is never a reason to
+enable a route.
+
+## Publication boundary (load-bearing — do not weaken to land a feature)
+
+| Piece | File | What it guarantees |
+|---|---|---|
+| Fail-closed boundary | `services/api/src/config/publishingBoundary.js` | `HIGH_RISK_CLINICAL_FEATURES_ENABLED = false`. Model execution is authorized ONLY by `ROUTE_OWNED_TASKS` (server-owned) or `CLIENT_TASK_ROUTES` (versioned structured task). Arbitrary prompt text is never authorization. `HIDDEN_PATH_PREFIXES` 404s `/clinical-trials`, `/genomics/vcf`, `/genomics/variant`, `/genomics/clinvar`, `/entities/medical-data`, `/entities/conversations`, `/admin/self-test`. Both hooks are global, installed at `src/index.js` **before** any route registers. |
+| Genomic guard | `services/api/src/services/genomicGuard.js` | Raw genomic content cannot reach a cloud model without a current `genomic_llm_upload` v1.0 consent (latest record wins, so revocation supersedes). |
+| Scientific honesty | `services/api/src/services/scientificHonesty.js` | Every model call is wrapped with the honesty directive. |
+| Route map | `apps/web/pages.config.js` | The ONLY authorization for a page to ship. Deliberately omits MedicalData, VCFAnalysis, AIAssistants, Anastasia, RobertClinical, VisualizationHub, GSEA from both the route map AND the lazy-import graph. Read the comment at the bottom of that file before touching it. |
+
+### Two gates enforce the above; both must stay green
+
+- `scripts/verify-publication-bundle.mjs` (wired into `pnpm release:check`) —
+  **denylist** of forbidden chunks/strings **plus an allowlist**: (A) any dist
+  chunk named after a module in `apps/web/pages/` must be in the `PAGES` route
+  map; (B) every page module on disk must be routed or declared in
+  `unroutedPageReasons` with a written reason; (C) the lazy-import graph and the
+  route map must name exactly the same pages. Stale exclusions also fail.
+- `services/api/src/__tests__/routeBoundaryCoverage.test.js` — walks
+  `services/api/src/routes/`, derives model-capability from the **real import
+  graph** (provider packages `@anthropic-ai/sdk` / `openai`; the choke point is
+  `services/llm.js`), and fails if a path declared by a model-capable route file
+  is not in `ROUTE_OWNED_TASKS`, `CLIENT_TASK_ROUTES`,
+  `SAFE_NON_GENERATION_EDUCATION_ROUTES`, `HIDDEN_PATH_PREFIXES`, or
+  `BOUNDARY_COVERAGE_ALLOWLIST` (which requires a written reason).
+  **Why it exists:** `isUnknownGenerationRoute` in the boundary only covers the
+  `/llm` and `/education` prefixes. A generation route mounted under a *new*
+  prefix (e.g. `/research/generate`) gets `null` from
+  `publicationBoundaryDecision` — verified by direct call — so the boundary alone
+  would let it through. This sweep is what catches it.
+
+Do not widen the model-capability detector, add a dry-run/report-only mode, or
+special-case a route to make either gate pass. Register the route, or record an
+allowlist entry with a reason.
 
 ## Tech Stack
 
@@ -51,7 +93,7 @@ Toolchain floor: Node >=24 + corepack/pnpm required (root `engines`) — Node 20
 | Env vars | `services/api/src/config/env.js` |
 | AI wrappers | `services/api/src/services/anthropic.js`, `openai.js`, `llm.js` |
 | AI honesty guard rails | `services/api/src/services/scientificHonesty.js` — one directive injected (system message / prompt prefix) into every AI path: `education.js` (explain/quiz/chat) + `llm.js` proxy (invoke/chat) |
-| Genomics | `services/api/src/routes/genomics.js`, `services/api/src/services/genomicDatabases.js`, `vcf.js` |
+| Genomics | `services/api/src/routes/genomics.js`, `services/api/src/services/genomicDatabases.js`, `vcf.js`. **Reachable:** `/genomics/phenotype/search`, `/genomics/enrich`, `/genomics/association-evidence`, `/genomics/publication-concepts/search`. **404'd by the boundary:** `/genomics/vcf/*`, `/genomics/variant/*`, `/genomics/clinvar/*`. **Env-gated off:** `GET /genomics/gene/:symbol` (needs `GENOMICS_GENE_LOOKUP_ENABLED=true`). |
 | Shared client | `packages/shared/src/client.ts` |
 | Stripe webhooks | `services/api/src/routes/billing.js` |
 | Rate-limit store | `services/api/src/config/rateLimitStore.js` — optional `REDIS_URL` (ioredis) backs it; in-memory otherwise |
