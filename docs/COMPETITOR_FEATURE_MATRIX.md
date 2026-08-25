@@ -22,8 +22,8 @@ not a market-share claim.
   printable exports now expose that positive component without reclassifying
   its owning claim or presenting a source score as a calibrated probability.
 - Gene comparison now includes an interactive human functional-association
-  network backed by the authenticated, deterministic STRING adapter. Users can
-  filter by source score and focus nodes; query genes, added neighbors, channel
+  network backed by a live, source-grounded deterministic STRING adapter.
+  Users can filter by source score and focus nodes; query genes, added neighbors, channel
   scores, retrieval time, and official source links remain explicit.
 - Clinical interpretation, personal variant analysis, diagnostic grades, and
   treatment guidance remain outside the published product boundary.
