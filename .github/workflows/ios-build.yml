@@ -53,9 +53,20 @@ jobs:
       - name: Sync Capacitor
         run: npx -y @capacitor/cli@8.4.1 sync ios
         working-directory: apps/web
+      - name: Verify generated Xcode project path
+        run: |
+          set -euo pipefail
+          PROJECT="$GITHUB_WORKSPACE/apps/web/ios/App/App.xcodeproj"
+          if [ ! -d "$PROJECT" ]; then
+            echo "Capacitor sync did not create the expected Xcode project: $PROJECT" >&2
+            find "$GITHUB_WORKSPACE/apps/web/ios" -maxdepth 4 -print >&2 || true
+            exit 1
+          fi
+          echo "Resolved iOS project: $PROJECT"
+          xcodebuild -project "$PROJECT" -scheme App -list
       - name: Archive (unsigned)
         run: |
-          xcodebuild -workspace apps/web/ios/App/App.xcworkspace -scheme App \
+          xcodebuild -project "$GITHUB_WORKSPACE/apps/web/ios/App/App.xcodeproj" -scheme App \
             -configuration Release -sdk iphoneos \
             -archivePath "$RUNNER_TEMP/App.xcarchive" archive \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
