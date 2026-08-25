@@ -258,9 +258,9 @@ CNAME   www     <Base44 CNAME>      60
 - [ ] Identify root cause
 - [ ] Plan remediation
 
-## Sign-Off
+## Cutover Record
 
-| Checkpoint | Time | Status | Signed By |
+| Checkpoint | Time | Status | Recorded By |
 |------------|------|--------|-----------|
 | Pre-cutover complete | | ⬜ Pass ⬜ Fail | |
 | Data migration complete | | ⬜ Pass ⬜ Fail | |

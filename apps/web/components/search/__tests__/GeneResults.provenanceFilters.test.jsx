@@ -29,6 +29,17 @@ function humanClaim(symbol) {
   };
 }
 
+function literatureClaim(symbol) {
+  return {
+    ...humanClaim(symbol),
+    source: 'Open Targets',
+    recordId: `literature:${symbol}`,
+    claim: `${symbol} and the query co-occur in published text`,
+    evidenceClass: 'literature',
+    evidenceType: 'literature',
+  };
+}
+
 describe('GeneResults provenance filters', () => {
   it('uses genuine claim provenance rather than confidence_score', () => {
     const highModelScoreOnly = {
@@ -43,11 +54,20 @@ describe('GeneResults provenance filters', () => {
       confidence_score: 0.001,
       associationClaims: [aiLead('HUMANLOW'), humanClaim('HUMANLOW')],
     };
+    const literatureOnly = {
+      symbol: 'LITONLY',
+      name: 'Literature-derived evidence only',
+      confidence_score: 0.999,
+      associationClaims: [aiLead('LITONLY'), literatureClaim('LITONLY')],
+    };
 
     expect(__test.geneMatchesFilters(highModelScoreOnly, { evidenceBasis: 'human' })).toBe(false);
     expect(__test.geneMatchesFilters(lowModelScoreWithHumanEvidence, { evidenceBasis: 'human' })).toBe(true);
     expect(__test.geneMatchesFilters(highModelScoreOnly, { evidenceBasis: 'unverified' })).toBe(true);
     expect(__test.geneMatchesFilters(lowModelScoreWithHumanEvidence, { evidenceBasis: 'unverified' })).toBe(false);
+    expect(__test.geneMatchesFilters(literatureOnly, { evidenceBasis: 'literature' })).toBe(true);
+    expect(__test.geneMatchesFilters(literatureOnly, { evidenceBasis: 'computational' })).toBe(false);
+    expect(__test.geneMatchesFilters(literatureOnly, { evidenceBasis: 'unverified' })).toBe(false);
 
     // Unknown legacy fields cannot silently reactivate model-score filtering.
     expect(__test.geneMatchesFilters(highModelScoreOnly, {

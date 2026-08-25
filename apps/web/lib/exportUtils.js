@@ -318,6 +318,7 @@ function rankingLabelFor(basis = 'ai_lead') {
   if (basis === 'human_verified') return 'Human-verified association evidence';
   if (basis === 'computational') return 'Computational association evidence';
   if (basis === 'animal_model') return 'Animal-model association evidence';
+  if (basis === 'literature') return 'Literature-derived association evidence';
   return 'AI research lead';
 }
 

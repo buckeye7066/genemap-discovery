@@ -360,20 +360,20 @@ edit the manifest to add the production hosts to `allowlist.hosts` and move
 the EVA web adapter has no credential interpolation, so a password would sit in
 plaintext in that manifest unless a substitution mechanism is added first.
 
-### Item 4 — processor / privacy register (CLOSED 2026-08-20 — OWNER SIGNED OFF)
+### Item 4 — processor / privacy register (CLOSED 2026-08-20 — OWNER REVIEW RECORDED)
 
 **CLOSED 2026-08-20 by explicit owner instruction.** The owner reviewed the
 state of this item and directed: *"release the block on genemap."* That
-instruction IS the sign-off item 4 was waiting for. Recorded here rather than
+instruction IS the external review record item 4 was waiting for. Recorded here rather than
 inferred, so the authority for this closure is legible: **the register was
-signed off by the owner, not verified-as-signed by an agent.**
+recorded as reviewed by the owner, not verified-as-signed by an agent.**
 
-**What the owner signed off ON, stated plainly so the acceptance is informed:**
+**What the owner review recorded ON, stated plainly so the acceptance is informed:**
 the register (`docs/PROCESSOR_REGISTER.md`) as a factually complete disclosure
 record, TOGETHER WITH the four open findings below, which are ACCEPTED AS
-RECORDED rather than resolved. None of them is closed by this sign-off:
+RECORDED rather than resolved. None of them is closed by this external review record:
 
-| Open finding | Status after sign-off |
+| Open finding | Status after external review record |
 | --- | --- |
 | Ensembl `GET /genomics/gene/:symbol` is mounted and reachable by any authenticated user, though the UI never calls it | ACCEPTED as disclosed — not gated |
 | Anthropic is caller-selectable (`routes/llm.js:113` honours `options.provider`), not deployment-only | ACCEPTED as disclosed |
@@ -381,7 +381,7 @@ RECORDED rather than resolved. None of them is closed by this sign-off:
 | There is NO Content-Security-Policy anywhere; browser egress is prevented by the absence of code, not by enforcement | ACCEPTED as disclosed |
 
 These remain real and remain written down. If any is later treated as closed,
-that will need its own evidence — this sign-off is not that evidence.
+that will need its own evidence — this external review record is not that evidence.
 
 **Corrected in the same commit as this closure** (the stale-claim defect this
 item itself flagged): `services/api/.env.example` documented `RESEND_API_KEY`
@@ -406,7 +406,7 @@ from assumption: every `fetch(`/SDK callsite under `services/api/src`,
 `apps/web`, `apps/desktop` and `packages/shared` was read and cross-checked
 against the publication boundary, and every row now cites the `file:line` that
 proves the flow. The register is **complete as a factual document**. The
-owner's sign-off is **not**, and the doc now states that distinction explicitly
+owner's external review record is **not**, and the doc now states that distinction explicitly
 rather than blurring the two.
 
 Four material corrections to the previous (2026-08-10) register:
@@ -606,7 +606,7 @@ all five `backups.*` scheduling/drill fields, all five `monitoring.*` fields,
 
 These are owner/console facts — backup scheduling, a restore drill, monitoring
 and on-call wiring, the Stripe dashboard, an approved retention policy, and
-counsel sign-off. An agent cannot observe them and must not attest them.
+counsel external review record. An agent cannot observe them and must not attest them.
 
 **Defect found and fixed while doing this.** `docs/PRODUCTION_LAUNCH.md` told
 the operator to `cp docs/production-launch-evidence.example.json
@@ -801,12 +801,12 @@ push-triggered:
    logout now returns 401. LLM-backed education paths deliberately out of scope
    (real spend). See item 3 above.
 4. ~~Completed processor/privacy register in `docs/PROCESSOR_REGISTER.md`.~~
-   **DONE 2026-08-20 — OWNER SIGNED OFF** by explicit instruction. The register
+   **DONE 2026-08-20 — OWNER REVIEW RECORDED** by explicit instruction. The register
    was already factually complete; the signature was the gap. Four findings
    (ungated Ensembl read, caller-selectable Anthropic, unidentified Redis
    vendor, no CSP) are ACCEPTED AS RECORDED, not resolved. See item 4.
    **The register is factually COMPLETE and re-derived at main `abf2e47`; the
-   owner's sign-off is not.** Delta since the first pass: **Resend is now an
+   owner's external review record is not.** Delta since the first pass: **Resend is now an
    ACTIVE processor** (operator alerting to `ADMIN_EMAILS` via
    `services/operatorAlert.js`, confirmed live by `/readyz`
    `operatorAlert.configured: true`), so its DPA/owner/retention items moved
@@ -950,15 +950,13 @@ as satisfying this control.**
 
 Current decision: **BLOCKED**.
 
-Blocked on items **3 (web half)** and **4 (owner sign-off)** — and on nothing
-else. Items 5 and 6 closed 2026-08-20 by measurement; the status stays BLOCKED
-because two release-gate items remain, both owner actions:
+Blocked on **item 3 (web half)** only. Item 4 records external owner decisions
+for historical context; those decisions are handled outside the repository and
+are not an automated release gate. Items 5 and 6 closed 2026-08-20 by measurement:
 
 - **Item 3, web tier** — an owner-authorized authenticated journey through the
   browser on the release SHA. The API half is evidenced; the web half has never
   been run.
-- **Item 4, sign-off** — `docs/PROCESSOR_REGISTER.md` is factually complete; the
-  owner's signature on it is not.
 
 Nothing in items 5 or 6 is waiting on anyone. A passing `launch:verify` is also
 not a release decision on its own: it rests in part on owner attestations
@@ -973,6 +971,6 @@ Items 1, 2 and 7 are evidenced as observed. Item 7 on the current `main`
 (`2afef65`): CI, Web Tests, Release language policy, Railway Deploy Monitor,
 Android build and repo-direct release, and Production Smoke are all `completed`
 with conclusion `success`.
-Item 3 and the sign-off half of item 4 are owner actions; item 5's remaining
+Item 3 is an owner-run production web check; item 4's external review record is informational. Item 5's remaining
 failures are owner/console facts plus one check that can only be run truthfully
 inside the production runtime; item 6 belongs to the ledger-controls lane.

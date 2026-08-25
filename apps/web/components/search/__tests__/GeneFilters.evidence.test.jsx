@@ -30,6 +30,7 @@ describe('GeneFilters evidence controls', () => {
     expect(screen.getByRole('option', { name: /human association evidence/i })).toBeInTheDocument();
     expect(screen.getByRole('option', { name: /model-organism evidence/i })).toBeInTheDocument();
     expect(screen.getByRole('option', { name: /computed association evidence/i })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /literature-derived association evidence/i })).toBeInTheDocument();
     expect(screen.getByRole('option', { name: /unverified AI leads only/i })).toBeInTheDocument();
 
     fireEvent.change(evidenceSelect, { target: { value: 'human' } });

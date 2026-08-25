@@ -9,9 +9,9 @@ machine-checked launch gate. It validates three things:
    IDs.
 2. **Live HTTP health** — `GET /healthz` is `ok`, `GET /readyz` is `ready` with
    `medicalEncryption: true`, and the web app returns HTML.
-3. **Human-attested evidence** — a JSON file (default
+3. **Recorded operational evidence** — a JSON file (default
    `ops/production-launch-evidence.json`) covering backups, monitoring, Stripe,
-   data-retention, and legal/compliance sign-off, with freshness windows (e.g. a
+   and data-retention configuration, with freshness windows (e.g. a
    restore must have been tested within 90 days, a Stripe webhook test within 30).
 
 ## How to run

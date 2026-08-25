@@ -948,6 +948,22 @@ describe('gene report provenance', () => {
       .find(section => section.title === 'Gene Overview');
     expect(associationOverview.content).toContain('Computational association evidence');
     expect(buildGeneShareText(associationGene)).toContain('Ranking: Computational association evidence');
+
+    const literatureGene = {
+      ...gene,
+      associationClaims: [{
+        ...associationClaim,
+        source: 'Open Targets',
+        recordId: 'LITERATURE:1',
+        claim: 'RUNX1 and the bounded query co-occur in published text',
+        evidenceClass: 'literature',
+        evidenceType: 'literature',
+      }],
+    };
+    const literatureOverview = buildGeneReportSections(literatureGene)
+      .find(section => section.title === 'Gene Overview');
+    expect(literatureOverview.content).toContain('Literature-derived association evidence');
+    expect(buildGeneShareText(literatureGene)).toContain('Ranking: Literature-derived association evidence');
   });
 
   it('labels disease and phenotype lists as candidates rather than verified associations', () => {

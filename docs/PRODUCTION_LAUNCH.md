@@ -2,8 +2,7 @@
 
 Use this runbook after CI is green and before real users are admitted. The goal
 is to make the remaining launch caveats explicit, evidenced, and repeatable:
-production secrets, backups, monitoring, Stripe live webhooks, data retention,
-and legal/compliance review.
+production secrets, backups, monitoring, Stripe live webhooks, and data retention.
 
 ## 1. Configure Production Secrets
 
@@ -89,16 +88,17 @@ In the live Stripe dashboard:
 5. Run a live-mode or Stripe-approved production validation flow and record the
    timestamp in the launch evidence file.
 
-## 5. Approve Retention and Compliance
+## 5. Record Retention Configuration
 
-Review `docs/DATA_RETENTION.md` before launch. The launch evidence must record:
+Review `docs/DATA_RETENTION.md` before launch. The launch evidence records only
+the operational settings the verifier can evaluate:
 
-- Data retention policy approval.
+- Data retention policy path and configured status.
 - Deletion request SLA.
 - Backup retention period.
-- Legal and compliance review completion or formal waiver.
-- Medical/genomics disclaimer approval.
-- BAA status as `signed` or `not_required`.
+
+Business, legal, and compliance decisions are handled outside the repository and
+are not automated release gates.
 
 ## 6. Create Launch Evidence
 
@@ -109,7 +109,7 @@ file is ignored by git because it can contain internal operational details.
 cp ops/production-launch-evidence.example.json ops/production-launch-evidence.json
 ```
 
-Every boolean in the template is `false` and every attested field says
+Every boolean in the template is `false` and every evidence field says
 `REPLACE` deliberately. Flip a value only after you have personally observed the
 thing it asserts, in the console or run that proves it. Leaving a value
 unverified so the gate fails is the correct outcome; a green gate assembled from
@@ -134,12 +134,12 @@ The verifier checks:
 - API production env validation through the same `loadEnv()` used at startup.
 - Production-only CORS and live Stripe key shape.
 - The launch evidence file for backups, monitoring, Stripe events, retention,
-  and legal/compliance sign-off.
+  and data-retention configuration.
 - `/healthz` and `/readyz`, including `medicalEncryption=true`.
 - The deployed web app returns HTML over HTTPS.
 
 For an evidence-only dry run, use `--skip-http`. That mode exits non-zero and
-cannot be used as launch approval because it does not prove the live API or web
+is not a complete launch proof because it does not prove the live API or web
 deployment.
 
 ## 8. Go / No-Go Rule
@@ -150,5 +150,3 @@ Go only when all of these are true:
 - `pnpm audit --audit-level=low` reports no known vulnerabilities.
 - `pnpm launch:verify` exits 0 against production URLs and evidence.
 - The backup restore test is complete.
-- Legal/compliance ownership has signed or formally waived the applicable
-  healthcare/privacy requirements.

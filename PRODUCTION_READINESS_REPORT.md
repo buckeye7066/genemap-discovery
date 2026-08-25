@@ -129,7 +129,7 @@ These are **owner-only operational** items — no code fix applies:
    4. Web: `vercel env add VITE_SENTRY_DSN production` (paste the React project DSN), then redeploy so the build-time var is baked in: `vercel redeploy <latest-prod-deployment-url>` (or push any commit to `main`).
    5. Verify: `GET /readyz` still 200; throw a test error or check Sentry's "Waiting for events" screen turns green.
    The code paths are already wired and gated (`services/api/src/config/sentry.js` on `SENTRY_DSN`; web on `VITE_SENTRY_DSN`) — no code change is needed, and the app runs identically until the vars are set.
-2. **Backups / retention / legal** — verify the PG18 restore drill (documented in `docs/`), data-retention policy, and legal pages match the launched product. Requires owner sign-off.
+2. **Backups / retention / legal** — verify the PG18 restore drill (documented in `docs/`), data-retention policy, and legal pages match the launched product. The owner handles this outside the repository.
 3. **Production env vars on Railway** — confirm all `PRODUCTION_REQUIRED` vars set, `CROSS_ORIGIN_COOKIES=true`, live Stripe keys + real price IDs, `MEDICAL_DATA_ENCRYPTION_KEY` (64 hex), `RESEND_API_KEY` (for owner error emails to actually send).
 4. **Rate-limit store** — ~~move to Redis before running multiple API replicas~~ **DONE 2026-07-01** (see §9): Redis provisioned on Railway, `REDIS_URL` referenced on genemap-api, Redis-backed store live for both limiters.
 5. **Live-DB items** — Postgres integration tests are skipped locally (no DB); they run in CI against `postgres:18`. Migration `deploy` against the real prod DB remains a human-gated action.

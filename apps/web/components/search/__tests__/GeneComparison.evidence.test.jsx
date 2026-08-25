@@ -1,7 +1,7 @@
 import React from 'react';
 import { render, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import GeneComparison from '../GeneComparison';
+import GeneComparison, { __test } from '../GeneComparison';
 
 function aiLead(symbol) {
   return {
@@ -73,6 +73,20 @@ const genes = [
         directLink: 'javascript:alert(1)',
         isAiLead: false,
       },
+      {
+        source: 'Open Targets',
+        recordId: 'literature:SCN2A:1',
+        claim: 'SCN2A and the query co-occur in published text',
+        taxon: '9606',
+        species: 'Homo sapiens',
+        evidenceClass: 'literature',
+        evidenceType: 'literature',
+        evidenceStrength: 'supporting',
+        releaseVersion: '26.06',
+        retrievalDate: '2026-08-09',
+        directLink: 'https://example.org/scn2a-literature',
+        isAiLead: false,
+      },
     ],
   },
 ];
@@ -86,11 +100,14 @@ describe('GeneComparison claim-level evidence', () => {
     expect(screen.getAllByText(/human association/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/model-organism/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/metadata/i).length).toBeGreaterThan(0);
+    expect(screen.getByText('Literature claims').closest('div')).toHaveTextContent('1');
+    expect(screen.getByText(/SCN2A and the query co-occur/i)).toBeInTheDocument();
+    expect(__test.rankingLabel('literature')).toBe('Literature-derived association evidence');
     expect(screen.getByText(/SCN1A has a source-recorded association/i)).toBeInTheDocument();
     expect(screen.getByText(/Mouse ortholog phenotype overlaps/i)).toBeInTheDocument();
 
     const sourceLinks = screen.getAllByRole('link', { name: /open source record/i });
-    expect(sourceLinks).toHaveLength(1);
+    expect(sourceLinks).toHaveLength(2);
     expect(sourceLinks[0]).toHaveAttribute('href', 'https://example.org/scn1a');
     expect(sourceLinks[0]).toHaveAttribute('rel', expect.stringContaining('noopener'));
     expect(document.querySelector('a[href^="javascript:"]')).toBeNull();

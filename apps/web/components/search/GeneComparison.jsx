@@ -6,6 +6,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { GitCompare, X, Dna, MapPin, Info, ExternalLink } from "lucide-react";
 import {
   claimProvenanceRole,
+  deriveRankingBasisFromClaims,
   partitionClaimsBySpecies,
   safeExternalHttpUrl,
 } from "../../../../packages/shared/src/associationClaim.ts";
@@ -48,6 +49,7 @@ function rankingLabel(value) {
   if (value === 'human_verified') return 'Human association evidence';
   if (value === 'animal_model') return 'Model-organism evidence';
   if (value === 'computational') return 'Computed association evidence';
+  if (value === 'literature') return 'Literature-derived association evidence';
   return 'Unverified AI lead';
 }
 
@@ -83,7 +85,7 @@ export default function GeneComparison({ genes = [], onClose }) {
         sources: sourceNames(gene),
         explanation: (candidateReusable ? normalizeText(gene?.explanation) : '')
           || (profileReusable ? normalizeText(gene?.aiSummary) : ''),
-        rankingBasis: gene?.rankingBasis || 'ai_lead',
+        rankingBasis: gene?.rankingBasis || deriveRankingBasisFromClaims(groups.claims),
         ...groups,
       };
     });
@@ -99,8 +101,9 @@ export default function GeneComparison({ genes = [], onClose }) {
       acc.human += row.partition.human?.length || 0;
       acc.animal += row.partition.animal?.length || 0;
       acc.computational += row.partition.computational?.length || 0;
+      acc.literature += row.partition.literature?.length || 0;
       return acc;
-    }, { human: 0, animal: 0, computational: 0 });
+    }, { human: 0, animal: 0, computational: 0, literature: 0 });
 
     return { rows, sharedPhenotypes, totals };
   }, [genes]);
@@ -140,7 +143,7 @@ export default function GeneComparison({ genes = [], onClose }) {
               Gene Evidence Comparison
             </CardTitle>
             <p className="text-sm text-slate-600 mt-1">
-              Human, model-organism, computed, AI-lead, and source-metadata records remain separate.
+              Human, model-organism, literature-derived, computed, AI-lead, and source-metadata records remain separate.
             </p>
           </div>
           {onClose && (
@@ -151,7 +154,7 @@ export default function GeneComparison({ genes = [], onClose }) {
           )}
         </CardHeader>
         <CardContent className="space-y-6">
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
             <div className="rounded-md border border-slate-200 bg-slate-50 p-4">
               <p className="text-xs font-medium uppercase text-slate-500">Selected genes</p>
               <p className="text-2xl font-bold text-slate-900">{genes.length}</p>
@@ -168,6 +171,10 @@ export default function GeneComparison({ genes = [], onClose }) {
               <p className="text-xs font-medium uppercase text-blue-700">Computed claims</p>
               <p className="text-2xl font-bold text-blue-900">{comparison.totals.computational}</p>
             </div>
+            <div className="rounded-md border border-violet-200 bg-violet-50 p-4">
+              <p className="text-xs font-medium uppercase text-violet-700">Literature claims</p>
+              <p className="text-2xl font-bold text-violet-900">{comparison.totals.literature}</p>
+            </div>
           </div>
 
           <div className="overflow-x-auto rounded-md border border-slate-200">
@@ -179,6 +186,7 @@ export default function GeneComparison({ genes = [], onClose }) {
                   <th className="px-4 py-3 text-left font-semibold text-slate-700">Human</th>
                   <th className="px-4 py-3 text-left font-semibold text-slate-700">Model organism</th>
                   <th className="px-4 py-3 text-left font-semibold text-slate-700">Computed</th>
+                  <th className="px-4 py-3 text-left font-semibold text-slate-700">Literature</th>
                   <th className="px-4 py-3 text-left font-semibold text-slate-700">Location</th>
                 </tr>
               </thead>
@@ -193,6 +201,7 @@ export default function GeneComparison({ genes = [], onClose }) {
                     <td className="px-4 py-3 align-top">{row.partition.human?.length || 0}</td>
                     <td className="px-4 py-3 align-top">{row.partition.animal?.length || 0}</td>
                     <td className="px-4 py-3 align-top">{row.partition.computational?.length || 0}</td>
+                    <td className="px-4 py-3 align-top">{row.partition.literature?.length || 0}</td>
                     <td className="px-4 py-3 align-top">
                       <span className="inline-flex items-center gap-1">
                         <MapPin className="w-3 h-3 text-slate-400" />

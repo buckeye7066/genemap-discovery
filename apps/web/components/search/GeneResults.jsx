@@ -102,11 +102,15 @@ function geneMatchesEvidenceBasis(gene, evidenceBasis = 'all') {
   const hasHuman = (partition.human || []).some((claim) => claimSortKey(claim) > 0);
   const hasAnimal = (partition.animal || []).some((claim) => claimSortKey(claim) > 0);
   const hasComputational = (partition.computational || []).some((claim) => claimSortKey(claim) > 0);
+  const hasLiterature = (partition.literature || []).some((claim) => claimSortKey(claim) > 0);
 
   if (evidenceBasis === 'human') return hasHuman;
   if (evidenceBasis === 'animal') return hasAnimal;
   if (evidenceBasis === 'computational') return hasComputational;
-  if (evidenceBasis === 'unverified') return !hasHuman && !hasAnimal && !hasComputational;
+  if (evidenceBasis === 'literature') return hasLiterature;
+  if (evidenceBasis === 'unverified') {
+    return !hasHuman && !hasAnimal && !hasComputational && !hasLiterature;
+  }
   return true;
 }
 
@@ -294,7 +298,7 @@ export default function GeneResults({
           {evidenceState.status === 'loading' && (
             <div className="flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900" role="status">
               <Loader2 className="h-4 w-4 animate-spin" />
-              Checking source-grounded human, model-organism, and computational associations…
+              Checking source-grounded human, model-organism, literature-derived, and computational associations…
             </div>
           )}
           {evidenceState.status === 'available' && (
@@ -379,7 +383,7 @@ export default function GeneResults({
           <h4 className="font-medium text-slate-900 mb-3">How to interpret these results</h4>
           <ul className="text-sm text-slate-600 space-y-1">
             <li>• The candidate list begins as bounded AI research leads, not findings or diagnoses.</li>
-            <li>• Human, model-organism, and computed claims are shown separately and may disagree.</li>
+            <li>• Human, model-organism, literature-derived, and computed claims are shown separately and may disagree.</li>
             <li>• Identity records and HPO term validation do not prove a gene-query association.</li>
             <li>• Missing source version, record, date, or link remains visibly “Not recorded.”</li>
             <li>• Open each source record and review study design, context, contradictions, and limitations.</li>

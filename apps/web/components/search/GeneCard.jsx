@@ -244,6 +244,7 @@ function groundedEvidenceSummary(partition = {}) {
     ['human', associationCount(partition.human)],
     ['model-organism', associationCount(partition.animal)],
     ['computed', associationCount(partition.computational)],
+    ['literature-derived', associationCount(partition.literature)],
   ].filter(([, count]) => count > 0);
   if (entries.length === 0) return null;
   return entries
@@ -311,6 +312,8 @@ function GeneCard({ gene, rank, isSelected = false, onSelect = null }) {
       ? 'Computational association evidence'
       : rankingBasis === 'animal_model'
         ? 'Animal-model association evidence'
+      : rankingBasis === 'literature'
+        ? 'Literature-derived association evidence'
         : 'AI research lead';
   const rankingColor = rankingBasis === 'human_verified'
     ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
@@ -318,11 +321,14 @@ function GeneCard({ gene, rank, isSelected = false, onSelect = null }) {
       ? 'bg-sky-100 text-sky-800 border-sky-200'
       : rankingBasis === 'animal_model'
         ? 'bg-orange-100 text-orange-800 border-orange-200'
+      : rankingBasis === 'literature'
+        ? 'bg-violet-100 text-violet-800 border-violet-200'
         : 'bg-amber-100 text-amber-800 border-amber-200';
   const RankingIcon = rankingBasis === 'human_verified' ? CheckCircle
     : rankingBasis === 'computational' ? Info
       : rankingBasis === 'animal_model' ? Info
-        : AlertTriangle;
+        : rankingBasis === 'literature' ? BookOpen
+          : AlertTriangle;
   const candidateContentIsReusable = hasReusablePublicationContent(gene.candidatePublication);
   const profileContentIsReusable = hasReusablePublicationContent(gene.profilePublication)
     && gene.profileStatus === 'available';

@@ -35,6 +35,7 @@ jobs:
               re.compile(r"\b(?:five|5)\s+(?:exact-head\s+)?(?:independent\s+)?approvals?\b", re.I),
               re.compile(rf"\brequired[_ -]{role}s?\b", re.I),
               re.compile(rf"\b{role}[- ]authenticated\b", re.I),
+              re.compile(r"\bsign(?:ed|ing)?[- ]?off\b", re.I),
           ]
 
           violations = []

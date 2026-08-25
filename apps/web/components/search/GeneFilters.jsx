@@ -3,6 +3,7 @@ const EVIDENCE_OPTIONS = Object.freeze([
   { value: 'human', label: 'Has human association evidence' },
   { value: 'animal', label: 'Has model-organism evidence' },
   { value: 'computational', label: 'Has computed association evidence' },
+  { value: 'literature', label: 'Has literature-derived association evidence' },
   { value: 'unverified', label: 'Unverified AI leads only' },
 ]);
 

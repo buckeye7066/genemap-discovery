@@ -23,7 +23,7 @@ reading every `fetch(`/SDK callsite under `services/api/src`, `apps/web`,
 `apps/desktop` and `packages/shared` and cross-checking each against the
 publication boundary — not from assumption or from a vendor list.
 
-**The owner's sign-off is NOT complete, and that is a separate thing.** A
+**Owner-managed operational decisions are separate from this factual map.** A
 complete factual map is not an executed DPA, a chosen region, a configured
 retention setting, a disabled training flag, or a security review. Those are
 owner actions on owner accounts; no agent can perform or attest them. Items
@@ -248,7 +248,7 @@ reviewed. The aggregate analytics endpoint is separately constrained to counts
 and allowlisted categories; it does not return raw query text, identities,
 medical/conversation records, activity metadata, or retired agent content.
 
-## Release checklist — owner sign-off (the part that is NOT complete)
+## Owner-managed operational decisions (outside repository gates)
 
 - [ ] Name an accountable owner for every active/conditional service.
 - [ ] **Resend is now live** (operator alerting to `ADMIN_EMAILS`). Execute/verify

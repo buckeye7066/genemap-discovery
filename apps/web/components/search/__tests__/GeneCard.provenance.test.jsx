@@ -171,9 +171,32 @@ describe('GeneCard claim-level provenance', () => {
       human: [associationClaim],
       animal: [{ ...associationClaim, taxon: '10090' }],
       computational: [{ ...associationClaim, evidenceClass: 'computational' }],
+      literature: [{ ...associationClaim, evidenceClass: 'literature' }],
       metadata: [identityClaim],
-    })).toBe('1 human claim, 1 model-organism claim, 1 computed claim');
+    })).toBe('1 human claim, 1 model-organism claim, 1 computed claim, 1 literature-derived claim');
     expect(__test.groundedEvidenceSummary({ metadata: [identityClaim], aiLeads: [aiClaim] })).toBeNull();
+  });
+
+  it('labels a literature-only source record as literature evidence rather than an AI lead', () => {
+    const literatureClaim = {
+      ...associationClaim,
+      source: 'Open Targets',
+      recordId: 'literature:RUNX1:1',
+      claim: 'RUNX1 and the bounded query co-occur in published text',
+      evidenceClass: 'literature',
+      evidenceType: 'literature',
+    };
+
+    render(<GeneCard gene={{
+      ...gene,
+      symbol: 'LIT1',
+      associationClaims: [literatureClaim],
+      evidencePartition: undefined,
+    }} rank={1} />);
+
+    expect(screen.getByText('Literature-derived association evidence')).toBeInTheDocument();
+    expect(screen.getByText(/1 literature-derived claim/)).toBeInTheDocument();
+    expect(screen.queryByText('AI research lead')).not.toBeInTheDocument();
   });
 
   it('retries activity logging while mounted and preserves successful de-duplication', async () => {

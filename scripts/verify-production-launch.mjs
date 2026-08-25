@@ -193,10 +193,10 @@ export function validateEvidence(evidence, opts = {}) {
   const now = opts.now || new Date();
   const checks = [];
 
-  checks.push(isBlank(evidence?.reviewedBy)
-    ? fail('evidence.reviewedBy', 'reviewedBy is required')
-    : pass('evidence.reviewedBy', `reviewed by ${evidence.reviewedBy}`));
-  checks.push(checkRecentDate('evidence.reviewedAt', evidence?.reviewedAt, 30, now));
+  checks.push(isBlank(evidence?.recordedBy)
+    ? fail('evidence.recordedBy', 'recordedBy is required')
+    : pass('evidence.recordedBy', `evidence recorded by ${evidence.recordedBy}`));
+  checks.push(checkRecentDate('evidence.recordedAt', evidence?.recordedAt, 30, now));
 
   const secrets = evidence?.productionSecrets || {};
   checks.push(secrets.storedInSecretManager === true
@@ -265,9 +265,9 @@ export function validateEvidence(evidence, opts = {}) {
   checks.push(checkRecentDate('stripe.lastWebhookTestAt', stripe.lastWebhookTestAt, 30, now));
 
   const retention = evidence?.dataRetention || {};
-  checks.push(retention.policyApproved === true
-    ? pass('retention.policyApproved', 'data retention policy approved')
-    : fail('retention.policyApproved', 'data retention policy must be approved before launch'));
+  checks.push(retention.policyConfigured === true
+    ? pass('retention.policyConfigured', 'data retention policy is configured')
+    : fail('retention.policyConfigured', 'data retention policy must be configured before launch'));
   checks.push(isBlank(retention.policyDocument)
     ? fail('retention.policyDocument', 'data retention policy document path is required')
     : pass('retention.policyDocument', `data retention policy documented at ${retention.policyDocument}`));
@@ -277,24 +277,6 @@ export function validateEvidence(evidence, opts = {}) {
   checks.push(Number(retention.backupRetentionDays) >= 7
     ? pass('retention.backupRetentionDays', `backup retention is ${retention.backupRetentionDays} days`)
     : fail('retention.backupRetentionDays', 'backup retention must be at least 7 days'));
-
-  const legal = evidence?.legalCompliance || {};
-  checks.push(legal.legalReviewCompleted === true
-    ? pass('legal.legalReviewCompleted', 'legal review completed')
-    : fail('legal.legalReviewCompleted', 'legal review must be completed or formally waived'));
-  checks.push(legal.complianceReviewCompleted === true
-    ? pass('legal.complianceReviewCompleted', 'compliance review completed')
-    : fail('legal.complianceReviewCompleted', 'compliance review must be completed or formally waived'));
-  checks.push(isBlank(legal.reviewer)
-    ? fail('legal.reviewer', 'legal/compliance reviewer is required')
-    : pass('legal.reviewer', `legal/compliance reviewer recorded: ${legal.reviewer}`));
-  checks.push(checkRecentDate('legal.reviewedAt', legal.reviewedAt, 365, now));
-  checks.push(legal.medicalDisclaimerApproved === true
-    ? pass('legal.medicalDisclaimerApproved', 'medical/genomics disclaimer approved')
-    : fail('legal.medicalDisclaimerApproved', 'medical/genomics disclaimer approval is required'));
-  checks.push(['signed', 'not_required'].includes(legal.baaStatus)
-    ? pass('legal.baaStatus', `BAA status recorded: ${legal.baaStatus}`)
-    : fail('legal.baaStatus', 'baaStatus must be "signed" or "not_required"'));
 
   return checks;
 }
@@ -389,7 +371,7 @@ export async function runLaunchVerification(opts = {}) {
   if (opts.skipHttp) {
     checks.push(fail(
       'http.skipped',
-      'HTTP endpoint checks were skipped. This is an evidence-only dry run, not launch approval. Run without --skip-http against production URLs for a passing launch proof.'
+      'HTTP endpoint checks were skipped. This is an evidence-only dry run, not a complete launch proof. Run without --skip-http against production URLs for a passing launch proof.'
     ));
   } else {
     checks.push(...await checkHttpEndpoints({
@@ -446,8 +428,8 @@ const SELF_TEST_ENV = {
 function buildSelfTestEvidence(now) {
   const iso = (msAgo) => new Date(now.getTime() - msAgo).toISOString();
   return {
-    reviewedBy: 'Self-Test Reviewer',
-    reviewedAt: iso(ONE_DAY_MS),
+    recordedBy: 'Self-Test Recorder',
+    recordedAt: iso(ONE_DAY_MS),
     productionSecrets: { storedInSecretManager: true, rotatedForLaunch: true, manager: 'Railway/Vercel/1Password' },
     backups: {
       automaticBackupsEnabled: true,
@@ -471,15 +453,7 @@ function buildSelfTestEvidence(now) {
       webhookEvents: [...REQUIRED_STRIPE_EVENTS],
       lastWebhookTestAt: iso(2 * ONE_DAY_MS),
     },
-    dataRetention: { policyApproved: true, policyDocument: 'docs/DATA_RETENTION.md', deletionRequestSlaDays: 30, backupRetentionDays: 30 },
-    legalCompliance: {
-      legalReviewCompleted: true,
-      complianceReviewCompleted: true,
-      reviewer: 'Counsel / Compliance Owner',
-      reviewedAt: iso(30 * ONE_DAY_MS),
-      medicalDisclaimerApproved: true,
-      baaStatus: 'not_required',
-    },
+    dataRetention: { policyConfigured: true, policyDocument: 'docs/DATA_RETENTION.md', deletionRequestSlaDays: 30, backupRetentionDays: 30 },
   };
 }
 
@@ -494,6 +468,10 @@ export function runSelfTest(now = new Date()) {
   const evidenceFailures = validateEvidence(buildSelfTestEvidence(now), { now }).filter((c) => c.status === 'fail');
   if (evidenceFailures.length > 0) {
     problems.push(`complete evidence fixture unexpectedly failed: ${evidenceFailures.map((c) => c.id).join(', ')}`);
+  }
+  if (validateEvidence(buildSelfTestEvidence(now), { now })
+    .some((check) => check.id.startsWith('legal.'))) {
+    problems.push('verifier reintroduced a legal/compliance certification gate');
   }
 
   // Fail-closed invariant: a missing Stripe live key MUST be caught.

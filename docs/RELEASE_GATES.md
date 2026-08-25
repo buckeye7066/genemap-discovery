@@ -144,7 +144,7 @@ pnpm launch:verify -- \
 - [ ] Production secrets stored in Railway/Vercel/secret manager and rotated for launch
 - [ ] `/healthz` and `/readyz` pass against production, with `medicalEncryption=true`
 - [ ] Stripe live webhook endpoint and required events verified
-- [ ] Backup restore test, monitoring dashboard, alert path, retention policy, and legal/compliance sign-off recorded
+- [ ] Backup restore test, monitoring dashboard, alert path, and retention configuration recorded
 
 ## Gate 6: Documentation
 
@@ -187,24 +187,10 @@ pnpm launch:verify -- \
 - [ ] Dashboard created
 - [ ] On-call schedule set
 
-## Gate 8: Stakeholder Approval
+## Gate 8: Release Coordination
 
-### Technical Approval
-- [ ] Engineering lead sign-off
-- [ ] Security team review complete
-- [ ] DevOps approval obtained
-
-### Business Approval
-- [ ] Product owner approval
-- [ ] Compliance review (if required)
-- [ ] Legal review (if required)
-- [ ] Data retention policy approved (`docs/DATA_RETENTION.md`)
-
-### Communication
-- [ ] Internal stakeholders notified
-- [ ] Customer communication prepared
-- [ ] Support team briefed
-- [ ] Marketing aligned (if user-facing)
+Repository release gates cover executable technical and operational evidence.
+Business, legal, and external coordination are handled outside this checklist.
 
 ## Pre-Deploy Final Checks
 
@@ -263,14 +249,10 @@ curl -X POST https://api.yourdomain.com/auth/register \
 - [ ] Frontend loading
 - [ ] Monitoring showing green status
 
-## Sign-Off
+## Release Record
 
-| Role | Name | Date | Signature |
-|------|------|------|-----------|
-| Engineering Lead | | | |
-| DevOps | | | |
-| Security | | | |
-| Product Owner | | | |
+Record the deployed commit, workflow run, deployment URLs, and verification timestamp
+in the release notes.
 
 ## Emergency Contacts
 

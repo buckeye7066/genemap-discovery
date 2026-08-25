@@ -193,10 +193,11 @@ VITE_API_URL=http://localhost:3000
 - [Migration Guide](docs/MIGRATION_OFF_BASE44.md) - migration documentation
 - [Deployment Guide](docs/DEPLOYMENT.md) - Railway + Vercel deployment
 - [Release Gates](docs/RELEASE_GATES.md) - pre-deployment checklist
-- [Production Launch Verification](docs/PRODUCTION_LAUNCH.md) - final secrets, backup, monitoring, Stripe, retention, and sign-off gate
+- [Production Launch Verification](docs/PRODUCTION_LAUNCH.md) - final secrets, backup, monitoring, Stripe, retention, and deployment evidence checks
 - [Data Retention Policy](docs/DATA_RETENTION.md) - production retention baseline for health-adjacent data
 - [Cutover Plan](docs/CUTOVER_CHECKLIST.md) - production cutover steps
 - [Backup Guide](docs/BACKUP.md) - backup and recovery procedures
+- [Competitive Feature Evidence](docs/COMPETITOR_FEATURE_MATRIX.md) - five closest comparators, transferable strengths, and scope decisions
 - [Historical Audits](docs/audits/README.md) - archived point-in-time audit reports
 
 ## API Endpoints

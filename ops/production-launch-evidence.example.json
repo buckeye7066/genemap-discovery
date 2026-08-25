@@ -1,8 +1,7 @@
 {
-  "_howToUse": "Copy to ops/production-launch-evidence.json (git-ignored) and fill it in. EVERY boolean starts false and every attested field starts REPLACE ON PURPOSE: this file is a record of what a human OBSERVED, and a template that ships pre-attested values turns the launch gate into a rubber stamp. Flip a boolean to true only after you have personally checked that specific thing in the specific console or run that proves it. If you cannot check something, leave it false and let the verifier fail on it — a failing gate you understand is worth more than a passing gate built on values nobody verified.",
-
-  "reviewedBy": "REPLACE — name of the person signing off on launch",
-  "reviewedAt": "REPLACE — ISO date of sign-off, e.g. 2026-07-01T00:00:00Z",
+  "_howToUse": "Copy to ops/production-launch-evidence.json (git-ignored) and fill it in. EVERY boolean starts false and every evidence field starts REPLACE ON PURPOSE: this file records what a person OBSERVED. A template with pre-filled values would turn the launch checks into a rubber stamp. Flip a boolean only after checking the specific console or run that proves it. If you cannot check something, leave it false and let the verifier report the missing evidence.",
+  "recordedBy": "REPLACE — name of the person who recorded the operational evidence",
+  "recordedAt": "REPLACE — ISO date the evidence was recorded, e.g. 2026-07-01T00:00:00Z",
   "productionSecrets": {
     "storedInSecretManager": false,
     "rotatedForLaunch": false,
@@ -33,17 +32,9 @@
     "lastWebhookTestAt": "REPLACE — ISO date you last sent a test event from the Stripe dashboard"
   },
   "dataRetention": {
-    "policyApproved": false,
     "policyDocument": "docs/DATA_RETENTION.md",
     "deletionRequestSlaDays": 0,
-    "backupRetentionDays": 0
-  },
-  "legalCompliance": {
-    "legalReviewCompleted": false,
-    "complianceReviewCompleted": false,
-    "reviewer": "REPLACE — reviewing attorney / compliance owner",
-    "reviewedAt": "REPLACE — ISO date of legal/compliance review",
-    "medicalDisclaimerApproved": false,
-    "baaStatus": "REPLACE — \"signed\" or \"not_required\"; not_required is the consumer-education posture, change it if GeneMap is offered to a covered entity"
+    "backupRetentionDays": 0,
+    "policyConfigured": false
   }
 }
