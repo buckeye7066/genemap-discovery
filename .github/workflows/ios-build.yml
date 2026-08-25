@@ -1,13 +1,23 @@
 name: iOS build
 
-# Manual trigger only — macOS runners bill at 10x, and the unsigned build
-# is only needed on demand. Produces genemap-unsigned-ipa: an UNSIGNED
-# .ipa proving the iOS build works end-to-end. App Store submission
-# additionally needs Apple Developer signing (Distribution certificate +
-# provisioning profile added as secrets, and a signed archive step).
+# Produces genemap-unsigned-ipa: an UNSIGNED .ipa proving the iOS build works
+# end-to-end. Pull requests run this only when the native wrapper, shipped web
+# assets, shared browser contract, lockfile, or this workflow changes. App
+# Store submission additionally needs Apple Developer signing (Distribution
+# certificate + provisioning profile added as secrets, and a signed archive
+# step).
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - '.github/workflows/ios-build.yml'
+      - 'apps/web/**'
+      - 'packages/shared/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
 
 permissions:
   contents: read
@@ -17,9 +27,16 @@ jobs:
     name: Build unsigned IPA
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Verify exact requested source
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '24'
           cache: 'pnpm'
@@ -42,13 +59,49 @@ jobs:
             -configuration Release -sdk iphoneos \
             -archivePath "$RUNNER_TEMP/App.xcarchive" archive \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
+      - name: Verify unsigned archive identity and contents
+        run: |
+          set -euo pipefail
+          APP="$RUNNER_TEMP/App.xcarchive/Products/Applications/App.app"
+          test -d "$APP"
+          test -s "$APP/App"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist")" = 'com.genemap.discovery'
+          test ! -e "$APP/embedded.mobileprovision"
+          test ! -d "$APP/_CodeSignature"
       - name: Package unsigned IPA
         run: |
+          set -euo pipefail
           mkdir -p "$RUNNER_TEMP/Payload"
           cp -R "$RUNNER_TEMP/App.xcarchive/Products/Applications/App.app" "$RUNNER_TEMP/Payload/"
           cd "$RUNNER_TEMP" && zip -qry GeneMap-unsigned.ipa Payload
-      - uses: actions/upload-artifact@v7
+      - name: Inspect IPA and record reproducible evidence
+        run: |
+          set -euo pipefail
+          IPA="$RUNNER_TEMP/GeneMap-unsigned.ipa"
+          LIST="$RUNNER_TEMP/genemap-ios-ipa-files.txt"
+          EVIDENCE="$RUNNER_TEMP/genemap-ios-unsigned-evidence.txt"
+          test -s "$IPA"
+          zipinfo -1 "$IPA" | tee "$LIST"
+          grep -Fx 'Payload/App.app/Info.plist' "$LIST"
+          grep -Fx 'Payload/App.app/App' "$LIST"
+          if grep -Eq '(^|/)(embedded\.mobileprovision|_CodeSignature)(/|$)' "$LIST"; then
+            echo 'Unsigned IPA unexpectedly contains signing material' >&2
+            exit 1
+          fi
+          {
+            echo "source_sha=$(git rev-parse HEAD)"
+            echo 'bundle_id=com.genemap.discovery'
+            echo 'configuration=Release'
+            echo 'sdk=iphoneos'
+            echo 'signing=disabled'
+            echo "ipa_bytes=$(stat -f '%z' "$IPA")"
+            echo "ipa_sha256=$(shasum -a 256 "$IPA" | awk '{print $1}')"
+          } | tee "$EVIDENCE"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: genemap-unsigned-ipa
-          path: ${{ runner.temp }}/GeneMap-unsigned.ipa
+          path: |
+            ${{ runner.temp }}/GeneMap-unsigned.ipa
+            ${{ runner.temp }}/genemap-ios-unsigned-evidence.txt
           if-no-files-found: error
+          retention-days: 7
