@@ -34,7 +34,7 @@ const STRING_ROWS = [
 ];
 
 describe('STRING gene-network adapter', () => {
-  it('normalizes API rows deterministically and distinguishes query from expanded nodes', () => {
+  it('normalizes API rows in stable order and distinguishes query from expanded nodes', () => {
     const network = normalizeStringNetwork(
       [...STRING_ROWS].reverse(),
       ['SCN2A', 'SCN1A'],
@@ -145,6 +145,35 @@ describe('STRING gene-network adapter', () => {
         { symbol: 'SCN2A', kind: 'query' },
       ],
     });
+  });
+
+  it('treats a malformed successful payload as unavailable rather than no associations', async () => {
+    const logger = { warn: vi.fn() };
+    const result = await getGeneNetwork(
+      ['SCN1A', 'SCN2A'],
+      {},
+      {
+        fetchImpl: vi.fn().mockResolvedValue({
+          ok: true,
+          json: vi.fn().mockResolvedValue({ message: 'unexpected payload' }),
+        }),
+        logger,
+      },
+    );
+
+    expect(result).toMatchObject({
+      sourceStatus: 'unavailable',
+      retrievedAt: null,
+      edges: [],
+      nodes: [
+        { symbol: 'SCN1A', kind: 'query' },
+        { symbol: 'SCN2A', kind: 'query' },
+      ],
+    });
+    expect(logger.warn).toHaveBeenCalledWith(
+      { error: 'STRING network response was not an array' },
+      'STRING network lookup failed',
+    );
   });
 
   it('reports any symbols outside the bounded upstream request instead of silently dropping them', async () => {

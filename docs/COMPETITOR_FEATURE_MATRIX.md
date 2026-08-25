@@ -22,7 +22,7 @@ not a market-share claim.
   printable exports now expose that positive component without reclassifying
   its owning claim or presenting a source score as a calibrated probability.
 - Gene comparison now includes an interactive human functional-association
-  network backed by a live, source-grounded deterministic STRING adapter.
+  network backed by a live, source-grounded STRING adapter.
   The bounded view names compared genes outside its ten-gene request and
   keeps disconnected query genes visible. Users can filter by source score
   and focus nodes; added neighbors, channel scores, retrieval time, and

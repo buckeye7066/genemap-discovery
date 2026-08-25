@@ -171,6 +171,9 @@ export async function getGeneNetwork(symbols, options = {}, dependencies = {}) {
       throw new Error(`STRING network request returned HTTP ${response.status}`);
     }
     const rows = await response.json();
+    if (!Array.isArray(rows)) {
+      throw new Error('STRING network response was not an array');
+    }
     const network = normalizeStringNetwork(rows, querySymbols, retrievedAt);
     return {
       requestedSymbols,
