@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import codecs
+import html
 import pathlib
 import re
 import subprocess
@@ -85,7 +86,7 @@ _SOURCE_BOUNDARY_JOINERS = re.compile(
 def normalize_text(text: str) -> str:
     """Normalize one complete file before matching separator-tolerant phrases."""
 
-    normalized = unicodedata.normalize("NFKC", text)
+    normalized = unicodedata.normalize("NFKC", html.unescape(text))
     normalized = "".join(char for char in normalized if unicodedata.category(char) != "Cf")
     return re.sub(r"[\s_\-\u2010-\u2015]+", " ", normalized)
 
@@ -254,6 +255,11 @@ def _run_index_self_test(scanner_source: str) -> None:
             + ";",
             encoding="utf-8",
         )
+        diverged_path = repo_root / "diverged.txt"
+        diverged_path.write_text(
+            "owner " + COMPLETION_TOKEN[:4] + "-" + COMPLETION_TOKEN[4:],
+            encoding="utf-8",
+        )
         (repo_root / "binary.dat").write_bytes(
             b"\xff" * 96 + b" " + COMPLETION_TOKEN.encode("ascii") + b" "
         )
@@ -266,11 +272,13 @@ def _run_index_self_test(scanner_source: str) -> None:
             stderr=subprocess.PIPE,
         )
         missing_path.unlink()
+        diverged_path.write_text("clean worktree content", encoding="utf-8")
 
         tracked_paths = {path for path, _, _ in tracked_index_entries(repo_root)}
         violations = dict(scan_repository(repo_root))
         expected_paths = {
             "concatenated.js",
+            "diverged.txt",
             "encoded.txt",
             "missing.txt",
             "rendered.jsx",
@@ -320,6 +328,28 @@ def run_self_test() -> None:
         "human gate JSX boundary": (
             f"<span>{MANUAL_TOKEN}</span><span>{APPROVAL_TOKEN}</span>"
         ),
+        "HTML named reference": (
+            "owner " + COMPLETION_TOKEN[:4] + "&nbsp;" + COMPLETION_TOKEN[4:]
+        ),
+        "HTML numeric reference": (
+            "owner " + COMPLETION_TOKEN[:4] + "&#32;" + COMPLETION_TOKEN[4:]
+        ),
+        "HTML hexadecimal reference": (
+            "owner " + COMPLETION_TOKEN[:4] + "&#x20;" + COMPLETION_TOKEN[4:]
+        ),
+        "three-part string concatenation": (
+            repr(COMPLETION_TOKEN[:2])
+            + " + "
+            + repr(COMPLETION_TOKEN[2:4])
+            + " + "
+            + repr(COMPLETION_TOKEN[4:])
+        ),
+        "four-part JSX boundary": (
+            f"<span>{COMPLETION_TOKEN[:1]}</span>"
+            f"<span>{COMPLETION_TOKEN[1:3]}</span>"
+            f"<span>{COMPLETION_TOKEN[3:5]}</span>"
+            f"<span>{COMPLETION_TOKEN[5:]}</span>"
+        ),
     }
     negative_probes = {
         "cryptographic signature": "The commit is cryptographically signed.",
@@ -329,6 +359,14 @@ def run_self_test() -> None:
         "informed consent": "Confirm informed consent before collecting participant data.",
         "destructive action": "Confirm the exact record before irreversible deletion.",
         "safety boundary": "Acknowledge the safety warning before continuing.",
+        "lexical prefix": "as" + COMPLETION_TOKEN + "s is not the gated phrase",
+        "lexical suffix": COMPLETION_TOKEN + "shore is not the gated phrase",
+        "entity lexical prefix": (
+            "as" + COMPLETION_TOKEN[:4] + "&#32;" + COMPLETION_TOKEN[4:] + "s"
+        ),
+        "entity lexical suffix": (
+            COMPLETION_TOKEN[:4] + "&#32;" + COMPLETION_TOKEN[4:] + "shore"
+        ),
     }
 
     missed = [name for name, probe in positive_probes.items() if not prohibited_labels(probe)]
