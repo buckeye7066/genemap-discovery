@@ -12,6 +12,7 @@ import {
   safeExternalHttpUrl,
 } from "../../../../packages/shared/src/associationClaim.ts";
 import PublicationState, { hasReusablePublicationContent } from "../shared/PublicationState";
+import GeneNetwork from "./GeneNetwork";
 
 function normalizeText(value) {
   return typeof value === "string" ? value.trim() : "";
@@ -238,6 +239,8 @@ export default function GeneComparison({ genes = [], onClose }) {
               </tbody>
             </table>
           </div>
+
+          <GeneNetwork symbols={comparison.rows.map((row) => row.symbol)} />
 
           <Card className="border-slate-200">
             <CardHeader className="pb-3">

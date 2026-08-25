@@ -31,6 +31,7 @@
     "audit": "node scripts/verify-security-exceptions.mjs && corepack pnpm audit --audit-level=low",
     "launch:verify": "node scripts/verify-production-launch.mjs",
     "launch:verify:selftest": "node scripts/verify-production-launch.mjs --self-test",
+    "release-language:check": "python3 scripts/check-release-language.py --self-test && python3 scripts/check-release-language.py",
     "release:check": "corepack pnpm install --frozen-lockfile && corepack pnpm lint && corepack pnpm typecheck && corepack pnpm test && corepack pnpm test:backup && corepack pnpm test:ledger && corepack pnpm launch:verify:selftest && corepack pnpm --filter @genemap/shared build && corepack pnpm build:web && node scripts/verify-publication-bundle.mjs && corepack pnpm run audit",
     "db:generate": "corepack pnpm --filter @genemap/api db:generate",
     "db:push": "corepack pnpm --filter @genemap/api db:push",

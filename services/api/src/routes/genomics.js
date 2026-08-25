@@ -13,6 +13,7 @@ import {
   getPublicationAssociationEvidence,
   isPublicationGeneSymbol,
 } from '../services/associationEvidenceContract.js';
+import { getGeneNetwork } from '../services/geneNetwork.js';
 import { parseVcfText, enrichVcfVariants, VCF_LIMITS } from '../services/vcf.js';
 import { ValidationError, NotFoundError } from '../utils/errors.js';
 import { createAuditLog } from '../utils/audit.js';
@@ -82,6 +83,15 @@ const associationEvidenceSchema = z.object({
     curatedReferenceSchema,
   ]),
   symbols: z.array(publicationSymbolSchema).min(1).max(15),
+}).strict();
+
+const geneNetworkSchema = z.object({
+  symbols: z.array(publicationSymbolSchema)
+    .min(2)
+    .max(10)
+    .refine((values) => new Set(values).size >= 2, 'At least two distinct gene symbols are required'),
+  requiredScore: z.number().int().min(0).max(1000).default(400),
+  addNodes: z.number().int().min(0).max(5).default(3),
 }).strict();
 
 /**
@@ -258,6 +268,19 @@ export default async function genomicsRoutes(fastify) {
   fastify.post('/association-evidence', async (request) => {
     const { query, symbols } = associationEvidenceSchema.parse(request.body || {});
     return getPublicationAssociationEvidence(query, symbols);
+  });
+
+  // ─── Source-grounded functional association network ───────────
+  // Only bounded public gene symbols leave the API. STRING scores and evidence
+  // channels remain labeled provider outputs; they do not alter GeneMap's
+  // gene-disease ranking and are not clinical or causal conclusions.
+  fastify.post('/gene-network', async (request) => {
+    const { symbols, requiredScore, addNodes } = geneNetworkSchema.parse(request.body || {});
+    return getGeneNetwork(
+      symbols,
+      { requiredScore, addNodes },
+      { logger: fastify.log },
+    );
   });
 
   // ─── Authoritative enrichment ──────────────────────────────────
