@@ -3,6 +3,7 @@ const STRING_NETWORK_PAGE = 'https://string-db.org/cgi/network';
 const STRING_API_DOCUMENTATION = 'https://string-db.org/help/api/';
 const HUMAN_TAXON_ID = 9606;
 const MAX_EDGES = 250;
+const MAX_QUERY_SYMBOLS = 10;
 const DEFAULT_REQUIRED_SCORE = 400;
 const DEFAULT_ADDED_NODES = 3;
 
@@ -44,7 +45,15 @@ function networkPageUrl(symbols) {
 export function normalizeStringNetwork(rows, querySymbols, retrievedAt) {
   const cleanQuerySymbols = cleanSymbols(querySymbols);
   const querySet = new Set(cleanQuerySymbols);
-  const nodeMap = new Map();
+  const nodeMap = new Map(cleanQuerySymbols.map((symbol) => [
+    symbol,
+    {
+      id: symbol,
+      symbol,
+      stringId: null,
+      kind: 'query',
+    },
+  ]));
   const edgeMap = new Map();
 
   for (const row of Array.isArray(rows) ? rows.slice(0, MAX_EDGES) : []) {
@@ -58,13 +67,16 @@ export function normalizeStringNetwork(rows, querySymbols, retrievedAt) {
       [symbolA, row.stringId_A],
       [symbolB, row.stringId_B],
     ]) {
-      if (!nodeMap.has(symbol)) {
+      const existing = nodeMap.get(symbol);
+      if (!existing) {
         nodeMap.set(symbol, {
           id: symbol,
           symbol,
           stringId: typeof stringId === 'string' ? stringId : null,
           kind: querySet.has(symbol) ? 'query' : 'expanded',
         });
+      } else if (!existing.stringId && typeof stringId === 'string') {
+        nodeMap.set(symbol, { ...existing, stringId });
       }
     }
 
@@ -102,7 +114,9 @@ export function normalizeStringNetwork(rows, querySymbols, retrievedAt) {
 }
 
 export async function getGeneNetwork(symbols, options = {}, dependencies = {}) {
-  const querySymbols = cleanSymbols(symbols).slice(0, 10);
+  const requestedSymbols = cleanSymbols(symbols);
+  const querySymbols = requestedSymbols.slice(0, MAX_QUERY_SYMBOLS);
+  const omittedSymbols = requestedSymbols.slice(MAX_QUERY_SYMBOLS);
   const requiredScore = boundedInteger(
     options.requiredScore,
     DEFAULT_REQUIRED_SCORE,
@@ -128,7 +142,9 @@ export async function getGeneNetwork(symbols, options = {}, dependencies = {}) {
 
   if (querySymbols.length < 2) {
     return {
+      requestedSymbols,
       querySymbols,
+      omittedSymbols,
       nodes: [],
       edges: [],
       sourceStatus: 'insufficient_input',
@@ -157,7 +173,9 @@ export async function getGeneNetwork(symbols, options = {}, dependencies = {}) {
     const rows = await response.json();
     const network = normalizeStringNetwork(rows, querySymbols, retrievedAt);
     return {
+      requestedSymbols,
       querySymbols,
+      omittedSymbols,
       ...network,
       sourceStatus: network.edges.length > 0 ? 'available' : 'no_associations',
       source,
@@ -166,7 +184,9 @@ export async function getGeneNetwork(symbols, options = {}, dependencies = {}) {
   } catch (error) {
     dependencies.logger?.warn?.({ error: error?.message }, 'STRING network lookup failed');
     return {
+      requestedSymbols,
       querySymbols,
+      omittedSymbols,
       nodes: querySymbols.map((symbol) => ({
         id: symbol,
         symbol,
@@ -182,7 +202,7 @@ export async function getGeneNetwork(symbols, options = {}, dependencies = {}) {
 }
 
 export const GENE_NETWORK_LIMITS = Object.freeze({
-  maxSymbols: 10,
+  maxSymbols: MAX_QUERY_SYMBOLS,
   maxAddedNodes: 5,
   maxEdges: MAX_EDGES,
   defaultRequiredScore: DEFAULT_REQUIRED_SCORE,

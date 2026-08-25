@@ -11,7 +11,7 @@ describe('geneNetworkClient', () => {
     vi.clearAllMocks();
   });
 
-  it('deduplicates, sorts, policy-filters, and bounds public gene symbols', async () => {
+  it('deduplicates, sorts, and policy-filters public gene symbols', async () => {
     shared.request.mockResolvedValue({
       querySymbols: ['SCN1A', 'SCN2A'],
       nodes: [{ id: 'SCN1A', symbol: 'SCN1A', kind: 'query' }],
@@ -36,6 +36,29 @@ describe('geneNetworkClient', () => {
     });
     expect(__test.isPublicGeneSymbol('SCN1A')).toBe(true);
     expect(__test.isPublicGeneSymbol('TAKE-5MG')).toBe(false);
+  });
+
+  it('returns an explicit scope when more than ten valid genes are selected', async () => {
+    const requestedSymbols = Array.from(
+      { length: 12 },
+      (_, index) => `G${String(index + 1).padStart(2, '0')}`,
+    );
+    shared.request.mockResolvedValue({ sourceStatus: 'no_associations' });
+
+    const result = await fetchGeneNetwork([...requestedSymbols].reverse());
+    const request = shared.request.mock.calls[0][1];
+
+    expect(JSON.parse(request.body).symbols).toEqual(requestedSymbols.slice(0, 10));
+    expect(result).toMatchObject({
+      requestedSymbols,
+      querySymbols: requestedSymbols.slice(0, 10),
+      omittedSymbols: requestedSymbols.slice(10),
+    });
+    expect(__test.networkScope(requestedSymbols)).toEqual({
+      requestedSymbols,
+      querySymbols: requestedSymbols.slice(0, 10),
+      omittedSymbols: requestedSymbols.slice(10),
+    });
   });
 
   it('fails soft while preserving the query symbols and source identity', async () => {

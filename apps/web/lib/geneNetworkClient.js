@@ -1,9 +1,12 @@
 import { apiClient } from '@genemap/shared';
 
 const CLINICAL_COMMAND = /^(?:TAKE|START|STOP|AVOID|USE|ADMINISTER|INJECT|SWALLOW|APPLY|PRESCRIBE|SWITCH)\b/u;
+export const GENE_NETWORK_MAX_SYMBOLS = 10;
 
 const EMPTY_RESULT = Object.freeze({
+  requestedSymbols: [],
   querySymbols: [],
+  omittedSymbols: [],
   nodes: [],
   edges: [],
   sourceStatus: 'unavailable',
@@ -33,8 +36,16 @@ function normalizeSymbols(symbols) {
   return [...new Set((Array.isArray(symbols) ? symbols : [])
     .map((symbol) => String(symbol || '').trim().toUpperCase())
     .filter(isPublicGeneSymbol))]
-    .sort((left, right) => left.localeCompare(right))
-    .slice(0, 10);
+    .sort((left, right) => left.localeCompare(right));
+}
+
+function networkScope(symbols) {
+  const requestedSymbols = normalizeSymbols(symbols);
+  return {
+    requestedSymbols,
+    querySymbols: requestedSymbols.slice(0, GENE_NETWORK_MAX_SYMBOLS),
+    omittedSymbols: requestedSymbols.slice(GENE_NETWORK_MAX_SYMBOLS),
+  };
 }
 
 function boundedInteger(value, fallback, min, max) {
@@ -43,9 +54,15 @@ function boundedInteger(value, fallback, min, max) {
 }
 
 export async function fetchGeneNetwork(symbols, options = {}) {
-  const cleanSymbols = normalizeSymbols(symbols);
-  if (cleanSymbols.length < 2) {
-    return { ...EMPTY_RESULT, querySymbols: cleanSymbols, sourceStatus: 'insufficient_input' };
+  const { requestedSymbols, querySymbols, omittedSymbols } = networkScope(symbols);
+  if (querySymbols.length < 2) {
+    return {
+      ...EMPTY_RESULT,
+      requestedSymbols,
+      querySymbols,
+      omittedSymbols,
+      sourceStatus: 'insufficient_input',
+    };
   }
   const requiredScore = boundedInteger(options.requiredScore, 400, 0, 1000);
   const addNodes = boundedInteger(options.addNodes, 3, 0, 5);
@@ -53,13 +70,15 @@ export async function fetchGeneNetwork(symbols, options = {}) {
   try {
     const response = await apiClient.request('/genomics/gene-network', {
       method: 'POST',
-      body: JSON.stringify({ symbols: cleanSymbols, requiredScore, addNodes }),
+      body: JSON.stringify({ symbols: querySymbols, requiredScore, addNodes }),
       timeoutMs: 30_000,
     });
     return {
       ...EMPTY_RESULT,
       ...(response && typeof response === 'object' ? response : {}),
-      querySymbols: Array.isArray(response?.querySymbols) ? response.querySymbols : cleanSymbols,
+      requestedSymbols,
+      querySymbols: Array.isArray(response?.querySymbols) ? response.querySymbols : querySymbols,
+      omittedSymbols,
       nodes: Array.isArray(response?.nodes) ? response.nodes : [],
       edges: Array.isArray(response?.edges) ? response.edges : [],
       source: {
@@ -70,10 +89,12 @@ export async function fetchGeneNetwork(symbols, options = {}) {
   } catch (error) {
     return {
       ...EMPTY_RESULT,
-      querySymbols: cleanSymbols,
+      requestedSymbols,
+      querySymbols,
+      omittedSymbols,
       error: error?.message || 'Gene network is temporarily unavailable.',
     };
   }
 }
 
-export const __test = { EMPTY_RESULT, isPublicGeneSymbol, normalizeSymbols };
+export const __test = { EMPTY_RESULT, isPublicGeneSymbol, networkScope, normalizeSymbols };

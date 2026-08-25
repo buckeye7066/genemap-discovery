@@ -2,7 +2,10 @@ import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const networkClient = vi.hoisted(() => ({ fetchGeneNetwork: vi.fn() }));
+const networkClient = vi.hoisted(() => ({
+  fetchGeneNetwork: vi.fn(),
+  GENE_NETWORK_MAX_SYMBOLS: 10,
+}));
 
 vi.mock('../../../lib/geneNetworkClient', () => networkClient);
 
@@ -104,6 +107,52 @@ describe('GeneNetwork', () => {
     expect(screen.getByText(/comparison evidence above remains unchanged/i)).toBeInTheDocument();
     expect(screen.getByText(/do not establish physical binding, causality, diagnosis, or treatment relevance/i))
       .toBeInTheDocument();
+  });
+
+  it('keeps a selected gene visible when it has no qualifying association edge', async () => {
+    networkClient.fetchGeneNetwork.mockResolvedValue({
+      ...network,
+      querySymbols: ['SCN1A', 'SCN2A', 'SCN4A'],
+      nodes: [
+        ...network.nodes,
+        { id: 'SCN4A', symbol: 'SCN4A', kind: 'query' },
+      ],
+    });
+
+    render(<GeneNetwork symbols={['SCN4A', 'SCN2A', 'SCN1A']} />);
+
+    expect(await screen.findByRole('img', { name: /4 nodes and 3 visible edges/i }))
+      .toBeInTheDocument();
+    expect(screen.getAllByText('SCN4A')).toHaveLength(2);
+    expect(screen.getByRole('button', { name: 'SCN4A' })).toBeInTheDocument();
+  });
+
+  it('names selected genes outside the bounded STRING network scope', async () => {
+    const requestedSymbols = Array.from(
+      { length: 12 },
+      (_, index) => `G${String(index + 1).padStart(2, '0')}`,
+    );
+    networkClient.fetchGeneNetwork.mockResolvedValue({
+      ...network,
+      requestedSymbols,
+      querySymbols: requestedSymbols.slice(0, 10),
+      omittedSymbols: requestedSymbols.slice(10),
+      nodes: [],
+      edges: [],
+      sourceStatus: 'no_associations',
+    });
+
+    render(<GeneNetwork symbols={[...requestedSymbols].reverse()} />);
+
+    const scopeNotice = await screen.findByText(/STRING network requests are limited to 10/i);
+    expect(networkClient.fetchGeneNetwork).toHaveBeenCalledWith(
+      requestedSymbols,
+      { requiredScore: 400, addNodes: 3 },
+    );
+    expect(scopeNotice).toHaveTextContent('Not included in this network: G11, G12');
+    expect(scopeNotice).toHaveTextContent(
+      'Every selected gene remains in the comparison table and evidence sections above.',
+    );
   });
 
   it('rejects non-STRING source links and computes stable node positions', () => {

@@ -62,6 +62,36 @@ describe('STRING gene-network adapter', () => {
     });
   });
 
+  it('preserves a selected query gene that has no qualifying STRING edge', () => {
+    const network = normalizeStringNetwork(
+      [STRING_ROWS[1]],
+      ['SCN2A', 'SCN1A'],
+      RETRIEVED_AT,
+    );
+
+    expect(network.nodes).toEqual([
+      {
+        id: 'SCN1A',
+        symbol: 'SCN1A',
+        stringId: null,
+        kind: 'query',
+      },
+      {
+        id: 'SCN2A',
+        symbol: 'SCN2A',
+        stringId: '9606.ENSP00000303540',
+        kind: 'query',
+      },
+      {
+        id: 'SCN3A',
+        symbol: 'SCN3A',
+        stringId: '9606.ENSP00000400001',
+        kind: 'expanded',
+      },
+    ]);
+    expect(network.edges).toHaveLength(1);
+  });
+
   it('sends sorted bounded public symbols and fixed human functional-network parameters', async () => {
     const fetchImpl = vi.fn().mockResolvedValue({
       ok: true,
@@ -115,5 +145,30 @@ describe('STRING gene-network adapter', () => {
         { symbol: 'SCN2A', kind: 'query' },
       ],
     });
+  });
+
+  it('reports any symbols outside the bounded upstream request instead of silently dropping them', async () => {
+    const requestedSymbols = Array.from(
+      { length: 12 },
+      (_, index) => `G${String(index + 1).padStart(2, '0')}`,
+    );
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue([]),
+    });
+
+    const result = await getGeneNetwork(requestedSymbols, {}, { fetchImpl });
+    const [url] = fetchImpl.mock.calls[0];
+
+    expect(new URL(url).searchParams.get('identifiers')).toBe(
+      requestedSymbols.slice(0, 10).join('\r'),
+    );
+    expect(result).toMatchObject({
+      requestedSymbols,
+      querySymbols: requestedSymbols.slice(0, 10),
+      omittedSymbols: requestedSymbols.slice(10),
+      sourceStatus: 'no_associations',
+    });
+    expect(result.nodes.map((node) => node.symbol)).toEqual(requestedSymbols.slice(0, 10));
   });
 });

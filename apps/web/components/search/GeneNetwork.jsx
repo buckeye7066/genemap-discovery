@@ -2,7 +2,10 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { ExternalLink, Info, Network } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { fetchGeneNetwork } from '@/lib/geneNetworkClient';
+import {
+  fetchGeneNetwork,
+  GENE_NETWORK_MAX_SYMBOLS,
+} from '@/lib/geneNetworkClient';
 
 const WIDTH = 720;
 const HEIGHT = 360;
@@ -101,6 +104,8 @@ export default function GeneNetwork({ symbols = [] }) {
   const documentationUrl = safeStringUrl(network?.source?.documentationUrl)
     || 'https://string-db.org/help/api/';
   const networkUrl = safeStringUrl(network?.source?.networkUrl);
+  const omittedSymbols = Array.isArray(network?.omittedSymbols) ? network.omittedSymbols : [];
+  const querySymbols = Array.isArray(network?.querySymbols) ? network.querySymbols : [];
 
   return (
     <Card className="border-indigo-200" aria-labelledby="gene-network-heading">
@@ -110,12 +115,24 @@ export default function GeneNetwork({ symbols = [] }) {
           Interactive functional association network
         </CardTitle>
         <p className="text-sm text-slate-600">
-          A deterministic human-gene network from STRING. Added neighbors are labeled separately
-          from genes selected for comparison.
+          A live, source-grounded human-gene network from STRING. Added neighbors are labeled
+          separately from genes selected for comparison.
         </p>
       </CardHeader>
       <CardContent className="space-y-4">
         {loading && <p role="status" className="text-sm text-slate-600">Loading source network…</p>}
+
+        {!loading && omittedSymbols.length > 0 && (
+          <Alert role="status" className="border-blue-200 bg-blue-50">
+            <Info className="h-4 w-4 text-blue-700" />
+            <AlertDescription className="text-blue-950">
+              STRING network requests are limited to {GENE_NETWORK_MAX_SYMBOLS} compared genes.
+              This network includes {querySymbols.join(', ')}. Not included in this network:{' '}
+              {omittedSymbols.join(', ')}. Every selected gene remains in the comparison table and
+              evidence sections above.
+            </AlertDescription>
+          </Alert>
+        )}
 
         {!loading && network?.sourceStatus === 'unavailable' && (
           <Alert className="border-amber-200 bg-amber-50">
