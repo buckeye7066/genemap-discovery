@@ -316,6 +316,96 @@ jobs:
           }
           Write-Host "Built $($installer.FullName)"
 
+  desktop-build-macos-smoke:
+    # Build a real unpacked macOS Electron bundle at the exact PR head. This
+    # deliberately disables identity discovery; signing and notarization are
+    # trusted release operations, not properties of this CI artifact.
+    name: Build unsigned macOS desktop application
+    runs-on: macos-15
+    needs: [build-web]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Verify exact requested source
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+          cache: 'pnpm'
+      - name: Install (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+      - name: Build shared package
+        run: pnpm --filter @genemap/shared build
+      - name: Build web bundle for desktop resources
+        run: pnpm build:web
+        env:
+          VITE_API_URL: http://localhost:3000
+      - name: Generate desktop icons
+        run: pnpm --filter @genemap/desktop run build:icons
+      - name: Build unpacked macOS application
+        working-directory: apps/desktop
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: node scripts/electron-build.mjs --mac --dir --publish never
+      - name: Verify bundle, binary identity, and absence of distribution signing
+        run: |
+          set -euo pipefail
+          OUTPUT="$GITHUB_WORKSPACE/apps/desktop/dist-electron"
+          APP_COUNT=$(find "$OUTPUT" -type d -name 'GeneMap Discovery.app' | wc -l | tr -d '[:space:]')
+          test "$APP_COUNT" = '1'
+          APP=$(find "$OUTPUT" -type d -name 'GeneMap Discovery.app' -print -quit)
+          PLIST="$APP/Contents/Info.plist"
+          test -f "$PLIST"
+          BUNDLE_ID=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$PLIST")
+          EXECUTABLE=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$PLIST")
+          test "$BUNDLE_ID" = 'com.genemap.discovery'
+          test "$EXECUTABLE" = 'GeneMap Discovery'
+          BINARY="$APP/Contents/MacOS/$EXECUTABLE"
+          test -x "$BINARY"
+          file "$BINARY" | tee "$RUNNER_TEMP/genemap-macos-binary.txt"
+          grep -q 'Mach-O' "$RUNNER_TEMP/genemap-macos-binary.txt"
+
+          SIGNING_STATUS='unsigned'
+          if codesign --display --verbose=4 "$APP" 2> "$RUNNER_TEMP/genemap-macos-codesign.txt"; then
+            SIGNING_STATUS='ad-hoc/no-distribution-authority'
+          fi
+          if grep -q '^Authority=' "$RUNNER_TEMP/genemap-macos-codesign.txt"; then
+            echo 'CI macOS artifact unexpectedly has a distribution signing authority' >&2
+            cat "$RUNNER_TEMP/genemap-macos-codesign.txt" >&2
+            exit 1
+          fi
+
+          ARCHIVE="$RUNNER_TEMP/GeneMap-macos-unsigned.zip"
+          ditto -c -k --sequesterRsrc --keepParent "$APP" "$ARCHIVE"
+          test -s "$ARCHIVE"
+          zipinfo -1 "$ARCHIVE" > "$RUNNER_TEMP/genemap-macos-files.txt"
+          grep -Fx 'GeneMap Discovery.app/Contents/Info.plist' "$RUNNER_TEMP/genemap-macos-files.txt"
+          grep -Fx 'GeneMap Discovery.app/Contents/MacOS/GeneMap Discovery' "$RUNNER_TEMP/genemap-macos-files.txt"
+          {
+            echo "source_sha=$(git rev-parse HEAD)"
+            echo "bundle_id=$BUNDLE_ID"
+            echo "executable=$EXECUTABLE"
+            echo 'package=unpacked-electron-app'
+            echo "signing=$SIGNING_STATUS"
+            echo 'notarization=not-performed'
+            echo "archive_bytes=$(stat -f '%z' "$ARCHIVE")"
+            echo "archive_sha256=$(shasum -a 256 "$ARCHIVE" | awk '{print $1}')"
+          } | tee "$RUNNER_TEMP/genemap-macos-unsigned-evidence.txt"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: genemap-macos-unsigned
+          path: |
+            ${{ runner.temp }}/GeneMap-macos-unsigned.zip
+            ${{ runner.temp }}/genemap-macos-unsigned-evidence.txt
+          if-no-files-found: error
+          retention-days: 7
+
   docker-build-api:
     # Build the API image we ship to Railway, on the same commit. Without
     # this, lockfile drift, missing build deps, or a broken Dockerfile only
