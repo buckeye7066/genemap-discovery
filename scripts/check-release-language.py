@@ -104,6 +104,9 @@ _SOURCE_LITERAL = re.compile(
 _SOURCE_CONSTANT_TEMPLATE = re.compile(
     r"\$\{"
     + _SOURCE_TRIVIA
+    + r"(?P<opening>(?:\("
+    + _SOURCE_TRIVIA
+    + r")*)"
     + r"(?P<expression>"
     + _SOURCE_LITERAL_PATTERN
     + r"(?:"
@@ -112,9 +115,13 @@ _SOURCE_CONSTANT_TEMPLATE = re.compile(
     + _SOURCE_TRIVIA
     + _SOURCE_LITERAL_PATTERN
     + r")*)"
+    + r"(?P<closing>(?:"
+    + _SOURCE_TRIVIA
+    + r"\))*)"
     + _SOURCE_TRIVIA
     + r"\}"
 )
+_SOURCE_TEMPLATE_LITERAL = re.compile(r"`(?P<body>(?:\\[\s\S]|[^`\\])*)`")
 
 _SOURCE_HEX_ESCAPE = re.compile(
     r"(\\+)(?:x(?P<byte>[0-9a-f]{2})|u\{(?P<braced>0*[0-9a-f]{1,6})\}|u(?P<unicode>[0-9a-f]{4}))",
@@ -124,6 +131,7 @@ _SOURCE_SURROGATE_ESCAPE = re.compile(
     r"(\\+)u(?P<high>d[89ab][0-9a-f]{2})(\\+)u(?P<low>d[c-f][0-9a-f]{2})",
     re.I,
 )
+_SOURCE_OCTAL_ESCAPE = re.compile(r"(\\+)(?P<octal>[0-3][0-7]{2}|[0-7]{1,2})")
 _SOURCE_LINE_CONTINUATION = re.compile(r"(\\+)(?:\r\n|[\n\r\u2028\u2029])")
 _SOURCE_CHARACTER_ESCAPE = re.compile(r"(\\+)(?P<value>[^\n\r\u2028\u2029])")
 
@@ -173,6 +181,8 @@ def source_template_projection(text: str) -> str:
     """Project template substitutions made only from constant string literals."""
 
     def render_constant(match: re.Match[str]) -> str:
+        if match.group("opening").count("(") != match.group("closing").count(")"):
+            return match.group(0)
         rendered: list[str] = []
         for literal in _SOURCE_LITERAL.finditer(match.group("expression")):
             body = next(
@@ -184,16 +194,19 @@ def source_template_projection(text: str) -> str:
                 )
                 if value is not None
             )
-            rendered.append(source_escape_projection(body))
+            rendered.append(body)
         return "".join(rendered)
 
-    projected = text
-    for _ in range(16):
-        updated = _SOURCE_CONSTANT_TEMPLATE.sub(render_constant, projected)
-        if updated == projected:
-            break
-        projected = updated
-    return projected
+    def render_template(match: re.Match[str]) -> str:
+        projected = match.group("body")
+        for _ in range(16):
+            updated = _SOURCE_CONSTANT_TEMPLATE.sub(render_constant, projected)
+            if updated == projected:
+                break
+            projected = updated
+        return "`" + projected + "`"
+
+    return _SOURCE_TEMPLATE_LITERAL.sub(render_template, text)
 
 
 def source_escape_projection(text: str) -> str:
@@ -226,6 +239,14 @@ def source_escape_projection(text: str) -> str:
         low = int(match.group("low"), 16)
         codepoint = 0x10000 + ((high - 0xD800) << 10) + (low - 0xDC00)
         return chr(codepoint)
+
+    def decode_octal(match: re.Match[str]) -> str:
+        slashes = match.group(1)
+        if len(slashes) % 2 == 0:
+            return match.group(0)
+        return protected_backslashes(len(slashes) // 2) + chr(
+            int(match.group("octal"), 8)
+        )
 
     def decode_character(match: re.Match[str]) -> str:
         slashes = match.group(1)
@@ -261,6 +282,7 @@ def source_escape_projection(text: str) -> str:
     projected = _SOURCE_LINE_CONTINUATION.sub(decode_continuation, text)
     projected = _SOURCE_SURROGATE_ESCAPE.sub(decode_surrogate_pair, projected)
     projected = _SOURCE_HEX_ESCAPE.sub(decode_hex, projected)
+    projected = _SOURCE_OCTAL_ESCAPE.sub(decode_octal, projected)
     projected = _SOURCE_CHARACTER_ESCAPE.sub(decode_character, projected)
     return projected.replace(sentinel, "\\")
 
@@ -601,6 +623,24 @@ def run_self_test() -> None:
             + COMPLETION_TOKEN[4:]
             + "s`;"
         ),
+        "grouped constant template substitution": (
+            "const status = `"
+            + COMPLETION_TOKEN[:2]
+            + "${('"
+            + COMPLETION_TOKEN[2:3]
+            + "' /* first */ + '"
+            + COMPLETION_TOKEN[3:4]
+            + "')}"
+            + COMPLETION_TOKEN[4:]
+            + "s`;"
+        ),
+        "legacy JavaScript octal literal": (
+            "const status = '"
+            + "\\"
+            + "163"
+            + COMPLETION_TOKEN[1:]
+            + "s';"
+        ),
         "escaped JSON Unicode literal": (
             '{"label":"'
             + "\\"
@@ -713,12 +753,35 @@ def run_self_test() -> None:
             + COMPLETION_TOKEN[2:]
             + "s';"
         ),
+        "escaped octal backslash literal": (
+            "const status = '"
+            + "\\\\"
+            + "163"
+            + COMPLETION_TOKEN[1:]
+            + "s';"
+        ),
         "odd identity backslash parity": (
             "const status = '"
             + COMPLETION_TOKEN[:2]
             + "\\" * 3
             + COMPLETION_TOKEN[2:]
             + "s';"
+        ),
+        "template escaped identity backslash": (
+            "const status = `"
+            + COMPLETION_TOKEN[:2]
+            + "${'"
+            + "\\\\"
+            + "'}"
+            + COMPLETION_TOKEN[2:]
+            + "s`;"
+        ),
+        "ordinary string with template syntax": (
+            "const status = \""
+            + COMPLETION_TOKEN[:3]
+            + "${''}"
+            + COMPLETION_TOKEN[3:]
+            + "s\";"
         ),
     }
 

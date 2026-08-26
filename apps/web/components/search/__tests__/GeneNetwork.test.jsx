@@ -222,22 +222,24 @@ describe('GeneNetwork', () => {
   it('states when identifier resolution leaves no network request to run', async () => {
     networkClient.fetchGeneNetwork.mockResolvedValue({
       ...network,
-      querySymbols: ['SCN1A', 'UNKNOWN'],
-      resolvedQuerySymbols: ['SCN1A'],
+      querySymbols: ['P53', 'TRP53'],
+      resolvedQuerySymbols: ['TP53'],
       queryMappings: [
-        { submittedSymbol: 'SCN1A', preferredSymbol: 'SCN1A', resolved: true },
-        { submittedSymbol: 'UNKNOWN', preferredSymbol: 'UNKNOWN', resolved: false },
+        { submittedSymbol: 'P53', preferredSymbol: 'TP53', resolved: true },
+        { submittedSymbol: 'TRP53', preferredSymbol: 'TP53', resolved: true },
       ],
-      nodes: [{ id: 'SCN1A', symbol: 'SCN1A', kind: 'query' }],
+      nodes: [{ id: 'TP53', symbol: 'TP53', kind: 'query' }],
       edges: [],
       sourceStatus: 'insufficient_resolved_input',
     });
 
-    render(<GeneNetwork symbols={['UNKNOWN', 'SCN1A']} />);
+    render(<GeneNetwork symbols={['TRP53', 'P53']} />);
 
     expect(await screen.findByText(/no functional-association request was made/i))
       .toHaveTextContent('not a negative association result');
-    expect(screen.getByText(/STRING did not resolve/i)).toHaveTextContent('UNKNOWN');
+    expect(screen.getByText(/distinct STRING-preferred identifiers/i)).toBeInTheDocument();
+    expect(screen.getByText(/STRING identifier mapping/i)).toHaveTextContent('P53 → TP53');
+    expect(screen.queryByText(/STRING did not resolve/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/returned no functional associations/i)).not.toBeInTheDocument();
   });
 

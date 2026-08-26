@@ -30,14 +30,14 @@ Copy `production-launch-evidence.example.json` to
 `production-launch-evidence.json` and fill it in. The real evidence file is
 intentionally **git-ignored** — it is a point-in-time launch record, not source.
 
-Every boolean in the template starts `false` and every attested string starts
+Every boolean in the template starts `false` and every recorded string starts
 `REPLACE`, on purpose. Flip a value only after you have personally observed the
 thing it asserts, in the console or run that proves it. **Do not treat any value
 in the template as pre-verified.** Until 2026-08-19 a second, divergent copy of
 this template lived at `docs/production-launch-evidence.example.json` fully
-pre-attested — legal review, compliance review, restore drill, ledger
-reconciliation and Stripe webhook test all set to done — and the launch docs told
-you to copy *that* one. Measured against the verifier at its own vintage date it
+prefilled — restore drill, ledger reconciliation, and Stripe webhook test all
+set to done — and the launch docs told you to copy *that* one. Measured against
+the verifier at its own vintage date it
 scored 37 pass / 0 fail on evidence nobody had checked. It has been deleted.
 
 ## Historical claims (2026-07-01) — NOT re-verified
@@ -73,13 +73,11 @@ Owner actions that still require a real answer before flipping to `true`:
 - **`backups.automaticBackupsEnabled` + `retentionDays`** — confirm/enable the
   Railway Postgres automated-snapshot schedule and set retention ≥ 7 days
   (dashboard-only setting), then record `lastSuccessfulBackupAt`.
-- **`dataRetention.policyDocument`** — `docs/DATA_RETENTION.md` exists and is
-  reconciled with the implemented deletion/consent behavior; a launch reviewer
-  should confirm it matches the business terms, then keep `policyApproved` true.
-- **`legalCompliance.*`** — record the reviewing attorney / compliance owner and
-  the review date. `baaStatus` is `not_required` for the consumer-education use
-  case; change to `signed` if GeneMap is ever offered to a covered entity that
-  requires a Business Associate Agreement.
+- **`dataRetention.policyDocument` + `policyConfigured`** — record
+  `docs/DATA_RETENTION.md` and set `policyConfigured` from evidence that the
+  deployed retention/deletion configuration matches the documented behavior.
+  Business or legal determinations are outside this machine-checked evidence
+  schema.
 - **`monitoring.dashboardUrl`** — point at the real Railway project dashboard.
 - **`stripe.lastWebhookTestAt`** — send a test event from the Stripe dashboard
   and record the date.

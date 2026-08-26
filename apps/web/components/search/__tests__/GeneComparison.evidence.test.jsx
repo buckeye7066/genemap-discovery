@@ -87,7 +87,7 @@ const genes = [
         scoreComponents: [{
           id: 'literature',
           label: 'Literature',
-          score: 0.42,
+          score: 0.0042,
           evidenceClass: 'literature',
           scale: 'open_targets_datatype_score_0_1',
         }],
@@ -109,9 +109,13 @@ describe('GeneComparison claim-level evidence', () => {
     expect(screen.getAllByText(/human association/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/model-organism/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/metadata/i).length).toBeGreaterThan(0);
-    expect(screen.getByText('Literature evidence').closest('div')).toHaveTextContent('1 score component');
+    expect(screen.getByText('Literature evidence', { selector: 'p' }).closest('div'))
+      .toHaveTextContent('1 score component');
     expect(screen.getByText(/Open Targets aggregates source datatypes for SCN2A/i)).toBeInTheDocument();
-    expect(screen.getByText(/Literature: 0.42 · class literature/i)).toBeInTheDocument();
+    expect(screen.getByText(/Literature: <0.01 · class literature/i)).toBeInTheDocument();
+    expect(__test.formatScoreComponent(0.0042)).toBe('<0.01');
+    expect(__test.formatScoreComponent(0.42)).toBe('0.42');
+    expect(__test.formatScoreComponent(0)).toBe('0.00');
     expect(__test.literatureEvidenceLabel({
       directClaims: 0,
       positiveScoreComponents: 1,

@@ -37,10 +37,6 @@ function strictScore(value) {
   return Number.isFinite(parsed) && parsed >= 0 && parsed <= 1 ? parsed : null;
 }
 
-function score(value) {
-  return strictScore(value) ?? 0;
-}
-
 function providerSymbol(value) {
   if (typeof value !== 'string') return null;
   const symbol = value.trim().toUpperCase();
@@ -67,16 +63,29 @@ export function normalizeStringQueryMappings(rows, querySymbols) {
     if (!row || typeof row !== 'object' || Array.isArray(row)) {
       throw new Error('STRING identifier response contained an invalid row');
     }
-    const queryIndex = Number.isInteger(row.queryIndex) ? row.queryIndex : null;
+    const hasQueryIndex = row.queryIndex !== undefined && row.queryIndex !== null;
+    if (hasQueryIndex && (
+      !Number.isInteger(row.queryIndex)
+      || row.queryIndex < 0
+      || row.queryIndex >= cleanQuerySymbols.length
+    )) {
+      throw new Error('STRING identifier response contained an invalid mapping');
+    }
+    const queryIndex = hasQueryIndex ? row.queryIndex : null;
     const indexedSymbol = queryIndex !== null
       && queryIndex >= 0
       && queryIndex < cleanQuerySymbols.length
       ? cleanQuerySymbols[queryIndex]
       : null;
+    const hasQueryItem = row.queryItem !== undefined && row.queryItem !== null;
     const echoedSymbol = providerSymbol(row.queryItem);
-    const submittedSymbol = echoedSymbol && querySet.has(echoedSymbol)
-      ? echoedSymbol
-      : indexedSymbol;
+    if (hasQueryItem && (!echoedSymbol || !querySet.has(echoedSymbol))) {
+      throw new Error('STRING identifier response contained an invalid mapping');
+    }
+    if (indexedSymbol && echoedSymbol && indexedSymbol !== echoedSymbol) {
+      throw new Error('STRING identifier response contained a contradictory mapping');
+    }
+    const submittedSymbol = echoedSymbol || indexedSymbol;
     const preferredSymbol = providerSymbol(row.preferredName);
     if (!submittedSymbol || !preferredSymbol) {
       throw new Error('STRING identifier response contained an invalid mapping');
@@ -148,15 +157,55 @@ export function normalizeStringNetwork(
     if (!symbolA || !symbolB || symbolA === symbolB) {
       throw new Error('STRING network response contained invalid association endpoints');
     }
-    return { row, combinedScore, symbolA, symbolB };
+    const evidenceChannels = EVIDENCE_CHANNELS.flatMap(([label, field]) => {
+      if (!Object.prototype.hasOwnProperty.call(row, field)) return [];
+      const channelScore = strictScore(row[field]);
+      if (channelScore === null) {
+        throw new Error('STRING network response contained an invalid evidence-channel score');
+      }
+      return channelScore > 0 ? [{ label, score: channelScore }] : [];
+    });
+    return {
+      row,
+      combinedScore,
+      symbolA,
+      symbolB,
+      evidenceChannels,
+    };
   });
+
+  const assertConnectedToQuery = (candidateRows) => {
+    const connectedSymbols = new Set(querySet);
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const { symbolA, symbolB } of candidateRows) {
+        if (connectedSymbols.has(symbolA) && !connectedSymbols.has(symbolB)) {
+          connectedSymbols.add(symbolB);
+          changed = true;
+        } else if (connectedSymbols.has(symbolB) && !connectedSymbols.has(symbolA)) {
+          connectedSymbols.add(symbolA);
+          changed = true;
+        }
+      }
+    }
+    if (candidateRows.some(({ symbolA, symbolB }) => (
+      !connectedSymbols.has(symbolA) || !connectedSymbols.has(symbolB)
+    ))) {
+      throw new Error('STRING network response fell outside the resolved query scope');
+    }
+  };
+  assertConnectedToQuery(validatedRows);
+  const boundedRows = validatedRows.slice(0, MAX_EDGES);
+  assertConnectedToQuery(boundedRows);
 
   for (const {
     row,
     combinedScore,
     symbolA,
     symbolB,
-  } of validatedRows.slice(0, MAX_EDGES)) {
+    evidenceChannels,
+  } of boundedRows) {
     for (const [symbol, stringId] of [
       [symbolA, row.stringId_A],
       [symbolB, row.stringId_B],
@@ -176,9 +225,6 @@ export function normalizeStringNetwork(
 
     const [source, target] = [symbolA, symbolB].sort((left, right) => left.localeCompare(right));
     const edgeId = `${source}::${target}`;
-    const evidenceChannels = EVIDENCE_CHANNELS
-      .map(([label, field]) => ({ label, score: score(row?.[field]) }))
-      .filter((channel) => channel.score > 0);
     const edge = {
       id: edgeId,
       source,

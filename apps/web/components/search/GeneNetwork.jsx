@@ -195,8 +195,9 @@ export default function GeneNetwork({ symbols = [] }) {
           <Alert className="border-amber-200 bg-amber-50">
             <Info className="h-4 w-4 text-amber-700" />
             <AlertDescription className="text-amber-900">
-              STRING resolved fewer than two selected identifiers, so no functional-association
-              request was made. This is not a negative association result.
+              Fewer than two distinct STRING-preferred identifiers remained after resolution, so
+              no functional-association request was made. This is not a negative association
+              result.
             </AlertDescription>
           </Alert>
         )}

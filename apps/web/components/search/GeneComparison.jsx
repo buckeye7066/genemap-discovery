@@ -63,6 +63,12 @@ function retrievalLabel(claim) {
   return claim.retrievalDate || 'retrieval date not recorded';
 }
 
+function formatScoreComponent(value) {
+  if (!Number.isFinite(value)) return 'not recorded';
+  if (value > 0 && value < 0.01) return '<0.01';
+  return value.toFixed(2);
+}
+
 function literatureEvidenceLabel(presence = {}) {
   const claims = presence.directClaims || 0;
   const components = presence.positiveScoreComponents || 0;
@@ -284,9 +290,7 @@ export default function GeneComparison({ genes = [], onClose }) {
                                   {claim.scoreComponents.map((component, componentIndex) => (
                                     <li key={`${component.id || 'component'}:${componentIndex}`}>
                                       {component.label || component.id || 'Unlabeled component'}:{' '}
-                                      {Number.isFinite(component.score)
-                                        ? component.score.toFixed(2)
-                                        : 'not recorded'}
+                                      {formatScoreComponent(component.score)}
                                       {' · '}class {component.evidenceClass || 'not recorded'}
                                       {' · '}scale {component.scale || 'not recorded'}
                                     </li>
@@ -399,6 +403,7 @@ export default function GeneComparison({ genes = [], onClose }) {
 
 export const __test = {
   claimGroups,
+  formatScoreComponent,
   geneSymbol,
   literatureEvidenceLabel,
   rankingLabel,

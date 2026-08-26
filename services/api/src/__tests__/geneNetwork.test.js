@@ -251,6 +251,33 @@ describe('STRING gene-network adapter', () => {
   });
 
   it.each([
+    ['nonnumeric', 'not-a-score'],
+    ['negative', -0.01],
+    ['greater than one', 1.01],
+    ['null', null],
+    ['object', { score: 0.5 }],
+  ])('treats a present %s evidence-channel score as malformed', async (_name, value) => {
+    const logger = { warn: vi.fn() };
+    const row = { ...STRING_ROWS[0], escore: value };
+
+    const result = await getGeneNetwork(
+      ['SCN1A', 'SCN2A'],
+      {},
+      { fetchImpl: networkFetch([row]), logger },
+    );
+
+    expect(result).toMatchObject({
+      sourceStatus: 'unavailable',
+      retrievedAt: null,
+      edges: [],
+    });
+    expect(logger.warn).toHaveBeenCalledWith(
+      { error: 'STRING network response contained an invalid evidence-channel score' },
+      'STRING network lookup failed',
+    );
+  });
+
+  it.each([
     ['missing endpoint', { preferredName_A: undefined }],
     ['invalid endpoint', { preferredName_A: 'not a gene' }],
     ['identical endpoints', { preferredName_B: 'SCN2A' }],
@@ -300,6 +327,37 @@ describe('STRING gene-network adapter', () => {
       retrievedAt: null,
       edges: [],
     });
+  });
+
+  it('rejects an association component disconnected from every resolved query', async () => {
+    const logger = { warn: vi.fn() };
+    const unrelatedRow = {
+      ...STRING_ROWS[0],
+      stringId_A: '9606.ENSP00000269305',
+      stringId_B: '9606.ENSP00000350283',
+      preferredName_A: 'TP53',
+      preferredName_B: 'BRCA1',
+    };
+
+    const result = await getGeneNetwork(
+      ['SCN1A', 'SCN2A'],
+      {},
+      { fetchImpl: networkFetch([STRING_ROWS[0], unrelatedRow]), logger },
+    );
+
+    expect(result).toMatchObject({
+      sourceStatus: 'unavailable',
+      retrievedAt: null,
+      edges: [],
+      nodes: [
+        { symbol: 'SCN1A', kind: 'query' },
+        { symbol: 'SCN2A', kind: 'query' },
+      ],
+    });
+    expect(logger.warn).toHaveBeenCalledWith(
+      { error: 'STRING network response fell outside the resolved query scope' },
+      'STRING network lookup failed',
+    );
   });
 
   it('maps submitted aliases to preferred STRING symbols before classifying query nodes', async () => {
@@ -365,6 +423,64 @@ describe('STRING gene-network adapter', () => {
       .toBe('SCN1A\rTP53');
   });
 
+  it('rejects a resolver row whose echoed and indexed query identities contradict', async () => {
+    const logger = { warn: vi.fn() };
+    const fetchImpl = vi.fn().mockResolvedValueOnce(okJson([{
+      queryIndex: 0,
+      queryItem: 'TP53',
+      stringId: '9606.ENSP00000269305',
+      preferredName: 'BRCA1',
+    }]));
+
+    const result = await getGeneNetwork(
+      ['SCN1A', 'SCN2A'],
+      {},
+      { fetchImpl, logger },
+    );
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(result).toMatchObject({
+      sourceStatus: 'unavailable',
+      identifierResolutionStatus: 'unavailable',
+      queryMappings: [],
+      nodes: [],
+      edges: [],
+      retrievedAt: null,
+    });
+    expect(logger.warn).toHaveBeenCalledWith(
+      { error: 'STRING identifier response contained an invalid mapping' },
+      'STRING network lookup failed',
+    );
+  });
+
+  it('rejects an echoed requested symbol assigned to a different query index', async () => {
+    const logger = { warn: vi.fn() };
+    const fetchImpl = vi.fn().mockResolvedValueOnce(okJson([{
+      queryIndex: 0,
+      queryItem: 'SCN2A',
+      stringId: '9606.ENSP00000303540',
+      preferredName: 'SCN2A',
+    }]));
+
+    const result = await getGeneNetwork(
+      ['SCN1A', 'SCN2A'],
+      {},
+      { fetchImpl, logger },
+    );
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(result).toMatchObject({
+      sourceStatus: 'unavailable',
+      identifierResolutionStatus: 'unavailable',
+      nodes: [],
+      edges: [],
+    });
+    expect(logger.warn).toHaveBeenCalledWith(
+      { error: 'STRING identifier response contained a contradictory mapping' },
+      'STRING network lookup failed',
+    );
+  });
+
   it('does not classify an unresolved submitted identifier as a queried node', async () => {
     const fetchImpl = networkFetch(STRING_ROWS, STRING_ID_ROWS);
 
@@ -420,6 +536,44 @@ describe('STRING gene-network adapter', () => {
       retrievedAt: RETRIEVED_AT,
     });
     expect(result.sourceStatus).not.toBe('no_associations');
+  });
+
+  it('uses the insufficient state when aliases collapse to one distinct preferred identifier', async () => {
+    const identifierRows = [
+      {
+        queryIndex: 0,
+        queryItem: 'P53',
+        stringId: '9606.ENSP00000269305',
+        preferredName: 'TP53',
+      },
+      {
+        queryIndex: 1,
+        queryItem: 'TRP53',
+        stringId: '9606.ENSP00000269305',
+        preferredName: 'TP53',
+      },
+    ];
+    const fetchImpl = vi.fn().mockResolvedValueOnce(okJson(identifierRows));
+
+    const result = await getGeneNetwork(
+      ['P53', 'TRP53'],
+      {},
+      { fetchImpl, now: () => new Date(RETRIEVED_AT) },
+    );
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(result).toMatchObject({
+      resolvedQuerySymbols: ['TP53'],
+      identifierResolutionStatus: 'available',
+      queryMappings: [
+        { submittedSymbol: 'P53', preferredSymbol: 'TP53', resolved: true },
+        { submittedSymbol: 'TRP53', preferredSymbol: 'TP53', resolved: true },
+      ],
+      nodes: [{ symbol: 'TP53', kind: 'query' }],
+      edges: [],
+      sourceStatus: 'insufficient_resolved_input',
+      retrievedAt: RETRIEVED_AT,
+    });
   });
 
   it('reports any symbols outside the bounded upstream request instead of silently dropping them', async () => {
