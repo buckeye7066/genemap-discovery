@@ -72,6 +72,8 @@ _BOM_ENCODINGS = (
 _SOURCE_BOUNDARY_JOINERS = re.compile(
     r"""
     (?:
+        <!--[\s\S]*?-->
+        |
         </?(?:[A-Za-z][^<>]{0,2000})?>
         |
         ["'`]
@@ -581,6 +583,11 @@ def run_self_test() -> None:
             f"<span>{COMPLETION_TOKEN[1:3]}</span>"
             f"<span>{COMPLETION_TOKEN[3:5]}</span>"
             f"<span>{COMPLETION_TOKEN[5:]}</span>"
+        ),
+        "HTML comment boundary": (
+            f"<span>{COMPLETION_TOKEN[:3]}</span>"
+            "<!-- rendered split -->"
+            f"<span>{COMPLETION_TOKEN[3:]}s</span>"
         ),
         "escaped JavaScript hex literal": (
             "const status = '"

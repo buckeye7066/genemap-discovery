@@ -250,6 +250,28 @@ describe('STRING gene-network adapter', () => {
     );
   });
 
+  it('treats a row below the requested provider threshold as unavailable', async () => {
+    const logger = { warn: vi.fn() };
+    const row = { ...STRING_ROWS[0], score: 0.5 };
+
+    const result = await getGeneNetwork(
+      ['SCN1A', 'SCN2A'],
+      { requiredScore: 700 },
+      { fetchImpl: networkFetch([row]), logger },
+    );
+
+    expect(result).toMatchObject({
+      sourceStatus: 'unavailable',
+      retrievedAt: null,
+      edges: [],
+      source: { requiredScore: 700 },
+    });
+    expect(logger.warn).toHaveBeenCalledWith(
+      { error: 'STRING network response fell below the requested score threshold' },
+      'STRING network lookup failed',
+    );
+  });
+
   it.each([
     ['nonnumeric', 'not-a-score'],
     ['negative', -0.01],
@@ -423,6 +445,63 @@ describe('STRING gene-network adapter', () => {
       .toBe('SCN1A\rTP53');
   });
 
+  it.each([
+    ['reported taxon', { ncbiTaxonId: 10090 }],
+    ['STRING ID prefix', { stringId: '10090.ENSMUSP00000000001' }],
+  ])('rejects resolver mappings with contradictory human %s provenance', async (_name, change) => {
+    const logger = { warn: vi.fn() };
+    const rows = [{ ...STRING_ID_ROWS[0], ...change }, STRING_ID_ROWS[1]];
+    const fetchImpl = vi.fn().mockResolvedValueOnce(okJson(rows));
+
+    const result = await getGeneNetwork(
+      ['SCN1A', 'SCN2A'],
+      {},
+      { fetchImpl, logger },
+    );
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(result).toMatchObject({
+      sourceStatus: 'unavailable',
+      identifierResolutionStatus: 'unavailable',
+      queryMappings: [],
+      nodes: [],
+      edges: [],
+    });
+    expect(logger.warn).toHaveBeenCalledWith(
+      { error: 'STRING identifier response contradicted human taxon provenance' },
+      'STRING network lookup failed',
+    );
+  });
+
+  it.each([
+    ['reported taxon', { ncbiTaxonId: 10090 }],
+    ['first STRING ID prefix', { stringId_A: '10090.ENSMUSP00000000001' }],
+    ['second STRING ID prefix', { stringId_B: '10090.ENSMUSP00000000002' }],
+  ])('rejects network rows with contradictory human %s provenance', async (_name, change) => {
+    const logger = { warn: vi.fn() };
+    const row = { ...STRING_ROWS[0], ...change };
+
+    const result = await getGeneNetwork(
+      ['SCN1A', 'SCN2A'],
+      {},
+      { fetchImpl: networkFetch([row]), logger },
+    );
+
+    expect(result).toMatchObject({
+      sourceStatus: 'unavailable',
+      retrievedAt: null,
+      edges: [],
+      nodes: [
+        { symbol: 'SCN1A', kind: 'query' },
+        { symbol: 'SCN2A', kind: 'query' },
+      ],
+    });
+    expect(logger.warn).toHaveBeenCalledWith(
+      { error: 'STRING network response contradicted human taxon provenance' },
+      'STRING network lookup failed',
+    );
+  });
+
   it('rejects a resolver row whose echoed and indexed query identities contradict', async () => {
     const logger = { warn: vi.fn() };
     const fetchImpl = vi.fn().mockResolvedValueOnce(okJson([{
@@ -479,6 +558,62 @@ describe('STRING gene-network adapter', () => {
       { error: 'STRING identifier response contained a contradictory mapping' },
       'STRING network lookup failed',
     );
+  });
+
+  it('rejects conflicting duplicate mappings for one submitted identifier', async () => {
+    const logger = { warn: vi.fn() };
+    const fetchImpl = vi.fn().mockResolvedValueOnce(okJson([
+      {
+        queryIndex: 0,
+        queryItem: 'SCN1A',
+        stringId: '9606.ENSP00000269305',
+        preferredName: 'TP53',
+      },
+      {
+        queryIndex: 0,
+        queryItem: 'SCN1A',
+        stringId: '9606.ENSP00000316527',
+        preferredName: 'SCN1A',
+      },
+      STRING_ID_ROWS[1],
+    ]));
+
+    const result = await getGeneNetwork(
+      ['SCN1A', 'SCN2A'],
+      {},
+      { fetchImpl, logger },
+    );
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(result).toMatchObject({
+      sourceStatus: 'unavailable',
+      identifierResolutionStatus: 'unavailable',
+      nodes: [],
+      edges: [],
+    });
+    expect(logger.warn).toHaveBeenCalledWith(
+      { error: 'STRING identifier response contained conflicting duplicate mappings' },
+      'STRING network lookup failed',
+    );
+  });
+
+  it('accepts byte-for-byte equivalent duplicate mappings without order dependence', async () => {
+    const fetchImpl = networkFetch(
+      STRING_ROWS,
+      [STRING_ID_ROWS[0], { ...STRING_ID_ROWS[0] }, STRING_ID_ROWS[1]],
+    );
+
+    const result = await getGeneNetwork(
+      ['SCN1A', 'SCN2A'],
+      {},
+      { fetchImpl, now: () => new Date(RETRIEVED_AT) },
+    );
+
+    expect(result).toMatchObject({
+      sourceStatus: 'available',
+      identifierResolutionStatus: 'available',
+      resolvedQuerySymbols: ['SCN1A', 'SCN2A'],
+    });
   });
 
   it('does not classify an unresolved submitted identifier as a queried node', async () => {

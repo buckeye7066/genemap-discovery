@@ -963,7 +963,7 @@ describe('gene report provenance', () => {
         scoreComponents: [{
           id: 'literature',
           label: 'Literature',
-          score: 0.42,
+          score: 0.0042,
           evidenceClass: 'literature',
           scale: 'open_targets_datatype_score_0_1',
         }],
@@ -980,10 +980,11 @@ describe('gene report provenance', () => {
 
     expect(openTargetsOverview.content).toContain('Computational association evidence');
     expect(openTargetsProvenance.content).toContain('Source Score Components');
-    expect(openTargetsProvenance.content).toContain('Literature: 0.42 · class literature');
+    expect(openTargetsProvenance.content).toContain('Literature: &lt;0.01 · class literature');
     expect(openTargetsProvenance.content).toContain('open_targets_datatype_score_0_1');
     expect(openTargetsShare).toContain('Ranking: Computational association evidence');
     expect(openTargetsShare).toContain('source_score_component=Literature');
+    expect(openTargetsShare).toContain('score=<0.01');
     expect(openTargetsShare).toContain('component_evidence=literature');
   });
 

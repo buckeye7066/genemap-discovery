@@ -43,6 +43,22 @@ function providerSymbol(value) {
   return /^[A-Z0-9][A-Z0-9-]{1,30}$/u.test(symbol) ? symbol : null;
 }
 
+function assertHumanTaxon(value, errorMessage) {
+  if (value === undefined || value === null) return;
+  if (String(value) !== String(HUMAN_TAXON_ID)) throw new Error(errorMessage);
+}
+
+function humanStringId(value, errorMessage) {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== 'string' || !value.trim()) throw new Error(errorMessage);
+  const stringId = value.trim();
+  const prefix = `${HUMAN_TAXON_ID}.`;
+  if (!stringId.startsWith(prefix) || stringId.length === prefix.length) {
+    throw new Error(errorMessage);
+  }
+  return stringId;
+}
+
 function networkPageUrl(symbols) {
   const params = new URLSearchParams({
     identifiers: symbols.join('\r'),
@@ -90,16 +106,23 @@ export function normalizeStringQueryMappings(rows, querySymbols) {
     if (!submittedSymbol || !preferredSymbol) {
       throw new Error('STRING identifier response contained an invalid mapping');
     }
-    if (!resolved.has(submittedSymbol)) {
-      resolved.set(submittedSymbol, {
-        submittedSymbol,
-        preferredSymbol,
-        stringId: typeof row.stringId === 'string' && row.stringId.trim()
-          ? row.stringId.trim()
-          : null,
-        resolved: true,
-      });
+    const taxonError = 'STRING identifier response contradicted human taxon provenance';
+    assertHumanTaxon(row.ncbiTaxonId, taxonError);
+    const stringId = humanStringId(row.stringId, taxonError);
+    const candidate = {
+      submittedSymbol,
+      preferredSymbol,
+      stringId,
+      resolved: true,
+    };
+    const existing = resolved.get(submittedSymbol);
+    if (existing && (
+      existing.preferredSymbol !== candidate.preferredSymbol
+      || existing.stringId !== candidate.stringId
+    )) {
+      throw new Error('STRING identifier response contained conflicting duplicate mappings');
     }
+    if (!existing) resolved.set(submittedSymbol, candidate);
   }
 
   return cleanQuerySymbols.map((submittedSymbol) => resolved.get(submittedSymbol) || {
@@ -115,6 +138,7 @@ export function normalizeStringNetwork(
   querySymbols,
   retrievedAt,
   queryMappings = null,
+  requiredScore = DEFAULT_REQUIRED_SCORE,
 ) {
   const cleanQuerySymbols = cleanSymbols(querySymbols);
   const normalizedMappings = Array.isArray(queryMappings)
@@ -144,6 +168,12 @@ export function normalizeStringNetwork(
   if (!Array.isArray(rows)) {
     throw new Error('STRING network response was not an array');
   }
+  const minimumCombinedScore = boundedInteger(
+    requiredScore,
+    DEFAULT_REQUIRED_SCORE,
+    0,
+    1000,
+  ) / 1000;
   const validatedRows = rows.map((row) => {
     if (!row || typeof row !== 'object' || Array.isArray(row)) {
       throw new Error('STRING network response contained invalid association endpoints');
@@ -152,11 +182,18 @@ export function normalizeStringNetwork(
     if (combinedScore === null) {
       throw new Error('STRING network response contained an invalid combined score');
     }
+    if (combinedScore < minimumCombinedScore) {
+      throw new Error('STRING network response fell below the requested score threshold');
+    }
     const symbolA = providerSymbol(row.preferredName_A);
     const symbolB = providerSymbol(row.preferredName_B);
     if (!symbolA || !symbolB || symbolA === symbolB) {
       throw new Error('STRING network response contained invalid association endpoints');
     }
+    const taxonError = 'STRING network response contradicted human taxon provenance';
+    assertHumanTaxon(row.ncbiTaxonId, taxonError);
+    const stringIdA = humanStringId(row.stringId_A, taxonError);
+    const stringIdB = humanStringId(row.stringId_B, taxonError);
     const evidenceChannels = EVIDENCE_CHANNELS.flatMap(([label, field]) => {
       if (!Object.prototype.hasOwnProperty.call(row, field)) return [];
       const channelScore = strictScore(row[field]);
@@ -166,10 +203,11 @@ export function normalizeStringNetwork(
       return channelScore > 0 ? [{ label, score: channelScore }] : [];
     });
     return {
-      row,
       combinedScore,
       symbolA,
       symbolB,
+      stringIdA,
+      stringIdB,
       evidenceChannels,
     };
   });
@@ -200,15 +238,16 @@ export function normalizeStringNetwork(
   assertConnectedToQuery(boundedRows);
 
   for (const {
-    row,
     combinedScore,
     symbolA,
     symbolB,
+    stringIdA,
+    stringIdB,
     evidenceChannels,
   } of boundedRows) {
     for (const [symbol, stringId] of [
-      [symbolA, row.stringId_A],
-      [symbolB, row.stringId_B],
+      [symbolA, stringIdA],
+      [symbolB, stringIdB],
     ]) {
       const existing = nodeMap.get(symbol);
       if (!existing) {
@@ -340,7 +379,13 @@ export async function getGeneNetwork(symbols, options = {}, dependencies = {}) {
     );
 
     if (resolvedQuerySymbols.length < 2) {
-      const network = normalizeStringNetwork([], querySymbols, retrievedAt, queryMappings);
+      const network = normalizeStringNetwork(
+        [],
+        querySymbols,
+        retrievedAt,
+        queryMappings,
+        requiredScore,
+      );
       return {
         requestedSymbols,
         querySymbols,
@@ -367,7 +412,13 @@ export async function getGeneNetwork(symbols, options = {}, dependencies = {}) {
     if (!Array.isArray(rows)) {
       throw new Error('STRING network response was not an array');
     }
-    const network = normalizeStringNetwork(rows, querySymbols, retrievedAt, queryMappings);
+    const network = normalizeStringNetwork(
+      rows,
+      querySymbols,
+      retrievedAt,
+      queryMappings,
+      requiredScore,
+    );
     return {
       requestedSymbols,
       querySymbols,
@@ -389,7 +440,13 @@ export async function getGeneNetwork(symbols, options = {}, dependencies = {}) {
       resolvedQuerySymbols,
       queryMappings,
       identifierResolutionStatus,
-      nodes: normalizeStringNetwork([], querySymbols, retrievedAt, queryMappings).nodes,
+      nodes: normalizeStringNetwork(
+        [],
+        querySymbols,
+        retrievedAt,
+        queryMappings,
+        requiredScore,
+      ).nodes,
       edges: [],
       sourceStatus: 'unavailable',
       source,

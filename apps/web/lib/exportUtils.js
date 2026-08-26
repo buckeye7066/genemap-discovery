@@ -354,6 +354,12 @@ function sourceScoreComponents(claim) {
     : [];
 }
 
+function formatSourceScore(value) {
+  if (!Number.isFinite(value)) return 'Not recorded';
+  if (value > 0 && value < 0.01) return '<0.01';
+  return value.toFixed(2);
+}
+
 function associationClaimContent(claim, index) {
   const safeLink = safeExternalHttpUrl(claim?.directLink);
   const recordId = displayValue(claim?.recordId);
@@ -385,7 +391,7 @@ function associationClaimContent(claim, index) {
         <tr><th>AI Lead</th><td>${escapeHtml(aiLeadValue(claim))}</td></tr>
         ${scoreComponents.length > 0 ? `
         <tr><th>Source Score Components</th><td>
-          <ul>${scoreComponents.map((component) => `<li>${escapeHtml(displayValue(component.label || component.id, 'Unlabeled component'))}: ${escapeHtml(component.score.toFixed(2))} · class ${escapeHtml(displayValue(component.evidenceClass))} · scale ${escapeHtml(displayValue(component.scale))}</li>`).join('')}</ul>
+          <ul>${scoreComponents.map((component) => `<li>${escapeHtml(displayValue(component.label || component.id, 'Unlabeled component'))}: ${escapeHtml(formatSourceScore(component.score))} · class ${escapeHtml(displayValue(component.evidenceClass))} · scale ${escapeHtml(displayValue(component.scale))}</li>`).join('')}</ul>
           <p>Source-published parts of this computed claim, not calibrated probabilities.</p>
         </td></tr>` : ''}
         <tr><th>Source Record</th><td>${safeLink
@@ -599,7 +605,7 @@ export function buildGeneShareText(data = {}) {
         lines.push([
           `   source_score_component=${displayValue(component.label || component.id, 'Unlabeled component')}`,
           `component_id=${displayValue(component.id)}`,
-          `score=${component.score.toFixed(2)}`,
+          `score=${formatSourceScore(component.score)}`,
           `component_evidence=${displayValue(component.evidenceClass)}`,
           `scale=${displayValue(component.scale)}`,
         ].join(' | '));
