@@ -90,17 +90,34 @@ _SOURCE_BOUNDARY_JOINERS = re.compile(
     re.VERBOSE,
 )
 
+_SOURCE_VALUE_PREFIX = (
+    r"(?:^|[=(:,\[\]!&|?+*%;~\-]|\b(?:return|throw|yield|case)\b)\s*"
+)
 _SOURCE_COMMENT_PROTECTED_CONTEXT = re.compile(
     r"""
     <(?P<raw_tag>script|style|textarea|title|xmp|iframe|noembed|noframes)\b[^>]*>
     [\s\S]*?
     </(?P=raw_tag)\s*>
     |
-    '(?:\\[\s\S]|[^'\\])*'
+    """
+    + _SOURCE_VALUE_PREFIX
+    + r"""
+    (?:
+        '(?:\\[\s\S]|[^'\\])*'
+        |
+        "(?:\\[\s\S]|[^"\\])*"
+        |
+        `(?:\\[\s\S]|[^`\\])*`
+        |
+        /(?:\\[\s\S]|[^/\\\r\n])+/[dgimsuvy]*
+    )
     |
-    "(?:\\[\s\S]|[^"\\])*"
+    (?m:^[ \t]*//[^\r\n\u2028\u2029]*)
     |
-    `(?:\\[\s\S]|[^`\\])*`
+    """
+    + _SOURCE_VALUE_PREFIX
+    + r"""
+    /\*[\s\S]*?\*/
     """,
     re.I | re.VERBOSE,
 )
@@ -625,6 +642,20 @@ def run_self_test() -> None:
             "{/* rendered split */}"
             f"<span>{COMPLETION_TOKEN[3:]}s</span>"
         ),
+        "HTML comment boundary among apostrophes": (
+            "<p>don't <span>"
+            + COMPLETION_TOKEN[:3]
+            + "</span><!-- rendered split --><span>"
+            + COMPLETION_TOKEN[3:]
+            + "s</span> can't</p>"
+        ),
+        "JSX comment boundary among apostrophes": (
+            "<p>don't <span>"
+            + COMPLETION_TOKEN[:3]
+            + "</span>{/* rendered split */}<span>"
+            + COMPLETION_TOKEN[3:]
+            + "s</span> can't</p>"
+        ),
         "escaped JavaScript hex literal": (
             "const status = '"
             + "\\"
@@ -839,6 +870,27 @@ def run_self_test() -> None:
             + "<!-- ordinary literal -->"
             + COMPLETION_TOKEN[3:]
             + "s</textarea>"
+        ),
+        "HTML comment in JavaScript regex": (
+            "const pattern = /"
+            + COMPLETION_TOKEN[:3]
+            + "<!-- ordinary literal -->"
+            + COMPLETION_TOKEN[3:]
+            + "s/;"
+        ),
+        "HTML comment in JavaScript block comment": (
+            "/* "
+            + COMPLETION_TOKEN[:3]
+            + "<!-- ordinary literal -->"
+            + COMPLETION_TOKEN[3:]
+            + "s */"
+        ),
+        "HTML comment in JavaScript line comment": (
+            "// "
+            + COMPLETION_TOKEN[:3]
+            + "<!-- ordinary literal -->"
+            + COMPLETION_TOKEN[3:]
+            + "s"
         ),
     }
 

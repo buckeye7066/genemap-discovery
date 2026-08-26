@@ -45,7 +45,12 @@ function providerSymbol(value) {
 
 function assertHumanTaxon(value, errorMessage) {
   if (value === undefined || value === null) return;
-  if (String(value) !== String(HUMAN_TAXON_ID)) throw new Error(errorMessage);
+  const isNumericTaxon = typeof value === 'number'
+    && Number.isInteger(value)
+    && value === HUMAN_TAXON_ID;
+  const isStringTaxon = typeof value === 'string'
+    && value === String(HUMAN_TAXON_ID);
+  if (!isNumericTaxon && !isStringTaxon) throw new Error(errorMessage);
 }
 
 function humanStringId(value, errorMessage) {

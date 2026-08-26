@@ -323,6 +323,7 @@ describe('clinical publishing boundary', () => {
 
   it('keeps public policy and subscription claims inside the same boundary', () => {
     const privacy = read('../../pages/PrivacyPolicy.jsx');
+    const normalizedPrivacy = privacy.replace(/\s+/g, ' ');
     const terms = read('../../pages/TermsOfService.jsx');
     const premium = read('../../pages/Premium.jsx');
 
@@ -331,9 +332,14 @@ describe('clinical publishing boundary', () => {
     expect(privacy).not.toContain('Delete any uploaded record from the Medical Data page');
     expect(privacy).not.toContain('Access to account data is scoped to the signed-in user');
     expect(privacy).toContain('authorized Axiom Biolabs operators');
-    for (const provider of ['Vercel:', 'Railway:', 'Resend:', 'Sentry:', 'Redis rate-limit operator:', 'NLM Clinical Tables']) {
+    for (const provider of ['Vercel:', 'Railway:', 'Resend:', 'Sentry:', 'Redis rate-limit operator:', 'NLM Clinical Tables', 'STRING public API:']) {
       expect(privacy).toContain(provider);
     }
+    expect(normalizedPrivacy).toContain('two to ten policy-filtered public gene symbols');
+    expect(normalizedPrivacy).toContain('fixed human taxon 9606');
+    expect(normalizedPrivacy).toContain('bounded score and added-neighbor settings');
+    expect(normalizedPrivacy).toContain('a caller identifier');
+    expect(normalizedPrivacy).toContain('does not send phenotype text, variants, patient records');
     expect(terms).not.toContain('The published service does not accept personal medical records');
     expect(terms).toContain('fields can still accept free text');
     expect(terms).not.toContain('AI providers acting as our processors');

@@ -7,7 +7,7 @@ import { ShieldCheck, ArrowLeft } from "lucide-react";
  * published data flows and the fail-closed boundary around personal clinical
  * and genomic information. Have counsel review before commercial reliance.
  */
-const UPDATED = "August 10, 2026";
+const UPDATED = "August 25, 2026";
 const CONTACT = "dr.johnwhite@axiombiolabs.org";
 
 function Section({ title, children }) {
@@ -185,6 +185,15 @@ export default function PrivacyPolicy() {
                 results are displayed only as computed research-comparison signals, never as clinical
                 conclusions. These services are lookup and follow-up sources, not automatic verification
                 of an AI-generated claim, and are not represented here as contracted processors.
+              </li>
+              <li>
+                <strong>STRING public API:</strong> the authenticated gene-comparison network sends two to
+                ten policy-filtered public gene symbols, fixed human taxon 9606 and functional-network
+                parameters, bounded score and added-neighbor settings, and a caller identifier to
+                string-db.org. Requests originate from the API and may remain user-linked within GeneMap.
+                GeneMap does not send phenotype text, variants, patient records, personal genomic files, or
+                model prompts in this lookup. Returned functional associations are source-attributed
+                research signals and are not presented as causal, diagnostic, or clinical conclusions.
               </li>
             </ul>
             <p>

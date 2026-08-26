@@ -467,6 +467,7 @@ describe('STRING gene-network adapter', () => {
 
   it.each([
     ['reported taxon', { ncbiTaxonId: 10090 }],
+    ['array taxon', { ncbiTaxonId: [9606] }],
     ['STRING ID prefix', { stringId: '10090.ENSMUSP00000000001' }],
   ])('rejects resolver mappings with contradictory human %s provenance', async (_name, change) => {
     const logger = { warn: vi.fn() };
@@ -495,6 +496,7 @@ describe('STRING gene-network adapter', () => {
 
   it.each([
     ['reported taxon', { ncbiTaxonId: 10090 }],
+    ['array taxon', { ncbiTaxonId: [9606] }],
     ['first STRING ID prefix', { stringId_A: '10090.ENSMUSP00000000001' }],
     ['second STRING ID prefix', { stringId_B: '10090.ENSMUSP00000000002' }],
   ])('rejects network rows with contradictory human %s provenance', async (_name, change) => {
