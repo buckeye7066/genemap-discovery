@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import { getGeneNetwork, normalizeStringNetwork } from '../services/geneNetwork.js';
+import {
+  GENE_NETWORK_LIMITS,
+  getGeneNetwork,
+  normalizeStringNetwork,
+} from '../services/geneNetwork.js';
 
 const RETRIEVED_AT = '2026-08-25T12:00:00.000Z';
 const STRING_ROWS = [
@@ -170,7 +174,7 @@ describe('STRING gene-network adapter', () => {
     });
   });
 
-  it('fails soft with labeled query nodes when the public source is unavailable', async () => {
+  it('fails soft without asserting query nodes when identifier resolution is unavailable', async () => {
     const result = await getGeneNetwork(
       ['SCN1A', 'SCN2A'],
       {},
@@ -181,9 +185,10 @@ describe('STRING gene-network adapter', () => {
       sourceStatus: 'unavailable',
       retrievedAt: null,
       edges: [],
-      nodes: [
-        { symbol: 'SCN1A', kind: 'query' },
-        { symbol: 'SCN2A', kind: 'query' },
+      nodes: [],
+      queryMappings: [
+        { submittedSymbol: 'SCN1A', resolved: false },
+        { submittedSymbol: 'SCN2A', resolved: false },
       ],
     });
   });
@@ -246,6 +251,55 @@ describe('STRING gene-network adapter', () => {
     );
   });
 
+  it.each([
+    ['missing endpoint', { preferredName_A: undefined }],
+    ['invalid endpoint', { preferredName_A: 'not a gene' }],
+    ['identical endpoints', { preferredName_B: 'SCN2A' }],
+  ])('treats %s as an unavailable source response', async (_name, change) => {
+    const logger = { warn: vi.fn() };
+    const row = { ...STRING_ROWS[0], ...change };
+
+    const result = await getGeneNetwork(
+      ['SCN1A', 'SCN2A'],
+      {},
+      { fetchImpl: networkFetch([row]), logger },
+    );
+
+    expect(result).toMatchObject({
+      sourceStatus: 'unavailable',
+      retrievedAt: null,
+      edges: [],
+      nodes: [
+        { symbol: 'SCN1A', kind: 'query' },
+        { symbol: 'SCN2A', kind: 'query' },
+      ],
+    });
+    expect(logger.warn).toHaveBeenCalledWith(
+      { error: 'STRING network response contained invalid association endpoints' },
+      'STRING network lookup failed',
+    );
+  });
+
+  it('validates every provider row before applying the output edge cap', async () => {
+    const rows = Array.from(
+      { length: GENE_NETWORK_LIMITS.maxEdges },
+      () => ({ ...STRING_ROWS[0] }),
+    );
+    rows.push({ ...STRING_ROWS[0], score: 'invalid-after-cap' });
+
+    const result = await getGeneNetwork(
+      ['SCN1A', 'SCN2A'],
+      {},
+      { fetchImpl: networkFetch(rows) },
+    );
+
+    expect(result).toMatchObject({
+      sourceStatus: 'unavailable',
+      retrievedAt: null,
+      edges: [],
+    });
+  });
+
   it('maps submitted aliases to preferred STRING symbols before classifying query nodes', async () => {
     const identifierRows = [
       {
@@ -306,6 +360,35 @@ describe('STRING gene-network adapter', () => {
     expect(result.nodes.some((node) => node.symbol === 'P53')).toBe(false);
     expect(new URL(result.source.networkUrl).searchParams.get('identifiers'))
       .toBe('SCN1A\rTP53');
+  });
+
+  it('does not classify an unresolved submitted identifier as a queried node', async () => {
+    const fetchImpl = networkFetch(STRING_ROWS, STRING_ID_ROWS);
+
+    const result = await getGeneNetwork(
+      ['UNKNOWN', 'SCN2A', 'SCN1A'],
+      {},
+      { fetchImpl, now: () => new Date(RETRIEVED_AT) },
+    );
+
+    expect(result).toMatchObject({
+      querySymbols: ['SCN1A', 'SCN2A', 'UNKNOWN'],
+      resolvedQuerySymbols: ['SCN1A', 'SCN2A'],
+      queryMappings: [
+        { submittedSymbol: 'SCN1A', preferredSymbol: 'SCN1A', resolved: true },
+        { submittedSymbol: 'SCN2A', preferredSymbol: 'SCN2A', resolved: true },
+        { submittedSymbol: 'UNKNOWN', preferredSymbol: 'UNKNOWN', resolved: false },
+      ],
+      nodes: [
+        { symbol: 'SCN1A', kind: 'query' },
+        { symbol: 'SCN2A', kind: 'query' },
+        { symbol: 'SCN3A', kind: 'expanded' },
+      ],
+      sourceStatus: 'available',
+    });
+    expect(result.nodes.some((node) => node.symbol === 'UNKNOWN')).toBe(false);
+    expect(new URL(fetchImpl.mock.calls[1][0]).searchParams.get('identifiers'))
+      .toBe('SCN1A\rSCN2A');
   });
 
   it('reports any symbols outside the bounded upstream request instead of silently dropping them', async () => {

@@ -166,6 +166,26 @@ describe('GeneNetwork', () => {
     expect(screen.queryByRole('button', { name: 'P53' })).not.toBeInTheDocument();
   });
 
+  it('names unresolved selections without presenting them as queried nodes', async () => {
+    networkClient.fetchGeneNetwork.mockResolvedValue({
+      ...network,
+      querySymbols: ['SCN1A', 'SCN2A', 'UNKNOWN'],
+      resolvedQuerySymbols: ['SCN1A', 'SCN2A'],
+      queryMappings: [
+        { submittedSymbol: 'SCN1A', preferredSymbol: 'SCN1A', resolved: true },
+        { submittedSymbol: 'SCN2A', preferredSymbol: 'SCN2A', resolved: true },
+        { submittedSymbol: 'UNKNOWN', preferredSymbol: 'UNKNOWN', resolved: false },
+      ],
+    });
+
+    render(<GeneNetwork symbols={['UNKNOWN', 'SCN2A', 'SCN1A']} />);
+
+    const unresolved = await screen.findByText(/STRING did not resolve/i);
+    expect(unresolved).toHaveTextContent('UNKNOWN');
+    expect(unresolved).toHaveTextContent('not shown as network nodes');
+    expect(screen.queryByRole('button', { name: 'UNKNOWN' })).not.toBeInTheDocument();
+  });
+
   it('names selected genes outside the bounded STRING network scope', async () => {
     const requestedSymbols = Array.from(
       { length: 12 },

@@ -116,6 +116,10 @@ export default function GeneNetwork({ symbols = [] }) {
       && mapping.submittedSymbol
       && mapping.preferredSymbol
       && mapping.submittedSymbol !== mapping.preferredSymbol);
+  const unresolvedSymbols = (Array.isArray(network?.queryMappings) ? network.queryMappings : [])
+    .filter((mapping) => mapping?.resolved === false)
+    .map((mapping) => String(mapping?.submittedSymbol || '').trim().toUpperCase())
+    .filter(Boolean);
 
   return (
     <Card className="border-indigo-200" aria-labelledby="gene-network-heading">
@@ -153,6 +157,17 @@ export default function GeneNetwork({ symbols = [] }) {
                 .map((mapping) => `${mapping.submittedSymbol} → ${mapping.preferredSymbol}`)
                 .join(', ')}. Network nodes use STRING-preferred symbols; the selected-gene
               evidence above remains unchanged.
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {!loading && unresolvedSymbols.length > 0 && (
+          <Alert role="status" className="border-amber-200 bg-amber-50">
+            <Info className="h-4 w-4 text-amber-700" />
+            <AlertDescription className="text-amber-950">
+              STRING did not resolve: {unresolvedSymbols.join(', ')}. These identifiers are not
+              shown as network nodes, and no source association is asserted for them. Their
+              selected-gene evidence above remains unchanged.
             </AlertDescription>
           </Alert>
         )}

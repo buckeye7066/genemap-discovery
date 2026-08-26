@@ -115,9 +115,10 @@ export function normalizeStringNetwork(
       stringId: null,
       resolved: true,
     }));
-  const querySet = new Set(normalizedMappings.map((mapping) => mapping.preferredSymbol));
+  const resolvedMappings = normalizedMappings.filter((mapping) => mapping?.resolved !== false);
+  const querySet = new Set(resolvedMappings.map((mapping) => mapping.preferredSymbol));
   const nodeMap = new Map();
-  for (const mapping of normalizedMappings) {
+  for (const mapping of resolvedMappings) {
     const symbol = providerSymbol(mapping?.preferredSymbol);
     if (!symbol) continue;
     const existing = nodeMap.get(symbol);
@@ -130,16 +131,31 @@ export function normalizeStringNetwork(
     });
   }
   const edgeMap = new Map();
-
-  for (const row of Array.isArray(rows) ? rows.slice(0, MAX_EDGES) : []) {
-    const combinedScore = strictScore(row?.score);
+  if (!Array.isArray(rows)) {
+    throw new Error('STRING network response was not an array');
+  }
+  const validatedRows = rows.map((row) => {
+    if (!row || typeof row !== 'object' || Array.isArray(row)) {
+      throw new Error('STRING network response contained invalid association endpoints');
+    }
+    const combinedScore = strictScore(row.score);
     if (combinedScore === null) {
       throw new Error('STRING network response contained an invalid combined score');
     }
-    const symbolA = providerSymbol(row?.preferredName_A);
-    const symbolB = providerSymbol(row?.preferredName_B);
-    if (!symbolA || !symbolB || symbolA === symbolB) continue;
+    const symbolA = providerSymbol(row.preferredName_A);
+    const symbolB = providerSymbol(row.preferredName_B);
+    if (!symbolA || !symbolB || symbolA === symbolB) {
+      throw new Error('STRING network response contained invalid association endpoints');
+    }
+    return { row, combinedScore, symbolA, symbolB };
+  });
 
+  for (const {
+    row,
+    combinedScore,
+    symbolA,
+    symbolB,
+  } of validatedRows.slice(0, MAX_EDGES)) {
     for (const [symbol, stringId] of [
       [symbolA, row.stringId_A],
       [symbolB, row.stringId_B],

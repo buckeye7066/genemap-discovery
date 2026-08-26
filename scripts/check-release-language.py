@@ -82,6 +82,17 @@ _SOURCE_BOUNDARY_JOINERS = re.compile(
     re.VERBOSE,
 )
 
+_SOURCE_HEX_ESCAPE = re.compile(
+    r"(\\+)(?:x(?P<byte>[0-9a-f]{2})|u\{(?P<braced>[0-9a-f]{1,6})\}|u(?P<unicode>[0-9a-f]{4}))",
+    re.I,
+)
+_SOURCE_SURROGATE_ESCAPE = re.compile(
+    r"(\\+)u(?P<high>d[89ab][0-9a-f]{2})(\\+)u(?P<low>d[c-f][0-9a-f]{2})",
+    re.I,
+)
+_SOURCE_SIMPLE_ESCAPE = re.compile(r"(\\+)(?P<escape>[nrtfv])")
+_SOURCE_LINE_CONTINUATION = re.compile(r"(\\+)\r?\n")
+
 
 def normalize_text(text: str) -> str:
     """Normalize one complete file before matching separator-tolerant phrases."""
@@ -97,10 +108,59 @@ def source_boundary_projection(text: str) -> str:
     return _SOURCE_BOUNDARY_JOINERS.sub("", text)
 
 
+def source_escape_projection(text: str) -> str:
+    """Decode rendered JS/JSON escapes while preserving even escaped backslashes."""
+
+    def decode_hex(match: re.Match[str]) -> str:
+        slashes = match.group(1)
+        if len(slashes) % 2 == 0:
+            return match.group(0)
+        digits = match.group("byte") or match.group("braced") or match.group("unicode")
+        codepoint = int(digits, 16)
+        if codepoint > 0x10FFFF or 0xD800 <= codepoint <= 0xDFFF:
+            return match.group(0)
+        return "\\" * (len(slashes) // 2) + chr(codepoint)
+
+    def decode_surrogate_pair(match: re.Match[str]) -> str:
+        if match.group(1) != "\\" or match.group(3) != "\\":
+            return match.group(0)
+        high = int(match.group("high"), 16)
+        low = int(match.group("low"), 16)
+        codepoint = 0x10000 + ((high - 0xD800) << 10) + (low - 0xDC00)
+        return chr(codepoint)
+
+    def decode_simple(match: re.Match[str]) -> str:
+        slashes = match.group(1)
+        if len(slashes) % 2 == 0:
+            return match.group(0)
+        decoded = {
+            "n": "\n",
+            "r": "\r",
+            "t": "\t",
+            "f": "\f",
+            "v": "\v",
+        }[match.group("escape")]
+        return "\\" * (len(slashes) // 2) + decoded
+
+    def decode_continuation(match: re.Match[str]) -> str:
+        slashes = match.group(1)
+        if len(slashes) % 2 == 0:
+            return match.group(0)
+        return "\\" * (len(slashes) // 2)
+
+    projected = _SOURCE_LINE_CONTINUATION.sub(decode_continuation, text)
+    projected = _SOURCE_SURROGATE_ESCAPE.sub(decode_surrogate_pair, projected)
+    projected = _SOURCE_HEX_ESCAPE.sub(decode_hex, projected)
+    return _SOURCE_SIMPLE_ESCAPE.sub(decode_simple, projected)
+
+
 def prohibited_labels(text: str) -> list[str]:
+    boundary_projection = source_boundary_projection(text)
     variants = {
         normalize_text(text),
-        normalize_text(source_boundary_projection(text)),
+        normalize_text(boundary_projection),
+        normalize_text(source_escape_projection(text)),
+        normalize_text(source_escape_projection(boundary_projection)),
     }
     return [
         label
@@ -267,6 +327,15 @@ def _run_index_self_test(scanner_source: str) -> None:
             "owner " + COMPLETION_TOKEN[:4] + "-" + COMPLETION_TOKEN[4:],
             encoding="utf-8",
         )
+        escaped_path = repo_root / "escaped.js"
+        escaped_path.write_text(
+            "const status = '"
+            + "\\"
+            + "x73"
+            + COMPLETION_TOKEN[1:]
+            + "s';",
+            encoding="utf-8",
+        )
         (repo_root / "binary.dat").write_bytes(
             b"\xff" * 96 + b" " + COMPLETION_TOKEN.encode("ascii") + b" "
         )
@@ -287,6 +356,7 @@ def _run_index_self_test(scanner_source: str) -> None:
             "concatenated.js",
             "diverged.txt",
             "encoded.txt",
+            "escaped.js",
             "missing.txt",
             "rendered.jsx",
         }
@@ -360,6 +430,52 @@ def run_self_test() -> None:
             f"<span>{COMPLETION_TOKEN[3:5]}</span>"
             f"<span>{COMPLETION_TOKEN[5:]}</span>"
         ),
+        "escaped JavaScript hex literal": (
+            "const status = '"
+            + "\\"
+            + "x73"
+            + COMPLETION_TOKEN[1:]
+            + "s';"
+        ),
+        "escaped JSON Unicode literal": (
+            '{"label":"'
+            + "\\"
+            + "u0073"
+            + COMPLETION_TOKEN[1:]
+            + 's"}'
+        ),
+        "escaped JSON surrogate pair": (
+            '{"label":"'
+            + "\\"
+            + "uD835"
+            + "\\"
+            + "uDC2C"
+            + COMPLETION_TOKEN[1:]
+            + 's"}'
+        ),
+        "escaped JavaScript Unicode brace": (
+            "const status = '"
+            + "\\"
+            + "u{73}"
+            + COMPLETION_TOKEN[1:]
+            + "s';"
+        ),
+        "escaped separator": (
+            COMPLETION_TOKEN[:4] + "\\" + "n" + COMPLETION_TOKEN[4:] + "s"
+        ),
+        "escaped three-part concatenation": (
+            "'"
+            + "\\"
+            + "x73"
+            + COMPLETION_TOKEN[1:2]
+            + "' + '"
+            + "\\"
+            + "u0067"
+            + COMPLETION_TOKEN[3:4]
+            + "' + '"
+            + COMPLETION_TOKEN[4:]
+            + "s'"
+        ),
     }
     negative_probes = {
         "cryptographic signature": "The commit is cryptographically signed.",
@@ -376,6 +492,13 @@ def run_self_test() -> None:
         ),
         "entity lexical suffix": (
             COMPLETION_TOKEN[:4] + "&#32;" + COMPLETION_TOKEN[4:] + "shore"
+        ),
+        "escaped backslash literal": (
+            "const status = '"
+            + "\\\\"
+            + "x73"
+            + COMPLETION_TOKEN[1:]
+            + "s';"
         ),
     }
 
