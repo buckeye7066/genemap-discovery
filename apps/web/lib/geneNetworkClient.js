@@ -72,6 +72,7 @@ export async function fetchGeneNetwork(symbols, options = {}) {
   const addNodes = boundedInteger(options.addNodes, 3, 0, 5);
 
   try {
+    /** @type {Record<string, any>} */
     const response = await apiClient.request('/genomics/gene-network', {
       method: 'POST',
       body: JSON.stringify({ symbols: querySymbols, requiredScore, addNodes }),
