@@ -162,6 +162,7 @@ describe('STRING gene-network adapter', () => {
         { submittedSymbol: 'SCN1A', preferredSymbol: 'SCN1A', resolved: true },
         { submittedSymbol: 'SCN2A', preferredSymbol: 'SCN2A', resolved: true },
       ],
+      identifierResolutionStatus: 'available',
       sourceStatus: 'available',
       retrievedAt: RETRIEVED_AT,
       source: {
@@ -183,13 +184,11 @@ describe('STRING gene-network adapter', () => {
 
     expect(result).toMatchObject({
       sourceStatus: 'unavailable',
+      identifierResolutionStatus: 'unavailable',
       retrievedAt: null,
       edges: [],
       nodes: [],
-      queryMappings: [
-        { submittedSymbol: 'SCN1A', resolved: false },
-        { submittedSymbol: 'SCN2A', resolved: false },
-      ],
+      queryMappings: [],
     });
   });
 
@@ -255,6 +254,9 @@ describe('STRING gene-network adapter', () => {
     ['missing endpoint', { preferredName_A: undefined }],
     ['invalid endpoint', { preferredName_A: 'not a gene' }],
     ['identical endpoints', { preferredName_B: 'SCN2A' }],
+    ['numeric endpoint', { preferredName_A: 123 }],
+    ['boolean endpoint', { preferredName_A: true }],
+    ['array endpoint', { preferredName_A: ['SCN2A'] }],
   ])('treats %s as an unavailable source response', async (_name, change) => {
     const logger = { warn: vi.fn() };
     const row = { ...STRING_ROWS[0], ...change };
@@ -336,6 +338,7 @@ describe('STRING gene-network adapter', () => {
     expect(result).toMatchObject({
       querySymbols: ['P53', 'SCN1A'],
       resolvedQuerySymbols: ['SCN1A', 'TP53'],
+      identifierResolutionStatus: 'available',
       queryMappings: [
         {
           submittedSymbol: 'P53',
@@ -374,6 +377,7 @@ describe('STRING gene-network adapter', () => {
     expect(result).toMatchObject({
       querySymbols: ['SCN1A', 'SCN2A', 'UNKNOWN'],
       resolvedQuerySymbols: ['SCN1A', 'SCN2A'],
+      identifierResolutionStatus: 'available',
       queryMappings: [
         { submittedSymbol: 'SCN1A', preferredSymbol: 'SCN1A', resolved: true },
         { submittedSymbol: 'SCN2A', preferredSymbol: 'SCN2A', resolved: true },

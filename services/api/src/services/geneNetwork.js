@@ -42,7 +42,8 @@ function score(value) {
 }
 
 function providerSymbol(value) {
-  const symbol = String(value || '').trim().toUpperCase();
+  if (typeof value !== 'string') return null;
+  const symbol = value.trim().toUpperCase();
   return /^[A-Z0-9][A-Z0-9-]{1,30}$/u.test(symbol) ? symbol : null;
 }
 
@@ -66,8 +67,8 @@ export function normalizeStringQueryMappings(rows, querySymbols) {
     if (!row || typeof row !== 'object' || Array.isArray(row)) {
       throw new Error('STRING identifier response contained an invalid row');
     }
-    const queryIndex = Number(row.queryIndex);
-    const indexedSymbol = Number.isInteger(queryIndex)
+    const queryIndex = Number.isInteger(row.queryIndex) ? row.queryIndex : null;
+    const indexedSymbol = queryIndex !== null
       && queryIndex >= 0
       && queryIndex < cleanQuerySymbols.length
       ? cleanQuerySymbols[queryIndex]
@@ -239,6 +240,7 @@ export async function getGeneNetwork(symbols, options = {}, dependencies = {}) {
       omittedSymbols,
       resolvedQuerySymbols: [],
       queryMappings: [],
+      identifierResolutionStatus: 'not_requested',
       nodes: [],
       edges: [],
       sourceStatus: 'insufficient_input',
@@ -256,8 +258,9 @@ export async function getGeneNetwork(symbols, options = {}, dependencies = {}) {
     caller_identity: 'GeneMapDiscovery',
   });
 
-  let queryMappings = normalizeStringQueryMappings([], querySymbols);
+  let queryMappings = [];
   let resolvedQuerySymbols = [];
+  let identifierResolutionStatus = 'unavailable';
 
   try {
     const resolutionParams = new URLSearchParams({
@@ -281,6 +284,7 @@ export async function getGeneNetwork(symbols, options = {}, dependencies = {}) {
       await resolutionResponse.json(),
       querySymbols,
     );
+    identifierResolutionStatus = 'available';
     resolvedQuerySymbols = [...new Set(queryMappings
       .filter((mapping) => mapping.resolved)
       .map((mapping) => mapping.preferredSymbol))]
@@ -297,6 +301,7 @@ export async function getGeneNetwork(symbols, options = {}, dependencies = {}) {
         omittedSymbols,
         resolvedQuerySymbols,
         queryMappings,
+        identifierResolutionStatus,
         ...network,
         sourceStatus: 'no_associations',
         source,
@@ -323,6 +328,7 @@ export async function getGeneNetwork(symbols, options = {}, dependencies = {}) {
       omittedSymbols,
       resolvedQuerySymbols,
       queryMappings,
+      identifierResolutionStatus,
       ...network,
       sourceStatus: network.edges.length > 0 ? 'available' : 'no_associations',
       source,
@@ -336,6 +342,7 @@ export async function getGeneNetwork(symbols, options = {}, dependencies = {}) {
       omittedSymbols,
       resolvedQuerySymbols,
       queryMappings,
+      identifierResolutionStatus,
       nodes: normalizeStringNetwork([], querySymbols, retrievedAt, queryMappings).nodes,
       edges: [],
       sourceStatus: 'unavailable',

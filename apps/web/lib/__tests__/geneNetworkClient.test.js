@@ -69,6 +69,7 @@ describe('geneNetworkClient', () => {
         { submittedSymbol: 'P53', preferredSymbol: 'TP53', resolved: true },
         { submittedSymbol: 'SCN1A', preferredSymbol: 'SCN1A', resolved: true },
       ],
+      identifierResolutionStatus: 'available',
       nodes: [
         { id: 'SCN1A', symbol: 'SCN1A', kind: 'query' },
         { id: 'TP53', symbol: 'TP53', kind: 'query' },
@@ -86,6 +87,7 @@ describe('geneNetworkClient', () => {
         { submittedSymbol: 'P53', preferredSymbol: 'TP53', resolved: true },
         { submittedSymbol: 'SCN1A', preferredSymbol: 'SCN1A', resolved: true },
       ],
+      identifierResolutionStatus: 'available',
     });
   });
 

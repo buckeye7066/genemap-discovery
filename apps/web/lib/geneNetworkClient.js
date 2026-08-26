@@ -9,6 +9,7 @@ const EMPTY_RESULT = Object.freeze({
   omittedSymbols: [],
   resolvedQuerySymbols: [],
   queryMappings: [],
+  identifierResolutionStatus: 'unavailable',
   nodes: [],
   edges: [],
   sourceStatus: 'unavailable',

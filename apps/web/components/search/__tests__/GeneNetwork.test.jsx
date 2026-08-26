@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const networkClient = vi.hoisted(() => ({
@@ -42,6 +42,7 @@ const network = {
     },
   ],
   sourceStatus: 'available',
+  identifierResolutionStatus: 'available',
   source: {
     name: 'STRING',
     documentationUrl: 'https://string-db.org/help/api/',
@@ -98,6 +99,11 @@ describe('GeneNetwork', () => {
       nodes: [],
       edges: [],
       sourceStatus: 'unavailable',
+      identifierResolutionStatus: 'unavailable',
+      queryMappings: [
+        { submittedSymbol: 'SCN1A', preferredSymbol: 'SCN1A', resolved: false },
+        { submittedSymbol: 'SCN2A', preferredSymbol: 'SCN2A', resolved: false },
+      ],
       retrievedAt: null,
     });
 
@@ -105,8 +111,35 @@ describe('GeneNetwork', () => {
 
     expect(await screen.findByText(/temporarily unavailable/i)).toBeInTheDocument();
     expect(screen.getByText(/comparison evidence above remains unchanged/i)).toBeInTheDocument();
+    expect(screen.queryByText(/STRING did not resolve/i)).not.toBeInTheDocument();
     expect(screen.getByText(/do not establish physical binding, causality, diagnosis, or treatment relevance/i))
       .toBeInTheDocument();
+  });
+
+  it('hides prior retrieval provenance while a changed-symbol lookup is pending', async () => {
+    let resolveSecond;
+    networkClient.fetchGeneNetwork
+      .mockResolvedValueOnce(network)
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveSecond = resolve; }));
+    const { rerender } = render(<GeneNetwork symbols={['SCN1A', 'SCN2A']} />);
+
+    await screen.findByRole('link', { name: /open in STRING/i });
+    expect(screen.getByText(`Retrieved: ${network.retrievedAt}`)).toBeInTheDocument();
+
+    rerender(<GeneNetwork symbols={['BRCA1', 'BRCA2']} />);
+
+    await screen.findByText(/Loading source network/i);
+    expect(screen.queryByRole('link', { name: /open in STRING/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(`Retrieved: ${network.retrievedAt}`)).not.toBeInTheDocument();
+
+    await act(async () => {
+      resolveSecond({
+        ...network,
+        querySymbols: ['BRCA1', 'BRCA2'],
+        resolvedQuerySymbols: ['BRCA1', 'BRCA2'],
+      });
+    });
+    await screen.findByRole('link', { name: /open in STRING/i });
   });
 
   it('keeps a selected gene visible when it has no qualifying association edge', async () => {

@@ -62,25 +62,27 @@ export default function GeneNetwork({ symbols = [] }) {
       .join('|'),
     [symbols],
   );
-  const [network, setNetwork] = useState(null);
+  const [networkState, setNetworkState] = useState({ symbolKey: null, result: null });
   const [loading, setLoading] = useState(false);
   const [minimumScore, setMinimumScore] = useState(0.4);
   const [selectedNode, setSelectedNode] = useState(null);
+  const network = networkState.symbolKey === symbolKey ? networkState.result : null;
 
   useEffect(() => {
     let cancelled = false;
     const cleanSymbols = symbolKey ? symbolKey.split('|') : [];
     setSelectedNode(null);
     if (cleanSymbols.length < 2) {
-      setNetwork(null);
+      setNetworkState({ symbolKey, result: null });
       setLoading(false);
       return () => { cancelled = true; };
     }
 
+    setNetworkState({ symbolKey, result: null });
     setLoading(true);
     fetchGeneNetwork(cleanSymbols, { requiredScore: 400, addNodes: 3 })
       .then((result) => {
-        if (!cancelled) setNetwork(result);
+        if (!cancelled) setNetworkState({ symbolKey, result });
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -116,10 +118,12 @@ export default function GeneNetwork({ symbols = [] }) {
       && mapping.submittedSymbol
       && mapping.preferredSymbol
       && mapping.submittedSymbol !== mapping.preferredSymbol);
-  const unresolvedSymbols = (Array.isArray(network?.queryMappings) ? network.queryMappings : [])
-    .filter((mapping) => mapping?.resolved === false)
-    .map((mapping) => String(mapping?.submittedSymbol || '').trim().toUpperCase())
-    .filter(Boolean);
+  const unresolvedSymbols = network?.identifierResolutionStatus === 'available'
+    ? (Array.isArray(network?.queryMappings) ? network.queryMappings : [])
+      .filter((mapping) => mapping?.resolved === false)
+      .map((mapping) => String(mapping?.submittedSymbol || '').trim().toUpperCase())
+      .filter(Boolean)
+    : [];
 
   return (
     <Card className="border-indigo-200" aria-labelledby="gene-network-heading">
@@ -336,29 +340,31 @@ export default function GeneNetwork({ symbols = [] }) {
           </AlertDescription>
         </Alert>
 
-        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600">
-          <span>Source: STRING public API</span>
-          <span>Species: Homo sapiens (taxon 9606)</span>
-          <span>Retrieved: {formatRetrievedAt(network?.retrievedAt)}</span>
-          <a
-            href={documentationUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 font-medium text-indigo-700 hover:underline"
-          >
-            API documentation <ExternalLink className="h-3 w-3" />
-          </a>
-          {networkUrl && (
+        {!loading && (
+          <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600">
+            <span>Source: STRING public API</span>
+            <span>Species: Homo sapiens (taxon 9606)</span>
+            <span>Retrieved: {formatRetrievedAt(network?.retrievedAt)}</span>
             <a
-              href={networkUrl}
+              href={documentationUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1 font-medium text-indigo-700 hover:underline"
             >
-              Open in STRING <ExternalLink className="h-3 w-3" />
+              API documentation <ExternalLink className="h-3 w-3" />
             </a>
-          )}
-        </div>
+            {networkUrl && (
+              <a
+                href={networkUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 font-medium text-indigo-700 hover:underline"
+              >
+                Open in STRING <ExternalLink className="h-3 w-3" />
+              </a>
+            )}
+          </div>
+        )}
       </CardContent>
     </Card>
   );

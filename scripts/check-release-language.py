@@ -83,7 +83,7 @@ _SOURCE_BOUNDARY_JOINERS = re.compile(
 )
 
 _SOURCE_HEX_ESCAPE = re.compile(
-    r"(\\+)(?:x(?P<byte>[0-9a-f]{2})|u\{(?P<braced>[0-9a-f]{1,6})\}|u(?P<unicode>[0-9a-f]{4}))",
+    r"(\\+)(?:x(?P<byte>[0-9a-f]{2})|u\{(?P<braced>0*[0-9a-f]{1,6})\}|u(?P<unicode>[0-9a-f]{4}))",
     re.I,
 )
 _SOURCE_SURROGATE_ESCAPE = re.compile(
@@ -91,14 +91,41 @@ _SOURCE_SURROGATE_ESCAPE = re.compile(
     re.I,
 )
 _SOURCE_SIMPLE_ESCAPE = re.compile(r"(\\+)(?P<escape>[nrtfv])")
-_SOURCE_LINE_CONTINUATION = re.compile(r"(\\+)\r?\n")
+_SOURCE_LINE_CONTINUATION = re.compile(r"(\\+)(?:\r\n|[\n\r\u2028\u2029])")
+
+_DEFAULT_IGNORABLE_RANGES = (
+    (0x00AD, 0x00AD),
+    (0x034F, 0x034F),
+    (0x061C, 0x061C),
+    (0x115F, 0x1160),
+    (0x17B4, 0x17B5),
+    (0x180B, 0x180F),
+    (0x200B, 0x200F),
+    (0x202A, 0x202E),
+    (0x2060, 0x206F),
+    (0x3164, 0x3164),
+    (0xFE00, 0xFE0F),
+    (0xFEFF, 0xFEFF),
+    (0xFFA0, 0xFFA0),
+    (0xFFF0, 0xFFF8),
+    (0x1BCA0, 0x1BCA3),
+    (0x1D173, 0x1D17A),
+    (0xE0000, 0xE0FFF),
+)
+
+
+def is_default_ignorable(char: str) -> bool:
+    codepoint = ord(char)
+    return unicodedata.category(char) == "Cf" or any(
+        start <= codepoint <= end for start, end in _DEFAULT_IGNORABLE_RANGES
+    )
 
 
 def normalize_text(text: str) -> str:
     """Normalize one complete file before matching separator-tolerant phrases."""
 
     normalized = unicodedata.normalize("NFKC", html.unescape(text))
-    normalized = "".join(char for char in normalized if unicodedata.category(char) != "Cf")
+    normalized = "".join(char for char in normalized if not is_default_ignorable(char))
     return re.sub(r"[\s_\-\u2010-\u2015]+", " ", normalized)
 
 
@@ -116,6 +143,7 @@ def source_escape_projection(text: str) -> str:
         if len(slashes) % 2 == 0:
             return match.group(0)
         digits = match.group("byte") or match.group("braced") or match.group("unicode")
+        digits = digits.lstrip("0") or "0"
         codepoint = int(digits, 16)
         if codepoint > 0x10FFFF or 0xD800 <= codepoint <= 0xDFFF:
             return match.group(0)
@@ -460,8 +488,50 @@ def run_self_test() -> None:
             + COMPLETION_TOKEN[1:]
             + "s';"
         ),
+        "leading-zero JavaScript Unicode brace": (
+            "const status = '"
+            + "\\"
+            + "u{0000073}"
+            + COMPLETION_TOKEN[1:]
+            + "s';"
+        ),
+        "escaped variation selector": (
+            COMPLETION_TOKEN[:4]
+            + "\\"
+            + "uFE0F"
+            + COMPLETION_TOKEN[4:]
+            + "s"
+        ),
+        "HTML variation selector": (
+            COMPLETION_TOKEN[:4] + "&#xFE0F;" + COMPLETION_TOKEN[4:] + "s"
+        ),
+        "supplementary variation selector": (
+            COMPLETION_TOKEN[:4]
+            + "\\"
+            + "u{E0100}"
+            + COMPLETION_TOKEN[4:]
+            + "s"
+        ),
+        "combining grapheme joiner": (
+            COMPLETION_TOKEN[:4] + "&#x034F;" + COMPLETION_TOKEN[4:] + "s"
+        ),
         "escaped separator": (
             COMPLETION_TOKEN[:4] + "\\" + "n" + COMPLETION_TOKEN[4:] + "s"
+        ),
+        "LF line continuation": (
+            COMPLETION_TOKEN[:4] + "\\" + "\n" + COMPLETION_TOKEN[4:] + "s"
+        ),
+        "CRLF line continuation": (
+            COMPLETION_TOKEN[:4] + "\\" + "\r\n" + COMPLETION_TOKEN[4:] + "s"
+        ),
+        "CR line continuation": (
+            COMPLETION_TOKEN[:4] + "\\" + "\r" + COMPLETION_TOKEN[4:] + "s"
+        ),
+        "line-separator continuation": (
+            COMPLETION_TOKEN[:4] + "\\" + "\u2028" + COMPLETION_TOKEN[4:] + "s"
+        ),
+        "paragraph-separator continuation": (
+            COMPLETION_TOKEN[:4] + "\\" + "\u2029" + COMPLETION_TOKEN[4:] + "s"
         ),
         "escaped three-part concatenation": (
             "'"
