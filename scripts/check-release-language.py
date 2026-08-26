@@ -528,14 +528,59 @@ def read_index_blob(
         raise RuntimeError(f"{path}: unable to read tracked blob ({detail})") from error
 
 
+def read_index_blobs(
+    entries: list[tuple[str, str, str]],
+    repo_root: pathlib.Path | str = ".",
+) -> dict[str, bytes | None]:
+    """Read every unique stage-zero blob through one Git batch process."""
+
+    blob_ids = list(dict.fromkeys(
+        object_id for _path, mode, object_id in entries if mode != "160000"
+    ))
+    for path, mode, _object_id in entries:
+        if mode not in {"100644", "100755", "120000", "160000"}:
+            raise RuntimeError(f"{path}: unsupported tracked mode {mode}")
+    if not blob_ids:
+        return {}
+
+    process = subprocess.Popen(
+        ["git", "cat-file", "--batch"],
+        cwd=repo_root,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    request = b"".join(object_id.encode("ascii") + b"\n" for object_id in blob_ids)
+    stdout, stderr = process.communicate(request)
+    if process.returncode != 0:
+        detail = stderr.decode("utf-8", "replace").strip()
+        raise RuntimeError(f"unable to batch-read tracked blobs ({detail})")
+
+    blobs: dict[str, bytes | None] = {}
+    offset = 0
+    for requested_id in blob_ids:
+        line_end = stdout.find(b"\n", offset)
+        if line_end < 0:
+            raise RuntimeError("git cat-file returned a truncated batch header")
+        header = stdout[offset:line_end].decode("ascii", "strict").split()
+        offset = line_end + 1
+        if len(header) != 3 or header[1] != "blob":
+            raise RuntimeError(f"{requested_id}: unavailable tracked blob")
+        size = int(header[2])
+        end = offset + size
+        if end >= len(stdout) or stdout[end:end + 1] != b"\n":
+            raise RuntimeError(f"{requested_id}: truncated tracked blob")
+        blobs[requested_id] = stdout[offset:end]
+        offset = end + 1
+    return blobs
+
+
 def scan_repository(repo_root: pathlib.Path | str = ".") -> list[tuple[str, list[str]]]:
     violations: list[tuple[str, list[str]]] = []
-    blob_cache: dict[str, bytes | None] = {}
-    for path, mode, object_id in tracked_index_entries(repo_root):
-        cache_key = f"{mode}:{object_id}"
-        if cache_key not in blob_cache:
-            blob_cache[cache_key] = read_index_blob(path, mode, object_id, repo_root)
-        data = blob_cache[cache_key]
+    entries = tracked_index_entries(repo_root)
+    blob_cache = read_index_blobs(entries, repo_root)
+    for path, mode, object_id in entries:
+        data = None if mode == "160000" else blob_cache[object_id]
         if data is None:
             continue
         labels = prohibited_blob_labels(data, path)
