@@ -106,6 +106,16 @@ export default function GeneNetwork({ symbols = [] }) {
   const networkUrl = safeStringUrl(network?.source?.networkUrl);
   const omittedSymbols = Array.isArray(network?.omittedSymbols) ? network.omittedSymbols : [];
   const querySymbols = Array.isArray(network?.querySymbols) ? network.querySymbols : [];
+  const aliasMappings = (Array.isArray(network?.queryMappings) ? network.queryMappings : [])
+    .map((mapping) => ({
+      submittedSymbol: String(mapping?.submittedSymbol || '').trim().toUpperCase(),
+      preferredSymbol: String(mapping?.preferredSymbol || '').trim().toUpperCase(),
+      resolved: mapping?.resolved === true,
+    }))
+    .filter((mapping) => mapping.resolved
+      && mapping.submittedSymbol
+      && mapping.preferredSymbol
+      && mapping.submittedSymbol !== mapping.preferredSymbol);
 
   return (
     <Card className="border-indigo-200" aria-labelledby="gene-network-heading">
@@ -130,6 +140,19 @@ export default function GeneNetwork({ symbols = [] }) {
               This network includes {querySymbols.join(', ')}. Not included in this network:{' '}
               {omittedSymbols.join(', ')}. Every selected gene remains in the comparison table and
               evidence sections above.
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {!loading && aliasMappings.length > 0 && (
+          <Alert role="status" className="border-blue-200 bg-blue-50">
+            <Info className="h-4 w-4 text-blue-700" />
+            <AlertDescription className="text-blue-950">
+              STRING identifier mapping:{' '}
+              {aliasMappings
+                .map((mapping) => `${mapping.submittedSymbol} → ${mapping.preferredSymbol}`)
+                .join(', ')}. Network nodes use STRING-preferred symbols; the selected-gene
+              evidence above remains unchanged.
             </AlertDescription>
           </Alert>
         )}

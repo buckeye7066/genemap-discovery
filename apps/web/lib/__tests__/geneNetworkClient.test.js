@@ -61,6 +61,34 @@ describe('geneNetworkClient', () => {
     });
   });
 
+  it('preserves provider identifier mappings for transparent alias display', async () => {
+    shared.request.mockResolvedValue({
+      querySymbols: ['P53', 'SCN1A'],
+      resolvedQuerySymbols: ['SCN1A', 'TP53'],
+      queryMappings: [
+        { submittedSymbol: 'P53', preferredSymbol: 'TP53', resolved: true },
+        { submittedSymbol: 'SCN1A', preferredSymbol: 'SCN1A', resolved: true },
+      ],
+      nodes: [
+        { id: 'SCN1A', symbol: 'SCN1A', kind: 'query' },
+        { id: 'TP53', symbol: 'TP53', kind: 'query' },
+      ],
+      edges: [],
+      sourceStatus: 'no_associations',
+    });
+
+    const result = await fetchGeneNetwork(['P53', 'SCN1A']);
+
+    expect(result).toMatchObject({
+      querySymbols: ['P53', 'SCN1A'],
+      resolvedQuerySymbols: ['SCN1A', 'TP53'],
+      queryMappings: [
+        { submittedSymbol: 'P53', preferredSymbol: 'TP53', resolved: true },
+        { submittedSymbol: 'SCN1A', preferredSymbol: 'SCN1A', resolved: true },
+      ],
+    });
+  });
+
   it('fails soft while preserving the query symbols and source identity', async () => {
     shared.request.mockRejectedValue(new Error('source unavailable'));
 

@@ -127,6 +127,45 @@ describe('GeneNetwork', () => {
     expect(screen.getByRole('button', { name: 'SCN4A' })).toBeInTheDocument();
   });
 
+  it('shows provider-preferred symbols when STRING resolves a selected alias', async () => {
+    networkClient.fetchGeneNetwork.mockResolvedValue({
+      ...network,
+      querySymbols: ['P53', 'SCN1A'],
+      resolvedQuerySymbols: ['SCN1A', 'TP53'],
+      queryMappings: [
+        {
+          submittedSymbol: 'P53',
+          preferredSymbol: 'TP53',
+          resolved: true,
+        },
+        {
+          submittedSymbol: 'SCN1A',
+          preferredSymbol: 'SCN1A',
+          resolved: true,
+        },
+      ],
+      nodes: [
+        { id: 'SCN1A', symbol: 'SCN1A', kind: 'query' },
+        { id: 'TP53', symbol: 'TP53', kind: 'query' },
+      ],
+      edges: [{
+        id: 'SCN1A::TP53',
+        source: 'SCN1A',
+        target: 'TP53',
+        score: 0.88,
+        evidenceChannels: [{ label: 'experiments', score: 0.7 }],
+      }],
+    });
+
+    render(<GeneNetwork symbols={['P53', 'SCN1A']} />);
+
+    const mapping = await screen.findByText(/STRING identifier mapping/i);
+    expect(mapping).toHaveTextContent('P53 → TP53');
+    expect(mapping).toHaveTextContent('Network nodes use STRING-preferred symbols');
+    expect(screen.getByRole('button', { name: 'TP53' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'P53' })).not.toBeInTheDocument();
+  });
+
   it('names selected genes outside the bounded STRING network scope', async () => {
     const requestedSymbols = Array.from(
       { length: 12 },

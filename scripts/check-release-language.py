@@ -132,19 +132,26 @@ def decode_text_candidates(data: bytes, path: str = "tracked blob") -> list[str]
                 raise RuntimeError(f"{path}: invalid {encoding} text") from error
             return [decoded] if _looks_like_text(decoded) else []
 
-    if b"\0" in data:
-        decoded_candidates: list[str] = []
-        for encoding in ("utf-32-le", "utf-32-be", "utf-16-le", "utf-16-be"):
-            try:
-                decoded = data.decode(encoding, "strict")
-            except (UnicodeDecodeError, UnicodeError):
-                continue
-            if _looks_like_text(decoded) and decoded not in decoded_candidates:
-                decoded_candidates.append(decoded)
-        return decoded_candidates
+    decoded_candidates: list[str] = []
+    for encoding, width in (
+        ("utf-32-le", 4),
+        ("utf-32-be", 4),
+        ("utf-16-le", 2),
+        ("utf-16-be", 2),
+    ):
+        if not data or len(data) % width != 0:
+            continue
+        try:
+            decoded = data.decode(encoding, "strict")
+        except (UnicodeDecodeError, UnicodeError):
+            continue
+        if _looks_like_text(decoded) and decoded not in decoded_candidates:
+            decoded_candidates.append(decoded)
 
     fallback = data.decode("utf-8", "replace") if data else ""
-    return [fallback] if _looks_like_text(fallback) else []
+    if _looks_like_text(fallback) and fallback not in decoded_candidates:
+        decoded_candidates.append(fallback)
+    return decoded_candidates
 
 
 def prohibited_blob_labels(data: bytes, path: str = "tracked blob") -> list[str]:
@@ -294,6 +301,9 @@ def _run_index_self_test(scanner_source: str) -> None:
 
 def run_self_test() -> None:
     human_gate = MANUAL_TOKEN + "_" + APPROVAL_TOKEN
+    fullwidth_completion = "".join(
+        chr(ord(char) + 0xFEE0) for char in COMPLETION_TOKEN + "s"
+    )
     positive_probes = {
         "line break": "owner " + COMPLETION_TOKEN[:4] + "\n" + COMPLETION_TOKEN[4:] + " required",
         "underscore": (
@@ -388,6 +398,8 @@ def run_self_test() -> None:
         "CJK-masked BOM-less UTF-16": (
             (chr(0x4E41) * 256 + " " + human_gate).encode("utf-16-le")
         ),
+        "fullwidth BOM-less UTF-16 LE": fullwidth_completion.encode("utf-16-le"),
+        "fullwidth BOM-less UTF-16 BE": fullwidth_completion.encode("utf-16-be"),
     }
     for name, payload in encoded_cases.items():
         decoded = decode_text_candidates(payload, name)

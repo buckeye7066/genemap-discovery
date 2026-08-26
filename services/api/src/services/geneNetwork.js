@@ -1,4 +1,5 @@
 const STRING_NETWORK_ENDPOINT = 'https://string-db.org/api/json/network';
+const STRING_IDENTIFIER_ENDPOINT = 'https://string-db.org/api/json/get_string_ids';
 const STRING_NETWORK_PAGE = 'https://string-db.org/cgi/network';
 const STRING_API_DOCUMENTATION = 'https://string-db.org/help/api/';
 const HUMAN_TAXON_ID = 9606;
@@ -29,9 +30,20 @@ function cleanSymbols(symbols) {
     .sort((left, right) => left.localeCompare(right));
 }
 
-function score(value) {
+function strictScore(value) {
+  if (typeof value !== 'number' && typeof value !== 'string') return null;
+  if (typeof value === 'string' && !value.trim()) return null;
   const parsed = Number(value);
-  return Number.isFinite(parsed) && parsed >= 0 && parsed <= 1 ? parsed : 0;
+  return Number.isFinite(parsed) && parsed >= 0 && parsed <= 1 ? parsed : null;
+}
+
+function score(value) {
+  return strictScore(value) ?? 0;
+}
+
+function providerSymbol(value) {
+  const symbol = String(value || '').trim().toUpperCase();
+  return /^[A-Z0-9][A-Z0-9-]{1,30}$/u.test(symbol) ? symbol : null;
 }
 
 function networkPageUrl(symbols) {
@@ -42,26 +54,91 @@ function networkPageUrl(symbols) {
   return `${STRING_NETWORK_PAGE}?${params.toString()}`;
 }
 
-export function normalizeStringNetwork(rows, querySymbols, retrievedAt) {
+export function normalizeStringQueryMappings(rows, querySymbols) {
+  if (!Array.isArray(rows)) {
+    throw new Error('STRING identifier response was not an array');
+  }
   const cleanQuerySymbols = cleanSymbols(querySymbols);
   const querySet = new Set(cleanQuerySymbols);
-  const nodeMap = new Map(cleanQuerySymbols.map((symbol) => [
-    symbol,
-    {
+  const resolved = new Map();
+
+  for (const row of rows) {
+    if (!row || typeof row !== 'object' || Array.isArray(row)) {
+      throw new Error('STRING identifier response contained an invalid row');
+    }
+    const queryIndex = Number(row.queryIndex);
+    const indexedSymbol = Number.isInteger(queryIndex)
+      && queryIndex >= 0
+      && queryIndex < cleanQuerySymbols.length
+      ? cleanQuerySymbols[queryIndex]
+      : null;
+    const echoedSymbol = providerSymbol(row.queryItem);
+    const submittedSymbol = echoedSymbol && querySet.has(echoedSymbol)
+      ? echoedSymbol
+      : indexedSymbol;
+    const preferredSymbol = providerSymbol(row.preferredName);
+    if (!submittedSymbol || !preferredSymbol) {
+      throw new Error('STRING identifier response contained an invalid mapping');
+    }
+    if (!resolved.has(submittedSymbol)) {
+      resolved.set(submittedSymbol, {
+        submittedSymbol,
+        preferredSymbol,
+        stringId: typeof row.stringId === 'string' && row.stringId.trim()
+          ? row.stringId.trim()
+          : null,
+        resolved: true,
+      });
+    }
+  }
+
+  return cleanQuerySymbols.map((submittedSymbol) => resolved.get(submittedSymbol) || {
+    submittedSymbol,
+    preferredSymbol: submittedSymbol,
+    stringId: null,
+    resolved: false,
+  });
+}
+
+export function normalizeStringNetwork(
+  rows,
+  querySymbols,
+  retrievedAt,
+  queryMappings = null,
+) {
+  const cleanQuerySymbols = cleanSymbols(querySymbols);
+  const normalizedMappings = Array.isArray(queryMappings)
+    ? queryMappings
+    : cleanQuerySymbols.map((symbol) => ({
+      submittedSymbol: symbol,
+      preferredSymbol: symbol,
+      stringId: null,
+      resolved: true,
+    }));
+  const querySet = new Set(normalizedMappings.map((mapping) => mapping.preferredSymbol));
+  const nodeMap = new Map();
+  for (const mapping of normalizedMappings) {
+    const symbol = providerSymbol(mapping?.preferredSymbol);
+    if (!symbol) continue;
+    const existing = nodeMap.get(symbol);
+    nodeMap.set(symbol, {
       id: symbol,
       symbol,
-      stringId: null,
+      stringId: existing?.stringId
+        || (typeof mapping.stringId === 'string' ? mapping.stringId : null),
       kind: 'query',
-    },
-  ]));
+    });
+  }
   const edgeMap = new Map();
 
   for (const row of Array.isArray(rows) ? rows.slice(0, MAX_EDGES) : []) {
-    const symbolA = String(row?.preferredName_A || '').trim().toUpperCase();
-    const symbolB = String(row?.preferredName_B || '').trim().toUpperCase();
+    const combinedScore = strictScore(row?.score);
+    if (combinedScore === null) {
+      throw new Error('STRING network response contained an invalid combined score');
+    }
+    const symbolA = providerSymbol(row?.preferredName_A);
+    const symbolB = providerSymbol(row?.preferredName_B);
     if (!symbolA || !symbolB || symbolA === symbolB) continue;
-    if (!/^[A-Z0-9][A-Z0-9-]{1,30}$/u.test(symbolA)) continue;
-    if (!/^[A-Z0-9][A-Z0-9-]{1,30}$/u.test(symbolB)) continue;
 
     for (const [symbol, stringId] of [
       [symbolA, row.stringId_A],
@@ -82,7 +159,6 @@ export function normalizeStringNetwork(rows, querySymbols, retrievedAt) {
 
     const [source, target] = [symbolA, symbolB].sort((left, right) => left.localeCompare(right));
     const edgeId = `${source}::${target}`;
-    const combinedScore = score(row.score);
     const evidenceChannels = EVIDENCE_CHANNELS
       .map(([label, field]) => ({ label, score: score(row?.[field]) }))
       .filter((channel) => channel.score > 0);
@@ -145,6 +221,8 @@ export async function getGeneNetwork(symbols, options = {}, dependencies = {}) {
       requestedSymbols,
       querySymbols,
       omittedSymbols,
+      resolvedQuerySymbols: [],
+      queryMappings: [],
       nodes: [],
       edges: [],
       sourceStatus: 'insufficient_input',
@@ -162,7 +240,55 @@ export async function getGeneNetwork(symbols, options = {}, dependencies = {}) {
     caller_identity: 'GeneMapDiscovery',
   });
 
+  let queryMappings = normalizeStringQueryMappings([], querySymbols);
+  let resolvedQuerySymbols = [];
+
   try {
+    const resolutionParams = new URLSearchParams({
+      identifiers: querySymbols.join('\r'),
+      species: String(HUMAN_TAXON_ID),
+      limit: '1',
+      echo_query: '1',
+      caller_identity: 'GeneMapDiscovery',
+    });
+    const resolutionResponse = await fetchImpl(
+      `${STRING_IDENTIFIER_ENDPOINT}?${resolutionParams.toString()}`,
+      {
+        headers: { Accept: 'application/json' },
+        signal: AbortSignal.timeout(15_000),
+      },
+    );
+    if (!resolutionResponse.ok) {
+      throw new Error(`STRING identifier request returned HTTP ${resolutionResponse.status}`);
+    }
+    queryMappings = normalizeStringQueryMappings(
+      await resolutionResponse.json(),
+      querySymbols,
+    );
+    resolvedQuerySymbols = [...new Set(queryMappings
+      .filter((mapping) => mapping.resolved)
+      .map((mapping) => mapping.preferredSymbol))]
+      .sort((left, right) => left.localeCompare(right));
+    source.networkUrl = networkPageUrl(
+      resolvedQuerySymbols.length > 0 ? resolvedQuerySymbols : querySymbols,
+    );
+
+    if (resolvedQuerySymbols.length < 2) {
+      const network = normalizeStringNetwork([], querySymbols, retrievedAt, queryMappings);
+      return {
+        requestedSymbols,
+        querySymbols,
+        omittedSymbols,
+        resolvedQuerySymbols,
+        queryMappings,
+        ...network,
+        sourceStatus: 'no_associations',
+        source,
+        retrievedAt,
+      };
+    }
+
+    params.set('identifiers', resolvedQuerySymbols.join('\r'));
     const response = await fetchImpl(`${STRING_NETWORK_ENDPOINT}?${params.toString()}`, {
       headers: { Accept: 'application/json' },
       signal: AbortSignal.timeout(15_000),
@@ -174,11 +300,13 @@ export async function getGeneNetwork(symbols, options = {}, dependencies = {}) {
     if (!Array.isArray(rows)) {
       throw new Error('STRING network response was not an array');
     }
-    const network = normalizeStringNetwork(rows, querySymbols, retrievedAt);
+    const network = normalizeStringNetwork(rows, querySymbols, retrievedAt, queryMappings);
     return {
       requestedSymbols,
       querySymbols,
       omittedSymbols,
+      resolvedQuerySymbols,
+      queryMappings,
       ...network,
       sourceStatus: network.edges.length > 0 ? 'available' : 'no_associations',
       source,
@@ -190,12 +318,9 @@ export async function getGeneNetwork(symbols, options = {}, dependencies = {}) {
       requestedSymbols,
       querySymbols,
       omittedSymbols,
-      nodes: querySymbols.map((symbol) => ({
-        id: symbol,
-        symbol,
-        stringId: null,
-        kind: 'query',
-      })),
+      resolvedQuerySymbols,
+      queryMappings,
+      nodes: normalizeStringNetwork([], querySymbols, retrievedAt, queryMappings).nodes,
       edges: [],
       sourceStatus: 'unavailable',
       source,

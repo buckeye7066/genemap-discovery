@@ -7,6 +7,8 @@ const EMPTY_RESULT = Object.freeze({
   requestedSymbols: [],
   querySymbols: [],
   omittedSymbols: [],
+  resolvedQuerySymbols: [],
+  queryMappings: [],
   nodes: [],
   edges: [],
   sourceStatus: 'unavailable',
@@ -79,6 +81,10 @@ export async function fetchGeneNetwork(symbols, options = {}) {
       requestedSymbols,
       querySymbols: Array.isArray(response?.querySymbols) ? response.querySymbols : querySymbols,
       omittedSymbols,
+      resolvedQuerySymbols: Array.isArray(response?.resolvedQuerySymbols)
+        ? response.resolvedQuerySymbols
+        : [],
+      queryMappings: Array.isArray(response?.queryMappings) ? response.queryMappings : [],
       nodes: Array.isArray(response?.nodes) ? response.nodes : [],
       edges: Array.isArray(response?.edges) ? response.edges : [],
       source: {

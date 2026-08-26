@@ -33,6 +33,34 @@ const STRING_ROWS = [
   },
 ];
 
+const STRING_ID_ROWS = [
+  {
+    queryIndex: 0,
+    queryItem: 'SCN1A',
+    stringId: '9606.ENSP00000316527',
+    preferredName: 'SCN1A',
+  },
+  {
+    queryIndex: 1,
+    queryItem: 'SCN2A',
+    stringId: '9606.ENSP00000303540',
+    preferredName: 'SCN2A',
+  },
+];
+
+function okJson(payload) {
+  return {
+    ok: true,
+    json: vi.fn().mockResolvedValue(payload),
+  };
+}
+
+function networkFetch(rows = STRING_ROWS, identifierRows = STRING_ID_ROWS) {
+  return vi.fn()
+    .mockResolvedValueOnce(okJson(identifierRows))
+    .mockResolvedValueOnce(okJson(rows));
+}
+
 describe('STRING gene-network adapter', () => {
   it('normalizes API rows in stable order and distinguishes query from expanded nodes', () => {
     const network = normalizeStringNetwork(
@@ -93,10 +121,7 @@ describe('STRING gene-network adapter', () => {
   });
 
   it('sends sorted bounded public symbols and fixed human functional-network parameters', async () => {
-    const fetchImpl = vi.fn().mockResolvedValue({
-      ok: true,
-      json: vi.fn().mockResolvedValue(STRING_ROWS),
-    });
+    const fetchImpl = networkFetch();
 
     const result = await getGeneNetwork(
       ['scn2a', 'SCN1A', 'SCN1A'],
@@ -104,8 +129,19 @@ describe('STRING gene-network adapter', () => {
       { fetchImpl, now: () => new Date(RETRIEVED_AT) },
     );
 
-    expect(fetchImpl).toHaveBeenCalledTimes(1);
-    const [url, request] = fetchImpl.mock.calls[0];
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    const [resolutionUrl, resolutionRequest] = fetchImpl.mock.calls[0];
+    const parsedResolution = new URL(resolutionUrl);
+    expect(parsedResolution.origin + parsedResolution.pathname)
+      .toBe('https://string-db.org/api/json/get_string_ids');
+    expect(parsedResolution.searchParams.get('identifiers')).toBe('SCN1A\rSCN2A');
+    expect(parsedResolution.searchParams.get('species')).toBe('9606');
+    expect(parsedResolution.searchParams.get('limit')).toBe('1');
+    expect(parsedResolution.searchParams.get('echo_query')).toBe('1');
+    expect(parsedResolution.searchParams.get('caller_identity')).toBe('GeneMapDiscovery');
+    expect(resolutionRequest.headers).toEqual({ Accept: 'application/json' });
+
+    const [url, request] = fetchImpl.mock.calls[1];
     const parsed = new URL(url);
     expect(parsed.origin + parsed.pathname).toBe('https://string-db.org/api/json/network');
     expect(parsed.searchParams.get('identifiers')).toBe('SCN1A\rSCN2A');
@@ -117,6 +153,11 @@ describe('STRING gene-network adapter', () => {
     expect(request.headers).toEqual({ Accept: 'application/json' });
     expect(result).toMatchObject({
       querySymbols: ['SCN1A', 'SCN2A'],
+      resolvedQuerySymbols: ['SCN1A', 'SCN2A'],
+      queryMappings: [
+        { submittedSymbol: 'SCN1A', preferredSymbol: 'SCN1A', resolved: true },
+        { submittedSymbol: 'SCN2A', preferredSymbol: 'SCN2A', resolved: true },
+      ],
       sourceStatus: 'available',
       retrievedAt: RETRIEVED_AT,
       source: {
@@ -153,10 +194,7 @@ describe('STRING gene-network adapter', () => {
       ['SCN1A', 'SCN2A'],
       {},
       {
-        fetchImpl: vi.fn().mockResolvedValue({
-          ok: true,
-          json: vi.fn().mockResolvedValue({ message: 'unexpected payload' }),
-        }),
+        fetchImpl: networkFetch({ message: 'unexpected payload' }),
         logger,
       },
     );
@@ -176,18 +214,115 @@ describe('STRING gene-network adapter', () => {
     );
   });
 
+  it.each([
+    ['missing', undefined],
+    ['nonnumeric', 'not-a-score'],
+    ['negative', -0.01],
+    ['greater than one', 1.01],
+  ])('treats a %s combined score as an unavailable source response', async (_name, value) => {
+    const row = { ...STRING_ROWS[0] };
+    if (value === undefined) delete row.score;
+    else row.score = value;
+    const logger = { warn: vi.fn() };
+
+    const result = await getGeneNetwork(
+      ['SCN1A', 'SCN2A'],
+      {},
+      { fetchImpl: networkFetch([row]), logger },
+    );
+
+    expect(result).toMatchObject({
+      sourceStatus: 'unavailable',
+      retrievedAt: null,
+      edges: [],
+      nodes: [
+        { symbol: 'SCN1A', kind: 'query' },
+        { symbol: 'SCN2A', kind: 'query' },
+      ],
+    });
+    expect(logger.warn).toHaveBeenCalledWith(
+      { error: 'STRING network response contained an invalid combined score' },
+      'STRING network lookup failed',
+    );
+  });
+
+  it('maps submitted aliases to preferred STRING symbols before classifying query nodes', async () => {
+    const identifierRows = [
+      {
+        queryIndex: 0,
+        queryItem: 'P53',
+        stringId: '9606.ENSP00000269305',
+        preferredName: 'TP53',
+      },
+      {
+        queryIndex: 1,
+        queryItem: 'SCN1A',
+        stringId: '9606.ENSP00000316527',
+        preferredName: 'SCN1A',
+      },
+    ];
+    const rows = [{
+      stringId_A: '9606.ENSP00000269305',
+      stringId_B: '9606.ENSP00000316527',
+      preferredName_A: 'TP53',
+      preferredName_B: 'SCN1A',
+      score: 0.88,
+      escore: 0.7,
+    }];
+    const fetchImpl = networkFetch(rows, identifierRows);
+
+    const result = await getGeneNetwork(
+      ['p53', 'SCN1A'],
+      {},
+      { fetchImpl, now: () => new Date(RETRIEVED_AT) },
+    );
+
+    const networkUrl = new URL(fetchImpl.mock.calls[1][0]);
+    expect(networkUrl.searchParams.get('identifiers')).toBe('SCN1A\rTP53');
+    expect(result).toMatchObject({
+      querySymbols: ['P53', 'SCN1A'],
+      resolvedQuerySymbols: ['SCN1A', 'TP53'],
+      queryMappings: [
+        {
+          submittedSymbol: 'P53',
+          preferredSymbol: 'TP53',
+          stringId: '9606.ENSP00000269305',
+          resolved: true,
+        },
+        {
+          submittedSymbol: 'SCN1A',
+          preferredSymbol: 'SCN1A',
+          stringId: '9606.ENSP00000316527',
+          resolved: true,
+        },
+      ],
+      nodes: [
+        { symbol: 'SCN1A', kind: 'query' },
+        { symbol: 'TP53', kind: 'query' },
+      ],
+      edges: [{ id: 'SCN1A::TP53', source: 'SCN1A', target: 'TP53', score: 0.88 }],
+      sourceStatus: 'available',
+    });
+    expect(result.nodes.some((node) => node.symbol === 'P53')).toBe(false);
+    expect(new URL(result.source.networkUrl).searchParams.get('identifiers'))
+      .toBe('SCN1A\rTP53');
+  });
+
   it('reports any symbols outside the bounded upstream request instead of silently dropping them', async () => {
     const requestedSymbols = Array.from(
       { length: 12 },
       (_, index) => `G${String(index + 1).padStart(2, '0')}`,
     );
-    const fetchImpl = vi.fn().mockResolvedValue({
-      ok: true,
-      json: vi.fn().mockResolvedValue([]),
-    });
+    const identifierRows = requestedSymbols.slice(0, 10).map((symbol, queryIndex) => ({
+      queryIndex,
+      queryItem: symbol,
+      stringId: `9606.${symbol}`,
+      preferredName: symbol,
+    }));
+    const fetchImpl = networkFetch([], identifierRows);
 
     const result = await getGeneNetwork(requestedSymbols, {}, { fetchImpl });
-    const [url] = fetchImpl.mock.calls[0];
+    const [url] = fetchImpl.mock.calls[1];
 
     expect(new URL(url).searchParams.get('identifiers')).toBe(
       requestedSymbols.slice(0, 10).join('\r'),
