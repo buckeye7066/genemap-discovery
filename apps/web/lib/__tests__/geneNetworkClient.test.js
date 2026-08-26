@@ -4,7 +4,11 @@ const shared = vi.hoisted(() => ({ request: vi.fn() }));
 
 vi.mock('@genemap/shared', () => ({ apiClient: shared }));
 
-import { fetchGeneNetwork, __test } from '../geneNetworkClient';
+import {
+  fetchGeneNetwork,
+  GENE_NETWORK_CLIENT_TIMEOUT_MS,
+  __test,
+} from '../geneNetworkClient';
 
 describe('geneNetworkClient', () => {
   beforeEach(() => {
@@ -32,8 +36,9 @@ describe('geneNetworkClient', () => {
         requiredScore: 700,
         addNodes: 2,
       }),
-      timeoutMs: 30_000,
+      timeoutMs: 40_000,
     });
+    expect(GENE_NETWORK_CLIENT_TIMEOUT_MS).toBeGreaterThan(2 * 15_000);
     expect(__test.isPublicGeneSymbol('SCN1A')).toBe(true);
     expect(__test.isPublicGeneSymbol('TAKE-5MG')).toBe(false);
   });

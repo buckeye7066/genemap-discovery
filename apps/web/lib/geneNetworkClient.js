@@ -2,6 +2,7 @@ import { apiClient } from '@genemap/shared';
 
 const CLINICAL_COMMAND = /^(?:TAKE|START|STOP|AVOID|USE|ADMINISTER|INJECT|SWALLOW|APPLY|PRESCRIBE|SWITCH)\b/u;
 export const GENE_NETWORK_MAX_SYMBOLS = 10;
+export const GENE_NETWORK_CLIENT_TIMEOUT_MS = 40_000;
 
 const EMPTY_RESULT = Object.freeze({
   requestedSymbols: [],
@@ -74,7 +75,7 @@ export async function fetchGeneNetwork(symbols, options = {}) {
     const response = await apiClient.request('/genomics/gene-network', {
       method: 'POST',
       body: JSON.stringify({ symbols: querySymbols, requiredScore, addNodes }),
-      timeoutMs: 30_000,
+      timeoutMs: GENE_NETWORK_CLIENT_TIMEOUT_MS,
     });
     return {
       ...EMPTY_RESULT,

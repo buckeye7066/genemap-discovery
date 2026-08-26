@@ -91,7 +91,7 @@ _SOURCE_BOUNDARY_JOINERS = re.compile(
 )
 
 _SOURCE_VALUE_PREFIX = (
-    r"(?:^|[=(:,\[\]!&|?+*%;~\-]|\b(?:return|throw|yield|case)\b)\s*"
+    r"(?:^|=>|[=(:,\[{\]!&|?+*%;~\-]|\b(?:return|throw|yield|case)\b)\s*"
 )
 _SOURCE_COMMENT_PROTECTED_CONTEXT = re.compile(
     r"""
@@ -109,14 +109,20 @@ _SOURCE_COMMENT_PROTECTED_CONTEXT = re.compile(
         |
         `(?:\\[\s\S]|[^`\\])*`
         |
-        /(?:\\[\s\S]|[^/\\\r\n])+/[dgimsuvy]*
+        /(?![/*])(?:\\[\s\S]|[^/\\\r\n])+/[dgimsuvy]*
     )
     |
-    (?m:^[ \t]*//[^\r\n\u2028\u2029]*)
+    (?m:(?:^|[^\S\r\n]|[;{}])[ \t]*//[^\r\n\u2028\u2029]*)
     |
-    """
-    + _SOURCE_VALUE_PREFIX
-    + r"""
+    (?:
+        ^
+        |
+        [=(:,\[\]!&|?+*%;~\-;}][ \t]*
+        |
+        \b[A-Za-z_$][\w$]*[ \t]+
+        |
+        [\d)\]][ \t]+
+    )
     /\*[\s\S]*?\*/
     """,
     re.I | re.VERBOSE,
@@ -124,6 +130,13 @@ _SOURCE_COMMENT_PROTECTED_CONTEXT = re.compile(
 _HTML_RENDERED_COMMENT = re.compile(r"<!--[\s\S]*?-->")
 _JSX_RENDERED_COMMENT = re.compile(r"\{\s*/\*[\s\S]*?\*/\s*\}")
 _LITERAL_COMMENT_MARKER = "\uFFFC"
+_MARKUP_TAG = re.compile(
+    r"<\s*(?P<closing>/)?\s*(?P<name>[A-Za-z][\w:.-]*)\b[^<>]*?(?P<self_closing>/)?\s*>",
+    re.I,
+)
+_VOID_MARKUP_TAGS = frozenset(
+    {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"}
+)
 
 _SOURCE_TRIVIA = r"(?:\s|/\*[\s\S]*?\*/|//[^\r\n\u2028\u2029]*(?:\r\n|[\r\n\u2028\u2029]|$))*"
 _SOURCE_LITERAL_PATTERN = (
@@ -209,6 +222,23 @@ def normalize_text(text: str) -> str:
 def source_boundary_projection(text: str) -> str:
     """Join text fragments separated only by common rendered-source syntax."""
 
+    def inside_rendered_markup(position: int) -> bool:
+        stack: list[str] = []
+        last_tag_end = 0
+        for tag in _MARKUP_TAG.finditer(text, 0, position):
+            name = tag.group("name").lower()
+            if tag.group("closing"):
+                if name in stack:
+                    reverse_index = stack[::-1].index(name)
+                    del stack[len(stack) - reverse_index - 1 :]
+            elif not tag.group("self_closing") and name not in _VOID_MARKUP_TAGS:
+                stack.append(name)
+            last_tag_end = tag.end()
+        if not stack:
+            return False
+        markup_text = text[last_tag_end:position]
+        return markup_text.rfind("{") <= markup_text.rfind("}")
+
     def strip_rendered_comments(segment: str) -> str:
         segment = _HTML_RENDERED_COMMENT.sub("", segment)
         return _JSX_RENDERED_COMMENT.sub("", segment)
@@ -221,7 +251,15 @@ def source_boundary_projection(text: str) -> str:
     cursor = 0
     for match in _SOURCE_COMMENT_PROTECTED_CONTEXT.finditer(text):
         projected.append(strip_rendered_comments(text[cursor:match.start()]))
-        projected.append(protect_literal_comments(match.group(0)))
+        starts_source_expression = match.group(0).lstrip().startswith("{")
+        if (
+            match.group("raw_tag")
+            or starts_source_expression
+            or not inside_rendered_markup(match.start())
+        ):
+            projected.append(protect_literal_comments(match.group(0)))
+        else:
+            projected.append(strip_rendered_comments(match.group(0)))
         cursor = match.end()
     projected.append(strip_rendered_comments(text[cursor:]))
     return _SOURCE_BOUNDARY_JOINERS.sub("", "".join(projected))
@@ -656,6 +694,20 @@ def run_self_test() -> None:
             + COMPLETION_TOKEN[3:]
             + "s</span> can't</p>"
         ),
+        "HTML comment boundary inside quoted markup": (
+            "<p>Message: '<span>"
+            + COMPLETION_TOKEN[:3]
+            + "</span><!-- rendered split --><span>"
+            + COMPLETION_TOKEN[3:]
+            + "s</span>'</p>"
+        ),
+        "JSX comment boundary inside quoted markup": (
+            "<p>Message: '<span>"
+            + COMPLETION_TOKEN[:3]
+            + "</span>{/* rendered split */}<span>"
+            + COMPLETION_TOKEN[3:]
+            + "s</span>'</p>"
+        ),
         "escaped JavaScript hex literal": (
             "const status = '"
             + "\\"
@@ -864,6 +916,13 @@ def run_self_test() -> None:
             + COMPLETION_TOKEN[3:]
             + "s\";"
         ),
+        "HTML comment in JSX string expression": (
+            "<p>{'"
+            + COMPLETION_TOKEN[:3]
+            + "<!-- ordinary literal -->"
+            + COMPLETION_TOKEN[3:]
+            + "s'}</p>"
+        ),
         "HTML comment in raw-text element": (
             "<textarea>"
             + COMPLETION_TOKEN[:3]
@@ -885,12 +944,33 @@ def run_self_test() -> None:
             + COMPLETION_TOKEN[3:]
             + "s */"
         ),
+        "HTML comment in inline JavaScript block comment": (
+            "const value = item /* "
+            + COMPLETION_TOKEN[:3]
+            + "<!-- ordinary literal -->"
+            + COMPLETION_TOKEN[3:]
+            + "s */;"
+        ),
         "HTML comment in JavaScript line comment": (
             "// "
             + COMPLETION_TOKEN[:3]
             + "<!-- ordinary literal -->"
             + COMPLETION_TOKEN[3:]
             + "s"
+        ),
+        "HTML comment in inline JavaScript line comment": (
+            "const value = 1; // "
+            + COMPLETION_TOKEN[:3]
+            + "<!-- ordinary literal -->"
+            + COMPLETION_TOKEN[3:]
+            + "s"
+        ),
+        "HTML comment in arrow-body JavaScript regex": (
+            "const pattern = () => /"
+            + COMPLETION_TOKEN[:3]
+            + "<!-- ordinary literal -->"
+            + COMPLETION_TOKEN[3:]
+            + "s/;"
         ),
     }
 
