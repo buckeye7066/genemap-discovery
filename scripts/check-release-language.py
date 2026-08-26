@@ -72,8 +72,6 @@ _BOM_ENCODINGS = (
 _SOURCE_BOUNDARY_JOINERS = re.compile(
     r"""
     (?:
-        <!--[\s\S]*?-->
-        |
         </?(?:[A-Za-z][^<>]{0,2000})?>
         |
         ["'`]
@@ -91,6 +89,24 @@ _SOURCE_BOUNDARY_JOINERS = re.compile(
     """,
     re.VERBOSE,
 )
+
+_SOURCE_COMMENT_PROTECTED_CONTEXT = re.compile(
+    r"""
+    <(?P<raw_tag>script|style|textarea|title|xmp|iframe|noembed|noframes)\b[^>]*>
+    [\s\S]*?
+    </(?P=raw_tag)\s*>
+    |
+    '(?:\\[\s\S]|[^'\\])*'
+    |
+    "(?:\\[\s\S]|[^"\\])*"
+    |
+    `(?:\\[\s\S]|[^`\\])*`
+    """,
+    re.I | re.VERBOSE,
+)
+_HTML_RENDERED_COMMENT = re.compile(r"<!--[\s\S]*?-->")
+_JSX_RENDERED_COMMENT = re.compile(r"\{\s*/\*[\s\S]*?\*/\s*\}")
+_LITERAL_COMMENT_MARKER = "\uFFFC"
 
 _SOURCE_TRIVIA = r"(?:\s|/\*[\s\S]*?\*/|//[^\r\n\u2028\u2029]*(?:\r\n|[\r\n\u2028\u2029]|$))*"
 _SOURCE_LITERAL_PATTERN = (
@@ -176,7 +192,22 @@ def normalize_text(text: str) -> str:
 def source_boundary_projection(text: str) -> str:
     """Join text fragments separated only by common rendered-source syntax."""
 
-    return _SOURCE_BOUNDARY_JOINERS.sub("", text)
+    def strip_rendered_comments(segment: str) -> str:
+        segment = _HTML_RENDERED_COMMENT.sub("", segment)
+        return _JSX_RENDERED_COMMENT.sub("", segment)
+
+    def protect_literal_comments(segment: str) -> str:
+        segment = _HTML_RENDERED_COMMENT.sub(_LITERAL_COMMENT_MARKER, segment)
+        return _JSX_RENDERED_COMMENT.sub(_LITERAL_COMMENT_MARKER, segment)
+
+    projected: list[str] = []
+    cursor = 0
+    for match in _SOURCE_COMMENT_PROTECTED_CONTEXT.finditer(text):
+        projected.append(strip_rendered_comments(text[cursor:match.start()]))
+        projected.append(protect_literal_comments(match.group(0)))
+        cursor = match.end()
+    projected.append(strip_rendered_comments(text[cursor:]))
+    return _SOURCE_BOUNDARY_JOINERS.sub("", "".join(projected))
 
 
 def source_template_projection(text: str) -> str:
@@ -589,6 +620,11 @@ def run_self_test() -> None:
             "<!-- rendered split -->"
             f"<span>{COMPLETION_TOKEN[3:]}s</span>"
         ),
+        "JSX comment expression boundary": (
+            f"<span>{COMPLETION_TOKEN[:3]}</span>"
+            "{/* rendered split */}"
+            f"<span>{COMPLETION_TOKEN[3:]}s</span>"
+        ),
         "escaped JavaScript hex literal": (
             "const status = '"
             + "\\"
@@ -789,6 +825,20 @@ def run_self_test() -> None:
             + "${''}"
             + COMPLETION_TOKEN[3:]
             + "s\";"
+        ),
+        "HTML comment in JavaScript string": (
+            "const label = \""
+            + COMPLETION_TOKEN[:3]
+            + "<!-- ordinary literal -->"
+            + COMPLETION_TOKEN[3:]
+            + "s\";"
+        ),
+        "HTML comment in raw-text element": (
+            "<textarea>"
+            + COMPLETION_TOKEN[:3]
+            + "<!-- ordinary literal -->"
+            + COMPLETION_TOKEN[3:]
+            + "s</textarea>"
         ),
     }
 

@@ -351,6 +351,26 @@ describe('STRING gene-network adapter', () => {
     });
   });
 
+  it('validates node identity consistency before applying the output edge cap', async () => {
+    const rows = Array.from(
+      { length: GENE_NETWORK_LIMITS.maxEdges },
+      () => ({ ...STRING_ROWS[0] }),
+    );
+    rows.push({ ...STRING_ROWS[0], stringId_A: '9606.ENSP00000999999' });
+
+    const result = await getGeneNetwork(
+      ['SCN1A', 'SCN2A'],
+      {},
+      { fetchImpl: networkFetch(rows) },
+    );
+
+    expect(result).toMatchObject({
+      sourceStatus: 'unavailable',
+      retrievedAt: null,
+      edges: [],
+    });
+  });
+
   it('rejects an association component disconnected from every resolved query', async () => {
     const logger = { warn: vi.fn() };
     const unrelatedRow = {
@@ -502,6 +522,71 @@ describe('STRING gene-network adapter', () => {
     );
   });
 
+  it('rejects a network STRING ID that conflicts with the resolver mapping', async () => {
+    const logger = { warn: vi.fn() };
+    const row = {
+      ...STRING_ROWS[0],
+      stringId_A: '9606.ENSP00000999999',
+    };
+
+    const result = await getGeneNetwork(
+      ['SCN1A', 'SCN2A'],
+      {},
+      { fetchImpl: networkFetch([row]), logger },
+    );
+
+    expect(result).toMatchObject({
+      sourceStatus: 'unavailable',
+      retrievedAt: null,
+      edges: [],
+    });
+    expect(logger.warn).toHaveBeenCalledWith(
+      { error: 'STRING network response contained conflicting node identities' },
+      'STRING network lookup failed',
+    );
+  });
+
+  it.each([
+    [
+      'one preferred symbol with different STRING IDs',
+      [
+        STRING_ROWS[1],
+        {
+          ...STRING_ROWS[0],
+          stringId_A: '9606.ENSP00000316527',
+          stringId_B: '9606.ENSP00000999999',
+          preferredName_A: 'SCN1A',
+          preferredName_B: 'SCN3A',
+        },
+      ],
+    ],
+    [
+      'one STRING ID assigned to different preferred symbols',
+      [{
+        ...STRING_ROWS[1],
+        stringId_B: '9606.ENSP00000303540',
+      }],
+    ],
+  ])('rejects network rows that report %s', async (_name, rows) => {
+    const logger = { warn: vi.fn() };
+
+    const result = await getGeneNetwork(
+      ['SCN1A', 'SCN2A'],
+      {},
+      { fetchImpl: networkFetch(rows), logger },
+    );
+
+    expect(result).toMatchObject({
+      sourceStatus: 'unavailable',
+      retrievedAt: null,
+      edges: [],
+    });
+    expect(logger.warn).toHaveBeenCalledWith(
+      { error: 'STRING network response contained conflicting node identities' },
+      'STRING network lookup failed',
+    );
+  });
+
   it('rejects a resolver row whose echoed and indexed query identities contradict', async () => {
     const logger = { warn: vi.fn() };
     const fetchImpl = vi.fn().mockResolvedValueOnce(okJson([{
@@ -614,6 +699,42 @@ describe('STRING gene-network adapter', () => {
       identifierResolutionStatus: 'available',
       resolvedQuerySymbols: ['SCN1A', 'SCN2A'],
     });
+  });
+
+  it('rejects aliases that assign different STRING IDs to one preferred symbol', async () => {
+    const logger = { warn: vi.fn() };
+    const fetchImpl = vi.fn().mockResolvedValueOnce(okJson([
+      {
+        queryIndex: 0,
+        queryItem: 'P53',
+        stringId: '9606.ENSP00000269305',
+        preferredName: 'TP53',
+      },
+      {
+        queryIndex: 1,
+        queryItem: 'TRP53',
+        stringId: '9606.ENSP00000999999',
+        preferredName: 'TP53',
+      },
+    ]));
+
+    const result = await getGeneNetwork(
+      ['P53', 'TRP53'],
+      {},
+      { fetchImpl, logger },
+    );
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(result).toMatchObject({
+      sourceStatus: 'unavailable',
+      identifierResolutionStatus: 'unavailable',
+      nodes: [],
+      edges: [],
+    });
+    expect(logger.warn).toHaveBeenCalledWith(
+      { error: 'STRING identifier response contained conflicting node identities' },
+      'STRING network lookup failed',
+    );
   });
 
   it('does not classify an unresolved submitted identifier as a queried node', async () => {

@@ -74,6 +74,8 @@ export function normalizeStringQueryMappings(rows, querySymbols) {
   const cleanQuerySymbols = cleanSymbols(querySymbols);
   const querySet = new Set(cleanQuerySymbols);
   const resolved = new Map();
+  const preferredStringIds = new Map();
+  const stringIdSymbols = new Map();
 
   for (const row of rows) {
     if (!row || typeof row !== 'object' || Array.isArray(row)) {
@@ -122,7 +124,26 @@ export function normalizeStringQueryMappings(rows, querySymbols) {
     )) {
       throw new Error('STRING identifier response contained conflicting duplicate mappings');
     }
+    if (
+      preferredStringIds.has(preferredSymbol)
+      && preferredStringIds.get(preferredSymbol) !== stringId
+    ) {
+      throw new Error('STRING identifier response contained conflicting node identities');
+    }
+    if (
+      stringId
+      && stringIdSymbols.has(stringId)
+      && stringIdSymbols.get(stringId) !== preferredSymbol
+    ) {
+      throw new Error('STRING identifier response contained conflicting node identities');
+    }
     if (!existing) resolved.set(submittedSymbol, candidate);
+    if (!preferredStringIds.has(preferredSymbol)) {
+      preferredStringIds.set(preferredSymbol, stringId);
+    }
+    if (stringId && !stringIdSymbols.has(stringId)) {
+      stringIdSymbols.set(stringId, preferredSymbol);
+    }
   }
 
   return cleanQuerySymbols.map((submittedSymbol) => resolved.get(submittedSymbol) || {
@@ -152,17 +173,42 @@ export function normalizeStringNetwork(
   const resolvedMappings = normalizedMappings.filter((mapping) => mapping?.resolved !== false);
   const querySet = new Set(resolvedMappings.map((mapping) => mapping.preferredSymbol));
   const nodeMap = new Map();
-  for (const mapping of resolvedMappings) {
-    const symbol = providerSymbol(mapping?.preferredSymbol);
-    if (!symbol) continue;
+  const stringIdsBySymbol = new Map();
+  const stringIdOwners = new Map();
+  const identityError = 'STRING network response contained conflicting node identities';
+
+  const registerNodeIdentity = (symbol, stringId) => {
+    if (
+      stringId
+      && stringIdsBySymbol.has(symbol)
+      && stringIdsBySymbol.get(symbol) !== stringId
+    ) {
+      throw new Error(identityError);
+    }
+    if (stringId) {
+      const existingOwner = stringIdOwners.get(stringId);
+      if (existingOwner && existingOwner !== symbol) throw new Error(identityError);
+      if (!stringIdsBySymbol.has(symbol)) stringIdsBySymbol.set(symbol, stringId);
+      if (!stringIdOwners.has(stringId)) stringIdOwners.set(stringId, symbol);
+    }
+  };
+
+  const putNode = (symbol, kind) => {
     const existing = nodeMap.get(symbol);
     nodeMap.set(symbol, {
       id: symbol,
       symbol,
-      stringId: existing?.stringId
-        || (typeof mapping.stringId === 'string' ? mapping.stringId : null),
-      kind: 'query',
+      stringId: stringIdsBySymbol.get(symbol) || null,
+      kind: existing?.kind === 'query' || kind === 'query' ? 'query' : 'expanded',
     });
+  };
+
+  for (const mapping of resolvedMappings) {
+    const symbol = providerSymbol(mapping?.preferredSymbol);
+    if (!symbol) continue;
+    const taxonError = 'STRING network response contradicted human taxon provenance';
+    registerNodeIdentity(symbol, humanStringId(mapping.stringId, taxonError));
+    putNode(symbol, 'query');
   }
   const edgeMap = new Map();
   if (!Array.isArray(rows)) {
@@ -233,6 +279,10 @@ export function normalizeStringNetwork(
       throw new Error('STRING network response fell outside the resolved query scope');
     }
   };
+  for (const { symbolA, symbolB, stringIdA, stringIdB } of validatedRows) {
+    registerNodeIdentity(symbolA, stringIdA);
+    registerNodeIdentity(symbolB, stringIdB);
+  }
   assertConnectedToQuery(validatedRows);
   const boundedRows = validatedRows.slice(0, MAX_EDGES);
   assertConnectedToQuery(boundedRows);
@@ -249,17 +299,8 @@ export function normalizeStringNetwork(
       [symbolA, stringIdA],
       [symbolB, stringIdB],
     ]) {
-      const existing = nodeMap.get(symbol);
-      if (!existing) {
-        nodeMap.set(symbol, {
-          id: symbol,
-          symbol,
-          stringId: typeof stringId === 'string' ? stringId : null,
-          kind: querySet.has(symbol) ? 'query' : 'expanded',
-        });
-      } else if (!existing.stringId && typeof stringId === 'string') {
-        nodeMap.set(symbol, { ...existing, stringId });
-      }
+      registerNodeIdentity(symbol, stringId);
+      putNode(symbol, querySet.has(symbol) ? 'query' : 'expanded');
     }
 
     const [source, target] = [symbolA, symbolB].sort((left, right) => left.localeCompare(right));
