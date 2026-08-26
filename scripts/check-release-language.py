@@ -124,9 +124,8 @@ _SOURCE_SURROGATE_ESCAPE = re.compile(
     r"(\\+)u(?P<high>d[89ab][0-9a-f]{2})(\\+)u(?P<low>d[c-f][0-9a-f]{2})",
     re.I,
 )
-_SOURCE_SIMPLE_ESCAPE = re.compile(r"(\\+)(?P<escape>['\"\\bfnrtv])")
 _SOURCE_LINE_CONTINUATION = re.compile(r"(\\+)(?:\r\n|[\n\r\u2028\u2029])")
-_SOURCE_IDENTITY_ESCAPE = re.compile(r"(\\+)(?P<value>[^\n\r\u2028\u2029])")
+_SOURCE_CHARACTER_ESCAPE = re.compile(r"(\\+)(?P<value>[^\n\r\u2028\u2029])")
 
 _DEFAULT_IGNORABLE_RANGES = (
     (0x00AD, 0x00AD),
@@ -228,11 +227,13 @@ def source_escape_projection(text: str) -> str:
         codepoint = 0x10000 + ((high - 0xD800) << 10) + (low - 0xDC00)
         return chr(codepoint)
 
-    def decode_simple(match: re.Match[str]) -> str:
+    def decode_character(match: re.Match[str]) -> str:
         slashes = match.group(1)
+        value = match.group("value")
+        literal_prefix = protected_backslashes(len(slashes) // 2)
         if len(slashes) % 2 == 0:
-            return match.group(0)
-        decoded = {
+            return literal_prefix + value
+        simple = {
             "'": "'",
             '"': '"',
             "\\": sentinel,
@@ -242,8 +243,14 @@ def source_escape_projection(text: str) -> str:
             "t": "\t",
             "f": "\f",
             "v": "\v",
-        }[match.group("escape")]
-        return protected_backslashes(len(slashes) // 2) + decoded
+        }
+        if value in simple:
+            return literal_prefix + simple[value]
+        if value == "0" and not match.string[match.end():match.end() + 1].isdigit():
+            return literal_prefix + "\0"
+        if value.lower() in {"x", "u"} or value.isdigit():
+            return literal_prefix + "\\" + value
+        return literal_prefix + value
 
     def decode_continuation(match: re.Match[str]) -> str:
         slashes = match.group(1)
@@ -251,20 +258,10 @@ def source_escape_projection(text: str) -> str:
             return match.group(0)
         return protected_backslashes(len(slashes) // 2)
 
-    def decode_identity(match: re.Match[str]) -> str:
-        slashes = match.group(1)
-        if len(slashes) % 2 == 0:
-            return match.group(0)
-        value = match.group("value")
-        if value.lower() in {"x", "u"} or value.isdigit():
-            return match.group(0)
-        return protected_backslashes(len(slashes) // 2) + value
-
     projected = _SOURCE_LINE_CONTINUATION.sub(decode_continuation, text)
     projected = _SOURCE_SURROGATE_ESCAPE.sub(decode_surrogate_pair, projected)
     projected = _SOURCE_HEX_ESCAPE.sub(decode_hex, projected)
-    projected = _SOURCE_SIMPLE_ESCAPE.sub(decode_simple, projected)
-    projected = _SOURCE_IDENTITY_ESCAPE.sub(decode_identity, projected)
+    projected = _SOURCE_CHARACTER_ESCAPE.sub(decode_character, projected)
     return projected.replace(sentinel, "\\")
 
 
@@ -713,6 +710,13 @@ def run_self_test() -> None:
             "const status = '"
             + COMPLETION_TOKEN[:2]
             + "\\\\"
+            + COMPLETION_TOKEN[2:]
+            + "s';"
+        ),
+        "odd identity backslash parity": (
+            "const status = '"
+            + COMPLETION_TOKEN[:2]
+            + "\\" * 3
             + COMPLETION_TOKEN[2:]
             + "s';"
         ),
