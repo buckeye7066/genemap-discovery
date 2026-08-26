@@ -74,12 +74,46 @@ _SOURCE_BOUNDARY_JOINERS = re.compile(
     (?:
         </?(?:[A-Za-z][^<>]{0,2000})?>
         |
-        ["'`]\s*[)\]}]*\s*\+\s*[(\[{]*\s*["'`]
+        ["'`]
+        (?:\s|/\*[\s\S]*?\*/|//[^\r\n\u2028\u2029]*(?:\r\n|[\r\n\u2028\u2029]|$))*
+        [)\]}]*
+        (?:\s|/\*[\s\S]*?\*/|//[^\r\n\u2028\u2029]*(?:\r\n|[\r\n\u2028\u2029]|$))*
+        \+
+        (?:\s|/\*[\s\S]*?\*/|//[^\r\n\u2028\u2029]*(?:\r\n|[\r\n\u2028\u2029]|$))*
+        [(\[{]*
+        (?:\s|/\*[\s\S]*?\*/|//[^\r\n\u2028\u2029]*(?:\r\n|[\r\n\u2028\u2029]|$))*
+        ["'`]
         |
         ["'`]\s*}\s*{\s*["'`]
     )
     """,
     re.VERBOSE,
+)
+
+_SOURCE_TRIVIA = r"(?:\s|/\*[\s\S]*?\*/|//[^\r\n\u2028\u2029]*(?:\r\n|[\r\n\u2028\u2029]|$))*"
+_SOURCE_LITERAL_PATTERN = (
+    r"(?:'(?:\\[\s\S]|[^'\\])*'"
+    r'|"(?:\\[\s\S]|[^"\\])*"'
+    r"|`(?:\\[\s\S]|[^`\\$]|\$(?!\{))*`)"
+)
+_SOURCE_LITERAL = re.compile(
+    r"'(?P<single>(?:\\[\s\S]|[^'\\])*)'"
+    r'|"(?P<double>(?:\\[\s\S]|[^"\\])*)"'
+    r"|`(?P<template>(?:\\[\s\S]|[^`\\$]|\$(?!\{))*)`"
+)
+_SOURCE_CONSTANT_TEMPLATE = re.compile(
+    r"\$\{"
+    + _SOURCE_TRIVIA
+    + r"(?P<expression>"
+    + _SOURCE_LITERAL_PATTERN
+    + r"(?:"
+    + _SOURCE_TRIVIA
+    + r"\+"
+    + _SOURCE_TRIVIA
+    + _SOURCE_LITERAL_PATTERN
+    + r")*)"
+    + _SOURCE_TRIVIA
+    + r"\}"
 )
 
 _SOURCE_HEX_ESCAPE = re.compile(
@@ -90,8 +124,9 @@ _SOURCE_SURROGATE_ESCAPE = re.compile(
     r"(\\+)u(?P<high>d[89ab][0-9a-f]{2})(\\+)u(?P<low>d[c-f][0-9a-f]{2})",
     re.I,
 )
-_SOURCE_SIMPLE_ESCAPE = re.compile(r"(\\+)(?P<escape>[nrtfv])")
+_SOURCE_SIMPLE_ESCAPE = re.compile(r"(\\+)(?P<escape>['\"\\bfnrtv])")
 _SOURCE_LINE_CONTINUATION = re.compile(r"(\\+)(?:\r\n|[\n\r\u2028\u2029])")
+_SOURCE_IDENTITY_ESCAPE = re.compile(r"(\\+)(?P<value>[^\n\r\u2028\u2029])")
 
 _DEFAULT_IGNORABLE_RANGES = (
     (0x00AD, 0x00AD),
@@ -135,8 +170,44 @@ def source_boundary_projection(text: str) -> str:
     return _SOURCE_BOUNDARY_JOINERS.sub("", text)
 
 
+def source_template_projection(text: str) -> str:
+    """Project template substitutions made only from constant string literals."""
+
+    def render_constant(match: re.Match[str]) -> str:
+        rendered: list[str] = []
+        for literal in _SOURCE_LITERAL.finditer(match.group("expression")):
+            body = next(
+                value
+                for value in (
+                    literal.group("single"),
+                    literal.group("double"),
+                    literal.group("template"),
+                )
+                if value is not None
+            )
+            rendered.append(source_escape_projection(body))
+        return "".join(rendered)
+
+    projected = text
+    for _ in range(16):
+        updated = _SOURCE_CONSTANT_TEMPLATE.sub(render_constant, projected)
+        if updated == projected:
+            break
+        projected = updated
+    return projected
+
+
 def source_escape_projection(text: str) -> str:
     """Decode rendered JS/JSON escapes while preserving even escaped backslashes."""
+
+    sentinel_codepoint = 0xF0000
+    sentinel = chr(sentinel_codepoint)
+    while sentinel in text:
+        sentinel_codepoint += 1
+        sentinel = chr(sentinel_codepoint)
+
+    def protected_backslashes(count: int) -> str:
+        return sentinel * count
 
     def decode_hex(match: re.Match[str]) -> str:
         slashes = match.group(1)
@@ -147,7 +218,7 @@ def source_escape_projection(text: str) -> str:
         codepoint = int(digits, 16)
         if codepoint > 0x10FFFF or 0xD800 <= codepoint <= 0xDFFF:
             return match.group(0)
-        return "\\" * (len(slashes) // 2) + chr(codepoint)
+        return protected_backslashes(len(slashes) // 2) + chr(codepoint)
 
     def decode_surrogate_pair(match: re.Match[str]) -> str:
         if match.group(1) != "\\" or match.group(3) != "\\":
@@ -162,38 +233,65 @@ def source_escape_projection(text: str) -> str:
         if len(slashes) % 2 == 0:
             return match.group(0)
         decoded = {
+            "'": "'",
+            '"': '"',
+            "\\": sentinel,
+            "b": "\b",
             "n": "\n",
             "r": "\r",
             "t": "\t",
             "f": "\f",
             "v": "\v",
         }[match.group("escape")]
-        return "\\" * (len(slashes) // 2) + decoded
+        return protected_backslashes(len(slashes) // 2) + decoded
 
     def decode_continuation(match: re.Match[str]) -> str:
         slashes = match.group(1)
         if len(slashes) % 2 == 0:
             return match.group(0)
-        return "\\" * (len(slashes) // 2)
+        return protected_backslashes(len(slashes) // 2)
+
+    def decode_identity(match: re.Match[str]) -> str:
+        slashes = match.group(1)
+        if len(slashes) % 2 == 0:
+            return match.group(0)
+        value = match.group("value")
+        if value.lower() in {"x", "u"} or value.isdigit():
+            return match.group(0)
+        return protected_backslashes(len(slashes) // 2) + value
 
     projected = _SOURCE_LINE_CONTINUATION.sub(decode_continuation, text)
     projected = _SOURCE_SURROGATE_ESCAPE.sub(decode_surrogate_pair, projected)
     projected = _SOURCE_HEX_ESCAPE.sub(decode_hex, projected)
-    return _SOURCE_SIMPLE_ESCAPE.sub(decode_simple, projected)
+    projected = _SOURCE_SIMPLE_ESCAPE.sub(decode_simple, projected)
+    projected = _SOURCE_IDENTITY_ESCAPE.sub(decode_identity, projected)
+    return projected.replace(sentinel, "\\")
 
 
 def prohibited_labels(text: str) -> list[str]:
-    boundary_projection = source_boundary_projection(text)
-    variants = {
-        normalize_text(text),
-        normalize_text(boundary_projection),
-        normalize_text(source_escape_projection(text)),
-        normalize_text(source_escape_projection(boundary_projection)),
+    structural_variants = {text}
+    frontier = {text}
+    for _ in range(6):
+        expanded = {
+            projection
+            for variant in frontier
+            for projection in (
+                source_boundary_projection(variant),
+                source_template_projection(variant),
+            )
+        }
+        frontier = expanded - structural_variants
+        if not frontier:
+            break
+        structural_variants.update(frontier)
+    variants = structural_variants | {
+        source_escape_projection(variant) for variant in structural_variants
     }
+    normalized_variants = {normalize_text(variant) for variant in variants}
     return [
         label
         for label, pattern in PATTERNS
-        if any(pattern.search(variant) for variant in variants)
+        if any(pattern.search(variant) for variant in normalized_variants)
     ]
 
 
@@ -452,6 +550,13 @@ def run_self_test() -> None:
             + " + "
             + repr(COMPLETION_TOKEN[4:])
         ),
+        "commented string concatenation": (
+            repr(COMPLETION_TOKEN[:2])
+            + " /* first */ + "
+            + repr(COMPLETION_TOKEN[2:4])
+            + " // second\n + "
+            + repr(COMPLETION_TOKEN[4:])
+        ),
         "four-part JSX boundary": (
             f"<span>{COMPLETION_TOKEN[:1]}</span>"
             f"<span>{COMPLETION_TOKEN[1:3]}</span>"
@@ -464,6 +569,40 @@ def run_self_test() -> None:
             + "x73"
             + COMPLETION_TOKEN[1:]
             + "s';"
+        ),
+        "JavaScript identity escape": (
+            "const status = '"
+            + COMPLETION_TOKEN[:2]
+            + "\\"
+            + COMPLETION_TOKEN[2:]
+            + "s';"
+        ),
+        "empty constant template substitution": (
+            "const status = `"
+            + COMPLETION_TOKEN[:3]
+            + "${''}"
+            + COMPLETION_TOKEN[3:]
+            + "s`;"
+        ),
+        "constant template string substitution": (
+            "const status = `"
+            + COMPLETION_TOKEN[:2]
+            + "${'"
+            + COMPLETION_TOKEN[2:4]
+            + "'}"
+            + COMPLETION_TOKEN[4:]
+            + "s`;"
+        ),
+        "constant template concatenation substitution": (
+            "const status = `"
+            + COMPLETION_TOKEN[:2]
+            + "${'"
+            + COMPLETION_TOKEN[2:3]
+            + "' /* first */ + '"
+            + COMPLETION_TOKEN[3:4]
+            + "'}"
+            + COMPLETION_TOKEN[4:]
+            + "s`;"
         ),
         "escaped JSON Unicode literal": (
             '{"label":"'
@@ -568,6 +707,13 @@ def run_self_test() -> None:
             + "\\\\"
             + "x73"
             + COMPLETION_TOKEN[1:]
+            + "s';"
+        ),
+        "escaped identity backslash literal": (
+            "const status = '"
+            + COMPLETION_TOKEN[:2]
+            + "\\\\"
+            + COMPLETION_TOKEN[2:]
             + "s';"
         ),
     }

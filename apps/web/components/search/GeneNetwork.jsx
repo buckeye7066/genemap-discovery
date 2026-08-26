@@ -191,6 +191,16 @@ export default function GeneNetwork({ symbols = [] }) {
           </p>
         )}
 
+        {!loading && network?.sourceStatus === 'insufficient_resolved_input' && (
+          <Alert className="border-amber-200 bg-amber-50">
+            <Info className="h-4 w-4 text-amber-700" />
+            <AlertDescription className="text-amber-900">
+              STRING resolved fewer than two selected identifiers, so no functional-association
+              request was made. This is not a negative association result.
+            </AlertDescription>
+          </Alert>
+        )}
+
         {!loading && network?.sourceStatus === 'available' && (
           <>
             <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_15rem]">

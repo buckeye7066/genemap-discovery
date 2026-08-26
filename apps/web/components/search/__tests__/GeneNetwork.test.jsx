@@ -219,6 +219,28 @@ describe('GeneNetwork', () => {
     expect(screen.queryByRole('button', { name: 'UNKNOWN' })).not.toBeInTheDocument();
   });
 
+  it('states when identifier resolution leaves no network request to run', async () => {
+    networkClient.fetchGeneNetwork.mockResolvedValue({
+      ...network,
+      querySymbols: ['SCN1A', 'UNKNOWN'],
+      resolvedQuerySymbols: ['SCN1A'],
+      queryMappings: [
+        { submittedSymbol: 'SCN1A', preferredSymbol: 'SCN1A', resolved: true },
+        { submittedSymbol: 'UNKNOWN', preferredSymbol: 'UNKNOWN', resolved: false },
+      ],
+      nodes: [{ id: 'SCN1A', symbol: 'SCN1A', kind: 'query' }],
+      edges: [],
+      sourceStatus: 'insufficient_resolved_input',
+    });
+
+    render(<GeneNetwork symbols={['UNKNOWN', 'SCN1A']} />);
+
+    expect(await screen.findByText(/no functional-association request was made/i))
+      .toHaveTextContent('not a negative association result');
+    expect(screen.getByText(/STRING did not resolve/i)).toHaveTextContent('UNKNOWN');
+    expect(screen.queryByText(/returned no functional associations/i)).not.toBeInTheDocument();
+  });
+
   it('names selected genes outside the bounded STRING network scope', async () => {
     const requestedSymbols = Array.from(
       { length: 12 },

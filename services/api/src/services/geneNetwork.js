@@ -303,7 +303,7 @@ export async function getGeneNetwork(symbols, options = {}, dependencies = {}) {
         queryMappings,
         identifierResolutionStatus,
         ...network,
-        sourceStatus: 'no_associations',
+        sourceStatus: 'insufficient_resolved_input',
         source,
         retrievedAt,
       };

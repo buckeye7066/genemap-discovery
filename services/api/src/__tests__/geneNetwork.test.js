@@ -395,6 +395,33 @@ describe('STRING gene-network adapter', () => {
       .toBe('SCN1A\rSCN2A');
   });
 
+  it('does not claim no associations when fewer than two identifiers resolve', async () => {
+    const fetchImpl = vi.fn().mockResolvedValueOnce(okJson([STRING_ID_ROWS[0]]));
+
+    const result = await getGeneNetwork(
+      ['SCN1A', 'UNKNOWN'],
+      {},
+      { fetchImpl, now: () => new Date(RETRIEVED_AT) },
+    );
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(new URL(fetchImpl.mock.calls[0][0]).pathname).toBe('/api/json/get_string_ids');
+    expect(result).toMatchObject({
+      querySymbols: ['SCN1A', 'UNKNOWN'],
+      resolvedQuerySymbols: ['SCN1A'],
+      identifierResolutionStatus: 'available',
+      queryMappings: [
+        { submittedSymbol: 'SCN1A', preferredSymbol: 'SCN1A', resolved: true },
+        { submittedSymbol: 'UNKNOWN', preferredSymbol: 'UNKNOWN', resolved: false },
+      ],
+      nodes: [{ symbol: 'SCN1A', kind: 'query' }],
+      edges: [],
+      sourceStatus: 'insufficient_resolved_input',
+      retrievedAt: RETRIEVED_AT,
+    });
+    expect(result.sourceStatus).not.toBe('no_associations');
+  });
+
   it('reports any symbols outside the bounded upstream request instead of silently dropping them', async () => {
     const requestedSymbols = Array.from(
       { length: 12 },
