@@ -90,8 +90,10 @@ _SOURCE_BOUNDARY_JOINERS = re.compile(
     re.VERBOSE,
 )
 
+_SOURCE_TRIVIA = r"(?:\s|/\*[\s\S]*?\*/|//[^\r\n\u2028\u2029]*(?:\r\n|[\r\n\u2028\u2029]|$))*"
 _SOURCE_VALUE_PREFIX = (
-    r"(?:^|=>|[=(:,\[{\]!&|?+*%;~\-]|\b(?:return|throw|yield|case)\b)\s*"
+    r"(?:^|=>|[=(:,\[{\]!&|?+*%;~\-]|\b(?:return|throw|yield|case)\b)"
+    + _SOURCE_TRIVIA
 )
 _SOURCE_COMMENT_PROTECTED_CONTEXT = re.compile(
     r"""
@@ -112,16 +114,16 @@ _SOURCE_COMMENT_PROTECTED_CONTEXT = re.compile(
         /(?![/*])(?:\\[\s\S]|[^/\\\r\n])+/[dgimsuvy]*
     )
     |
-    (?m:(?:^|[^\S\r\n]|[;{}])[ \t]*//[^\r\n\u2028\u2029]*)
+    (?m:(?:^|[^:/\r\n])//[^\r\n\u2028\u2029]*)
     |
     (?:
         ^
         |
         [=(:,\[\]!&|?+*%;~\-;}][ \t]*
         |
-        \b[A-Za-z_$][\w$]*[ \t]+
+        \b[A-Za-z_$][\w$]*[ \t]*
         |
-        [\d)\]][ \t]+
+        [\d)\]][ \t]*
     )
     /\*[\s\S]*?\*/
     """,
@@ -131,14 +133,21 @@ _HTML_RENDERED_COMMENT = re.compile(r"<!--[\s\S]*?-->")
 _JSX_RENDERED_COMMENT = re.compile(r"\{\s*/\*[\s\S]*?\*/\s*\}")
 _LITERAL_COMMENT_MARKER = "\uFFFC"
 _MARKUP_TAG = re.compile(
-    r"<\s*(?P<closing>/)?\s*(?P<name>[A-Za-z][\w:.-]*)\b[^<>]*?(?P<self_closing>/)?\s*>",
-    re.I,
+    r"""
+    (?P<fragment><\s*(?P<fragment_closing>/)?\s*>)
+    |
+    <\s*(?P<closing>/)?\s*(?P<name>[A-Za-z][\w:.-]*)\b
+    [^<>]*?(?P<self_closing>/)?\s*>
+    """,
+    re.I | re.VERBOSE,
 )
 _VOID_MARKUP_TAGS = frozenset(
-    {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"}
+    {
+        "area", "base", "br", "col", "embed", "hr", "img", "input", "link",
+        "meta", "param", "source", "track", "wbr",
+    }
 )
 
-_SOURCE_TRIVIA = r"(?:\s|/\*[\s\S]*?\*/|//[^\r\n\u2028\u2029]*(?:\r\n|[\r\n\u2028\u2029]|$))*"
 _SOURCE_LITERAL_PATTERN = (
     r"(?:'(?:\\[\s\S]|[^'\\])*'"
     r'|"(?:\\[\s\S]|[^"\\])*"'
@@ -226,12 +235,21 @@ def source_boundary_projection(text: str) -> str:
         stack: list[str] = []
         last_tag_end = 0
         for tag in _MARKUP_TAG.finditer(text, 0, position):
-            name = tag.group("name").lower()
-            if tag.group("closing"):
+            is_fragment = bool(tag.group("fragment"))
+            name = "#fragment" if is_fragment else tag.group("name").lower()
+            is_closing = (
+                bool(tag.group("fragment_closing"))
+                if is_fragment
+                else bool(tag.group("closing"))
+            )
+            if is_closing:
                 if name in stack:
                     reverse_index = stack[::-1].index(name)
                     del stack[len(stack) - reverse_index - 1 :]
-            elif not tag.group("self_closing") and name not in _VOID_MARKUP_TAGS:
+            elif (
+                is_fragment
+                or (not tag.group("self_closing") and name not in _VOID_MARKUP_TAGS)
+            ):
                 stack.append(name)
             last_tag_end = tag.end()
         if not stack:
@@ -708,6 +726,20 @@ def run_self_test() -> None:
             + COMPLETION_TOKEN[3:]
             + "s</span>'</p>"
         ),
+        "HTML comment boundary inside shorthand JSX fragment": (
+            "<>Message: '<span>"
+            + COMPLETION_TOKEN[:3]
+            + "</span><!-- rendered split --><span>"
+            + COMPLETION_TOKEN[3:]
+            + "s</span>'</>"
+        ),
+        "JSX comment boundary inside shorthand JSX fragment": (
+            "<>Message: '<span>"
+            + COMPLETION_TOKEN[:3]
+            + "</span>{/* rendered split */}<span>"
+            + COMPLETION_TOKEN[3:]
+            + "s</span>'</>"
+        ),
         "escaped JavaScript hex literal": (
             "const status = '"
             + "\\"
@@ -965,8 +997,36 @@ def run_self_test() -> None:
             + COMPLETION_TOKEN[3:]
             + "s"
         ),
+        "HTML comment in adjacent JavaScript line comment": (
+            "foo()// "
+            + COMPLETION_TOKEN[:3]
+            + "<!-- ordinary literal -->"
+            + COMPLETION_TOKEN[3:]
+            + "s"
+        ),
+        "HTML comment in identifier-adjacent JavaScript line comment": (
+            "value// "
+            + COMPLETION_TOKEN[:3]
+            + "<!-- ordinary literal -->"
+            + COMPLETION_TOKEN[3:]
+            + "s"
+        ),
+        "HTML comment in adjacent JavaScript block comment": (
+            "foo()/* "
+            + COMPLETION_TOKEN[:3]
+            + "<!-- ordinary literal -->"
+            + COMPLETION_TOKEN[3:]
+            + "s */"
+        ),
         "HTML comment in arrow-body JavaScript regex": (
             "const pattern = () => /"
+            + COMPLETION_TOKEN[:3]
+            + "<!-- ordinary literal -->"
+            + COMPLETION_TOKEN[3:]
+            + "s/;"
+        ),
+        "HTML comment in arrow-body regex after source trivia": (
+            "const pattern = () => /* explanation */ /"
             + COMPLETION_TOKEN[:3]
             + "<!-- ordinary literal -->"
             + COMPLETION_TOKEN[3:]
