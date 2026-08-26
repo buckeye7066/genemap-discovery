@@ -114,7 +114,7 @@ _SOURCE_COMMENT_PROTECTED_CONTEXT = re.compile(
         /(?![/*])(?:\\[\s\S]|[^/\\\r\n])+/[dgimsuvy]*
     )
     |
-    (?m:(?:^|[^:/\r\n])//[^\r\n\u2028\u2029]*)
+    (?m:(?<![:/])//[^\r\n\u2028\u2029]*)
     |
     (?:
         ^
@@ -255,7 +255,17 @@ def source_boundary_projection(text: str) -> str:
         if not stack:
             return False
         markup_text = text[last_tag_end:position]
-        return markup_text.rfind("{") <= markup_text.rfind("}")
+        last_opening_brace = markup_text.rfind("{")
+        if last_opening_brace > markup_text.rfind("}"):
+            absolute_brace = last_tag_end + last_opening_brace
+            expression_prefix = text[absolute_brace + 1 : position + 2].lstrip()
+            if re.match(
+                r'''(?:["'`([{]|/\*|//|(?:false|null|true|undefined)\b|'''
+                r"[A-Za-z_$][\w$]*\s*(?:[?.[(]|&&|\|\||\?\?|[+*/%<>=!]))",
+                expression_prefix,
+            ):
+                return False
+        return True
 
     def strip_rendered_comments(segment: str) -> str:
         segment = _HTML_RENDERED_COMMENT.sub("", segment)
@@ -740,6 +750,13 @@ def run_self_test() -> None:
             + COMPLETION_TOKEN[3:]
             + "s</span>'</>"
         ),
+        "HTML comment boundary after literal opening brace": (
+            "<p>{ Message: '<span>"
+            + COMPLETION_TOKEN[:3]
+            + "</span><!-- rendered split --><span>"
+            + COMPLETION_TOKEN[3:]
+            + "s</span>'</p>"
+        ),
         "escaped JavaScript hex literal": (
             "const status = '"
             + "\\"
@@ -1006,6 +1023,13 @@ def run_self_test() -> None:
         ),
         "HTML comment in identifier-adjacent JavaScript line comment": (
             "value// "
+            + COMPLETION_TOKEN[:3]
+            + "<!-- ordinary literal -->"
+            + COMPLETION_TOKEN[3:]
+            + "s"
+        ),
+        "HTML comment in literal-adjacent JavaScript line comment": (
+            "const x = 'x'// "
             + COMPLETION_TOKEN[:3]
             + "<!-- ordinary literal -->"
             + COMPLETION_TOKEN[3:]
