@@ -8,23 +8,23 @@
 - **MOSTLY SKIPPED: only 2 of 375 candidate file(s) (0%) were reviewed.**
 - **Defects found:** 7
 - **Files fixed:** 0
-- **Errors recorded:** 16 (see the Errors section below; ledger at `C:\Users\firer\.flexfactor\runs\genemap-discovery-20260824-050548-082562-16164\errors.md`)
+- **Errors recorded:** 8 (see the Errors section below; ledger at `C:\Users\firer\.flexfactor\runs\genemap-discovery-20260824-050548-082562-16164\errors.md`)
 - **Baseline build:** FAILED
 - **Unit tests added:** 0 (suite not run)
 - **Button/UI (Playwright):** skipped
 - **Cycles run:** 1
-- **Providers:** rotation:groq/compound
+- **Providers:** rotation:gemini-3.1-pro-preview
 - **Git:** PROVIDER-OUTAGE ABORT on main: checkpoint preserved; no unverified commit created
 
 ## System inventory
 
-**973 entries accounted for.**
+**974 entries accounted for.**
 
 | Category | Count |
 |---|---:|
 | artifact-subtree | 11 |
 | binary-asset | 62 |
-| configuration-documentation-or-data | 273 |
+| configuration-documentation-or-data | 274 |
 | first-party-source | 627 |
 
 The immutable run manifest contains the complete path-level inventory. Artifact, binary, and reparse entries are named and classified; they are not represented as line-reviewed source.
@@ -32,8 +32,8 @@ The immutable run manifest contains the complete path-level inventory. Artifact,
 ## Executable evidence
 
 - **Evidence run:** `genemap-discovery-20260824-050548-082562-16164`
-- **Exact final commit:** `63b5f364ba7c26d09621e49292c562725711711f`
-- **Code map:** 553 file(s), 1258 function(s), 24 route(s), 538 material control(s)
+- **Exact final commit:** `2f9abe3f799bcf86ffaebd6f70e93988c40f3f92`
+- **Code map:** 554 file(s), 1258 function(s), 24 route(s), 538 material control(s)
 - **Function execution:** 0/1069 with invocation evidence
 - **Route execution:** 0/24
 - **Control execution:** 0/538
@@ -65,29 +65,31 @@ Full scorecard: `C:\Users\firer\genemap-discovery\genemap-discovery_readiness.md
 
 ## Competitor research
 
-**Coverage:** ONLY 4 of the target 5 competitors could be corroborated from a reachable source. This is a coverage SHORTFALL, not evidence that fewer competitors exist.
+**Coverage:** 5 competitor(s) covered with corroborating sources (target 5).
 
 - **Sources used:** web:duckduckgo, repo-rewards
 - **Repo Rewards endpoint:** `https://web-production-d7db7.up.railway.app`
 - **Sources SKIPPED (named, not silent):**
-  - `idea:andreaswallberg/GenomeLens` - model returned an incomplete idea (missing why_valuable) - forced to accept=False for andreaswallberg/GenomeLens
+  - `idea:Top 10 Discovery Alternatives & Competitors in 2026 | G2` - model returned an incomplete idea (missing why_valuable) - forced to accept=False for Top 10 Discovery Alternatives & Competitors in 2026 | G2
   - `idea:cmdcolin/awesome-genome-visualization` - model returned an incomplete idea (missing why_valuable) - forced to accept=False for cmdcolin/awesome-genome-visualization
-  - `idea:jrderuiter/genemap` - model returned an incomplete idea (missing why_valuable) - forced to accept=False for jrderuiter/genemap
-  - `idea:wjwei-handsome/ZeaGeneMap` - model returned an incomplete idea (missing why_valuable) - forced to accept=False for wjwei-handsome/ZeaGeneMap
-  - `model-discovery` - RotationError: no light route available (102 enabled routes in catalog). Pools skipped: groq:free-tier (pool cooling down); local:ollama (pool cooling down); nvidia_nim:free-tier (pool cooling down); openrouter:credits (openrouter:free-tier allowance exhausted (account-wide)); openrouter:free:cohere/north-mini-code:free (openrouter:free-tier allowance exhausted (account-wide)); openrouter:free:dots-studio/dots-3-note-preview:free (openrouter:free-tier allowance exhausted (account-wide))
+  - `idea:hyacinlee/IGMT` - model returned an incomplete idea (missing why_valuable) - forced to accept=False for hyacinlee/IGMT
+  - `idea:jendelman/MapRtools` - model returned an incomplete idea (missing why_valuable) - forced to accept=False for jendelman/MapRtools
+  - `idea:jsg200830/Mapping-by-Sequencing-Analysis` - model returned an incomplete idea (missing why_valuable) - forced to accept=False for jsg200830/Mapping-by-Sequencing-Analysis
+  - `model-discovery` - RotationError: no light route available (119 enabled routes in catalog). Pools skipped: gemini:free-tier (gemini:free-tier allowance exhausted (account-wide)); groq:free-tier (pool cooling down); local:ollama (pool cooling down); nvidia_nim:free-tier (pool cooling down); openrouter:credits (openrouter:free-tier allowance exhausted (account-wide)); openrouter:free:cohere/north-mini-code:free (openrouter:free-tier allowance exhausted (account-wide))
   - `web:searxng` - RuntimeError: FLEXFACTOR_SEARXNG_URL is not set
 
-- **Ideas accepted as serving this program's purpose:** 0 (rejected 4 - the purpose contract, not the competitor, decides)
+- **Ideas accepted as serving this program's purpose:** 0 (rejected 5 - the purpose contract, not the competitor, decides)
 
-- **Bridged into the fix stream:** 0 of 4 candidate(s)
-  - NOT bridged (4): andreaswallberg/GenomeLens, cmdcolin/awesome-genome-visualization, jrderuiter/genemap, wjwei-handsome/ZeaGeneMap - idea rejected by the purpose contract
+- **Bridged into the fix stream:** 0 of 5 candidate(s)
+  - NOT bridged (5): Top 10 Discovery Alternatives & Competitors in 2026 | G2, cmdcolin/awesome-genome-visualization, hyacinlee/IGMT, jendelman/MapRtools, jsg200830/Mapping-by-Sequencing-Analysis - idea rejected by the purpose contract
 
 | Competitor | Kind | Licence | Reuse mode | Purpose mapping | Verdict | Fix stream | Adoptable idea |
 |---|---|---|---|---|---|---|---|
 | [cmdcolin/awesome-genome-visualization](https://github.com/cmdcolin/awesome-genome-visualization) | oss | `MIT` | `direct-code-reuse` | purpose-only | reject | NOT entered - idea rejected by the purpose contract | (idea extraction failed) |
-| [wjwei-handsome/ZeaGeneMap](https://github.com/wjwei-handsome/ZeaGeneMap) | oss | `GPL-3.0` | `clean-room-from-documented-behavior` | purpose-only | reject | NOT entered - idea rejected by the purpose contract | (idea extraction failed) |
-| [andreaswallberg/GenomeLens](https://github.com/andreaswallberg/GenomeLens) | oss | `AGPL-3.0` | `clean-room-from-documented-behavior` | purpose-only | reject | NOT entered - idea rejected by the purpose contract | (idea extraction failed) |
-| [jrderuiter/genemap](https://github.com/jrderuiter/genemap) | oss | `MIT` | `direct-code-reuse` | purpose-only | reject | NOT entered - idea rejected by the purpose contract | (idea extraction failed) |
+| [jendelman/MapRtools](https://github.com/jendelman/MapRtools) | oss | `GPL-3.0` | `clean-room-from-documented-behavior` | purpose-only | reject | NOT entered - idea rejected by the purpose contract | (idea extraction failed) |
+| [hyacinlee/IGMT](https://github.com/hyacinlee/IGMT) | oss | `MIT` | `direct-code-reuse` | purpose-only | reject | NOT entered - idea rejected by the purpose contract | (idea extraction failed) |
+| [Top 10 Discovery Alternatives & Competitors in 2026 | G2](https://www.g2.com/products/patsnap-discovery/competitors/alternatives) | market | `UNKNOWN` | `clean-room-from-documented-behavior` | purpose-only | reject | NOT entered - idea rejected by the purpose contract | (idea extraction failed) |
+| [jsg200830/Mapping-by-Sequencing-Analysis](https://github.com/jsg200830/Mapping-by-Sequencing-Analysis) | oss | `UNKNOWN` | `reference-only` | purpose-only | reject | NOT entered - idea rejected by the purpose contract | (idea extraction failed) |
 
 ### cmdcolin/awesome-genome-visualization
 
@@ -96,44 +98,56 @@ Full scorecard: `C:\Users\firer\genemap-discovery\genemap-discovery_readiness.md
 - **Reuse mode:** `direct-code-reuse` - licence MIT is permissive and compatible; source may be read and adapted with attribution
 - **Idea:** (idea extraction failed) - 
 - **Value here:** 
-- **Purpose / criterion mapping:** purpose-only - NOT ACTED ON: model returned an incomplete idea (missing why_valuable) - forced to accept=False. not judged: no strong route available (102 enabled routes in catalog). Pools skipped: cerebras:free-tier (pool cooling down); groq:free-tier (pool cooling down); local:ollama (pool cooling down); nvidia_nim:free-tier (pool cooling down); openrouter:credits (openrouter:free-tier allowance exhausted (account-wide)); openrouter:free:cohere/north-mini-code:free (openrouter:free-tier allowance exhausted (account-wide))
-- **Purpose verdict:** REJECTED - NOT ACTED ON: model returned an incomplete idea (missing why_valuable) - forced to accept=False. not judged: no strong route available (102 enabled routes in catalog). Pools skipped: cerebras:free-tier (pool cooling down); groq:free-tier (pool cooling down); local:ollama (pool cooling down); nvidia_nim:free-tier (pool cooling down); openrouter:credits (openrouter:free-tier allowance exhausted (account-wide)); openrouter:free:cohere/north-mini-code:free (openrouter:free-tier allowance exhausted (account-wide))
+- **Purpose / criterion mapping:** purpose-only - NOT ACTED ON: model returned an incomplete idea (missing why_valuable) - forced to accept=False. not judged: no strong route available (119 enabled routes in catalog). Pools skipped: cerebras:free-tier (pool cooling down); gemini:free-tier (gemini:free-tier allowance exhausted (account-wide)); groq:free-tier (pool cooling down); local:ollama (pool cooling down); nvidia_nim:free-tier (pool cooling down); openrouter:credits (openrouter:free-tier allowance exhausted (account-wide))
+- **Purpose verdict:** REJECTED - NOT ACTED ON: model returned an incomplete idea (missing why_valuable) - forced to accept=False. not judged: no strong route available (119 enabled routes in catalog). Pools skipped: cerebras:free-tier (pool cooling down); gemini:free-tier (gemini:free-tier allowance exhausted (account-wide)); groq:free-tier (pool cooling down); local:ollama (pool cooling down); nvidia_nim:free-tier (pool cooling down); openrouter:credits (openrouter:free-tier allowance exhausted (account-wide))
 - **Fix-stream decision:** DID NOT enter the fix stream - idea rejected by the purpose contract
 - **Evidence basis:**  (confidence ?)
 
-### wjwei-handsome/ZeaGeneMap
+### jendelman/MapRtools
 
-- **Evidence:** <https://github.com/wjwei-handsome/ZeaGeneMap>
+- **Evidence:** <https://github.com/jendelman/MapRtools>
 - **Licence:** `GPL-3.0` (via repo-rewards)
 - **Reuse mode:** `clean-room-from-documented-behavior` - licence GPL-3.0 is copyleft/restricted; source must NOT be copied - work from documented behaviour only
 - **Idea:** (idea extraction failed) - 
 - **Value here:** 
-- **Purpose / criterion mapping:** purpose-only - NOT ACTED ON: model returned an incomplete idea (missing why_valuable) - forced to accept=False. not judged: no strong route available (102 enabled routes in catalog). Pools skipped: cerebras:free-tier (pool cooling down); groq:free-tier (pool cooling down); local:ollama (pool cooling down); nvidia_nim:free-tier (pool cooling down); openrouter:credits (openrouter:free-tier allowance exhausted (account-wide)); openrouter:free:cohere/north-mini-code:free (openrouter:free-tier allowance exhausted (account-wide))
-- **Purpose verdict:** REJECTED - NOT ACTED ON: model returned an incomplete idea (missing why_valuable) - forced to accept=False. not judged: no strong route available (102 enabled routes in catalog). Pools skipped: cerebras:free-tier (pool cooling down); groq:free-tier (pool cooling down); local:ollama (pool cooling down); nvidia_nim:free-tier (pool cooling down); openrouter:credits (openrouter:free-tier allowance exhausted (account-wide)); openrouter:free:cohere/north-mini-code:free (openrouter:free-tier allowance exhausted (account-wide))
+- **Purpose / criterion mapping:** purpose-only - NOT ACTED ON: model returned an incomplete idea (missing why_valuable) - forced to accept=False. not judged: no strong route available (119 enabled routes in catalog). Pools skipped: cerebras:free-tier (pool cooling down); gemini:free-tier (gemini:free-tier allowance exhausted (account-wide)); groq:free-tier (pool cooling down); local:ollama (pool cooling down); nvidia_nim:free-tier (pool cooling down); openrouter:credits (openrouter:free-tier allowance exhausted (account-wide))
+- **Purpose verdict:** REJECTED - NOT ACTED ON: model returned an incomplete idea (missing why_valuable) - forced to accept=False. not judged: no strong route available (119 enabled routes in catalog). Pools skipped: cerebras:free-tier (pool cooling down); gemini:free-tier (gemini:free-tier allowance exhausted (account-wide)); groq:free-tier (pool cooling down); local:ollama (pool cooling down); nvidia_nim:free-tier (pool cooling down); openrouter:credits (openrouter:free-tier allowance exhausted (account-wide))
 - **Fix-stream decision:** DID NOT enter the fix stream - idea rejected by the purpose contract
 - **Evidence basis:**  (confidence ?)
 
-### andreaswallberg/GenomeLens
+### hyacinlee/IGMT
 
-- **Evidence:** <https://github.com/andreaswallberg/GenomeLens>
-- **Licence:** `AGPL-3.0` (via repo-rewards)
-- **Reuse mode:** `clean-room-from-documented-behavior` - licence AGPL-3.0 is copyleft/restricted; source must NOT be copied - work from documented behaviour only
-- **Idea:** (idea extraction failed) - 
-- **Value here:** 
-- **Purpose / criterion mapping:** purpose-only - NOT ACTED ON: model returned an incomplete idea (missing why_valuable) - forced to accept=False. not judged: no strong route available (102 enabled routes in catalog). Pools skipped: cerebras:free-tier (pool cooling down); groq:free-tier (pool cooling down); local:ollama (pool cooling down); nvidia_nim:free-tier (pool cooling down); openrouter:credits (openrouter:free-tier allowance exhausted (account-wide)); openrouter:free:cohere/north-mini-code:free (openrouter:free-tier allowance exhausted (account-wide))
-- **Purpose verdict:** REJECTED - NOT ACTED ON: model returned an incomplete idea (missing why_valuable) - forced to accept=False. not judged: no strong route available (102 enabled routes in catalog). Pools skipped: cerebras:free-tier (pool cooling down); groq:free-tier (pool cooling down); local:ollama (pool cooling down); nvidia_nim:free-tier (pool cooling down); openrouter:credits (openrouter:free-tier allowance exhausted (account-wide)); openrouter:free:cohere/north-mini-code:free (openrouter:free-tier allowance exhausted (account-wide))
-- **Fix-stream decision:** DID NOT enter the fix stream - idea rejected by the purpose contract
-- **Evidence basis:**  (confidence ?)
-
-### jrderuiter/genemap
-
-- **Evidence:** <https://github.com/jrderuiter/genemap>
+- **Evidence:** <https://github.com/hyacinlee/IGMT>
 - **Licence:** `MIT` (via repo-rewards)
 - **Reuse mode:** `direct-code-reuse` - licence MIT is permissive and compatible; source may be read and adapted with attribution
 - **Idea:** (idea extraction failed) - 
 - **Value here:** 
-- **Purpose / criterion mapping:** purpose-only - NOT ACTED ON: model returned an incomplete idea (missing why_valuable) - forced to accept=False. not judged: no strong route available (102 enabled routes in catalog). Pools skipped: cerebras:free-tier (pool cooling down); groq:free-tier (pool cooling down); local:ollama (pool cooling down); nvidia_nim:free-tier (pool cooling down); openrouter:credits (openrouter:free-tier allowance exhausted (account-wide)); openrouter:free:cohere/north-mini-code:free (openrouter:free-tier allowance exhausted (account-wide))
-- **Purpose verdict:** REJECTED - NOT ACTED ON: model returned an incomplete idea (missing why_valuable) - forced to accept=False. not judged: no strong route available (102 enabled routes in catalog). Pools skipped: cerebras:free-tier (pool cooling down); groq:free-tier (pool cooling down); local:ollama (pool cooling down); nvidia_nim:free-tier (pool cooling down); openrouter:credits (openrouter:free-tier allowance exhausted (account-wide)); openrouter:free:cohere/north-mini-code:free (openrouter:free-tier allowance exhausted (account-wide))
+- **Purpose / criterion mapping:** purpose-only - NOT ACTED ON: model returned an incomplete idea (missing why_valuable) - forced to accept=False. not judged: no strong route available (119 enabled routes in catalog). Pools skipped: cerebras:free-tier (pool cooling down); gemini:free-tier (gemini:free-tier allowance exhausted (account-wide)); groq:free-tier (pool cooling down); local:ollama (pool cooling down); nvidia_nim:free-tier (pool cooling down); openrouter:credits (openrouter:free-tier allowance exhausted (account-wide))
+- **Purpose verdict:** REJECTED - NOT ACTED ON: model returned an incomplete idea (missing why_valuable) - forced to accept=False. not judged: no strong route available (119 enabled routes in catalog). Pools skipped: cerebras:free-tier (pool cooling down); gemini:free-tier (gemini:free-tier allowance exhausted (account-wide)); groq:free-tier (pool cooling down); local:ollama (pool cooling down); nvidia_nim:free-tier (pool cooling down); openrouter:credits (openrouter:free-tier allowance exhausted (account-wide))
+- **Fix-stream decision:** DID NOT enter the fix stream - idea rejected by the purpose contract
+- **Evidence basis:**  (confidence ?)
+
+### Top 10 Discovery Alternatives & Competitors in 2026 | G2
+
+- **Evidence:** <https://www.g2.com/products/patsnap-discovery/competitors/alternatives>, <https://ensun.io/search/genome-mapping>, <https://en.wikipedia.org/wiki/GenMAPP>
+- **Licence:** `UNKNOWN` (via none (no repository could be attributed to this competitor))
+- **Reuse mode:** `clean-room-from-documented-behavior` - no inspectable source (licence UNKNOWN); only publicly documented behaviour may inform our own independent design
+- **Idea:** (idea extraction failed) - 
+- **Value here:** 
+- **Purpose / criterion mapping:** purpose-only - NOT ACTED ON: model returned an incomplete idea (missing why_valuable) - forced to accept=False. not judged: no strong route available (119 enabled routes in catalog). Pools skipped: cerebras:free-tier (pool cooling down); gemini:free-tier (gemini:free-tier allowance exhausted (account-wide)); groq:free-tier (pool cooling down); local:ollama (pool cooling down); nvidia_nim:free-tier (pool cooling down); openrouter:credits (openrouter:free-tier allowance exhausted (account-wide))
+- **Purpose verdict:** REJECTED - NOT ACTED ON: model returned an incomplete idea (missing why_valuable) - forced to accept=False. not judged: no strong route available (119 enabled routes in catalog). Pools skipped: cerebras:free-tier (pool cooling down); gemini:free-tier (gemini:free-tier allowance exhausted (account-wide)); groq:free-tier (pool cooling down); local:ollama (pool cooling down); nvidia_nim:free-tier (pool cooling down); openrouter:credits (openrouter:free-tier allowance exhausted (account-wide))
+- **Fix-stream decision:** DID NOT enter the fix stream - idea rejected by the purpose contract
+- **Evidence basis:**  (confidence ?)
+
+### jsg200830/Mapping-by-Sequencing-Analysis
+
+- **Evidence:** <https://github.com/jsg200830/Mapping-by-Sequencing-Analysis>
+- **Licence:** `UNKNOWN` (via repo-rewards)
+- **Reuse mode:** `reference-only` - licence UNKNOWN could not be verified; record the capability as a reference and copy nothing
+- **Idea:** (idea extraction failed) - 
+- **Value here:** 
+- **Purpose / criterion mapping:** purpose-only - NOT ACTED ON: model returned an incomplete idea (missing why_valuable) - forced to accept=False. not judged: no strong route available (119 enabled routes in catalog). Pools skipped: cerebras:free-tier (pool cooling down); gemini:free-tier (gemini:free-tier allowance exhausted (account-wide)); groq:free-tier (pool cooling down); local:ollama (pool cooling down); nvidia_nim:free-tier (pool cooling down); openrouter:credits (openrouter:free-tier allowance exhausted (account-wide))
+- **Purpose verdict:** REJECTED - NOT ACTED ON: model returned an incomplete idea (missing why_valuable) - forced to accept=False. not judged: no strong route available (119 enabled routes in catalog). Pools skipped: cerebras:free-tier (pool cooling down); gemini:free-tier (gemini:free-tier allowance exhausted (account-wide)); groq:free-tier (pool cooling down); local:ollama (pool cooling down); nvidia_nim:free-tier (pool cooling down); openrouter:credits (openrouter:free-tier allowance exhausted (account-wide))
 - **Fix-stream decision:** DID NOT enter the fix stream - idea rejected by the purpose contract
 - **Evidence basis:**  (confidence ?)
 
@@ -178,7 +192,7 @@ _These were found but left as-is - review and decide. Critical/high here means a
 
 ### high (2)
 - `apps/web/components/research/ProjectManager.jsx` line 164 (correctness) - **Annotation resolve button never renders due to missing userId field**: Line 164 checks `annotation.userId === user?.id` to gate the 'resolve' button, but the `Annotation` interface (types.ts:615-625) defines no `userId` field. This expression always evaluates to `undefined === user?.id`, which is always falsy. The resolve button is therefore never rendered for any annotation regardless of ownership. _Suggested fix:_ Either add `userId?: string` to the `Annotation` interface in types.ts, or verify the API response includes `userId` and update the type accordingly.
-- `(purpose)` line 0 (quality-gate) - **Purpose assessment evidence is incomplete**: baseline purpose assessment failed: RuntimeError: all 3 purpose assessment samples failed: RotationError: no light route available (102 enabled routes in catalog). Pools skipped: groq:free-tier (pool cooling down); local:ollama (pool cooling down); nvidia_nim:free-tier (pool cooling down); openrouter:credits (openrouter:free-tier allowance exhausted (account-wide)); openrouter:free:cohere/north-mini-code:free (openrouter:free-tier allowance exhausted (account-wide)); openrouter:free:dots-studio/dots-3-note-preview:free (openrouter:free-tier allowance exhausted (account-wide)); RotationError: no light route available (102 enabled routes in catalog). Pools skipped: groq:free-tier (pool cooling down); local:ollama (pool cooling down); nvidia_nim:free-tier (pool cooling down); openrouter:credits (openrouter:free-tier allowance exhausted (account-wide)); openrouter:free:cohere/north-mini-code:free (openrouter:free-tier allowance exhausted (account-wide)); openrouter:free:dots-studio/dots-3-note-preview:free (openrouter:free-tier allowance exhausted (account-wide)); RotationError: no light route available (102 enabled routes in catalog). Pools skipped: groq:free-tier (pool cooling down); local:ollama (pool cooling down); nvidia_nim:free-tier (pool cooling down); openrouter:credits (openrouter:free-tier allowance exhausted (account-wide)); openrouter:free:cohere/north-mini-code:free (openrouter:free-tier allowance exhausted (account-wide)); openrouter:free:dots-studio/dots-3-note-preview:free (openrouter:free-tier allowance exhausted (account-wide)); final purpose assessment returned no usable result _Suggested fix:_ Retry the resumable run after restoring a responsive provider.
+- `(purpose)` line 0 (quality-gate) - **Purpose assessment evidence is incomplete**: baseline purpose assessment incomplete: 2/3 sample(s) usable; RotationError: no light route available (119 enabled routes in catalog). Pools skipped: gemini:free-tier (gemini:free-tier allowance exhausted (account-wide)); groq:free-tier (pool cooling down); local:ollama (pool cooling down); nvidia_nim:free-tier (pool cooling down); openrouter:credits (openrouter:free-tier allowance exhausted (account-wide)); openrouter:free:cohere/north-mini-code:free (openrouter:free-tier allowance exhausted (account-wide)); final purpose assessment returned no usable result _Suggested fix:_ Retry the resumable run after restoring a responsive provider.
 
 ### medium (1)
 - `apps/web/components/research/ProjectManager.jsx` line 152 (correctness) - **Annotation user display shows 'Unknown' for all annotations due to missing user field in type**: Line 152 accesses `annotation.user?.displayName || annotation.user?.email` to show who created an annotation, but the `Annotation` interface (types.ts:615-625) defines no `user` field. The API may include user info in the response, but the TypeScript type does not reflect this, so every annotation unconditionally falls through to the final `'Unknown'` fallback. _Suggested fix:_ Add `user?: { displayName?: string | null; email?: string }` (or the full `User` shape) to the `Annotation` interface in types.ts to match what the API actually returns.
@@ -198,7 +212,6 @@ _These were found but left as-is - review and decide. Critical/high here means a
 ## Fix notes / left unfixed
 
 - scripts/verify-production-launch.mjs: no verified candidate was produced
-- scripts/verify-production-launch.mjs: TIMED OUT after 15m of fix attempts - rolled back and re-queued (raise FLEXFACTOR_FIX_FILE_MAX_SECONDS to allow longer)
 - scripts/verify-production-launch.mjs: no verified candidate was produced
 - publication failure made no progress and did not name another repairable source file
 - baseline publication suite is red and bounded repair did not fix it; review continued, publication stays blocked
@@ -206,72 +219,22 @@ _These were found but left as-is - review and decide. Critical/high here means a
 - rollback failed; working tree requires inspection
 
 
-## Errors (16)
+## Errors (8)
 
 | # | phase | kind | error | responsible |
 |---|---|---|---|---|
-| 1 | rotation | program-defect | EgressBlockedError: flexfactor_egress_blocked: payload contains ['cloud_token', 'password_ | flexfactor.py:1294 |
-| 2 | rotation | program-defect | EgressBlockedError: flexfactor_egress_blocked: payload contains ['cloud_token', 'password_ | flexfactor.py:1294 |
-| 3 | fix | program-defect | flexfactor_egress_blocked: payload contains ['cloud_token', 'password_assignment'] (near l | scripts/verify-production-launch.mjs |
-| 4 | baseline | program-defect | baseline publication suite is RED and bounded targeted repair did not fix it | - |
-| 5 | rotation | provider | TimeoutError: timed out | flexfactor.py:2755 |
-| 6 | rotation | provider | BadRequestError: Error code: 400 - {'error': {'message': 'Please reduce the length of the  | flexfactor.py:2412 |
-| 7 | rotation | provider | TimeoutError: timed out | flexfactor.py:2755 |
-| 8 | rotation | provider | NotFoundError: Error code: 404 - {'status': 404, 'title': 'Not Found', 'detail': "Function | flexfactor.py:2412 |
-| 9 | rotation | provider | RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `met | flexfactor.py:2412 |
-| 10 | rotation | provider | TimeoutError: timed out | flexfactor.py:2755 |
-| 11 | rotation | provider | TimeoutError: timed out | flexfactor.py:2755 |
-| 12 | rotation | provider | NotFoundError: Error code: 404 - {'status': 404, 'title': 'Not Found', 'detail': "Function | flexfactor.py:2412 |
-| 13 | rotation | provider | BadRequestError: Error code: 400 - {'error': {'message': 'Please reduce the length of the  | flexfactor.py:2412 |
-| 14 | rotation | provider | RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `met | flexfactor.py:2412 |
-| 15 | fix | budget | no strong route available (102 enabled routes in catalog). Pools skipped: cerebras:free-ti | apps/web/components/research/ProjectManager.jsx |
-| 16 | baseline-gate | program-defect | review made no progress: three consecutive semantic review batches completed ZERO files (2 | - |
+| 1 | fix | program-defect | flexfactor_egress_blocked: payload contains ['cloud_token', 'password_assignment'] (near l | scripts/verify-production-launch.mjs |
+| 2 | fix | program-defect | flexfactor_egress_blocked: payload contains ['cloud_token', 'password_assignment'] (near l | scripts/verify-production-launch.mjs |
+| 3 | baseline | program-defect | baseline publication suite is RED and bounded targeted repair did not fix it | - |
+| 4 | rotation | provider | BadRequestError: Error code: 400 - {'error': {'message': 'Please reduce the length of the  | flexfactor.py:2412 |
+| 5 | rotation | provider | RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `met | flexfactor.py:2412 |
+| 6 | rotation | budget | RateLimitError: Error code: 429 - [{'error': {'code': 429, 'message': 'You exceeded your c | flexfactor.py:2412 |
+| 7 | fix | budget | no strong route available (119 enabled routes in catalog). Pools skipped: cerebras:free-ti | apps/web/components/research/ProjectManager.jsx |
+| 8 | baseline-gate | program-defect | review made no progress: three consecutive semantic review batches completed ZERO files (2 | - |
 
-Counts by kind: budget 1, program-defect 5, provider 10
+Counts by kind: budget 2, program-defect 4, provider 2
 
-### 1. rotation — program-defect
-
-**Error**
-
-```
-EgressBlockedError: flexfactor_egress_blocked: payload contains ['cloud_token', 'password_assignment'] (near line(s) [434, 435]); refusing to send to a cloud model. Re-run with --redact to mask and send, --allow-sensitive to send anyway, or allow categories via FLEXFACTOR_ALLOW_EGRESS / ~/.flexfactor/policy.json {"allow_egress": [...]}.
-```
-
-**Responsible code**
-
-- FlexFactor `flexfactor.py:1294` in `_egress_gate()`
-
-```python
-raise EgressBlockedError(
-```
-- Route: `cerebras/gemma-4-31b`
-
-**Suggested fix** (signature)
-
-The egress gate found a secret/PII pattern in repo-derived text and refused to send it to a cloud model. Remove the secret from the repo (or use --redact / FLEXFACTOR_ALLOW_EGRESS for a known-safe fixture).
-
-### 2. rotation — program-defect
-
-**Error**
-
-```
-EgressBlockedError: flexfactor_egress_blocked: payload contains ['cloud_token', 'password_assignment'] (near line(s) [434, 435]); refusing to send to a cloud model. Re-run with --redact to mask and send, --allow-sensitive to send anyway, or allow categories via FLEXFACTOR_ALLOW_EGRESS / ~/.flexfactor/policy.json {"allow_egress": [...]}.
-```
-
-**Responsible code**
-
-- FlexFactor `flexfactor.py:1294` in `_egress_gate()`
-
-```python
-raise EgressBlockedError(
-```
-- Route: `cerebras/gpt-oss-120b`
-
-**Suggested fix** (signature)
-
-The egress gate found a secret/PII pattern in repo-derived text and refused to send it to a cloud model. Remove the secret from the repo (or use --redact / FLEXFACTOR_ALLOW_EGRESS for a known-safe fixture).
-
-### 3. fix — program-defect
+### 1. fix — program-defect
 
 **Error**
 
@@ -287,7 +250,23 @@ flexfactor_egress_blocked: payload contains ['cloud_token', 'password_assignment
 
 The egress gate found a secret/PII pattern in repo-derived text and refused to send it to a cloud model. Remove the secret from the repo (or use --redact / FLEXFACTOR_ALLOW_EGRESS for a known-safe fixture).
 
-### 4. baseline — program-defect
+### 2. fix — program-defect
+
+**Error**
+
+```
+flexfactor_egress_blocked: payload contains ['cloud_token', 'password_assignment'] (near line(s) [434, 435]); refusing to send to a cloud model. Re-run with --redact to mask and send, --allow-sensitive to send anyway, or allow categories via FLEXFACTOR_ALLOW_EGRESS / ~/.flexfactor/policy.json {"allow_egress": [...]}.
+```
+
+**Responsible code**
+
+- Program file: `scripts/verify-production-launch.mjs`
+
+**Suggested fix** (signature)
+
+The egress gate found a secret/PII pattern in repo-derived text and refused to send it to a cloud model. Remove the secret from the repo (or use --redact / FLEXFACTOR_ALLOW_EGRESS for a known-safe fixture).
+
+### 3. baseline — program-defect
 
 **Error**
 
@@ -315,9 +294,9 @@ npm warn Unknown project config "node-linker". This will stop working in the nex
 $ npm run build
 apps/desktop build$ node scripts/generate-icons.mjs && node scripts/electron-build.mjs
 apps/desktop build: Generated desktop icons (png/ico/icns) and web PWA icons (192/512).
-packages/shared build: Done
 apps/desktop build:   • electron-builder  version=26.15.3 os=10.0.26200
 apps/desktop build:   • loaded configuration  file=package.json ("build" field)
+packages/shared build: Done
 apps/desktop build:   • executing @electron/rebuild  electronVersion=39.8.10 arch=x64 buildFromSource=false workspaceRoot=C:\Users\firer\genemap-discovery\apps\desktop projectDir=./ appDir=./
 apps/desktop build:   • installing native dependencies  arch=x64
 apps/desktop build:   • completed installing native dependencies
@@ -334,96 +313,33 @@ apps/des
 
 Read the full log at C:\Users\firer\.flexfactor\runs\genemap-discovery-20260824-050548-082562-16164\baseline-publication-failure.log. Publication (push/merge) stays refused while the baseline is red; the review still runs.
 
+### 4. rotation — provider
+
+**Error**
+
+```
+BadRequestError: Error code: 400 - {'error': {'message': 'Please reduce the length of the messages or completion.', 'type': 'invalid_request_error', 'param': 'messages'}}
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2412` in `_chat_create()`
+
+```python
+return client.chat.completions.create(**kwargs)
+```
+- Route: `groq/allam-2-7b`
+
+**Suggested fix** (none)
+
+no known fix; start from the responsible code above
+
 ### 5. rotation — provider
 
 **Error**
 
 ```
-TimeoutError: timed out
-```
-
-**Responsible code**
-
-- FlexFactor `flexfactor.py:2755` in `_chat()`
-
-```python
-with self._opener.open(req, timeout=_ollama_http_timeout()) as resp:
-```
-- Route: `ollama/mistral:latest`
-
-**Suggested fix** (none)
-
-no known fix; start from the responsible code above
-
-### 6. rotation — provider
-
-**Error**
-
-```
-BadRequestError: Error code: 400 - {'error': {'message': 'Please reduce the length of the messages or completion.', 'type': 'invalid_request_error', 'param': 'messages'}}
-```
-
-**Responsible code**
-
-- FlexFactor `flexfactor.py:2412` in `_chat_create()`
-
-```python
-return client.chat.completions.create(**kwargs)
-```
-- Route: `groq/allam-2-7b`
-
-**Suggested fix** (none)
-
-no known fix; start from the responsible code above
-
-### 7. rotation — provider
-
-**Error**
-
-```
-TimeoutError: timed out
-```
-
-**Responsible code**
-
-- FlexFactor `flexfactor.py:2755` in `_chat()`
-
-```python
-with self._opener.open(req, timeout=_ollama_http_timeout()) as resp:
-```
-- Route: `ollama/gpt-oss:20b`
-
-**Suggested fix** (none)
-
-no known fix; start from the responsible code above
-
-### 8. rotation — provider
-
-**Error**
-
-```
-NotFoundError: Error code: 404 - {'status': 404, 'title': 'Not Found', 'detail': "Function '7dfc10a8-3cc4-448e-97c1-2213308dc222': Not found for account 'hvux_0rjHS6OiBfWXcZvKgoOaUBy_3UsQqq6I6IAz7I'"}
-```
-
-**Responsible code**
-
-- FlexFactor `flexfactor.py:2412` in `_chat_create()`
-
-```python
-return client.chat.completions.create(**kwargs)
-```
-- Route: `nvidia_nim/google/codegemma-7b`
-
-**Suggested fix** (none)
-
-no known fix; start from the responsible code above
-
-### 9. rotation — provider
-
-**Error**
-
-```
-RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `meta-llama/llama-4-scout-17b-16e-instruct` in organization `org_01kxhxdkh3e7nasshjpfbkzh11` service tier `on_demand` on tokens per minute (TPM): Limit 30000, Used 19900, Requested 23796. Please try again in 27.392s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'compound', 'code': 'rate_limit_exceeded'}}
+RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `meta-llama/llama-4-scout-17b-16e-instruct` in organization `org_01kxhxdkh3e7nasshjpfbkzh11` service tier `on_demand` on tokens per minute (TPM): Limit 30000, Used 19953, Requested 23804. Please try again in 27.514s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'compound', 'code': 'rate_limit_exceeded'}}
 ```
 
 **Responsible code**
@@ -439,54 +355,12 @@ return client.chat.completions.create(**kwargs)
 
 Rate-limited. The rotator cools the pool down and moves on; nothing to fix unless it recurs on every pool, which means the free tiers are exhausted for now.
 
-### 10. rotation — provider
+### 6. rotation — budget
 
 **Error**
 
 ```
-TimeoutError: timed out
-```
-
-**Responsible code**
-
-- FlexFactor `flexfactor.py:2755` in `_chat()`
-
-```python
-with self._opener.open(req, timeout=_ollama_http_timeout()) as resp:
-```
-- Route: `ollama/qwen2.5-coder:7b`
-
-**Suggested fix** (none)
-
-no known fix; start from the responsible code above
-
-### 11. rotation — provider
-
-**Error**
-
-```
-TimeoutError: timed out
-```
-
-**Responsible code**
-
-- FlexFactor `flexfactor.py:2755` in `_chat()`
-
-```python
-with self._opener.open(req, timeout=_ollama_http_timeout()) as resp:
-```
-- Route: `ollama/qwen2.5-coder:7b`
-
-**Suggested fix** (none)
-
-no known fix; start from the responsible code above
-
-### 12. rotation — provider
-
-**Error**
-
-```
-NotFoundError: Error code: 404 - {'status': 404, 'title': 'Not Found', 'detail': "Function 'c322f327-55a3-4af3-a91f-c757e2b8b135': Not found for account 'hvux_0rjHS6OiBfWXcZvKgoOaUBy_3UsQqq6I6IAz7I'"}
+RateLimitError: Error code: 429 - [{'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_input_token_count, limit: 0, model: gemini-3.1-pro\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_input_token_count, limit: 0, model: gemini-3.1-pro\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 0, model: gemini-3.1-pro\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 0, model: gemini-3.1-pro\nPlease retry in 6.81204503s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_input_token_count', 'quotaId': 'GenerateContentInputTokensPerModelPerDay-FreeTier', 'quotaDimensions': {'model': 'gemini-3.1-pro', 'location': 'global'}}, {'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_input_token_count', 'quotaId': 'GenerateContentInputTokensPerModelPerMinute-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-3.1-pro'}}, {'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-3.1-pro'}}, {'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsP
 ```
 
 **Responsible code**
@@ -496,60 +370,18 @@ NotFoundError: Error code: 404 - {'status': 404, 'title': 'Not Found', 'detail':
 ```python
 return client.chat.completions.create(**kwargs)
 ```
-- Route: `nvidia_nim/google/gemma-3-4b-it`
-
-**Suggested fix** (none)
-
-no known fix; start from the responsible code above
-
-### 13. rotation — provider
-
-**Error**
-
-```
-BadRequestError: Error code: 400 - {'error': {'message': 'Please reduce the length of the messages or completion.', 'type': 'invalid_request_error', 'param': 'messages'}}
-```
-
-**Responsible code**
-
-- FlexFactor `flexfactor.py:2412` in `_chat_create()`
-
-```python
-return client.chat.completions.create(**kwargs)
-```
-- Route: `groq/allam-2-7b`
-
-**Suggested fix** (none)
-
-no known fix; start from the responsible code above
-
-### 14. rotation — provider
-
-**Error**
-
-```
-RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `meta-llama/llama-4-scout-17b-16e-instruct` in organization `org_01kxhxdkh3e7nasshjpfbkzh11` service tier `on_demand` on tokens per minute (TPM): Limit 30000, Used 19958, Requested 23796. Please try again in 27.508s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'compound', 'code': 'rate_limit_exceeded'}}
-```
-
-**Responsible code**
-
-- FlexFactor `flexfactor.py:2412` in `_chat_create()`
-
-```python
-return client.chat.completions.create(**kwargs)
-```
-- Route: `groq/groq/compound`
+- Route: `gemini/gemini-3.1-pro-preview`
 
 **Suggested fix** (signature)
 
-Rate-limited. The rotator cools the pool down and moves on; nothing to fix unless it recurs on every pool, which means the free tiers are exhausted for now.
+The account's FREE DAILY allowance for that backend is spent - one allowance, however many models the catalog lists under it. FlexFactor now benches the whole allowance until the reset the provider named (X-RateLimit-Reset) instead of re-testing it every 60s, and the run continues on other backends. It returns by itself at the daily reset; do not add paid credit to compensate. If a run must not depend on it, point the run at a backend with headroom rather than waiting.
 
-### 15. fix — budget
+### 7. fix — budget
 
 **Error**
 
 ```
-no strong route available (102 enabled routes in catalog). Pools skipped: cerebras:free-tier (pool cooling down); groq:free-tier (pool cooling down); local:ollama (pool cooling down); nvidia_nim:free-tier (pool cooling down); openrouter:credits (openrouter:free-tier allowance exhausted (account-wide)); openrouter:free:cohere/north-mini-code:free (openrouter:free-tier allowance exhausted (account-wide))
+no strong route available (119 enabled routes in catalog). Pools skipped: cerebras:free-tier (pool cooling down); gemini:free-tier (gemini:free-tier allowance exhausted (account-wide)); groq:free-tier (pool cooling down); local:ollama (pool cooling down); nvidia_nim:free-tier (pool cooling down); openrouter:credits (openrouter:free-tier allowance exhausted (account-wide))
 ```
 
 **Responsible code**
@@ -560,7 +392,7 @@ no strong route available (102 enabled routes in catalog). Pools skipped: cerebr
 
 The pool's allowance is spent. The rotator benches it until reset; check AI Time for the reset time. Do not add paid keys to compensate.
 
-### 16. baseline-gate — program-defect
+### 8. baseline-gate — program-defect
 
 **Error**
 
@@ -574,4 +406,4 @@ review made no progress: three consecutive semantic review batches completed ZER
 
 **Suggested fix** (none)
 
-no known fix; start from the responsible code above (model suggester failed: no light route available (102 enabled routes in catalog). Pools skipped: groq:free-tier (pool cooling down); local:ollama (pool cooling down); nvidia_nim:free-tier (pool cooling down); openrouter:credits (openrouter:free-tier allowance exhausted (account-wide)); openrouter:free:cohere/north-mini-code:free (openrouter:free-tier allowance exhausted (account-wide)); openrouter:free:dots-studio/dots-3-note-preview:free (openrouter:free-tier allowance exhausted (account-wide)))
+no known fix; start from the responsible code above (model suggester failed: no light route available (119 enabled routes in catalog). Pools skipped: gemini:free-tier (gemini:free-tier allowance exhausted (account-wide)); groq:free-tier (pool cooling down); local:ollama (pool cooling down); nvidia_nim:free-tier (pool cooling down); openrouter:credits (openrouter:free-tier allowance exhausted (account-wide)); openrouter:free:cohere/north-mini-code:free (openrouter:free-tier allowance exhausted (account-wide)))
