@@ -1,159 +1,151 @@
-# FlexFactor audit — Genemap
+# FlexFactor audit — GeneMap
 
 - **Project:** `C:\Users\firer\genemap-discovery`
 - **Branch:** `main`
 - **Toolchains:** java, node
-- **Files reviewed:** 67
-- **Defects found:** 126
-- **Files fixed:** 46
-- **No-ops:** 2 (none are successes) — **0 rejected finding(s)** (author found nothing to fix — a REVIEW-precision defect, not a fix failure), **0 no fix found** (a real defect the loop could not land), 2 unclassified (the note did not say)
-- **Baseline build:** passed
+- **Files reviewed:** 0 of 375 candidate(s)
+- **FILE ACCOUNTING: 375 candidate(s) = 0 reviewed + 343 never_attempted + 24 review_incomplete + 8 skipped_known_clean**
+- **ZERO WORK: not one of 375 candidate file(s) was reviewed. This run did nothing; treat it as a FAILURE, not a clean repo.**
+- **Defects found:** 4
+- **Files fixed:** 0
+- **Errors recorded:** 28 (see the Errors section below; ledger at `C:\Users\firer\.flexfactor\runs\genemap-20260827-011439-176807-19352\errors.md`)
+- **Baseline build:** FAILED
 - **Unit tests added:** 0 (suite not run)
 - **Button/UI (Playwright):** skipped
 - **Cycles run:** 1
-- **Providers:** openai:gpt-4o
+- **Providers:** rotation:writer/palmyra-creative-122b
 - **Git:** PROVIDER-OUTAGE ABORT on main: checkpoint preserved; no unverified commit created
 
 ## System inventory
 
-**838 entries accounted for.**
+**975 entries accounted for.**
 
 | Category | Count |
 |---|---:|
 | artifact-subtree | 11 |
-| binary-asset | 58 |
-| configuration-documentation-or-data | 248 |
-| first-party-source | 521 |
+| binary-asset | 62 |
+| configuration-documentation-or-data | 275 |
+| first-party-source | 627 |
 
 The immutable run manifest contains the complete path-level inventory. Artifact, binary, and reparse entries are named and classified; they are not represented as line-reviewed source.
 
 ## Executable evidence
 
-- **Evidence run:** `genemap-20260816-213527-756611-45340`
-- **Exact final commit:** `f2c5c4e0b0b90a20fa120bcfbe51d07da37e16c2`
-- **Code map:** 496 file(s), 1092 function(s), 24 route(s), 504 material control(s)
-- **Function execution:** 0/954 with invocation evidence
+- **Evidence run:** `genemap-20260827-011439-176807-19352`
+- **Exact final commit:** `aa6e0ddb306726678d70879fd6ad728fd77009b8`
+- **Code map:** 556 file(s), 1258 function(s), 24 route(s), 538 material control(s)
+- **Function execution:** 0/1069 with invocation evidence
 - **Route execution:** 0/24
-- **Control execution:** 0/504
-- **Changed-file rescan:** 47/47 (complete)
-- **Blast radius:** 54 affected file(s); analysis ran
-- **Normalized gates:** 4 pass, 3 fail, 2 blocked
+- **Control execution:** 0/538
+- **Changed-file rescan:** 1/1 (complete)
+- **Blast radius:** 1 affected file(s); analysis ran
+- **Normalized gates:** 3 pass, 4 fail, 2 blocked
 
-- **Blast Radius:** `C:\Users\firer\.flexfactor\evidence\e29c9d26f8adcf57\genemap-20260816-213527-756611-45340\blast-radius.json`
-- **Changed File Rescan:** `C:\Users\firer\.flexfactor\evidence\e29c9d26f8adcf57\genemap-20260816-213527-756611-45340\changed-file-rescan.json`
-- **Code Index:** `C:\Users\firer\.flexfactor\evidence\e29c9d26f8adcf57\genemap-20260816-213527-756611-45340\code-index.json`
-- **Coverage Ledger:** `C:\Users\firer\.flexfactor\evidence\e29c9d26f8adcf57\genemap-20260816-213527-756611-45340\coverage-ledger.json`
-- **Manifest:** `C:\Users\firer\.flexfactor\evidence\e29c9d26f8adcf57\genemap-20260816-213527-756611-45340\manifest.json`
-- **Purpose Graph:** `C:\Users\firer\.flexfactor\evidence\e29c9d26f8adcf57\genemap-20260816-213527-756611-45340\purpose-graph.json`
-- **Quality Gates:** `C:\Users\firer\.flexfactor\evidence\e29c9d26f8adcf57\genemap-20260816-213527-756611-45340\quality-gates.json`
-- **Sarif:** `C:\Users\firer\.flexfactor\evidence\e29c9d26f8adcf57\genemap-20260816-213527-756611-45340\results.sarif`
+- **Blast Radius:** `C:\Users\firer\.flexfactor\evidence\e29c9d26f8adcf57\genemap-20260827-011439-176807-19352\blast-radius.json`
+- **Changed File Rescan:** `C:\Users\firer\.flexfactor\evidence\e29c9d26f8adcf57\genemap-20260827-011439-176807-19352\changed-file-rescan.json`
+- **Code Index:** `C:\Users\firer\.flexfactor\evidence\e29c9d26f8adcf57\genemap-20260827-011439-176807-19352\code-index.json`
+- **Coverage Ledger:** `C:\Users\firer\.flexfactor\evidence\e29c9d26f8adcf57\genemap-20260827-011439-176807-19352\coverage-ledger.json`
+- **Manifest:** `C:\Users\firer\.flexfactor\evidence\e29c9d26f8adcf57\genemap-20260827-011439-176807-19352\manifest.json`
+- **Purpose Graph:** `C:\Users\firer\.flexfactor\evidence\e29c9d26f8adcf57\genemap-20260827-011439-176807-19352\purpose-graph.json`
+- **Quality Gates:** `C:\Users\firer\.flexfactor\evidence\e29c9d26f8adcf57\genemap-20260827-011439-176807-19352\quality-gates.json`
+- **Sarif:** `C:\Users\firer\.flexfactor\evidence\e29c9d26f8adcf57\genemap-20260827-011439-176807-19352\results.sarif`
+
+## Production readiness
+
+**NOT PRODUCTION READY** — 11/14 evaluated gates passed, 3 blocker(s).
+
+Full scorecard: `C:\Users\firer\genemap-discovery\genemap_readiness.md`
+
+- **Project builds** [critical] — build command failed
+  - Fix: Fix the compile/build errors.
+- **Test suite passes** [high] — tests were not run
+  - Fix: Run the suite and fix failures.
+- **Dependencies are lock-pinned** [high] — no lockfile: java:apps/web/android
+  - Fix: Commit the lockfile so builds are reproducible.
 
 ## Competitor research
 
-**Coverage:** 8 competitor(s) covered with corroborating sources (target 5).
+**Coverage:** 5 competitor(s) covered with corroborating sources (target 5).
 
 - **Sources used:** web:duckduckgo, github, repo-rewards
 - **Repo Rewards endpoint:** `https://web-production-d7db7.up.railway.app`
 - **Sources SKIPPED (named, not silent):**
+  - `idea:Genepool` - model returned an incomplete idea (missing why_valuable) - forced to accept=False for Genepool
   - `web:searxng` - RuntimeError: FLEXFACTOR_SEARXNG_URL is not set
 
-- **Ideas accepted as serving this program's purpose:** 5 (rejected 3 - the purpose contract, not the competitor, decides)
+- **Ideas accepted as serving this program's purpose:** 1 (rejected 4 - the purpose contract, not the competitor, decides)
 
-- **Bridged into the fix stream:** 0 of 8 candidate(s)
-  - NOT bridged (3): Geneious, Geneious-Prime-molecular/.github, paolomaccallini-hub/UKBB - idea rejected by the purpose contract
-  - NOT bridged (1): vortexxyynubb/GenomeConsole - not bridgeable (evidence=verified, reuse_mode=reference-only)
-  - NOT bridged (4): Benchling, Bioconductor, Ensembl, Jalview - severity 'medium' is below the --fix-severity floor
+- **Bridged into the fix stream:** 0 of 5 candidate(s)
+  - NOT bridged (4): DNA.Land Compass, Geneious-Prime-molecular/.github, Genepool, OpenSNP - idea rejected by the purpose contract
+  - NOT bridged (1): Biopython - not bridgeable (evidence=verified, reuse_mode=reference-only)
 
-| Competitor | Kind | Licence | Reuse mode | Verdict | Adoptable idea |
-|---|---|---|---|---|---|
-| [Benchling](https://github.com/benchling/integration-examples) | oss | `MIT` | `direct-code-reuse` | ACCEPT | API Integration Examples |
-| [Jalview](https://github.com/jalview/jalview-js) | oss | `AGPL-3.0` | `clean-room-from-documented-behavior` | ACCEPT | Interactive Alignment Visualization |
-| [paolomaccallini-hub/UKBB](https://github.com/paolomaccallini-hub/UKBB) | oss | `GPL-3.0` | `clean-room-from-documented-behavior` | reject | GWAS Analysis Integration |
-| [Geneious-Prime-molecular/.github](https://github.com/Geneious-Prime-molecular/.github) | oss | `UNKNOWN` | `reference-only` | reject | CRISPR Guide Design |
-| [vortexxyynubb/GenomeConsole](https://github.com/vortexxyynubb/GenomeConsole) | oss | `UNKNOWN` | `reference-only` | ACCEPT | Sequence Analysis Features |
-| [Geneious](https://github.com/SmithsonianWorkshops/GeneiousLIMS) | market | `UNKNOWN` | `clean-room-from-documented-behavior` | reject | Integrated Gene LIMS |
-| [Bioconductor](https://github.com/bioMate-AI/biomate-bioconductor-kb) | market | `UNKNOWN` | `clean-room-from-documented-behavior` | ACCEPT | AI-Driven Knowledge Base |
-| [Ensembl](https://github.com/drewmccormack/ensembles) | market | `UNKNOWN` | `clean-room-from-documented-behavior` | ACCEPT | Gene Set Aggregation |
+| Competitor | Kind | Licence | Reuse mode | Purpose mapping | Verdict | Fix stream | Adoptable idea |
+|---|---|---|---|---|---|---|---|
+| [Biopython](https://github.com/biopython/biopython) | oss | `NOASSERTION` | `reference-only` | acceptance #deterministic benchmarks | ACCEPT | NOT entered - not bridgeable (evidence=verified, reuse_mode=reference-only) | Benchmarking workflow for genomic data reproducibility |
+| [OpenSNP](https://github.com/openSNP/snpr) | oss | `MIT` | `direct-code-reuse` | purpose-only | reject | NOT entered - idea rejected by the purpose contract | Integrated variant browser and annotation viewer |
+| [Geneious-Prime-molecular/.github](https://github.com/Geneious-Prime-molecular/.github) | oss | `UNKNOWN` | `reference-only` | purpose-only | reject | NOT entered - idea rejected by the purpose contract | Interactive Phylogenetic Tree Builder |
+| [Genepool](https://www.genepool.app/) | market | `UNKNOWN` | `clean-room-from-documented-behavior` | purpose-only | reject | NOT entered - idea rejected by the purpose contract | (idea extraction failed) |
+| [DNA.Land Compass](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5870659/) | market | `UNKNOWN` | `clean-room-from-documented-behavior` | acceptance #6 | reject | NOT entered - idea rejected by the purpose contract | Client-side secure navigation of personal genetic data |
 
-### Benchling
+### Biopython
 
-- **Evidence:** <https://github.com/benchling/integration-examples>, <https://github.com/jvrana/benchling-api>
+- **Evidence:** <https://github.com/biopython/biopython>
+- **Licence:** `NOASSERTION` (via github-api)
+- **Reuse mode:** `reference-only` - licence NOASSERTION could not be verified; record the capability as a reference and copy nothing
+- **Idea:** Benchmarking workflow for genomic data reproducibility - Provides deterministic benchmarking pipelines with versioned reference datasets, reproducible output hashes, and automated reporting to verify analytical consistency across runs.
+- **Value here:** Enables the program to satisfy acceptance criterion 4 (deterministic benchmarks) and criterion 7 (exact deployed SHA and real research journey) by proving analytical output is reproducible and traceable to a specific commit and dataset version.
+- **Purpose / criterion mapping:** acceptance #deterministic benchmarks - Directly advances the program's authored purpose of being an education and early-research platform where provenance and reproducibility are essential for lessons and candidate-gene exploration. It does not enable diagnosis, clinical decision support, or any prohibited function.
+- **Purpose verdict:** ACCEPTED - Directly advances the program's authored purpose of being an education and early-research platform where provenance and reproducibility are essential for lessons and candidate-gene exploration. It does not enable diagnosis, clinical decision support, or any prohibited function.
+- **Fix-stream decision:** DID NOT enter the fix stream - not bridgeable (evidence=verified, reuse_mode=reference-only)
+- **Evidence basis:** Competitor repository contains benchmarking scripts and versioned test data; Biopython's CI includes reproducible genomic analysis pipelines that produce consistent output across environments. (confidence medium)
+
+### OpenSNP
+
+- **Evidence:** <https://github.com/openSNP/snpr>
 - **Licence:** `MIT` (via github-api)
 - **Reuse mode:** `direct-code-reuse` - licence MIT is permissive and compatible; source may be read and adapted with attribution
-- **Idea:** API Integration Examples - Provides examples on how to integrate with the Benchling API for various functionalities, enabling users to explore and implement custom integrations easily.
-- **Value here:** Adding API integration examples would enhance users' ability to adapt the platform for specific research needs, thereby improving the program's educational and exploratory capabilities.
-- **Purpose verdict:** ACCEPTED - Providing API examples directly supports the platform's educational and research goals by enabling users to navigate and leverage the program more effectively for custom exploratory and educational purposes.
-- **Evidence basis:** The GitHub repository "benchling/integration-examples" provides integration examples for the Benchling API. (confidence high)
-
-### Jalview
-
-- **Evidence:** <https://github.com/jalview/jalview-js>
-- **Licence:** `AGPL-3.0` (via github-api)
-- **Reuse mode:** `clean-room-from-documented-behavior` - licence AGPL-3.0 is copyleft/restricted; source must NOT be copied - work from documented behaviour only
-- **Idea:** Interactive Alignment Visualization - Provides interactive visualizations of sequence alignments within the application to aid in genomic research and education.
-- **Value here:** Incorporating interactive alignment visualization would enhance the educational aspect of the platform by allowing users to engage with genomic data more dynamically and intuitively, aligning with the goal to support lessons and research navigation.
-- **Purpose verdict:** ACCEPTED - Interactive visualization aids users in understanding genetic alignments and would support the platform's educational purpose by improving users' learning experience and ability to interact with genomic data.
-- **Evidence basis:** The GitHub repository description for JalviewJS suggests that it includes JavaScript artifacts related to genomic visualization. (confidence medium)
-
-### paolomaccallini-hub/UKBB
-
-- **Evidence:** <https://github.com/paolomaccallini-hub/UKBB>
-- **Licence:** `GPL-3.0` (via repo-rewards)
-- **Reuse mode:** `clean-room-from-documented-behavior` - licence GPL-3.0 is copyleft/restricted; source must NOT be copied - work from documented behaviour only
-- **Idea:** GWAS Analysis Integration - Performs GWAS analysis on summary statistics, defining risk loci, performing fine-mapping, and mapping variants to genes using VEP and regulatory annotation.
-- **Value here:** Integrating GWAS analysis into GeneMap Discovery would enhance its research capabilities by allowing users to perform advanced genetic association studies, thereby supporting early-stage research and learning.
-- **Purpose verdict:** REJECTED - Including GWAS analysis features does not align with the program’s purpose of being an education and early-research platform with a clear separation of AI leads and verified evidence. The existing criteria emphasize learning and research navigation without being mistaken for clinical decision support.
-- **Evidence basis:** The competitor's description clearly states that it performs GWAS analysis on summary statistics, defines risk loci, and maps variants to genes. (confidence high)
+- **Idea:** Integrated variant browser and annotation viewer - OpenSNP's snpr interface allows users to upload VCF files, visualize genomic variants in a browser, and view detailed annotations. This includes filtering options (e.g., by allele frequency, quality, and population-specific databases) and the ability to click on variants to see detailed information such as clinical significance and source publications.
+- **Value here:** The audited program (GeneMap) currently lacks a direct interface for uploading and analyzing personal genomic data (VCF files). Adopting a similar variant browser would bridge the gap between theoretical genetic education and practical data analysis, allowing users to see how the concepts they are learning apply to their own genetic makeup.
+- **Purpose / criterion mapping:** purpose-only - While a variant browser is a useful tool for many bioinformaticians, it does not align with GeneMap's current purpose contract. GeneMap is explicitly defined as an 'educational platform' that does 'not accept personal medical records or VCF uploads' and provides 'no diagnosis or personal risk guidance'. Adding this feature would fundamentally change the nature of the product from an educational resource to a data analysis service, which contradicts the stated acceptance criteria and project brief.
+- **Purpose verdict:** REJECTED - While a variant browser is a useful tool for many bioinformaticians, it does not align with GeneMap's current purpose contract. GeneMap is explicitly defined as an 'educational platform' that does 'not accept personal medical records or VCF uploads' and provides 'no diagnosis or personal risk guidance'. Adding this feature would fundamentally change the nature of the product from an educational resource to a data analysis service, which contradicts the stated acceptance criteria and project brief.
+- **Fix-stream decision:** DID NOT enter the fix stream - idea rejected by the purpose contract
+- **Evidence basis:** The description from OpenSNP's GitHub repository clearly states that the project allows for 'VCF file upload' and provides an 'annotation viewer' with 'filtering options' and 'detailed information' on variants. The screenshot in the repository also visually demonstrates a data table specific to genomic variants. (confidence high)
 
 ### Geneious-Prime-molecular/.github
 
 - **Evidence:** <https://github.com/Geneious-Prime-molecular/.github>
 - **Licence:** `UNKNOWN` (via repo-rewards)
 - **Reuse mode:** `reference-only` - licence UNKNOWN could not be verified; record the capability as a reference and copy nothing
-- **Idea:** CRISPR Guide Design - The competitor offers CRISPR guide design functionality to assist researchers in designing CRISPR guides for genetic editing.
-- **Value here:** Adding CRISPR guide design could enrich the early research tools of Axiom GeneMap Discovery and enhance its value for genetics education.
-- **Purpose verdict:** REJECTED - The audited program's purpose is focused on genetics education and early research with a clear separation from practical applications like genetic editing. Incorporating CRISPR guide design may blur this line and violate the acceptance criteria to not be mistaken for clinical decision support.
-- **Evidence basis:** The description of Geneious-Prime mentions 'CRISPR guide design' as part of its capabilities. (confidence high)
+- **Idea:** Interactive Phylogenetic Tree Builder - Constructs and visualizes evolutionary trees from DNA/protein sequence data
+- **Value here:** Would let users view evolutionary relationships in lessons or research explorations, enhancing biology education
+- **Purpose / criterion mapping:** purpose-only - Adding phylogenetic tree generation does not move GeneMap toward its core purpose of separating AI candidate leads from verified evidence, providing provenance-aware gene exploration, and serving as an educational platform without clinical or diagnostic functionality. It merely adds a generic lab-analysis feature not required for the stated acceptance criteria.
+- **Purpose verdict:** REJECTED - Adding phylogenetic tree generation does not move GeneMap toward its core purpose of separating AI candidate leads from verified evidence, providing provenance-aware gene exploration, and serving as an educational platform without clinical or diagnostic functionality. It merely adds a generic lab-analysis feature not required for the stated acceptance criteria.
+- **Fix-stream decision:** DID NOT enter the fix stream - idea rejected by the purpose contract
+- **Evidence basis:** Competitor description lists "Phylogenetic tree building" as a feature (confidence medium)
 
-### vortexxyynubb/GenomeConsole
+### Genepool
 
-- **Evidence:** <https://github.com/vortexxyynubb/GenomeConsole>
-- **Licence:** `UNKNOWN` (via repo-rewards)
-- **Reuse mode:** `reference-only` - licence UNKNOWN could not be verified; record the capability as a reference and copy nothing
-- **Idea:** Sequence Analysis Features - The competitor platform, GenomeConsole, provides comprehensive DNA sequence analysis capabilities such as sequence validation, GC content analysis, reverse complement, transcription, translation, ORF prediction, restriction enzyme mapping, motif search, and sequence alignment.
-- **Value here:** Implementing DNA sequence analysis features could enhance the educational and research capabilities of Genemap Discovery, making the platform more useful for users who want to engage in more detailed and practical genetics research and learning.
-- **Purpose verdict:** ACCEPTED - Adding sequence analysis capabilities can support the program's goal of being an educational and research platform by providing users with tools to explore genetic sequences more thoroughly, thereby enhancing lessons and research paths.
-- **Evidence basis:** The evidence from the competitor's description lists extensive DNA sequence analysis features including sequence validation, GC content analysis, and more. (confidence high)
-
-### Geneious
-
-- **Evidence:** <https://github.com/SmithsonianWorkshops/GeneiousLIMS>
+- **Evidence:** <https://www.genepool.app/>, <https://www.genome.gov/genetics-glossary/Gene-Pool>, <https://perspectives.nsgc.org/Article/genepool-a-discord-channel-for-genetic-counselors-across-career-stages>, <https://github.com/iskandr/genepool>
 - **Licence:** `UNKNOWN` (via none (no repository could be attributed to this competitor))
 - **Reuse mode:** `clean-room-from-documented-behavior` - no inspectable source (licence UNKNOWN); only publicly documented behaviour may inform our own independent design
-- **Idea:** Integrated Gene LIMS - Provides a Laboratory Information Management System (LIMS) optimized for genomics research.
-- **Value here:** Adopting a LIMS feature could enhance research navigation by streamlining data management, particularly for educational and research purposes in genetics.
-- **Purpose verdict:** REJECTED - While a LIMS could enhance data organization, it does not align with the explicitly stated contract requirements such as separating AI leads from verified evidence or supporting the lessons-to-research path. The purpose focuses on education and evidence interaction rather than laboratory management.
-- **Evidence basis:** Geneious is referenced as having a LIMS capability in their GitHub repository, indicated by the name GeneiousLIMS. (confidence medium)
+- **Idea:** (idea extraction failed) - 
+- **Value here:** 
+- **Purpose / criterion mapping:** purpose-only - NOT ACTED ON: model returned an incomplete idea (missing why_valuable) - forced to accept=False. not judged: every strong pool failed this call; last error was NotFoundError: Error code: 404 - {'status': 404, 'title': 'Not Found', 'detail': "Function '00bdd0a7-e38f-4423-9007-c4d8730a3f78': Not found for account 'hvux_0rjHS6OiBfWXcZvKgoOaUBy_3UsQqq6I6IAz7I'"}
+- **Purpose verdict:** REJECTED - NOT ACTED ON: model returned an incomplete idea (missing why_valuable) - forced to accept=False. not judged: every strong pool failed this call; last error was NotFoundError: Error code: 404 - {'status': 404, 'title': 'Not Found', 'detail': "Function '00bdd0a7-e38f-4423-9007-c4d8730a3f78': Not found for account 'hvux_0rjHS6OiBfWXcZvKgoOaUBy_3UsQqq6I6IAz7I'"}
+- **Fix-stream decision:** DID NOT enter the fix stream - idea rejected by the purpose contract
+- **Evidence basis:**  (confidence ?)
 
-### Bioconductor
+### DNA.Land Compass
 
-- **Evidence:** <https://github.com/bioMate-AI/biomate-bioconductor-kb>
+- **Evidence:** <https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5870659/>, <https://www.ngsgenealogy.org/genealogy-courses/>, <https://isogg.org/wiki/DNA.Land>, <https://github.com/TeamErlich/dna-land-compass>
 - **Licence:** `UNKNOWN` (via none (no repository could be attributed to this competitor))
 - **Reuse mode:** `clean-room-from-documented-behavior` - no inspectable source (licence UNKNOWN); only publicly documented behaviour may inform our own independent design
-- **Idea:** AI-Driven Knowledge Base - The competitor platform, Bioconductor, integrates an AI-driven knowledge base for life sciences research, which facilitates discovery and exploration of genetics-related content by automating data processing and enhancing research insights.
-- **Value here:** Adopting a similar AI-driven knowledge base could enhance the exploration capability of Genemap by providing users with automated insights and facilitating a more intuitive connection between educational content and research discoveries.
-- **Purpose verdict:** ACCEPTED - Integrating an AI-driven knowledge base aligns with the platform's purpose of supporting early research and exploration in a user-friendly manner, further enhancing the separation of AI-generated ideas and providing a clearer educational journey.
-- **Evidence basis:** The presence of an AI-driven knowledge base is implied by the search evidence linked to the Bioconductor repository, although specific implementation details are not provided. (confidence medium)
-
-### Ensembl
-
-- **Evidence:** <https://github.com/drewmccormack/ensembles>, <https://github.com/MLWave/Kaggle-Ensemble-Guide>
-- **Licence:** `UNKNOWN` (via none (no repository could be attributed to this competitor))
-- **Reuse mode:** `clean-room-from-documented-behavior` - no inspectable source (licence UNKNOWN); only publicly documented behaviour may inform our own independent design
-- **Idea:** Gene Set Aggregation - Ensembl provides capabilities to aggregate and analyze sets of genes interactively, allowing users to explore gene associations and functions comprehensively.
-- **Value here:** Integrating a gene set aggregation feature would enable users of GeneMap to group genes and analyze their interactions and functions, which aligns with educational and research navigation enhancements.
-- **Purpose verdict:** ACCEPTED - This feature would serve the program's purpose of supporting genetics education and early research by enhancing the user's ability to explore and compare genes in an educational context.
-- **Evidence basis:** The competitor's offering in the market provides comprehensive tools for interactive gene set analysis as suggested by their general market presence. (confidence medium)
+- **Idea:** Client-side secure navigation of personal genetic data - Enables users to upload and explore their own genetic data locally in the browser without transmitting it to a server, preserving privacy while allowing personalized exploration.
+- **Value here:** Would allow GeneMap to offer personalized, hands-on exploration of genetic variants in an educational context, increasing engagement and learning efficacy by connecting abstract concepts to users' own data.
+- **Purpose / criterion mapping:** acceptance #6 - Adopting this would violate acceptance criterion #6: the program must not provide personal risk, diagnosis, or any form of personal genetic guidance. Even educational use of personal data risks conflating learning with self-diagnosis or risk assessment, which is explicitly prohibited.
+- **Purpose verdict:** REJECTED - Adopting this would violate acceptance criterion #6: the program must not provide personal risk, diagnosis, or any form of personal genetic guidance. Even educational use of personal data risks conflating learning with self-diagnosis or risk assessment, which is explicitly prohibited.
+- **Fix-stream decision:** DID NOT enter the fix stream - idea rejected by the purpose contract
+- **Evidence basis:** Competitor evidence from NCBI PMC article describing DNA.Land Compass as a 'secure, client-side site for navigating personal genetic data'. (confidence medium)
 
 ## Release status
 
@@ -184,341 +176,669 @@ Standing between this program and PRODUCTION READY (20 condition(s) without pass
 - `user_understandable` — The application is understandable to its intended users without developer assistance.
 - `no_external_gap` — No required credential, certificate, legal review, payment validation, or external production proof remains incomplete.
 
-## Remaining defects NOT auto-fixed (fix floor = high)
+## Runtime-data evidence (read-only production)
+
+**UNAVAILABLE** - FLEXFACTOR_READONLY_DATABASE_URL is not set - FlexFactor has NO read path to production data, so NO data-shaped or environment-shaped root cause could be looked for (this is not evidence that none exists)
+
+_This is NOT a clean data bill of health: no data-shaped or environment-shaped root cause could be looked for._
+
+## Remaining defects NOT auto-fixed (fix floor = medium)
 
 _These were found but left as-is - review and decide. Critical/high here means a file that could not be safely auto-fixed (see manual-review list)._
 
-### high (3)
-- `services/api/src/services/genomicDatabases.js` line 8 (correctness) - **Default TTL Configuration Issue**: The default TTL for the cache is set to 10 minutes, which might be too long for certain caching scenarios, leading to outdated or stale data being served from the cache without proper invalidation. _Suggested fix:_ Consider allowing the TTL to be configurable by the user or setting a more dynamic TTL strategy depending on the usage context.
-- `apps/web/pages/History.jsx` line 104 (error-handling) - **Missing Error Handling for Deleting History**: The function for clearing all search history does not handle errors from the backend API request. If the deletion fails, the user receives no feedback about the failure beyond a console error. _Suggested fix:_ Add a catch block to handle errors from the API call in the try block of handleClearAllHistory.
-- `services/api/src/services/scientificHonesty.js` line 58 (bug) - **Unchecked string input causing unexpected behavior**: The 'withHonestyPrefix' function checks if the prompt starts with 'SCIENTIFIC_HONESTY_DIRECTIVE' but does not validate the actual content of the prompt string properly. If a user inputs a string that contains sensitive information or violates the honesty principles, the system will not catch this due to the string manipulation. This can lead to the system being used to express unregulated or false information. _Suggested fix:_ Implement a validation mechanism to check for sensitive content or compliance with honesty rules before processing the prompt.
-
-### medium (54)
-- `apps/web/pages/LearningPath.jsx` line 54 (edge-case) - **Potential for undefined category in CATEGORY_BLURBS**: The use of `CATEGORY_BLURBS[c.category] || 'Core genetics topics'` may lead to cases where `c.category` is not defined in the `CATEGORY_BLURBS`, resulting in a fallback that could lead to inconsistent user experience. _Suggested fix:_ Ensure that `c.category` is validated against known categories before using it, or implement a default description for undefined categories.
-- `apps/web/components/search/GeneCard.jsx` line 97 (edge-case) - **Possible incorrect handling of phenotypes**: If the phenotypes array contains null or undefined values, mapping can lead to unexpected results without validation, which could be seen by users with no proper linked phenotype data. _Suggested fix:_ Add nullish checks or filtering on the phenotypes array before mapping: `gene.phenotypes?.filter(p => p)?.map(p => p.name) || []`
-- `apps/web/components/search/GeneCard.jsx` line 120 (error-handling) - **Effect cleanup does not handle retries properly**: If the component unmounts while a retry is scheduled, the cleanup might not effectively cancel the retry leading to potential memory leaks or attempts to update state on an unmounted component. _Suggested fix:_ Ensure that `cancelled` is set to true before `retryTimer` is cleared to effectively halt all pending asynchronous actions.
-- `services/api/src/services/publicationTaskOutput.js` line 680 (logic) - **Incorrect Clinical Dose Recognition Logic**: The function `containsClinicalDose` contains a logic flaw where it assumes that if `EXPLICIT_DOSE_PATTERN.test(value)` is false, it immediately returns false. However, it fails to check further against various patterns such as `PASSIVE_USE_PERSONALIZED_PATTERN`, which could lead to legitimate doses being considered erroneous _Suggested fix:_ Adjust the conditions in `containsClinicalDose` to ensure it accurately reflects the context and checks against all necessary patterns without early exit.
-- `packages/shared/src/client.ts` line 364 (error-handling) - **Uncaught error handling for fetch requests**: If the fetch fails for reasons other than timeout, the error is captured but not logged or handled further, leading to potential silent failures when network issues occur. _Suggested fix:_ Add logging to catch errors for better debugging and ensure visibility of network errors.
-- `packages/shared/src/client.ts` line 122 (error-handling) - **LocalStorage access potential failure**: The code assumes localStorage will always be available when it attempts to read the CSRF token. In environments like private browsing in some browsers, localStorage may not be accessible, which can cause the app to not function correctly when localStorage is not present. _Suggested fix:_ Handle cases where localStorage is not available gracefully by adding user feedback or alternative handling mechanisms.
-- `services/api/src/services/associationEvidence.js` line 636 (edge-case) - **Potential for malformed URL generation**: When constructing the URL in fetchMonarchAssociations, the queryId is passed directly to the URL without validation, which could lead to malformed URLs if the queryId is not properly sanitized or constructed. _Suggested fix:_ Add validation or sanitization for the queryId before using it to construct the URL to ensure it adheres to expected formats.
-- `services/api/src/services/accountClosure.js` line 177 (error-handling) - **Silent Failure on Session Expiry Error**: If an error occurs while attempting to expire a session, it is silently handled if it's related to a missing Stripe resource, which does not inform the user or operators that the expiration has failed. This can lead to lingering sessions that should have been cleaned up. _Suggested fix:_ Log the error even when it is a `resource_missing` error to inform that the session cleanup process did not complete as expected.
-- `apps/web/pages/BannedUsers.jsx` line 104 (bug) - **Error message exposure from API**: If the API call during user search fails, the error message from the API response may be displayed directly to the user, which could lead to the exposure of potentially sensitive information, depending on how the backend handles errors. _Suggested fix:_ Sanitize the error message or replace it with a generic error message before displaying it to the user.
-- `apps/web/pages/BannedUsers.jsx` line 268 (correctness) - **Access control issue on user interface rendering**: The logic to check if the current user is an admin only prevents the rendering of certain buttons but does not restrict the loading or processing of functions in advance, which could potentially allow a non-admin user to attempt actions that they should not be able to. _Suggested fix:_ Implement an access control check before executing any administrative function that would expose sensitive data or functionalities.
-- `services/api/src/config/publicationTaskContracts.js` line 295 (correctness) - **Empty recentGenes and recentConcepts accepted as valid**: The function validateLearningActivityInput allows for both recentGenes and recentConcepts to be empty, which contradicts the requirement that at least one item must be present. Line 292 checks if either recentGenes or recentConcepts are null, but allows for both to be empty in certain cases which leads to contradictory validation rules. _Suggested fix:_ Adjust the logic to ensure at least one of recentGenes or recentConcepts contains at least one entry when validating.
-- `services/api/src/routes/auth.js` line 304 (error-handling) - **Silent Failure on Trial Grant**: If `grantOrExtendFreePeriod` fails, the error is logged but no response is returned to the user, leading to a potential miscommunication regarding the user's free trial status. _Suggested fix:_ Add error handling to properly inform the user if the free trial grant fails.
-- `apps/web/components/research/ProjectManager.jsx` line 206 (error-handling) - **Silent Failure When Loading Projects**: When loading projects, if there's an error, no user feedback is provided apart from logging the error, which can leave users unaware that there was a problem fetching their projects. _Suggested fix:_ Set an error state and display a user-friendly message when an error occurs while loading projects.
-- `apps/web/pages/SuperAdminSetup.jsx` line 146 (error-handling) - **Potential vulnerability in granting admin privileges**: The email lookup and promotion does not check if the target is already an admin or super admin, allowing for incorrect promotion and potential privilege escalation. _Suggested fix:_ Add a check to see if the user is already an admin before promoting, and notify the user accordingly.
-- `apps/web/components/research/HypothesisGenerator.jsx` line 156 (error-handling) - **Silent failure on invalid sample count or modalities**: If the sample count is not valid or no modalities are selected, an error is set but the actual cause of the error is not directly communicated to the user. Instead, a generic error message is displayed, which may not guide the user effectively to the issue. _Suggested fix:_ Provide a more specific error message that distinguishes between sample count and modalities issues.
-- `services/api/src/routes/education.js` line 388 (error-handling) - **Error handling does not propagate issues properly**: In the '/quiz' route handler, when an error occurs during quiz generation, the function attempts to create a publication artifact even when an error might have led to malformed or unexpected data. If 'unavailablePublication' is called, it does not stop the function from returning the created artifact, potentially leading to unexpected states. _Suggested fix:_ Ensure to check if 'publication' is valid before returning or to clearly handle the error case to prevent misleading state propagation.
-- `apps/web/pages/InstitutionalPricing.jsx` line 125 (error-handling) - **Uncaught error not handled correctly**: On error caught in the try-catch block after the API request, the 'setIsProcessing(false)' is placed after the catch block instead of in all execution paths causing potential unethical states where a user thinks the request is processing when it isn't. _Suggested fix:_ Add 'setIsProcessing(false)' right after the try-catch block to ensure that processing state is reset on both success and failure.
-- `services/api/src/services/genomicDatabases.js` line 92 (error-handling) - **Unhandled URL Parsing Errors**: If the URL passed to the `fetchJSON` function is invalid, it will throw an error that does not contain specific handling or a response back to the caller, potentially leading to issues in the app flow. _Suggested fix:_ Enhance the error handling in the catch block to log a more informative error message or throw a specific error that can be handled by the calling functions.
-- `apps/web/pages/AxiomNewsletter.jsx` line 161 (correctness) - **Incorrect user role check for statistics**: The 'getStats' function incorrectly accesses 'phone_number' on user objects while it should access 'phoneNumber'. This could lead to inaccurate statistic counts for users with phone numbers. _Suggested fix:_ Change 'u.phone_number' to 'u.phoneNumber' in line 162 of the getStats function.
-- `apps/web/pages/AxiomNewsletter.jsx` line 63 (error-handling) - **Silent failure on data load error**: When an error occurs during data load, the error is logged to the console, but there's no actionable feedback that indicates the problem to the user's interface, beyond a generic error message. This could mislead users regarding the app's functionality and the state of their request. _Suggested fix:_ Consider enhancing the error handling to provide more context about the error when rendering.
-- `apps/web/components/search/GeneComparison.jsx` line 228 (security) - **Potential exposure of unvalidated source link**: Directly using `safeExternalHttpUrl(claim.directLink)` without ensuring that it is safe can expose the application to open redirect vulnerabilities. _Suggested fix:_ Ensure `safeExternalHttpUrl` properly validates the URL to prevent open redirects or ensure that only safe, internal URLs are accepted.
-- `apps/web/components/search/GeneComparison.jsx` line 109 (error-handling) - **Improper handling of less than two genes**: The handling of the situation when fewer than two genes are provided does not include provisions to explicitly handle errors or log this condition, which could confuse users. _Suggested fix:_ Implement a logging statement or user feedback to clarify why the comparison cannot proceed, providing better user experience.
-- `apps/web/Layout.jsx` line 207 (error-handling) - **Uncaught Promise Rejection on Service Worker Unregistration**: The .catch() block for the service worker unregistration is empty. If the unregistration fails, this error is not logged or handled, leading to silent failures with no indication of failure in the application. _Suggested fix:_ Implement error logging in the .catch() block, e.g., .catch((error) => console.error('Service Worker Unregistration failed:', error));
-- `apps/web/Layout.jsx` line 212 (error-handling) - **Silently Failing Service Worker Registration**: The service worker registration's .catch() block does nothing. This leads to a lack of feedback if registration fails, contributing to silent failures without logging or notification. _Suggested fix:_ Log the error in the .catch() block, e.g., .catch((error) => console.error('Service Worker registration failed:', error));
-- `apps/web/Layout.jsx` line 146 (edge-case) - **isAdmin Variable Can Be Incorrectly Set**: If the user object is null or undefined, calling isAdminUser(user) could lead to incorrect behavior. This will cause a runtime error or an unintended state where the admin navigation is incorrectly filtered or shown. _Suggested fix:_ Add a null check for the user object before calling isAdminUser, e.g., const isAdmin = user ? isAdminUser(user) : false;
-- `apps/web/pages/AdminMessages.jsx` line 53 (error-handling) - **Error handling missing error response handling**: When an API call fails (e.g., due to network issues or server errors), it catches the error but does not handle a case where `err.message` might be undefined, leading to a potential TypeError. _Suggested fix:_ Use a fallback message if err.message is not defined: `setError(err?.message || 'Failed to load messages');`.
-- `services/api/src/services/publicationResolvers.js` line 209 (error-handling) - **Potential for undefined variable leading to a null return**: If a non-string value is passed to `resolvePublicationMondo`, the identifier variable will remain an empty string, but the subsequent identifier checks could allow for mishandling this case without proper logging or feedback. This could be problematic especially in debugging or tracing valid identifiers during API calls. _Suggested fix:_ Include an error logging mechanism for cases where the identifier is found to be invalid before making API calls.
-- `apps/web/pages/ContactSupport.jsx` line 110 (edge-case) - **Missing Validation of Message Length**: The form validation only checks for empty fields when submitting the contact message, which does not account for excessively long messages that could cause performance issues or break the UI if rendered. _Suggested fix:_ Implement a message length check in addition to trimming whitespace to prevent excessively long messages from being submitted.
-- `apps/web/pages/DiscoveryStudio.jsx` line 61 (bug) - **Potentially Undefined User Name**: When attempting to derive the first name from user.name, if user.name is undefined, it may result in an exception or unexpected behavior. _Suggested fix:_ Ensure user.name is defined before using it to derive firstName, by checking its existence explicitly.
-- `apps/web/pages/DemographicCollection.jsx` line 47 (edge-case) - **Setting Full Name From User Object Without Validation**: The full name is set directly from the user object without validation or trimming, which could lead to unexpected issues if the data includes unwanted characters or whitespace. _Suggested fix:_ Trim the full name from the user object before setting it in state: `setFullName(user.full_name.trim());`.
-- `apps/web/pages/DemographicCollection.jsx` line 99 (error-handling) - **Catch Block Does Not Handle All Errors Gracefully**: The catch block sets a generic error message but does not specify the nature of the error or allow for different handling depending on the type of error caught, potentially leaving users unaware of specific issues such as network problems. _Suggested fix:_ Differentiate the error handling within the `catch` block based on the error type or provide more detailed feedback before calling `setError`.
-- `apps/web/pages/Login.jsx` line 72 (bug) - **Generic Error Message on Authentication Failure**: When authentication fails, the error message is simply set to `err?.message || "Authentication failed"`. This can leak implementation details if `err.message` contains sensitive information, allowing for potential exploitation of the authentication system. _Suggested fix:_ Sanitize or obfuscate the `err.message` output to prevent leaking sensitive error information while still providing user-friendly messages.
-- `apps/web/pages/LearnGenetics.jsx` line 49 (correctness) - **Potential Undefined Progress Value**: The progressRes.value may not have a 'progress' key if the API response is malformed or if there's any aspect of the response that leads to it being undefined. This can lead to 'undefined' values in the state or break functionality that expects an array. _Suggested fix:_ Add a check to ensure that progressRes.value has a 'progress' key before accessing it.
-- `apps/web/pages/LearnGenetics.jsx` line 169 (correctness) - **Unclear Handling of No Matching Topics**: The condition filteredCategories.length === 0 does not prevent the UI from indicating that it is loading. This can create confusion for users expecting to see results when in fact there are none. _Suggested fix:_ Improve the user experience by adding a message that clearly indicates the lack of matching topics instead of loading indicators using conditional rendering that includes a message when the search yields no results.
-- `apps/web/pages/AccountSettings.jsx` line 49 (error-handling) - **Silent failure of purge request**: If the status of the request is not 'completed', the function throws an error, which is caught in the catch block of the try-catch structure. But the user is not notified effectively that their purge request is pending, leading to confusion about whether the request was successful. _Suggested fix:_ Consider notifying the user about the pending status of their request or provide an update on the progress of the purge request instead of throwing an error.
-- `apps/web/components/search/AutocompleteSearch.jsx` line 113 (error-handling) - **Silent Failures on API Errors**: The catch block is empty, leading to silent failures that do not provide any feedback to the user when the API fails. This makes debugging difficult and affects UX since the user is not aware of issues during their search. _Suggested fix:_ Log the error message or provide feedback to the user when an API call fails in the catch block.
-- `services/api/src/index.js` line 175 (error-handling) - **Unhandled database query error**: The raw database query may throw an error which is caught, but not logged or properly handled before returning a response. This may lead to unknown states in API usage. _Suggested fix:_ Add error logging or handling to capture more details of the database error before exiting the function.
-- `apps/web/components/search/GeneSetComparison.jsx` line 88 (edge-case) - **Uncontrolled Access to Length of Metrics with Zero Genes**: If both `userGenes` and `phenotypeGenes` are empty arrays, metrics properties like `metrics.overlapping` could be empty, leading to a rendering issue where the overlap rate is reported without appropriate checks. Users might misunderstand the output if no genes are compared. _Suggested fix:_ Add conditional rendering logic to ensure metrics are displayed only when applicable, or show a relevant message when there are no genes to compare.
-- `apps/web/components/research/ProjectVersionControl.jsx` line 53 (edge-case) - **Incorrect current version calculation when versions are empty**: The line const currentVersion = project.current_version || versions.length; defaults to the length of versions array, which can lead to issues if no versions exist or if current_version is not set properly. This can result in attempts to set the current_version incorrectly when there are no versions, potentially causing data integrity issues. _Suggested fix:_ Change the logic to handle cases where both project.current_version and versions.length are invalid; possibly default to a known starting version like 1.
-- `apps/desktop/scripts/generate-icons.mjs` line 80 (correctness) - **Incorrect alpha compositing calculation**: The alpha compositing logic in the `blend` function could lead to incorrect color outputs when the source alpha is 0. The condition `if (outA <= 0) return;` returns without updating the buffer, which may not properly handle situations where `srcA` is the only factor affecting the output alpha, leading to some pixels not being colored correctly when they should be. _Suggested fix:_ Revise the blending logic to ensure that if `srcA` is 0, the destination pixel remains unchanged, and otherwise, calculate the output correctly using the blend formula regardless of its contribution to the output being zero.
-- `apps/web/components/search/SearchForm.jsx` line 47 (edge-case) - **Search Trigger Without Query**: `onSearch(query.trim(), isPremium, searchMode)` is called without checking if `query.trim()` is valid within the `handleSubmit` function, making it possible to perform an invalid search if `query` is empty after trimming. _Suggested fix:_ Ensure that `query.trim()` returns a non-empty string before calling `onSearch`, or handle the case where the search should not be performed.
-- `apps/web/components/search/SearchForm.jsx` line 190 (correctness) - **Unclear Search Button Text**: The button text dynamically changes based on `isLoading` and `searchMode`, which may confuse users if a search is submitted but loading doesn't represent a completed action; in case of rapid button clicks, the text could also reflect outdated state. _Suggested fix:_ Ensure that the button reflects a clear and accurate status of the search submission rather than switching context within loading state.
-- `apps/web/components/dashboard/OnboardingTour.jsx` line 93 (error-handling) - **Missing failure handling for async operation**: The `handleSkip` function calls `markComplete()` without handling potential errors, which could lead to unhandled promise rejections if the API call fails. _Suggested fix:_ Add error handling for the `markComplete()` call in `handleSkip` similar to what is done in the `handleComplete()` function.
-- `services/api/src/services/variantNormalize.js` line 110 (bug) - **Uncaught Exception in `parsePipeAnnotations` Function**: The `parsePipeAnnotations` function does not handle cases where `value` is a number, which could lead to an uncaught error when attempting to split a non-string type. This could crash the application if such input is received. _Suggested fix:_ Add type checking to ensure that `value` is a string before processing.
-- `services/api/src/middleware/csrf.js` line 179 (error-handling) - **No response if CSRF verification fails for cross-site requests**: The function does not return a response or an error if CSRF verification fails for cross-site requests, which could leave the client waiting indefinitely. _Suggested fix:_ Ensure that a response is sent on failure to the client, indicating an invalid CSRF token.
-- `scripts/backup-snapshot.sh` line 132 (error-handling) - **Potential silent failure when final archive is empty**: The check for the final archive being empty occurs after the encryption step, but it does not account for the possibility of the archive failing to save or being created empty due to other issues, such as permission problems or disk space being exhausted, which could leave the user unaware that the backup failed. _Suggested fix:_ Add logging or error messaging to indicate that the archive creation step may have failed before it reaches this point.
-- `scripts/backup-snapshot.sh` line 124 (error-handling) - **No recovery on failure to copy final archive**: In the case of an error during the encryption of the final archive (likely due to a permissions issue or other unexpected conditions), the script will attempt to remove the FINAL_PATH but the original source of failure is not logged for user awareness, leading to confusion. _Suggested fix:_ Log an error message whenever a failure to create the final archive occurs before attempting to remove it.
-- `services/api/src/services/clinicalTrials.js` line 118 (error-handling) - **Silent failure on response text retrieval**: The catch on response.text() in line 118 could silently ignore errors, leading to an incomplete error message while throwing an error later. _Suggested fix:_ Consider adding logging or a more specific error handling mechanism that captures the failure reason instead of silently returning an empty string.
-- `services/api/src/services/clinicalTrials.js` line 24 (performance) - **Inefficient cache eviction process**: The cache eviction in the setCache function removes the 50 oldest entries every time the cache exceeds a size of 200, which could lead to performance degradation as the sort operation scales poorly. _Suggested fix:_ Use a more efficient eviction strategy, such as a linked list or priority queue, to maintain the oldest items and reduce sorting costs.
-- `apps/web/lib/publicationConceptCatalog.js` line 60 (edge-case) - **Missing normalization for MONDO reference**: The function checks if the value matches the MONDO regex, but it does not trim or clean the string first before using it, which could lead to unexpected matches if users input extra whitespace or unexpected characters. _Suggested fix:_ Use String(value).trim() before performing the regex test.
-- `apps/web/lib/publicationConceptCatalog.js` line 88 (bug) - **Incorrect handling of publicationReference in publicationReferenceFromHistory**: The use of optional chaining and null coalescing (??) leads to a boolean check on raw, which makes it possible for it to pass through when it should not (e.g., if both are undefined), leading to faulty conclusions about valid references. _Suggested fix:_ Improve the checks to ensure that the correct structure is validated even when both fields are falsy or misconfigured.
-- `apps/web/lib/EducationLevelContext.jsx` line 120 (error-handling) - **Silent Failure for LocalStorage Setting**: When setting the localStorage item fails, the catch block silently ignores the error without any handling, which can lead to loss of expected functionality, as the user will not be able to persist changes. _Suggested fix:_ Log the error or notify the user that localStorage is unavailable: `catch (error) { console.error('LocalStorage save error:', error); }`
-- `apps/web/components/search/GeneFilters.jsx` line 49 (bug) - **Button disabled condition may cause user confusion**: The Clear Filters button is disabled when there are no active filters, but it could mislead users into thinking it is broken or non-functional. _Suggested fix:_ Change the implementation to provide user feedback, such as showing a tooltip or changing the button text to indicate why it is disabled.
-- `services/api/src/services/scientificHonesty.js` line 81 (bug) - **Uncontrolled input leading to unintended message removal**: The 'withHonestySystem' function removes client-supplied system messages without notifying the user. This could lead to an application behavior where crucial context provided by the user is lost, making the responses less relevant or coherent. _Suggested fix:_ Log a warning or throw an error when client-supplied system messages are dropped, informing the user of the operation.
-
-### low (6)
-- `apps/web/pages/Premium.jsx` line 53 (error-handling) - **Silent failure in loadEntitlements function**: The catch block in loadEntitlements does not handle the error nor provide any feedback, leading to undetected loading errors. _Suggested fix:_ Log the error or set an error state to inform the user.
-- `services/api/src/config/rateLimitStore.js` line 144 (security) - **Error details may expose sensitive information**: When logging Redis errors, the error message is included without sanitization, which may accidentally expose sensitive application internals or implementation details. _Suggested fix:_ Sanitize the error message or log only necessary information without exposing sensitive details.
-- `apps/web/pages/AdminMessages.jsx` line 90 (error-handling) - **Silent failure on message closing**: If there is an error when closing a message, the error is caught, but no specific error details are recorded, only a generic 'Failed to close message' message is set. _Suggested fix:_ Log the actual error in addition to the user-facing message for better diagnosing of issues.
-- `apps/web/components/search/AutocompleteSearch.jsx` line 55 (concurrency) - **Potential Memory Leak with Event Listener**: The component adds an event listener but handles cleanup incorrectly. While the cleanup does occur when the component unmounts, it could lead to performance issues if the component is rapidly mounted and unmounted repeatedly without proper tracking of listener instances. _Suggested fix:_ Ensure that the listener is only added if the component is mounted and cleaned up correctly on unmounting.
-- `apps/web/components/research/ProjectVersionControl.jsx` line 63 (error-handling) - **Silent failure on version restoration**: While the error is logged to the console, there is no notification to the user other than an alert. If the error occurs due to a non-recoverable state or an unexpected error type, the user remains uninformed about what specifically went wrong, which can lead to confusion. _Suggested fix:_ Enhance the error handling to provide more specific feedback to the user regarding the nature of the failure.
-- `apps/web/lib/EducationLevelContext.jsx` line 81 (correctness) - **Inconsistent Analogy Style Key**: The analogyStyle key for the postgraduate level is set to 'publication', which may not be coherent with other levels that refer more explicitly to education styles. This inconsistency could affect user expectations when interpreting content for postgraduate education. _Suggested fix:_ Consider renaming analogyStyle to something that reflects graduate studies more clearly, such as 'advanced_research'.
+### high (1)
+- `(purpose)` line 0 (quality-gate) - **Purpose assessment evidence is incomplete**: baseline purpose assessment incomplete: 1/3 sample(s) usable; BadRequestError: Error code: 400 - {'object': 'error', 'message': 'Expected exactly one message. Expected exactly one message.', 'type': 'BadRequestError', 'param': None, 'code': 400}; RotationError: every light pool failed this call; last error was NotFoundError: Error code: 404 - {'status': 404, 'title': 'Not Found', 'detail': "Function 'ee47df99-c92b-4dc9-b3a7-f3fb0f087b73': Not found for account 'hvux_0rjHS6OiBfWXcZvKgoOaUBy_3UsQqq6I6IAz7I'"}; final purpose assessment returned no usable result _Suggested fix:_ Retry the resumable run after restoring a responsive provider.
 
 ## Defects by file
 
-### `apps/web/pages/LearningPath.jsx` ✅ fixed
-- **[high]** line 72 (logic) — **Division by zero risk in progress calculation**: The calculation of `overallProgress` could result in a division by zero if there are no topics available, leading to potentially incorrect behavior or an error _Fix:_ Add a check to ensure totalCount is greater than zero before accessing it to avoid division by zero errors.
-- **[medium]** line 54 (edge-case) — **Potential for undefined category in CATEGORY_BLURBS**: The use of `CATEGORY_BLURBS[c.category] || 'Core genetics topics'` may lead to cases where `c.category` is not defined in the `CATEGORY_BLURBS`, resulting in a fallback that could lead to inconsistent user experience. _Fix:_ Ensure that `c.category` is validated against known categories before using it, or implement a default description for undefined categories.
-
-### `apps/web/components/search/GeneCard.jsx` ✅ fixed
-- **[high]** line 80 (error-handling) — **Potential undefined behavior on geneSymbol**: The check for geneSymbol directly proceeds to log views without safety verification after the comment return, leaving open the chance it is undefined or null in some states of the application. _Fix:_ Change `if (!geneSymbol) return undefined;` to `if (!geneSymbol) return;` to ensure nothing proceeds with an invalid state.
-- **[medium]** line 97 (edge-case) — **Possible incorrect handling of phenotypes**: If the phenotypes array contains null or undefined values, mapping can lead to unexpected results without validation, which could be seen by users with no proper linked phenotype data. _Fix:_ Add nullish checks or filtering on the phenotypes array before mapping: `gene.phenotypes?.filter(p => p)?.map(p => p.name) || []`
-- **[medium]** line 120 (error-handling) — **Effect cleanup does not handle retries properly**: If the component unmounts while a retry is scheduled, the cleanup might not effectively cancel the retry leading to potential memory leaks or attempts to update state on an unmounted component. _Fix:_ Ensure that `cancelled` is set to true before `retryTimer` is cleared to effectively halt all pending asynchronous actions.
-
-### `services/api/src/services/publicationTaskOutput.js` ✅ fixed
-- **[high]** line 294 (security) — **Potential Information Leak through Unrecognized Named HTML Entities**: The function `containsUnsupportedNamedHtmlEntity` checks for named HTML entities against a predefined list. If an unknown entity is encountered, this could lead to incorrect sanitization, potentially allowing injection attacks if the output is subsequently rendered in a browser. This could expose sensitive user data or lead to XSS vulnerabilities. _Fix:_ Implement a validation or escaping mechanism for HTML entities to prevent execution of unrecognized entities.
-- **[high]** line 850 (bug) — **Risk of Unhandled Null Value for Reason Code**: If `emptyReasonCode` is not provided in the `sanitizePublicationArtifact` function call in line 850, the `reasonCode` can be `undefined`, leading to an unexpected null value in the `createPublicationArtifact` function which may cause failure downstream. _Fix:_ Ensure that `emptyReasonCode` is provided or defaulted to a valid string if not present when calling `createPublicationArtifact`.
-- **[medium]** line 680 (logic) — **Incorrect Clinical Dose Recognition Logic**: The function `containsClinicalDose` contains a logic flaw where it assumes that if `EXPLICIT_DOSE_PATTERN.test(value)` is false, it immediately returns false. However, it fails to check further against various patterns such as `PASSIVE_USE_PERSONALIZED_PATTERN`, which could lead to legitimate doses being considered erroneous _Fix:_ Adjust the conditions in `containsClinicalDose` to ensure it accurately reflects the context and checks against all necessary patterns without early exit.
-
-### `packages/shared/src/client.ts` ✅ fixed
-- **[high]** line 67 (error-handling) — **Potential silent failure in URL sanitization**: If the 'raw' parameter is null, the function returns an empty string, but any additional unexpected control characters are not handled if they sneak in later. This can lead to forming invalid URLs without proper sanitization, causing requests to fail silently. _Fix:_ Implement stricter checks for control characters to ensure all potential malformations are addressed immediately.
-- **[medium]** line 364 (error-handling) — **Uncaught error handling for fetch requests**: If the fetch fails for reasons other than timeout, the error is captured but not logged or handled further, leading to potential silent failures when network issues occur. _Fix:_ Add logging to catch errors for better debugging and ensure visibility of network errors.
-- **[medium]** line 122 (error-handling) — **LocalStorage access potential failure**: The code assumes localStorage will always be available when it attempts to read the CSRF token. In environments like private browsing in some browsers, localStorage may not be accessible, which can cause the app to not function correctly when localStorage is not present. _Fix:_ Handle cases where localStorage is not available gracefully by adding user feedback or alternative handling mechanisms.
-
-### `apps/web/pages/InstitutionalAdmin.jsx` ✅ fixed
-- **[high]** line 90 (bug) — **Incorrect license data fetching in loadLicenseDetails function**: The function loadLicenseDetails is incorrectly fetching license details. It calls getMyLicenses instead of a method intended to fetch details for a specific license. This can lead to incorrect or irrelevant data being processed, causing display issues. _Fix:_ Update the data fetching call to correctly retrieve details for the specified licenseId by using the appropriate API method.
-- **[high]** line 118 (bug) — **Potential crash due to selectedLicense being null**: When calling handleInviteUser, if selectedLicense is null, it will lead to a TypeError because the code attempts to access properties (maxSeats and assignedSeats) on a null object. _Fix:_ Add a null check for selectedLicense before accessing its properties in handleInviteUser.
-
-### `services/api/src/services/associationEvidence.js` ✅ fixed
-- **[high]** line 119 (error-handling) — **Missing HTTP response error handling**: The function fetchJson does not handle non-2xx HTTP responses correctly; even though it logs that the request failed with an error, the result still returns a successful ok status of false, leading to potentially confusing behavior for callers expecting a valid result. _Fix:_ Ensure that the response.ok is checked correctly to indicate failure whenever the response status is not 2xx, and add proper error handling that differentiates between client errors (4xx) and server errors (5xx).
-- **[medium]** line 636 (edge-case) — **Potential for malformed URL generation**: When constructing the URL in fetchMonarchAssociations, the queryId is passed directly to the URL without validation, which could lead to malformed URLs if the queryId is not properly sanitized or constructed. _Fix:_ Add validation or sanitization for the queryId before using it to construct the URL to ensure it adheres to expected formats.
-
-### `services/api/src/services/accountClosure.js` ✅ fixed
-- **[high]** line 146 (security) — **Potential Exposure of Stripe Secret Key**: The code returns a Stripe client initialized with a secret key obtained from environment variables without any validation or checks on the environment or usage of secure practices. If the environment variable `STRIPE_SECRET_KEY` is misconfigured or exposed, it could lead to unauthorized access to Stripe resources. _Fix:_ Add validation to ensure `env.STRIPE_SECRET_KEY` is a valid and secure key before instantiating the Stripe client, or ensure the key is not logged or exposed in error messages.
-- **[medium]** line 177 (error-handling) — **Silent Failure on Session Expiry Error**: If an error occurs while attempting to expire a session, it is silently handled if it's related to a missing Stripe resource, which does not inform the user or operators that the expiration has failed. This can lead to lingering sessions that should have been cleaned up. _Fix:_ Log the error even when it is a `resource_missing` error to inform that the session cleanup process did not complete as expected.
-
-### `apps/web/pages/BannedUsers.jsx` ✅ fixed
-- **[high]** line 62 (bug) — **Potential undefined response handling**: If the API call to get banned users fails or returns a response that does not contain 'bannedUsers', it could lead to a silent failure when trying to access properties on an undefined value, which leads to an empty banned users list being shown without any error message. _Fix:_ Ensure to check if the 'response' object and 'response.bannedUsers' exist before proceeding with the operations.
-- **[medium]** line 104 (bug) — **Error message exposure from API**: If the API call during user search fails, the error message from the API response may be displayed directly to the user, which could lead to the exposure of potentially sensitive information, depending on how the backend handles errors. _Fix:_ Sanitize the error message or replace it with a generic error message before displaying it to the user.
-- **[medium]** line 268 (correctness) — **Access control issue on user interface rendering**: The logic to check if the current user is an admin only prevents the rendering of certain buttons but does not restrict the loading or processing of functions in advance, which could potentially allow a non-admin user to attempt actions that they should not be able to. _Fix:_ Implement an access control check before executing any administrative function that would expose sensitive data or functionalities.
-
-### `apps/web/components/search/PhenotypeSearchService.jsx` ✅ fixed
-- **[high]** line 197 (error-handling) — **Potential uncaught error on publication retrieval**: If 'terminalPublicationArtifactFromError' returns null, the catch block at line 209 fails to handle this case and will throw a generic error without indicating what went wrong. _Fix:_ Add a check to ensure the recoveryPublication is not null before attempting to return it; otherwise, return a more descriptive error message.
-- **[high]** line 209 (error-handling) — **Throwing a generic error message**: The error handling at line 209 does not provide context-specific information about the failure. It lacks specificity regarding what caused the error during the gene search process. _Fix:_ Replace the catch block's error handling with context-aware logging or throwing an error that includes the error message and context of failure.
-
-### `services/api/src/config/publicationTaskContracts.js` ⚠️ reported
-- **[medium]** line 295 (correctness) — **Empty recentGenes and recentConcepts accepted as valid**: The function validateLearningActivityInput allows for both recentGenes and recentConcepts to be empty, which contradicts the requirement that at least one item must be present. Line 292 checks if either recentGenes or recentConcepts are null, but allows for both to be empty in certain cases which leads to contradictory validation rules. _Fix:_ Adjust the logic to ensure at least one of recentGenes or recentConcepts contains at least one entry when validating.
-
-### `apps/web/pages/TopicExplorer.jsx` ✅ fixed
-- **[high]** line 172 (bug) — **Potential null reference when accessing searchParams**: The `searchParams.get('topic')` may return null if `topic` is not present, causing issues when constructing the `publicationRequestScope` string which expects a non-null string. _Fix:_ Ensure `topicId` is a default empty string or defined to prevent null references: `const topicId = searchParams.get('topic') || '';`
-- **[high]** line 228 (bug) — **Potential access to undefined properties**: The code does not ensure that category.topics is an array before attempting to access it. This can lead to runtime errors if `category` is improperly structured. _Fix:_ Ensure the presence of `topics` property before accessing it: `Array.isArray(category.topics) ? category.topics : []`.
-
-### `apps/web/pages/Dashboard.jsx` ✅ fixed
-- **[high]** line 190 (error-handling) — **Improper signal handling leading to race condition**: If the abort signal is triggered, the function exits without setting the loading states properly, potentially leaving the interface in a loading state even after the abort. _Fix:_ Ensure that the loading states are set to false in the abort condition to reflect the accurate state of the application UI.
-
-### `services/api/src/routes/auth.js` ⚠️ reported
-- **[medium]** line 304 (error-handling) — **Silent Failure on Trial Grant**: If `grantOrExtendFreePeriod` fails, the error is logged but no response is returned to the user, leading to a potential miscommunication regarding the user's free trial status. _Fix:_ Add error handling to properly inform the user if the free trial grant fails.
-
-### `apps/web/components/research/ProjectManager.jsx` ✅ fixed
-- **[high]** line 68 (bug) — **Potential Incorrect Target ID Assignment**: The assignment of 'targetId' to 'targetGene || project.id' allows for possible misuse leading to annotations being incorrectly linked to projects instead of specific genes when 'targetGene' is empty, which may cause confusion in annotations retrieval. _Fix:_ Change the assignment to explicitly check that either 'targetGene' is valid or raise an error if both are invalid.
-- **[medium]** line 206 (error-handling) — **Silent Failure When Loading Projects**: When loading projects, if there's an error, no user feedback is provided apart from logging the error, which can leave users unaware that there was a problem fetching their projects. _Fix:_ Set an error state and display a user-friendly message when an error occurs while loading projects.
-
-### `apps/web/pages/Premium.jsx` ⚠️ reported
-- **[low]** line 53 (error-handling) — **Silent failure in loadEntitlements function**: The catch block in loadEntitlements does not handle the error nor provide any feedback, leading to undetected loading errors. _Fix:_ Log the error or set an error state to inform the user.
-
-### `apps/web/pages/SuperAdminSetup.jsx` ⚠️ reported
-- **[medium]** line 146 (error-handling) — **Potential vulnerability in granting admin privileges**: The email lookup and promotion does not check if the target is already an admin or super admin, allowing for incorrect promotion and potential privilege escalation. _Fix:_ Add a check to see if the user is already an admin before promoting, and notify the user accordingly.
-
-### `apps/web/components/research/HypothesisGenerator.jsx` ✅ fixed
-- **[high]** line 190 (error-handling) — **Potential null dereference on publication processing**: The response from the API call may be null, leading to an attempt to access properties of an invalid publication object. Specifically, if 'response' is null, 'response?.publication' will also be undefined, and the subsequent call to 'publicationContent(publication)' could throw an error. _Fix:_ Add validation to check if 'response' and 'response.publication' are valid before processing.
-- **[high]** line 177 (bug) — **Reassigned variable prevents correct sample count extraction**: The 'sampleCount' variable is converted to a number using 'Number(sampleCount)', which allows for values like strings (e.g., '50') but could unintentionally convert non-numeric values to NaN. This could lead to an infinite loop or failure in cases where invalid or unexpected input is provided. _Fix:_ Ensure validation checks before setting the sample count and possibly use parseInt with a base to avoid NaN results.
-- **[medium]** line 156 (error-handling) — **Silent failure on invalid sample count or modalities**: If the sample count is not valid or no modalities are selected, an error is set but the actual cause of the error is not directly communicated to the user. Instead, a generic error message is displayed, which may not guide the user effectively to the issue. _Fix:_ Provide a more specific error message that distinguishes between sample count and modalities issues.
-
-### `services/api/src/routes/education.js` ⚠️ reported
-- **[medium]** line 388 (error-handling) — **Error handling does not propagate issues properly**: In the '/quiz' route handler, when an error occurs during quiz generation, the function attempts to create a publication artifact even when an error might have led to malformed or unexpected data. If 'unavailablePublication' is called, it does not stop the function from returning the created artifact, potentially leading to unexpected states. _Fix:_ Ensure to check if 'publication' is valid before returning or to clearly handle the error case to prevent misleading state propagation.
-
-### `apps/web/pages/UsersLog.jsx` ✅ fixed
-- **[high]** line 173 (security) — **Potential User Data Exposure on Delete Confirmation**: The user is prompted for confirmation before deleting but the confirmation dialog exposes the user's email, which could be a privacy concern or lead to social engineering attacks if this is visible to unauthorized parties. _Fix:_ Change the dialog message to show only generic user identifiers instead of user emails, such as using a username or ID instead.
-
-### `apps/web/pages/InstitutionalPricing.jsx` ⚠️ reported
-- **[medium]** line 125 (error-handling) — **Uncaught error not handled correctly**: On error caught in the try-catch block after the API request, the 'setIsProcessing(false)' is placed after the catch block instead of in all execution paths causing potential unethical states where a user thinks the request is processing when it isn't. _Fix:_ Add 'setIsProcessing(false)' right after the try-catch block to ensure that processing state is reset on both success and failure.
-
-### `services/api/src/services/genomicDatabases.js` ⚠️ reported
-- **[high]** line 8 (correctness) — **Default TTL Configuration Issue**: The default TTL for the cache is set to 10 minutes, which might be too long for certain caching scenarios, leading to outdated or stale data being served from the cache without proper invalidation. _Fix:_ Consider allowing the TTL to be configurable by the user or setting a more dynamic TTL strategy depending on the usage context.
-- **[medium]** line 92 (error-handling) — **Unhandled URL Parsing Errors**: If the URL passed to the `fetchJSON` function is invalid, it will throw an error that does not contain specific handling or a response back to the caller, potentially leading to issues in the app flow. _Fix:_ Enhance the error handling in the catch block to log a more informative error message or throw a specific error that can be handled by the calling functions.
-
-### `apps/web/pages/AxiomNewsletter.jsx` ⚠️ reported
-- **[medium]** line 161 (correctness) — **Incorrect user role check for statistics**: The 'getStats' function incorrectly accesses 'phone_number' on user objects while it should access 'phoneNumber'. This could lead to inaccurate statistic counts for users with phone numbers. _Fix:_ Change 'u.phone_number' to 'u.phoneNumber' in line 162 of the getStats function.
-- **[medium]** line 63 (error-handling) — **Silent failure on data load error**: When an error occurs during data load, the error is logged to the console, but there's no actionable feedback that indicates the problem to the user's interface, beyond a generic error message. This could mislead users regarding the app's functionality and the state of their request. _Fix:_ Consider enhancing the error handling to provide more context about the error when rendering.
-
-### `apps/web/components/search/GeneComparison.jsx` ✅ fixed
-- **[high]** line 65 (bug) — **Incorrect claim filtering due to unhandled input type**: The function `claimGroups` incorrectly processes `gene.associationClaims` when it is not an array (e.g., null or undefined), leading to potential runtime errors when trying to filter claims. _Fix:_ Add a safeguard to ensure `gene.associationClaims` is an array: `const claims = Array.isArray(gene?.associationClaims) ? gene.associationClaims : [];` is correct but ensure it is handled early.
-- **[medium]** line 228 (security) — **Potential exposure of unvalidated source link**: Directly using `safeExternalHttpUrl(claim.directLink)` without ensuring that it is safe can expose the application to open redirect vulnerabilities. _Fix:_ Ensure `safeExternalHttpUrl` properly validates the URL to prevent open redirects or ensure that only safe, internal URLs are accepted.
-- **[medium]** line 109 (error-handling) — **Improper handling of less than two genes**: The handling of the situation when fewer than two genes are provided does not include provisions to explicitly handle errors or log this condition, which could confuse users. _Fix:_ Implement a logging statement or user feedback to clarify why the comparison cannot proceed, providing better user experience.
-
-### `services/api/src/config/rateLimitStore.js` ✅ fixed
-- **[high]** line 109 (bug) — **Redis client not properly instantiated**: The Redis client is instantiated using environment variable REDIS_URL which can be undefined or improperly formatted, leading to potential runtime errors when attempting to connect to Redis without proper error handling. _Fix:_ Implement validation to ensure REDIS_URL is valid and throw a descriptive error if it is invalid before instantiating the Redis client.
-- **[low]** line 144 (security) — **Error details may expose sensitive information**: When logging Redis errors, the error message is included without sanitization, which may accidentally expose sensitive application internals or implementation details. _Fix:_ Sanitize the error message or log only necessary information without exposing sensitive details.
-
-### `apps/web/Layout.jsx` ⚠️ reported
-- **[medium]** line 207 (error-handling) — **Uncaught Promise Rejection on Service Worker Unregistration**: The .catch() block for the service worker unregistration is empty. If the unregistration fails, this error is not logged or handled, leading to silent failures with no indication of failure in the application. _Fix:_ Implement error logging in the .catch() block, e.g., .catch((error) => console.error('Service Worker Unregistration failed:', error));
-- **[medium]** line 212 (error-handling) — **Silently Failing Service Worker Registration**: The service worker registration's .catch() block does nothing. This leads to a lack of feedback if registration fails, contributing to silent failures without logging or notification. _Fix:_ Log the error in the .catch() block, e.g., .catch((error) => console.error('Service Worker registration failed:', error));
-- **[medium]** line 146 (edge-case) — **isAdmin Variable Can Be Incorrectly Set**: If the user object is null or undefined, calling isAdminUser(user) could lead to incorrect behavior. This will cause a runtime error or an unintended state where the admin navigation is incorrectly filtered or shown. _Fix:_ Add a null check for the user object before calling isAdminUser, e.g., const isAdmin = user ? isAdminUser(user) : false;
-
-### `services/api/src/services/vcf.js` ✅ fixed
-- **[high]** line 274 (error-handling) — **Unhandled Promise Rejection for ClinVar Data Retrieval**: If `getClinVarVariant` fails for any reason, its rejection is not handled, which can lead to unhandled promise rejections that crash the program in Node.js environments. _Fix:_ Wrap the call to `getClinVarVariant` in a try-catch block or handle the rejection properly.
-- **[high]** line 59 (logic) — **Incorrect Variant Type Inference**: The `inferVariantType` function assumes that `ref` and `alt` will always be strings. If either `ref` or `alt` is not a valid string, it could lead to unexpected behavior or errors due to length checks failing. _Fix:_ Add validation to check that both `ref` and `alt` are strings before determining their lengths.
-
-### `services/api/src/services/accountClosureLedger.js` ✅ fixed
-- **[high]** line 68 (security) — **Insufficient Secret Length Validation**: The code checks if the secret length is less than MIN_LEDGER_SECRET_LENGTH during identity key parsing but does not account for the scenario where this secret length could come from the environment variables directly after the initial check, potentially allowing weak secrets to be used in critical applications. _Fix:_ Add validation for the length of env.ACCOUNT_CLOSURE_LEDGER_SECRET in the ledgerConfig function.
-
-### `apps/web/pages/AdminMessages.jsx` ⚠️ reported
-- **[medium]** line 53 (error-handling) — **Error handling missing error response handling**: When an API call fails (e.g., due to network issues or server errors), it catches the error but does not handle a case where `err.message` might be undefined, leading to a potential TypeError. _Fix:_ Use a fallback message if err.message is not defined: `setError(err?.message || 'Failed to load messages');`.
-- **[low]** line 90 (error-handling) — **Silent failure on message closing**: If there is an error when closing a message, the error is caught, but no specific error details are recorded, only a generic 'Failed to close message' message is set. _Fix:_ Log the actual error in addition to the user-facing message for better diagnosing of issues.
-
-### `services/api/src/routes/billing.js` ✅ fixed
-- **[high]** line 11 (security) — **Potential exposure of Stripe secret key**: The Stripe client is initialized with the secret key pulled directly from the environment variable without verification or fallback handling, exposing the application to potential issues if the key is not set correctly or if it is leaked. _Fix:_ Ensure that the STRIPE_SECRET_KEY is set properly and handle the case where it's null by preventing further Stripe API calls or gracefully degrading the service.
-- **[high]** line 250 (error-handling) — **Missing webhook secret check leading to potential denial of service**: When the webhook secret is not configured, an internal error is logged, but no further action is taken. This could cause denial of service if a legitimate webhook event is sent without the secret but the application crashes anyway. _Fix:_ Instead of sending back an error response, you can implement fallback behavior to log the issue and safely reject further processing.
-- **[high]** line 263 (error-handling) — **Improper error handling for webhook signature verification**: While the signature verification failure is logged, it doesn't stop the processing pipeline effectively, potentially allowing invalid data to propagate through the system even if the verification fails. _Fix:_ Return an error response immediately when the webhook signature fails verification to prevent further processing.
-
-### `apps/web/pages/History.jsx` ⚠️ reported
-- **[high]** line 104 (error-handling) — **Missing Error Handling for Deleting History**: The function for clearing all search history does not handle errors from the backend API request. If the deletion fails, the user receives no feedback about the failure beyond a console error. _Fix:_ Add a catch block to handle errors from the API call in the try block of handleClearAllHistory.
-
-### `services/api/src/services/publicationResolvers.js` ✅ fixed
-- **[high]** line 128 (error-handling) — **Cached HPO return value could be null**: The function `cachedHpo` can return undefined if the identifier is not cached or expired. If the identifier is valid but the fetch operation does not return any data or fails silently, it could produce a null payload, which may lead to unhandled cases downstream in the logic. _Fix:_ Ensure that a default return value is handled properly when null is encountered or propagate errors properly for better clarity.
-- **[high]** line 106 (correctness) — **Validation logic for Entrez ID could be bypassed**: The code tests if `entrezId` is not null and reformats it to a string but does not check if this string correctly represents a valid Entrez ID. If invalid data is passed through, higher-level functions may operate on faulty or irrelevant identifiers, leading to incorrect behavior. _Fix:_ Add a regex validation check after the conversion to ensure that the resulting string is a valid Entrez ID.
-- **[medium]** line 209 (error-handling) — **Potential for undefined variable leading to a null return**: If a non-string value is passed to `resolvePublicationMondo`, the identifier variable will remain an empty string, but the subsequent identifier checks could allow for mishandling this case without proper logging or feedback. This could be problematic especially in debugging or tracing valid identifiers during API calls. _Fix:_ Include an error logging mechanism for cases where the identifier is found to be invalid before making API calls.
-
-### `services/api/src/services/llm.js` ✅ fixed
-- **[high]** line 44 (error-handling) — **Silent failure on invalid raw input**: The function `parseJsonFromLLM` fails silently by returning `fallback` if the input `raw` is not a valid JSON string but doesn't signal to the caller that an error occurred, potentially leading to misunderstanding of the function's behavior. _Fix:_ Log the error or throw a specific error message when the input is invalid before returning the fallback value.
-
-### `apps/web/pages/ContactSupport.jsx` ✅ fixed
-- **[high]** line 2 (security) — **Potential API Client Misuse**: The API client is imported as 'apiClient' but does not seem to undergo any authentication checks before it's invoked, which could allow unauthorized access to sensitive user data or actions if the app's authentication state is compromised. _Fix:_ Ensure that API calls require a valid authentication token or implement checks to identify unauthorized requests before executing API methods.
-- **[high]** line 45 (error-handling) — **Silent Failure on Missing Theme Color**: When 'user.message_theme_color' is undefined, no error handling occurs for this situation as it could lead to unexpected UI themes affecting usability. Moreover, if the 'user' object does not contain any of the expected theme customization fields, the app doesn't handle those cases gracefully, which can lead to user confusion. _Fix:_ Add checks to handle cases where 'user.message_theme_color' is undefined, and either provide a default value or show an error to the user regarding missing customization data.
-- **[medium]** line 110 (edge-case) — **Missing Validation of Message Length**: The form validation only checks for empty fields when submitting the contact message, which does not account for excessively long messages that could cause performance issues or break the UI if rendered. _Fix:_ Implement a message length check in addition to trimming whitespace to prevent excessively long messages from being submitted.
-
-### `apps/web/components/research/ProjectCollaboration.jsx` ✅ fixed
-- **[high]** line 51 (bug) — **Inconsistent API response handling**: The code assumes that the response from apiClient.getProjects() will always contain a project with the same ID as 'project.id'. If the project is not found, the app will set 'collaborators' to an empty array without any notification of failure, potentially leading to the wrong state in the UI without any feedback on the error state. _Fix:_ Add validation to check if 'collabs' is correctly retrieved and provide user feedback if it isn't found.
-
-### `apps/web/lib/vcfCohort.js` ✅ fixed
-- **[high]** line 126 (error-handling) — **Unhandled Error When Gzip Not Supported**: The function does not handle the case where DecompressionStream is undefined, throwing an error that may crash the app if not caught properly. _Fix:_ Implement a try-catch block around the file parsing code to manage potential errors gracefully.
-- **[high]** line 130 (error-handling) — **Unhandled Error When File Streaming Not Supported**: An error is thrown if the file.stream function is not available, which could crash the application if not handled. _Fix:_ Wrap the streaming check in a try-catch block or provide a fallback mechanism.
-
-### `apps/web/pages/AdminAnalytics.jsx` ✅ fixed
-- **[high]** line 138 (bug) — **Potential Null Value in Setting Analytics**: The code assumes response.stats to always be an object but does not handle cases where it might be null or undefined, which could cause runtime errors. _Fix:_ Add a check for response.stats to ensure it is an object before attempting to set analytics.stats.
-
-### `packages/shared/src/associationClaim.ts` ✅ fixed
-- **[high]** line 73 (security) — **Insecure URL Handling in safeExternalHttpUrl**: The safeExternalHttpUrl function allows for potentially unsafe HTTP links because it accepts URLs that do not use HTTPS, which could lead to unsecured data transmission. _Fix:_ Modify the function to only return URLs using the 'https:' protocol and raise an alert or error for 'http:' URLs.
-
-### `apps/web/pages/DiscoveryStudio.jsx` ⚠️ reported
-- **[medium]** line 61 (bug) — **Potentially Undefined User Name**: When attempting to derive the first name from user.name, if user.name is undefined, it may result in an exception or unexpected behavior. _Fix:_ Ensure user.name is defined before using it to derive firstName, by checking its existence explicitly.
-
-### `apps/web/pages/DemographicCollection.jsx` ✅ fixed
-- **[high]** line 39 (bug) — **Navigate to Login Triggered Without Error Message on Authentication Failure**: If the user is not authenticated, the `navigateToLogin()` function is called without providing any feedback to the user about their session state or why they are redirected to the login. This can create confusion, particularly if users are unknowingly logged out. _Fix:_ Implement a user feedback mechanism (like an alert or a message) to inform the user that they need to log in before accessing the page.
-- **[medium]** line 47 (edge-case) — **Setting Full Name From User Object Without Validation**: The full name is set directly from the user object without validation or trimming, which could lead to unexpected issues if the data includes unwanted characters or whitespace. _Fix:_ Trim the full name from the user object before setting it in state: `setFullName(user.full_name.trim());`.
-- **[medium]** line 99 (error-handling) — **Catch Block Does Not Handle All Errors Gracefully**: The catch block sets a generic error message but does not specify the nature of the error or allow for different handling depending on the type of error caught, potentially leaving users unaware of specific issues such as network problems. _Fix:_ Differentiate the error handling within the `catch` block based on the error type or provide more detailed feedback before calling `setError`.
-
-### `services/api/src/routes/genomics.js` ✅ fixed
-- **[high]** line 115 (error-handling) — **Missing Error Handling for parseVcfText**: The invocation of `parseVcfText` on line 117 does not handle any potential errors that may be thrown if the parsing fails, which could lead to unhandled promise rejections or application crashes when invalid VCF text is provided. _Fix:_ Wrap the call to `parseVcfText` in a try-catch block to handle any exceptions and return a meaningful error response.
-- **[high]** line 195 (error-handling) — **Insufficient Handling for Missing Query Parameter**: The code throws a ValidationError without providing a user-friendly response mechanism or handling the error at a higher level which may expose internal error details in production. _Fix:_ Implement a centralized error handling middleware to catch ValidationError and return consistent error responses to the client.
-- **[high]** line 236 (error-handling) — **Potential Undefined Request Body**: The request body for the association evidence endpoint is initialized with an empty object in case of undefined (request.body || {}), which can lead to undefined behavior if the request body is anticipated to have specific structure. _Fix:_ Ensure the request body is properly defined by enforcing a schema validation for non-optional fields before processing the request.
-
-### `apps/web/pages/Login.jsx` ✅ fixed
-- **[high]** line 78 (error-handling) — **Uncaught Error on Maintenance Activation**: If the maintenance mode is activated (i.e., `maintenance.active` is true), the user is presented with maintenance messages. However, if `maintenance` is not correctly formatted or does not include `title`, `message`, or `etaText`, accessing these properties will lead to an uncaught error, causing the application to crash or behave unexpectedly. _Fix:_ Ensure the `maintenance` object structure is validated before accessing its properties. Alternatively, implement default values or fallback mechanisms when accessing maintenance properties.
-- **[medium]** line 72 (bug) — **Generic Error Message on Authentication Failure**: When authentication fails, the error message is simply set to `err?.message || "Authentication failed"`. This can leak implementation details if `err.message` contains sensitive information, allowing for potential exploitation of the authentication system. _Fix:_ Sanitize or obfuscate the `err.message` output to prevent leaking sensitive error information while still providing user-friendly messages.
-
-### `apps/web/pages/LearnGenetics.jsx` ✅ fixed
-- **[high]** line 51 (error-handling) — **Unhandled Error in loadData**: The catch block in loadData does not log or specify the error, making debugging difficult. This could lead to hidden errors in fetching topics or progress which users are not aware of, and it results in setting topicsError to true without a detailed reason for the failure. Incorrect behavior is observed when data retrieval fails without any indication of the root cause. _Fix:_ Add error handling in the catch block to log the error or provide some feedback to the user.
-- **[medium]** line 49 (correctness) — **Potential Undefined Progress Value**: The progressRes.value may not have a 'progress' key if the API response is malformed or if there's any aspect of the response that leads to it being undefined. This can lead to 'undefined' values in the state or break functionality that expects an array. _Fix:_ Add a check to ensure that progressRes.value has a 'progress' key before accessing it.
-- **[medium]** line 169 (correctness) — **Unclear Handling of No Matching Topics**: The condition filteredCategories.length === 0 does not prevent the UI from indicating that it is loading. This can create confusion for users expecting to see results when in fact there are none. _Fix:_ Improve the user experience by adding a message that clearly indicates the lack of matching topics instead of loading indicators using conditional rendering that includes a message when the search yields no results.
-
-### `apps/web/pages/AccountSettings.jsx` ⚠️ reported
-- **[medium]** line 49 (error-handling) — **Silent failure of purge request**: If the status of the request is not 'completed', the function throws an error, which is caught in the catch block of the try-catch structure. But the user is not notified effectively that their purge request is pending, leading to confusion about whether the request was successful. _Fix:_ Consider notifying the user about the pending status of their request or provide an update on the progress of the purge request instead of throwing an error.
-
-### `apps/web/components/search/AutocompleteSearch.jsx` ✅ fixed
-- **[high]** line 106 (error-handling) — **Uncaught Errors from API Calls**: The `apiClient.searchPublicationConcepts` call is wrapped in a try-catch block, but the catch block does not handle the error or provide any feedback. If an error occurs, the function continues execution without indicating failure, potentially leaving the user unaware that their actions did not complete properly. _Fix:_ Add error handling in the catch block to log the error or show a user-friendly message.
-- **[medium]** line 113 (error-handling) — **Silent Failures on API Errors**: The catch block is empty, leading to silent failures that do not provide any feedback to the user when the API fails. This makes debugging difficult and affects UX since the user is not aware of issues during their search. _Fix:_ Log the error message or provide feedback to the user when an API call fails in the catch block.
-- **[low]** line 55 (concurrency) — **Potential Memory Leak with Event Listener**: The component adds an event listener but handles cleanup incorrectly. While the cleanup does occur when the component unmounts, it could lead to performance issues if the component is rapidly mounted and unmounted repeatedly without proper tracking of listener instances. _Fix:_ Ensure that the listener is only added if the component is mounted and cleaned up correctly on unmounting.
-
-### `services/api/src/index.js` ✅ fixed
-- **[high]** line 93 (security) — **Potentially exposed COOKIE_SECRET**: The COOKIE_SECRET environment variable is being used directly without validation or checks. If this value is not securely managed, it could lead to security vulnerabilities in cookie management. _Fix:_ Ensure the COOKIE_SECRET is obtained securely and validated for proper format before usage. Implement checks to ensure it is not empty or a default/test value.
-- **[medium]** line 175 (error-handling) — **Unhandled database query error**: The raw database query may throw an error which is caught, but not logged or properly handled before returning a response. This may lead to unknown states in API usage. _Fix:_ Add error logging or handling to capture more details of the database error before exiting the function.
-
-### `apps/web/components/search/GeneSetComparison.jsx` ✅ fixed
-- **[high]** line 21 (bug) — **Division by Zero in Percentage Calculation**: The `percent` function returns '0%' without any error handling when the denominator is zero. However, if the denominator is strictly zero, the function should ideally handle this scenario differently (like returning 'undefined' or an error message) instead of simply returning '0%'. This could mislead users about the coverage ratios, especially in cases where there are no user genes or phenotype genes. _Fix:_ Change the return statement to handle the case of numerator and denominator being both zero with a specific message or a fallback indicator instead of just '0%'.
-- **[medium]** line 88 (edge-case) — **Uncontrolled Access to Length of Metrics with Zero Genes**: If both `userGenes` and `phenotypeGenes` are empty arrays, metrics properties like `metrics.overlapping` could be empty, leading to a rendering issue where the overlap rate is reported without appropriate checks. Users might misunderstand the output if no genes are compared. _Fix:_ Add conditional rendering logic to ensure metrics are displayed only when applicable, or show a relevant message when there are no genes to compare.
-
-### `apps/web/components/research/ProjectVersionControl.jsx` ✅ fixed
-- **[high]** line 37 (bug) — **Potential undefined project ID usage in API call**: If project.id is undefined, the call to apiClient.getProjectVersions(project.id) will likely result in an error due to passing an undefined value. This can potentially break the application as it may not handle the undefined ID properly. _Fix:_ Add a check before making the API call to ensure project.id is defined.
-- **[medium]** line 53 (edge-case) — **Incorrect current version calculation when versions are empty**: The line const currentVersion = project.current_version || versions.length; defaults to the length of versions array, which can lead to issues if no versions exist or if current_version is not set properly. This can result in attempts to set the current_version incorrectly when there are no versions, potentially causing data integrity issues. _Fix:_ Change the logic to handle cases where both project.current_version and versions.length are invalid; possibly default to a known starting version like 1.
-- **[low]** line 63 (error-handling) — **Silent failure on version restoration**: While the error is logged to the console, there is no notification to the user other than an alert. If the error occurs due to a non-recoverable state or an unexpected error type, the user remains uninformed about what specifically went wrong, which can lead to confusion. _Fix:_ Enhance the error handling to provide more specific feedback to the user regarding the nature of the failure.
-
-### `apps/desktop/scripts/generate-icons.mjs` ✅ fixed
-- **[high]** line 185 (error-handling) — **Potential failure in directory creation**: The script attempts to create directories for icons using `mkdirSync(desktopIcons, { recursive: true });` and `mkdirSync(webIcons, { recursive: true });` without handling potential errors. If the directories cannot be created (due to permissions issues, for instance), it will silently fail and subsequent write operations will fail without any notice. _Fix:_ Wrap the `mkdirSync` calls in a try-catch block to handle any potential errors during directory creation.
-- **[high]** line 188 (error-handling) — **Unhandled potential error during file writes**: There are multiple calls to `writeFileSync` which can throw errors if the file cannot be written (due to permission issues or filesystem errors). No error handling is implemented to catch these potential exceptions, leading to silent failures. _Fix:_ Surround each `writeFileSync` call with a try-catch block to handle any errors that occur during file writing.
-- **[medium]** line 80 (correctness) — **Incorrect alpha compositing calculation**: The alpha compositing logic in the `blend` function could lead to incorrect color outputs when the source alpha is 0. The condition `if (outA <= 0) return;` returns without updating the buffer, which may not properly handle situations where `srcA` is the only factor affecting the output alpha, leading to some pixels not being colored correctly when they should be. _Fix:_ Revise the blending logic to ensure that if `srcA` is 0, the destination pixel remains unchanged, and otherwise, calculate the output correctly using the blend formula regardless of its contribution to the output being zero.
-
-### `apps/web/components/search/SearchForm.jsx` ⚠️ reported
-- **[medium]** line 47 (edge-case) — **Search Trigger Without Query**: `onSearch(query.trim(), isPremium, searchMode)` is called without checking if `query.trim()` is valid within the `handleSubmit` function, making it possible to perform an invalid search if `query` is empty after trimming. _Fix:_ Ensure that `query.trim()` returns a non-empty string before calling `onSearch`, or handle the case where the search should not be performed.
-- **[medium]** line 190 (correctness) — **Unclear Search Button Text**: The button text dynamically changes based on `isLoading` and `searchMode`, which may confuse users if a search is submitted but loading doesn't represent a completed action; in case of rapid button clicks, the text could also reflect outdated state. _Fix:_ Ensure that the button reflects a clear and accurate status of the search submission rather than switching context within loading state.
-
-### `apps/web/components/dashboard/OnboardingTour.jsx` ✅ fixed
-- **[high]** line 107 (error-handling) — **Unhandled API Error Logging**: When the API call in `markComplete` fails, it only logs the error to the console without any user feedback or handling mechanism, leading to a poor user experience. _Fix:_ Implement user notification or error feedback mechanism to inform the user of the failure when marking onboarding complete.
-- **[medium]** line 93 (error-handling) — **Missing failure handling for async operation**: The `handleSkip` function calls `markComplete()` without handling potential errors, which could lead to unhandled promise rejections if the API call fails. _Fix:_ Add error handling for the `markComplete()` call in `handleSkip` similar to what is done in the `handleComplete()` function.
-
-### `services/api/src/services/variantNormalize.js` ✅ fixed
-- **[high]** line 75 (bug) — **Potential Null Reference in `genomicHgvs` Function**: The function `genomicHgvs` assumes that `position`, `referenceAllele`, and `alternateAllele` are always valid inputs. If both `referenceAllele` and `alternateAllele` are empty strings, this constructs an invalid HGVS string, which can lead to inconsistent outputs or undefined behavior in genetic representations. _Fix:_ Add validation to ensure that `referenceAllele` and `alternateAllele` are not empty before constructing the HGVS string.
-- **[medium]** line 110 (bug) — **Uncaught Exception in `parsePipeAnnotations` Function**: The `parsePipeAnnotations` function does not handle cases where `value` is a number, which could lead to an uncaught error when attempting to split a non-string type. This could crash the application if such input is received. _Fix:_ Add type checking to ensure that `value` is a string before processing.
-
-### `services/api/src/middleware/csrf.js` ✅ fixed
-- **[high]** line 31 (security) — **Potential exposure of a hardcoded CSRF secret**: The fallback value for CSRF secret includes a hardcoded production token, which may be exposed if the environment variables are not set correctly, allowing attackers to forge CSRF tokens. _Fix:_ Replace the hardcoded fallback with a more secure method that prevents exposure of secrets in source code; e.g., remove the fallback or use a more secure placeholder.
-- **[high]** line 70 (error-handling) — **CSRF token integrity verification does not log failures**: If the CSRF token verification fails, the system fails silently without logging the incident, making it difficult to detect potential attacks or issues. _Fix:_ Add logging statements to capture failures in token verification for monitoring and debugging purposes.
-- **[medium]** line 179 (error-handling) — **No response if CSRF verification fails for cross-site requests**: The function does not return a response or an error if CSRF verification fails for cross-site requests, which could leave the client waiting indefinitely. _Fix:_ Ensure that a response is sent on failure to the client, indicating an invalid CSRF token.
-
-### `apps/web/components/search/GeneInputForm.jsx` ✅ fixed
-- **[high]** line 57 (bug) — **Silent removal of gene without confirmation**: The `handleRemoveGene` function does not provide any feedback or confirmation when a gene is removed. This can lead to user confusion, as there is no indication that a gene has been successfully removed from the list. Users may believe the operation failed if there is no observable change or feedback. _Fix:_ Implement a notification or visual feedback to inform users when a gene has been removed.
-
-### `services/api/src/services/educationSources.js` ✅ fixed
-- **[high]** line 78 (error-handling) — **Unvalidated Topic ID May Lead to Null Dereference**: The function `getSources` calls `resolveEducationTopic(topic?.id)` without checking if `topic` is defined first. If `topic` is undefined, it will potentially pass an undefined value to `resolveEducationTopic` and may lead to unexpected behavior or crashes. _Fix:_ Add a check for `topic` before accessing `topic.id` to prevent potential null dereference errors.
-
-### `scripts/backup-snapshot.sh` ⚠️ reported
-- **[medium]** line 132 (error-handling) — **Potential silent failure when final archive is empty**: The check for the final archive being empty occurs after the encryption step, but it does not account for the possibility of the archive failing to save or being created empty due to other issues, such as permission problems or disk space being exhausted, which could leave the user unaware that the backup failed. _Fix:_ Add logging or error messaging to indicate that the archive creation step may have failed before it reaches this point.
-- **[medium]** line 124 (error-handling) — **No recovery on failure to copy final archive**: In the case of an error during the encryption of the final archive (likely due to a permissions issue or other unexpected conditions), the script will attempt to remove the FINAL_PATH but the original source of failure is not logged for user awareness, leading to confusion. _Fix:_ Log an error message whenever a failure to create the final archive occurs before attempting to remove it.
-
-### `services/api/src/services/clinicalTrials.js` ✅ fixed
-- **[high]** line 137 (error-handling) — **Invalid NCT ID format handling**: The function getTrialDetails does not handle empty or invalid nctId input gracefully, potentially leading to unhandled errors in API calls that follow. _Fix:_ Ensure that the function appropriately manages the case where nctId does not conform to the expected format, possibly by returning an error message or handling it more gracefully without proceeding to API calls.
-- **[medium]** line 118 (error-handling) — **Silent failure on response text retrieval**: The catch on response.text() in line 118 could silently ignore errors, leading to an incomplete error message while throwing an error later. _Fix:_ Consider adding logging or a more specific error handling mechanism that captures the failure reason instead of silently returning an empty string.
-- **[medium]** line 24 (performance) — **Inefficient cache eviction process**: The cache eviction in the setCache function removes the 50 oldest entries every time the cache exceeds a size of 200, which could lead to performance degradation as the sort operation scales poorly. _Fix:_ Use a more efficient eviction strategy, such as a linked list or priority queue, to maintain the oldest items and reduce sorting costs.
-
-### `apps/web/lib/publicationConceptCatalog.js` ⚠️ reported
-- **[medium]** line 60 (edge-case) — **Missing normalization for MONDO reference**: The function checks if the value matches the MONDO regex, but it does not trim or clean the string first before using it, which could lead to unexpected matches if users input extra whitespace or unexpected characters. _Fix:_ Use String(value).trim() before performing the regex test.
-- **[medium]** line 88 (bug) — **Incorrect handling of publicationReference in publicationReferenceFromHistory**: The use of optional chaining and null coalescing (??) leads to a boolean check on raw, which makes it possible for it to pass through when it should not (e.g., if both are undefined), leading to faulty conclusions about valid references. _Fix:_ Improve the checks to ensure that the correct structure is validated even when both fields are falsy or misconfigured.
-
-### `apps/web/App.jsx` ✅ fixed
-- **[high]** line 68 (bug) — **Unauthenticated User Accesses Protected Routes**: If the user is not authenticated (isAuthenticated is false), the app does not return any error message or indication that access is denied when trying to access protected routes. This leads to a potential confusion as the user is rerouted without notification or acknowledgement that they attempted to access restricted content. _Fix:_ Add an indication or message to the user when they are being redirected due to lack of authentication, or handle with an explicit redirect to an error page rather than to public routes.
-
-### `scripts/reconcile-account-closure-ledger.mjs` ✅ fixed
-- **[critical]** line 120 (error-handling) — **Missing Required Acknowledgment Check**: The process can be reconciled without the required acknowledgment if the environment variable `RESTORE_RECONCILIATION_ACK` is improperly set or not set at all, which poses a risk to data integrity. This may allow unintended database operations without the necessary confirmation. _Fix:_ Implement a more robust environment check and log a clear error message if the acknowledgment requirement is not met before proceeding with the reconciliation.
-- **[high]** line 125 (error-handling) — **Unverified Database URL setting**: If `DATABASE_URL` is not set, the code throws an error, but no fallback mechanism or guidance is provided for users to rectify this situation. This could lead to confusion and the application crashing without informing the user of necessary steps. _Fix:_ Provide clear logging or a message to guide the user on how to set the `DATABASE_URL`, or handle this more gracefully by providing an alternate course of action rather than crashing.
-
-### `apps/web/lib/EducationLevelContext.jsx` ✅ fixed
-- **[high]** line 102 (error-handling) — **LocalStorage Access Failure Handling**: The code attempts to access localStorage, which may not be available in all environments (like some browsers in incognito mode). If localStorage access fails due to a SecurityError, the catch block does not log this error, which may obscure issues during debugging. _Fix:_ Log the error in the catch block for better visibility: `catch (error) { console.error('LocalStorage error:', error); return null; }`
-- **[medium]** line 120 (error-handling) — **Silent Failure for LocalStorage Setting**: When setting the localStorage item fails, the catch block silently ignores the error without any handling, which can lead to loss of expected functionality, as the user will not be able to persist changes. _Fix:_ Log the error or notify the user that localStorage is unavailable: `catch (error) { console.error('LocalStorage save error:', error); }`
-- **[low]** line 81 (correctness) — **Inconsistent Analogy Style Key**: The analogyStyle key for the postgraduate level is set to 'publication', which may not be coherent with other levels that refer more explicitly to education styles. This inconsistency could affect user expectations when interpreting content for postgraduate education. _Fix:_ Consider renaming analogyStyle to something that reflects graduate studies more clearly, such as 'advanced_research'.
-
-### `apps/web/components/search/GeneFilters.jsx` ✅ fixed
-- **[high]** line 18 (error-handling) — **Change handler may not be defined**: If both onFilterChange and onChange are undefined, the setFilter function will not execute and thus will not notify any filter changes, leading to silent failures in the UI where filters appear not to be working without any feedback to the user. _Fix:_ Ensure that at least one of onFilterChange or onChange is defined, or provide a default implementation that logs an error or warning when neither is present.
-- **[medium]** line 49 (bug) — **Button disabled condition may cause user confusion**: The Clear Filters button is disabled when there are no active filters, but it could mislead users into thinking it is broken or non-functional. _Fix:_ Change the implementation to provide user feedback, such as showing a tooltip or changing the button text to indicate why it is disabled.
-
-### `services/api/src/services/scientificHonesty.js` ⚠️ reported
-- **[high]** line 58 (bug) — **Unchecked string input causing unexpected behavior**: The 'withHonestyPrefix' function checks if the prompt starts with 'SCIENTIFIC_HONESTY_DIRECTIVE' but does not validate the actual content of the prompt string properly. If a user inputs a string that contains sensitive information or violates the honesty principles, the system will not catch this due to the string manipulation. This can lead to the system being used to express unregulated or false information. _Fix:_ Implement a validation mechanism to check for sensitive content or compliance with honesty rules before processing the prompt.
-- **[medium]** line 81 (bug) — **Uncontrolled input leading to unintended message removal**: The 'withHonestySystem' function removes client-supplied system messages without notifying the user. This could lead to an application behavior where crucial context provided by the user is lost, making the responses less relevant or coherent. _Fix:_ Log a warning or throw an error when client-supplied system messages are dropped, informing the user of the operation.
-
-### `services/api/src/services/accountClosureState.js` ✅ fixed
-- **[high]** line 28 (error-handling) — **Potential silent failure on missing input**: The 'latestAccountClosureState' function could return an incomplete state (active: false, row: null, token: null) without any indication of the input problem. If the 'prisma' or 'userId' is missing or incorrect, there is no logging or error thrown to inform the calling function. _Fix:_ Add logging or throw an error if 'prisma' or 'userId' is not provided.
-- **[high]** line 48 (error-handling) — **Unclear error handling for ongoing deletion**: If the account is already in an active deletion state, 'assertCheckoutAllowed' throws an error without handling or logging the original state. This could confuse the user or operator about the implications of the account being inactive or already in the process of deletion. _Fix:_ Add a log statement to capture the current state before throwing the error in 'assertCheckoutAllowed'.
+_No defects found in the reviewed files._
 
 ## Fix notes / left unfixed
 
-- services/api/src/services/publicationTaskOutput.js: The high defect for 'Risk of Unhandled Null Value for Reason Code' cannot be resolved as it requires managing the default value of `emptyReasonCode` which is handled outside this file by its caller, potentially in configuration or a different module. The implementation of a default inside the function is not possible within this file without altering the function's input structure or behavior.
-- apps/web/pages/TopicExplorer.jsx: The second defect regarding access to undefined properties was already correctly handled in the code with `Array.isArray(category.topics) ? category.topics : []`. Hence, no changes were needed for that defect.
-- services/api/src/services/genomicDatabases.js: NO-OP - author model returned no change for 1 finding(s): THE DEFECT IS REAL but cannot be fixed in this file alone: the TTL should ideally be configurable, but this change would require additional alterations to other parts of the system to allow for user configurability, such as modifications to the constructor parameter interface where TTL could be set dynamically. This cannot be fixed within the confines of this file alone.
-- apps/web/pages/History.jsx: rolled back (broke build): esbuild syntax check
-- services/api/src/services/publicationResolvers.js: The defect 'Cached HPO return value could be null' cannot be fixed in this file alone because ensuring a default return value or propagating errors properly requires handling logic that might be dependent on broader changes across the codebase. The existing logic seems to handle null and undefined values correctly by caching null when no valid identifier is found or when marked as obsolete.
-- services/api/src/routes/genomics.js: The defect related to potential undefined request body for the association evidence endpoint cannot be safely handled in this file alone. It requires enforcing schema validation or handling the input at a different level or file. This is a cross-file concern.
-- services/api/src/services/scientificHonesty.js: NO-OP - author model returned no change for 1 finding(s): THE DEFECT IS REAL but cannot be fixed in this file alone. Implementing a validation mechanism to check for sensitive content or compliance with honesty rules would require additional logic or external rules which are not present in this file. This needs changes outside this file or new dependencies.
-- provider outage: three consecutive semantic review batches completed zero files - stopped fail-closed for resumable retry
-- provider-outage rollback failed; working tree requires inspection
+- scripts/verify-production-launch.mjs: no verified candidate was produced
+- scripts/verify-production-launch.mjs: TIMED OUT after 15m of fix attempts - rolled back and re-queued (raise FLEXFACTOR_FIX_FILE_MAX_SECONDS to allow longer)
+- scripts/verify-production-launch.mjs: no verified candidate was produced
+- publication failure made no progress and did not name another repairable source file
+- baseline publication suite is red and bounded repair did not fix it; review continued, publication stays blocked
+- review made no progress: three consecutive semantic review batches completed ZERO files (0 of 375 candidate file(s) reviewed all run). This is a provider/route fault, NOT evidence the repo is clean - stopped fail-closed for resumable retry
+- rollback failed; working tree requires inspection
+
+
+## Errors (28)
+
+| # | phase | kind | error | responsible |
+|---|---|---|---|---|
+| 1 | fix | program-defect | flexfactor_egress_blocked: payload contains ['cloud_token', 'password_assignment'] (near l | scripts/verify-production-launch.mjs |
+| 2 | baseline | program-defect | baseline publication suite is RED and bounded targeted repair did not fix it | - |
+| 3 | rotation | provider | NotFoundError: Error code: 404 - {'status': 404, 'title': 'Not Found', 'detail': "Function | flexfactor.py:2412 |
+| 4 | rotation | provider | BadRequestError: Error code: 400 - {'object': 'error', 'message': 'Expected exactly one me | flexfactor.py:2412 |
+| 5 | rotation | provider | TimeoutError: timed out | flexfactor.py:2755 |
+| 6 | rotation | provider | BadRequestError: Error code: 400 - {'error': {'message': "This model's maximum context len | flexfactor.py:2412 |
+| 7 | rotation | provider | RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `met | flexfactor.py:2412 |
+| 8 | rotation | provider | TimeoutError: timed out | flexfactor.py:2755 |
+| 9 | rotation | provider | TimeoutError: timed out | flexfactor.py:2755 |
+| 10 | rotation | provider | NotFoundError: Error code: 404 - {'status': 404, 'title': 'Not Found', 'detail': "Function | flexfactor.py:2412 |
+| 11 | rotation | provider | RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `met | flexfactor.py:2412 |
+| 12 | rotation | provider | TimeoutError: timed out | flexfactor.py:2755 |
+| 13 | rotation | provider | TimeoutError: timed out | flexfactor.py:2755 |
+| 14 | rotation | provider | RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `met | flexfactor.py:2412 |
+| 15 | rotation | provider | NotFoundError: Error code: 404 - {'status': 404, 'title': 'Not Found', 'detail': "Function | flexfactor.py:2412 |
+| 16 | rotation | provider | TimeoutError: timed out | flexfactor.py:2755 |
+| 17 | rotation | provider | APIStatusError: Error code: 413 - {'error': {'message': 'Request Entity Too Large', 'type' | flexfactor.py:2412 |
+| 18 | rotation | provider | NotFoundError: Error code: 404 - {'status': 404, 'title': 'Not Found', 'detail': "Function | flexfactor.py:2412 |
+| 19 | rotation | provider | InternalServerError: Error code: 503 - [{'error': {'code': 503, 'message': 'This model is  | flexfactor.py:2412 |
+| 20 | rotation | provider | BadRequestError: Error code: 400 - {'error': {'message': 'Please reduce the length of the  | flexfactor.py:2412 |
+| 21 | rotation | provider | NotFoundError: Error code: 404 - {'status': 404, 'title': 'Not Found', 'detail': "Function | flexfactor.py:2412 |
+| 22 | rotation | provider | InternalServerError: Error code: 503 - [{'error': {'code': 503, 'message': 'This model is  | flexfactor.py:2412 |
+| 23 | rotation | provider | RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `met | flexfactor.py:2412 |
+| 24 | rotation | provider | NotFoundError: Error code: 404 - {'status': 404, 'title': 'Not Found', 'detail': "Function | flexfactor.py:2412 |
+| 25 | rotation | provider | NotFoundError: Error code: 404 - {'status': 404, 'title': 'Not Found', 'detail': "Function | flexfactor.py:2412 |
+| 26 | rotation | provider | NotFoundError: Error code: 404 - {'status': 404, 'title': 'Not Found', 'detail': "Function | flexfactor.py:2412 |
+| 27 | rotation | provider | NotFoundError: Error code: 404 - {'status': 404, 'title': 'Not Found', 'detail': "Function | flexfactor.py:2412 |
+| 28 | baseline-gate | program-defect | review made no progress: three consecutive semantic review batches completed ZERO files (0 | - |
+
+Counts by kind: program-defect 3, provider 25
+
+### 1. fix — program-defect
+
+**Error**
+
+```
+flexfactor_egress_blocked: payload contains ['cloud_token', 'password_assignment'] (near line(s) [434, 435]); refusing to send to a cloud model. Re-run with --redact to mask and send, --allow-sensitive to send anyway, or allow categories via FLEXFACTOR_ALLOW_EGRESS / ~/.flexfactor/policy.json {"allow_egress": [...]}.
+```
+
+**Responsible code**
+
+- Program file: `scripts/verify-production-launch.mjs`
+
+**Suggested fix** (signature)
+
+The egress gate found a secret/PII pattern in repo-derived text and refused to send it to a cloud model. Remove the secret from the repo (or use --redact / FLEXFACTOR_ALLOW_EGRESS for a known-safe fixture).
+
+### 2. baseline — program-defect
+
+**Error**
+
+```
+baseline publication suite is RED and bounded targeted repair did not fix it
+```
+
+**Detail**
+
+```
+> tsc --noEmit
+
+
+> @genemap/api@1.0.0 typecheck C:\Users\firer\genemap-discovery\services\api
+> node --check src/index.js && node --check src/config/env.js
+
+
+> genemap-discovery@1.0.0 launch:verify:selftest C:\Users\firer\genemap-discovery
+> node scripts/verify-production-launch.mjs --self-test
+
+Launch verifier self-test passed (env + evidence validation executed, fail-closed confirmed).
+
+npm warn Unknown project config "node-linker". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+
+$ npm run build
+packages/shared build$ tsc
+apps/desktop build: Generated desktop icons (png/ico/icns) and web PWA icons (192/512).
+apps/desktop build:   • electron-builder  version=26.15.3 os=10.0.26200
+apps/desktop build:   • loaded configuration  file=package.json ("build" field)
+packages/shared build: Done
+apps/desktop build:   • executing @electron/rebuild  electronVersion=39.8.10 arch=x64 buildFromSource=false workspaceRoot=C:\Users\firer\genemap-discovery\apps\desktop projectDir=./ appDir=./
+apps/desktop build:   • installing native dependencies  arch=x64
+apps/desktop build:   • completed installing native dependencies
+apps/desktop build:   • packaging       platform=win32 arch=x64 electron=39.8.10 appOutDir=dist-electron\win-unpacked
+apps/desktop build:   ⨯ connect ECONNREFUSED 127.0.0.1:9  failedTask=build stackTrace=RequestError: connect ECONNREFUSED 127.0.0.1:9
+apps/desktop build:     at ClientRequest.<anonymous> (C:\Users\firer
+```
+
+**Responsible code**
+
+- Not attributable to a specific line from the evidence recorded.
+
+**Suggested fix** (signature)
+
+Read the full log at C:\Users\firer\.flexfactor\runs\genemap-20260827-011439-176807-19352\baseline-publication-failure.log. Publication (push/merge) stays refused while the baseline is red; the review still runs.
+
+### 3. rotation — provider
+
+**Error**
+
+```
+NotFoundError: Error code: 404 - {'status': 404, 'title': 'Not Found', 'detail': "Function 'f35337fa-b4dd-4996-bcba-5476ee01171d': Not found for account 'hvux_0rjHS6OiBfWXcZvKgoOaUBy_3UsQqq6I6IAz7I'"}
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2412` in `_chat_create()`
+
+```python
+return client.chat.completions.create(**kwargs)
+```
+- Route: `nvidia_nim/nvidia/riva-translate-4b-instruct`
+
+**Suggested fix** (none)
+
+no known fix; start from the responsible code above
+
+### 4. rotation — provider
+
+**Error**
+
+```
+BadRequestError: Error code: 400 - {'object': 'error', 'message': 'Expected exactly one message. Expected exactly one message.', 'type': 'BadRequestError', 'param': None, 'code': 400}
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2412` in `_chat_create()`
+
+```python
+return client.chat.completions.create(**kwargs)
+```
+- Route: `nvidia_nim/nvidia/nemotron-parse`
+
+**Suggested fix** (none)
+
+no known fix; start from the responsible code above
+
+### 5. rotation — provider
+
+**Error**
+
+```
+TimeoutError: timed out
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2755` in `_chat()`
+
+```python
+with self._opener.open(req, timeout=_ollama_http_timeout()) as resp:
+```
+- Route: `ollama/qwen2.5-coder:7b`
+
+**Suggested fix** (none)
+
+no known fix; start from the responsible code above
+
+### 6. rotation — provider
+
+**Error**
+
+```
+BadRequestError: Error code: 400 - {'error': {'message': "This model's maximum context length is 8192 tokens. However, you requested 8000 output tokens and your prompt contains 78627 characters (more than 14592 characters, which is the upper bound for 192 input tokens). Please reduce the length of the input prompt or the number of requested output tokens. (parameter=input_text, value=78627)", 'type': 'BadRequestError', 'param': 'input_text', 'code': 400}}
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2412` in `_chat_create()`
+
+```python
+return client.chat.completions.create(**kwargs)
+```
+- Route: `nvidia_nim/nvidia/riva-translate-4b-instruct-v2`
+
+**Suggested fix** (signature)
+
+The route's output/context ceiling is below what was requested. FlexFactor learns the ceiling from this 400 and retries once; if it recurs, the prompt unit must shrink (fewer findings per call) or the route should be excluded for large files.
+
+### 7. rotation — provider
+
+**Error**
+
+```
+RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `meta-llama/llama-4-scout-17b-16e-instruct` in organization `org_01kxhxdkh3e7nasshjpfbkzh11` service tier `on_demand` on tokens per minute (TPM): Limit 30000, Used 19966, Requested 23798. Please try again in 27.528s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'compound', 'code': 'rate_limit_exceeded'}}
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2412` in `_chat_create()`
+
+```python
+return client.chat.completions.create(**kwargs)
+```
+- Route: `groq/groq/compound`
+
+**Suggested fix** (signature)
+
+Rate-limited. The rotator cools the pool down and moves on; nothing to fix unless it recurs on every pool, which means the free tiers are exhausted for now.
+
+### 8. rotation — provider
+
+**Error**
+
+```
+TimeoutError: timed out
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2755` in `_chat()`
+
+```python
+with self._opener.open(req, timeout=_ollama_http_timeout()) as resp:
+```
+- Route: `ollama/gpt-oss:20b`
+
+**Suggested fix** (none)
+
+no known fix; start from the responsible code above
+
+### 9. rotation — provider
+
+**Error**
+
+```
+TimeoutError: timed out
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2755` in `_chat()`
+
+```python
+with self._opener.open(req, timeout=_ollama_http_timeout()) as resp:
+```
+- Route: `ollama/phi4-mini:latest`
+
+**Suggested fix** (none)
+
+no known fix; start from the responsible code above
+
+### 10. rotation — provider
+
+**Error**
+
+```
+NotFoundError: Error code: 404 - {'status': 404, 'title': 'Not Found', 'detail': "Function '8378ffb2-51b0-4140-9684-dda1889373e6': Not found for account 'hvux_0rjHS6OiBfWXcZvKgoOaUBy_3UsQqq6I6IAz7I'"}
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2412` in `_chat_create()`
+
+```python
+return client.chat.completions.create(**kwargs)
+```
+- Route: `nvidia_nim/zyphra/zamba2-7b-instruct`
+
+**Suggested fix** (none)
+
+no known fix; start from the responsible code above
+
+### 11. rotation — provider
+
+**Error**
+
+```
+RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `meta-llama/llama-4-scout-17b-16e-instruct` in organization `org_01kxhxdkh3e7nasshjpfbkzh11` service tier `on_demand` on tokens per minute (TPM): Limit 30000, Used 19961, Requested 23798. Please try again in 27.518s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'compound', 'code': 'rate_limit_exceeded'}}
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2412` in `_chat_create()`
+
+```python
+return client.chat.completions.create(**kwargs)
+```
+- Route: `groq/groq/compound`
+
+**Suggested fix** (signature)
+
+Rate-limited. The rotator cools the pool down and moves on; nothing to fix unless it recurs on every pool, which means the free tiers are exhausted for now.
+
+### 12. rotation — provider
+
+**Error**
+
+```
+TimeoutError: timed out
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2755` in `_chat()`
+
+```python
+with self._opener.open(req, timeout=_ollama_http_timeout()) as resp:
+```
+- Route: `ollama/qwen2.5-coder:7b`
+
+**Suggested fix** (none)
+
+no known fix; start from the responsible code above
+
+### 13. rotation — provider
+
+**Error**
+
+```
+TimeoutError: timed out
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2755` in `_chat()`
+
+```python
+with self._opener.open(req, timeout=_ollama_http_timeout()) as resp:
+```
+- Route: `ollama/gemma4:26b`
+
+**Suggested fix** (none)
+
+no known fix; start from the responsible code above
+
+### 14. rotation — provider
+
+**Error**
+
+```
+RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `meta-llama/llama-4-scout-17b-16e-instruct` in organization `org_01kxhxdkh3e7nasshjpfbkzh11` service tier `on_demand` on tokens per minute (TPM): Limit 30000, Used 19791, Requested 23798. Please try again in 27.178s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'compound', 'code': 'rate_limit_exceeded'}}
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2412` in `_chat_create()`
+
+```python
+return client.chat.completions.create(**kwargs)
+```
+- Route: `groq/groq/compound`
+
+**Suggested fix** (signature)
+
+Rate-limited. The rotator cools the pool down and moves on; nothing to fix unless it recurs on every pool, which means the free tiers are exhausted for now.
+
+### 15. rotation — provider
+
+**Error**
+
+```
+NotFoundError: Error code: 404 - {'status': 404, 'title': 'Not Found', 'detail': "Function '02f84bf4-c1a1-489b-a9de-ac3e8dcdec14': Not found for account 'hvux_0rjHS6OiBfWXcZvKgoOaUBy_3UsQqq6I6IAz7I'"}
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2412` in `_chat_create()`
+
+```python
+return client.chat.completions.create(**kwargs)
+```
+- Route: `nvidia_nim/aisingapore/sea-lion-7b-instruct`
+
+**Suggested fix** (none)
+
+no known fix; start from the responsible code above
+
+### 16. rotation — provider
+
+**Error**
+
+```
+TimeoutError: timed out
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2755` in `_chat()`
+
+```python
+with self._opener.open(req, timeout=_ollama_http_timeout()) as resp:
+```
+- Route: `ollama/gemma4:e4b`
+
+**Suggested fix** (none)
+
+no known fix; start from the responsible code above
+
+### 17. rotation — provider
+
+**Error**
+
+```
+APIStatusError: Error code: 413 - {'error': {'message': 'Request Entity Too Large', 'type': 'invalid_request_error', 'code': 'request_too_large'}}
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2412` in `_chat_create()`
+
+```python
+return client.chat.completions.create(**kwargs)
+```
+- Route: `groq/groq/compound-mini`
+
+**Suggested fix** (none)
+
+no known fix; start from the responsible code above
+
+### 18. rotation — provider
+
+**Error**
+
+```
+NotFoundError: Error code: 404 - {'status': 404, 'title': 'Not Found', 'detail': "Function '3d6c2ff8-8bfc-4d10-8fd0-b7337288e869': Not found for account 'hvux_0rjHS6OiBfWXcZvKgoOaUBy_3UsQqq6I6IAz7I'"}
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2412` in `_chat_create()`
+
+```python
+return client.chat.completions.create(**kwargs)
+```
+- Route: `nvidia_nim/databricks/dbrx-instruct`
+
+**Suggested fix** (none)
+
+no known fix; start from the responsible code above
+
+### 19. rotation — provider
+
+**Error**
+
+```
+InternalServerError: Error code: 503 - [{'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}]
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2412` in `_chat_create()`
+
+```python
+return client.chat.completions.create(**kwargs)
+```
+- Route: `gemini/gemini-3.1-flash-lite`
+
+**Suggested fix** (signature)
+
+Provider overloaded. Rotation already moves to the next pool; no change needed.
+
+### 20. rotation — provider
+
+**Error**
+
+```
+BadRequestError: Error code: 400 - {'error': {'message': 'Please reduce the length of the messages or completion.', 'type': 'invalid_request_error', 'param': 'messages'}}
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2412` in `_chat_create()`
+
+```python
+return client.chat.completions.create(**kwargs)
+```
+- Route: `groq/allam-2-7b`
+
+**Suggested fix** (none)
+
+no known fix; start from the responsible code above
+
+### 21. rotation — provider
+
+**Error**
+
+```
+NotFoundError: Error code: 404 - {'status': 404, 'title': 'Not Found', 'detail': "Function 'e503b15c-62b0-4d69-b532-a88f0bfa2656': Not found for account 'hvux_0rjHS6OiBfWXcZvKgoOaUBy_3UsQqq6I6IAz7I'"}
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2412` in `_chat_create()`
+
+```python
+return client.chat.completions.create(**kwargs)
+```
+- Route: `nvidia_nim/deepseek-ai/deepseek-coder-6.7b-instruct`
+
+**Suggested fix** (none)
+
+no known fix; start from the responsible code above
+
+### 22. rotation — provider
+
+**Error**
+
+```
+InternalServerError: Error code: 503 - [{'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}]
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2412` in `_chat_create()`
+
+```python
+return client.chat.completions.create(**kwargs)
+```
+- Route: `gemini/gemini-3.1-flash-lite-preview`
+
+**Suggested fix** (signature)
+
+Provider overloaded. Rotation already moves to the next pool; no change needed.
+
+### 23. rotation — provider
+
+**Error**
+
+```
+RateLimitError: Error code: 429 - {'error': {'message': 'Rate limit reached for model `meta-llama/llama-4-scout-17b-16e-instruct` in organization `org_01kxhxdkh3e7nasshjpfbkzh11` service tier `on_demand` on tokens per minute (TPM): Limit 30000, Used 19966, Requested 23798. Please try again in 27.528s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing', 'type': 'compound', 'code': 'rate_limit_exceeded'}}
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2412` in `_chat_create()`
+
+```python
+return client.chat.completions.create(**kwargs)
+```
+- Route: `groq/groq/compound`
+
+**Suggested fix** (signature)
+
+Rate-limited. The rotator cools the pool down and moves on; nothing to fix unless it recurs on every pool, which means the free tiers are exhausted for now.
+
+### 24. rotation — provider
+
+**Error**
+
+```
+NotFoundError: Error code: 404 - {'status': 404, 'title': 'Not Found', 'detail': "Function '7dfc10a8-3cc4-448e-97c1-2213308dc222': Not found for account 'hvux_0rjHS6OiBfWXcZvKgoOaUBy_3UsQqq6I6IAz7I'"}
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2412` in `_chat_create()`
+
+```python
+return client.chat.completions.create(**kwargs)
+```
+- Route: `nvidia_nim/google/codegemma-7b`
+
+**Suggested fix** (none)
+
+no known fix; start from the responsible code above
+
+### 25. rotation — provider
+
+**Error**
+
+```
+NotFoundError: Error code: 404 - {'status': 404, 'title': 'Not Found', 'detail': "Function '04174188-f742-4069-9e72-d77c2b77d3cb': Not found for account 'hvux_0rjHS6OiBfWXcZvKgoOaUBy_3UsQqq6I6IAz7I'"}
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2412` in `_chat_create()`
+
+```python
+return client.chat.completions.create(**kwargs)
+```
+- Route: `nvidia_nim/google/gemma-2b`
+
+**Suggested fix** (none)
+
+no known fix; start from the responsible code above
+
+### 26. rotation — provider
+
+**Error**
+
+```
+NotFoundError: Error code: 404 - {'status': 404, 'title': 'Not Found', 'detail': "Function 'ee47df99-c92b-4dc9-b3a7-f3fb0f087b73': Not found for account 'hvux_0rjHS6OiBfWXcZvKgoOaUBy_3UsQqq6I6IAz7I'"}
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2412` in `_chat_create()`
+
+```python
+return client.chat.completions.create(**kwargs)
+```
+- Route: `nvidia_nim/google/gemma-3-12b-it`
+
+**Suggested fix** (none)
+
+no known fix; start from the responsible code above
+
+### 27. rotation — provider
+
+**Error**
+
+```
+NotFoundError: Error code: 404 - {'status': 404, 'title': 'Not Found', 'detail': "Function 'c322f327-55a3-4af3-a91f-c757e2b8b135': Not found for account 'hvux_0rjHS6OiBfWXcZvKgoOaUBy_3UsQqq6I6IAz7I'"}
+```
+
+**Responsible code**
+
+- FlexFactor `flexfactor.py:2412` in `_chat_create()`
+
+```python
+return client.chat.completions.create(**kwargs)
+```
+- Route: `nvidia_nim/google/gemma-3-4b-it`
+
+**Suggested fix** (none)
+
+no known fix; start from the responsible code above
+
+### 28. baseline-gate — program-defect
+
+**Error**
+
+```
+review made no progress: three consecutive semantic review batches completed ZERO files (0 of 375 candidate file(s) reviewed all run). This is a provider/route fault, NOT evidence the repo is clean - stopped fail-closed for resumable retry
+```
+
+**Responsible code**
+
+- Not attributable to a specific line from the evidence recorded.
+
+**Suggested fix** (none)
+
+no known fix; start from the responsible code above (model suggester failed: no light route available (120 enabled routes in catalog). Pools skipped: gemini:free-tier (gemini:free-tier allowance exhausted (account-wide)); groq:free-tier (pool cooling down); local:ollama (pool cooling down); nvidia_nim:free-tier (pool cooling down); openrouter:credits (openrouter:free-tier allowance exhausted (account-wide)); openrouter:free:cohere/north-mini-code:free (openrouter:free-tier allowance exhausted (account-wide)))
