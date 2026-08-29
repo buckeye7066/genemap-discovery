@@ -8,7 +8,7 @@
 - **ZERO WORK: not one of 375 candidate file(s) was reviewed. This run did nothing; treat it as a FAILURE, not a clean repo.**
 - **Defects found:** 4
 - **Files fixed:** 0
-- **Errors recorded:** 4 (see the Errors section below; ledger at `C:\Users\firer\.flexfactor\runs\genemap-20260827-070257-327422-34856\errors.md`)
+- **Errors recorded:** 4 (see the Errors section below; ledger at `C:\Users\firer\.flexfactor\runs\genemap-20260827-074943-270404-40916\errors.md`)
 - **Baseline build:** FAILED
 - **Unit tests added:** 0 (suite not run)
 - **Button/UI (Playwright):** skipped
@@ -18,22 +18,22 @@
 
 ## System inventory
 
-**974 entries accounted for.**
+**975 entries accounted for.**
 
 | Category | Count |
 |---|---:|
 | artifact-subtree | 11 |
 | binary-asset | 62 |
-| configuration-documentation-or-data | 274 |
+| configuration-documentation-or-data | 275 |
 | first-party-source | 627 |
 
 The immutable run manifest contains the complete path-level inventory. Artifact, binary, and reparse entries are named and classified; they are not represented as line-reviewed source.
 
 ## Executable evidence
 
-- **Evidence run:** `genemap-20260827-070257-327422-34856`
-- **Exact final commit:** `8d575151245b2aabedb98a3706b772eb88984cab`
-- **Code map:** 559 file(s), 1258 function(s), 24 route(s), 538 material control(s)
+- **Evidence run:** `genemap-20260827-074943-270404-40916`
+- **Exact final commit:** `6792eeabba6500e8d9b85e7736bbf467d8e4a87d`
+- **Code map:** 560 file(s), 1258 function(s), 24 route(s), 538 material control(s)
 - **Function execution:** 0/1069 with invocation evidence
 - **Route execution:** 0/24
 - **Control execution:** 0/538
@@ -41,14 +41,14 @@ The immutable run manifest contains the complete path-level inventory. Artifact,
 - **Blast radius:** 0 affected file(s); analysis ran
 - **Normalized gates:** 3 pass, 4 fail, 2 blocked
 
-- **Blast Radius:** `C:\Users\firer\.flexfactor\evidence\e29c9d26f8adcf57\genemap-20260827-070257-327422-34856\blast-radius.json`
-- **Changed File Rescan:** `C:\Users\firer\.flexfactor\evidence\e29c9d26f8adcf57\genemap-20260827-070257-327422-34856\changed-file-rescan.json`
-- **Code Index:** `C:\Users\firer\.flexfactor\evidence\e29c9d26f8adcf57\genemap-20260827-070257-327422-34856\code-index.json`
-- **Coverage Ledger:** `C:\Users\firer\.flexfactor\evidence\e29c9d26f8adcf57\genemap-20260827-070257-327422-34856\coverage-ledger.json`
-- **Manifest:** `C:\Users\firer\.flexfactor\evidence\e29c9d26f8adcf57\genemap-20260827-070257-327422-34856\manifest.json`
-- **Purpose Graph:** `C:\Users\firer\.flexfactor\evidence\e29c9d26f8adcf57\genemap-20260827-070257-327422-34856\purpose-graph.json`
-- **Quality Gates:** `C:\Users\firer\.flexfactor\evidence\e29c9d26f8adcf57\genemap-20260827-070257-327422-34856\quality-gates.json`
-- **Sarif:** `C:\Users\firer\.flexfactor\evidence\e29c9d26f8adcf57\genemap-20260827-070257-327422-34856\results.sarif`
+- **Blast Radius:** `C:\Users\firer\.flexfactor\evidence\e29c9d26f8adcf57\genemap-20260827-074943-270404-40916\blast-radius.json`
+- **Changed File Rescan:** `C:\Users\firer\.flexfactor\evidence\e29c9d26f8adcf57\genemap-20260827-074943-270404-40916\changed-file-rescan.json`
+- **Code Index:** `C:\Users\firer\.flexfactor\evidence\e29c9d26f8adcf57\genemap-20260827-074943-270404-40916\code-index.json`
+- **Coverage Ledger:** `C:\Users\firer\.flexfactor\evidence\e29c9d26f8adcf57\genemap-20260827-074943-270404-40916\coverage-ledger.json`
+- **Manifest:** `C:\Users\firer\.flexfactor\evidence\e29c9d26f8adcf57\genemap-20260827-074943-270404-40916\manifest.json`
+- **Purpose Graph:** `C:\Users\firer\.flexfactor\evidence\e29c9d26f8adcf57\genemap-20260827-074943-270404-40916\purpose-graph.json`
+- **Quality Gates:** `C:\Users\firer\.flexfactor\evidence\e29c9d26f8adcf57\genemap-20260827-074943-270404-40916\quality-gates.json`
+- **Sarif:** `C:\Users\firer\.flexfactor\evidence\e29c9d26f8adcf57\genemap-20260827-074943-270404-40916\results.sarif`
 
 ## Production readiness
 
@@ -281,7 +281,7 @@ apps/desktop build:     at ClientRequest.<anonymous> (C:\Users\firer
 
 **Suggested fix** (signature)
 
-Read the full log at C:\Users\firer\.flexfactor\runs\genemap-20260827-070257-327422-34856\baseline-publication-failure.log. Publication (push/merge) stays refused while the baseline is red; the review still runs.
+Read the full log at C:\Users\firer\.flexfactor\runs\genemap-20260827-074943-270404-40916\baseline-publication-failure.log. Publication (push/merge) stays refused while the baseline is red; the review still runs.
 
 ### 4. baseline-gate — program-defect
 
