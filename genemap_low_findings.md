@@ -1,23 +1,44 @@
-# Genemap — low / info findings (6)
+# Genemap — low / info findings (13)
 
-_Generated 2026-08-16T22:46:18. These are below the auto-fix bar and were left unchanged on purpose. Review and decide per item._
+_Generated 2026-08-29T10:33:26. These are below the auto-fix bar and were left unchanged on purpose. Review and decide per item._
 
-**Files with low/info issues:** 6
+**Files with low/info issues:** 13
 
-## `apps/web/components/research/ProjectVersionControl.jsx` (1)
-- [ ] line 63 **[low]** (error-handling) — **Silent failure on version restoration**: While the error is logged to the console, there is no notification to the user other than an alert. If the error occurs due to a non-recoverable state or an unexpected error type, the user remains uninformed about what specifically went wrong, which can lead to confusion. _Suggested fix:_ Enhance the error handling to provide more specific feedback to the user regarding the nature of the failure.
+## `apps/web/android/app/capacitor.build.gradle` (1)
+- [ ] line 10 **[low]** (dead-code) — **Unused Import of Variables Gradle File**: The import of the `cordova.variables.gradle` file may not be necessary if no variables are actually utilized in the current build. _Suggested fix:_ Remove the line if the variables imported are not used, or confirm their necessity and document their use.
 
-## `apps/web/components/search/AutocompleteSearch.jsx` (1)
-- [ ] line 55 **[low]** (concurrency) — **Potential Memory Leak with Event Listener**: The component adds an event listener but handles cleanup incorrectly. While the cleanup does occur when the component unmounts, it could lead to performance issues if the component is rapidly mounted and unmounted repeatedly without proper tracking of listener instances. _Suggested fix:_ Ensure that the listener is only added if the component is mounted and cleaned up correctly on unmounting.
+## `apps/web/components/GenerateAppIcon.jsx` (1)
+- [ ] line 3 **[low]** (dead-code) — **Unused Import**: The import statement for `Button` from `@/components/ui/button` might not be necessary as it is only used conditionally inside the JSX but is not required for rendering the component in a basic state without the icon. _Suggested fix:_ Evaluate the necessity of importing `Button`; if not used in certain conditions, consider removing it to clean up the code.
 
-## `apps/web/lib/EducationLevelContext.jsx` (1)
-- [ ] line 81 **[low]** (correctness) — **Inconsistent Analogy Style Key**: The analogyStyle key for the postgraduate level is set to 'publication', which may not be coherent with other levels that refer more explicitly to education styles. This inconsistency could affect user expectations when interpreting content for postgraduate education. _Suggested fix:_ Consider renaming analogyStyle to something that reflects graduate studies more clearly, such as 'advanced_research'.
+## `apps/web/components/education/UsageBanner.jsx` (1)
+- [ ] line 21 **[low]** (error-handling) — **Empty catch block in async operation**: Using an empty catch block without any error handling may lead to unnoticeable failures in fetching the entitlements, making debugging harder. _Suggested fix:_ At minimum, log the error caught in the catch block to provide visibility into issues occurring during the async request.
 
-## `apps/web/pages/AdminMessages.jsx` (1)
-- [ ] line 90 **[low]** (error-handling) — **Silent failure on message closing**: If there is an error when closing a message, the error is caught, but no specific error details are recorded, only a generic 'Failed to close message' message is set. _Suggested fix:_ Log the actual error in addition to the user-facing message for better diagnosing of issues.
+## `apps/web/components/search/GeneComparison.jsx` (1)
+- [ ] line 263 **[low]** (edge-case) — **No Metadata Handling When No Records Found**: The component does not handle the case when 'row.metadataClaims.length' is zero appropriately, potentially confusing users about the absence of metadata. _Suggested fix:_ Add a message indicating there are no metadata claims when 'row.metadataClaims.length' is zero.
 
-## `apps/web/pages/Premium.jsx` (1)
-- [ ] line 53 **[low]** (error-handling) — **Silent failure in loadEntitlements function**: The catch block in loadEntitlements does not handle the error nor provide any feedback, leading to undetected loading errors. _Suggested fix:_ Log the error or set an error state to inform the user.
+## `apps/web/components/search/LoadingSpinner.jsx` (1)
+- [ ] line 6 **[low]** (correctness) — **Pass-Through Component Without Props Validation**: The `LoadingSpinner` component directly passes its `props` to `SharedLoadingSpinner` without any validation or restriction. If `SharedLoadingSpinner` expects certain props and they are not provided or are in an unexpected format, this may lead to runtime errors. Additionally, since it's a pass-through, any unintended props can also be passed through, potentially leading to unexpected behaviors. _Suggested fix:_ Implement prop validation using PropTypes or TypeScript to ensure that the correct props are provided to the `SharedLoadingSpinner` component.
 
-## `services/api/src/config/rateLimitStore.js` (1)
-- [ ] line 144 **[low]** (security) — **Error details may expose sensitive information**: When logging Redis errors, the error message is included without sanitization, which may accidentally expose sensitive application internals or implementation details. _Suggested fix:_ Sanitize the error message or log only necessary information without exposing sensitive details.
+## `apps/web/components/search/SavedGeneSets.jsx` (1)
+- [ ] line 39 **[low]** (edge-case) — **Confirmation dialog could be bypassed**: The confirmation dialog can be bypassed if the user interacts with the component through another means (like a keyboard shortcut). This can lead to unintended deletions. _Suggested fix:_ Ensure deletion is only processed through the confirmation dialog by wrapping the delete action in the confirmation logic.
+
+## `apps/web/lib/researchTaskFixtures.js` (1)
+- [ ] line 12 **[low]** (edge-case) — **Sample count validation edge case**: The isValidAggregateSampleCount function accepts sample counts over 1,000,000, which may not be realistic in a research context. It does not account for how large sample sizes may impact performance or memory consumption. _Suggested fix:_ Consider applying a more realistic upper limit for sampleCount based on practical use cases or document the expected behavior when large values are passed.
+
+## `apps/web/pages/Home.jsx` (1)
+- [ ] line 10 **[info]** (correctness) — **Unconditional Redirect**: The Home component always redirects to /dashboard without any conditions, which might not be the intended behavior if /home is accessed for other purposes in the future. _Suggested fix:_ Consider adding a condition to determine whether to redirect or render specific content for /home.
+
+## `scripts/backup-snapshot.sh` (1)
+- [ ] line 109 **[low]** (edge-case) — **Date format handling in metadata**: The use of date in the ISO 8601 format is generally robust, but no checks are added to ensure the date is formatted correctly on all systems, which could lead to inconsistent backup metadata display on different locales or systems. _Suggested fix:_ Ensure appropriate date formatting and locale handling or provide guidelines for expected environments when running the script.
+
+## `services/api/src/__tests__/projectApiContract.test.js` (1)
+- [ ] line 198 **[low]** (dead-code) — **Unused Variables in Entity Variables Mapping**: The ENTITY_VARIABLES object maps variable names to potential UI elements, but not all mappings are used in assertions or functionality within the tests, suggesting redundancy. _Suggested fix:_ Review the ENTITY_VARIABLES mapping and remove any unused variables or ensure they are utilized in the test cases to avoid confusion.
+
+## `services/api/src/config/publishingBoundary.js` (1)
+- [ ] line 30 **[low]** (edge-case) — **Potentially Unhandled Edge Case in HIDDEN_PATH_PREFIXES**: The path '/genomics/variant' may not be properly handled in edge cases where the expected format of the path is violated or malformed, leading to unexpected application responses. _Suggested fix:_ Ensure normalization and validation is applied to paths against the expected patterns, possibly returning a controlled error for unhandled cases.
+
+## `services/api/src/config/sentry.js` (1)
+- [ ] line 14 **[low]** (bug) — **captureException Method Does Not Function**: The captureException function is defined but intentionally does nothing, meaning any call to it results in lost error information, which could hinder debugging. _Suggested fix:_ Implement logging functionality to capture and log exceptions appropriately when Sentry is enabled.
+
+## `services/api/src/services/clinicalTrials.js` (1)
+- [ ] line 106 **[low]** (bug) — **Caching pageSize greater than 50 is allowed but limited**: The 'pageSize' parameter can be set to values greater than 50, which is acceptable in terms of request setup, but ultimately ignored when fetching data due to the hardcoded cap in the request parameters. _Suggested fix:_ Ensure that the logic accounts for this limitation and makes it clear to users what the maximum allowable page size is for requests.

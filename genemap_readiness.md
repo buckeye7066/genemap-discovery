@@ -1,4 +1,4 @@
-# Production readiness — GeneMap
+# Production readiness — Genemap
 
 **Verdict: NOT PRODUCTION READY**
 
