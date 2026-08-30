@@ -105,6 +105,16 @@ export default function InstitutionalAdminPage() {
       return;
     }
 
+    if (!bulkInviteMode && !inviteEmail.trim()) {
+      setError("Please enter a valid email address for single invite");
+      return;
+    }
+
+    if (bulkInviteMode && !bulkEmails.trim()) {
+      setError("Please enter at least one email address for bulk invite");
+      return;
+    }
+
     setIsInviting(true);
     setError(null);
     setSuccess(null);
@@ -117,7 +127,7 @@ export default function InstitutionalAdminPage() {
       // Check if we have enough seats
       if (selectedLicense) {
         const availableSeats = selectedLicense.maxSeats - selectedLicense.assignedSeats;
-        if (emails.length > availableSeats + 1) {
+        if (emails.length > availableSeats) {
           throw new Error(`Not enough seats available. You have ${availableSeats} seats remaining.`);
         }
       } else {

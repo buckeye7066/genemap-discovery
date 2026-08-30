@@ -293,7 +293,7 @@ function GeneCard({ gene, rank, isSelected = false, onSelect = null }) {
     };
 
     void logGeneView();
-    return () => {
+    return function cleanup() {
       cancelled = true;
       if (retryTimer) clearTimeout(retryTimer);
     };

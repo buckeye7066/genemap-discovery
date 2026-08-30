@@ -120,7 +120,7 @@ export default function ProfilePage() {
 
     // We downscale before upload, so this only guards against absurdly large
     // source files that would be slow to read into memory in the first place.
-    if (file.size > 15 * 1024 * 1024) {
+    if (file.size >= 15 * 1024 * 1024) {
       setError('Image size must be less than 15MB');
       return;
     }

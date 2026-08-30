@@ -187,6 +187,8 @@ export default function Layout({ children, currentPageName }) {
       manifestLink.setAttribute('rel', 'manifest');
       manifestLink.setAttribute('href', '/manifest.json');
       document.head.appendChild(manifestLink);
+    } else {
+      manifestLink.setAttribute('href', '/manifest.json');
     }
 
     // Add apple-touch-icon
