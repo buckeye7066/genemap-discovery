@@ -36,7 +36,10 @@ export default function GeneInputForm({ onGenesSubmit, isLoading, initialGenes =
 
   const handleAddGene = () => {
     const newGene = geneInput.trim().toUpperCase();
-    if (!newGene) return;
+    if (!newGene) {
+    alert('Please enter a valid gene symbol.');
+    return;
+  };
     // Functional update (never read the array from a stale closure) + keep
     // focus in the input. Clicking the "+" button moves focus to the button,
     // so without this refocus the user's next keystrokes went nowhere and the
@@ -55,12 +58,12 @@ export default function GeneInputForm({ onGenesSubmit, isLoading, initialGenes =
 
   const handleRemoveGene = (geneToRemove) => {
     setGenes((prevGenes) => {
-      if (prevGenes.includes(geneToRemove)) {
-        const updatedGenes = prevGenes.filter(g => g !== geneToRemove);
-        toast(`${geneToRemove} has been removed from the list.`);
-        return updatedGenes;
+      if (!prevGenes.includes(geneToRemove)) {
+        return prevGenes;
       }
-      return prevGenes;
+      const updatedGenes = prevGenes.filter(g => g !== geneToRemove);
+      toast(`${geneToRemove} has been removed from the list.`);
+      return updatedGenes;
     });
   };
 

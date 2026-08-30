@@ -39,12 +39,14 @@ export default function Login() {
         if (cancelled || !status || typeof status.active !== "boolean") return;
         setMaintenance({ ...LOGIN_MAINTENANCE, ...status });
       })
-      .catch(() => { /* keep the static fallback */ });
+      .catch((err) => {
+        console.error('Failed to fetch maintenance status:', err);
+      });
     return () => { cancelled = true; };
   }, []);
 
   const isRegister = mode === "register";
-  const redirectFrom = location.state?.from;
+  const redirectFrom = location.state?.from || '/';
   const hasProtectedRedirect = Boolean(
     redirectFrom?.pathname &&
     redirectFrom.pathname !== "/login" &&

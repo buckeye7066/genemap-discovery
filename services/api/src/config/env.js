@@ -225,10 +225,10 @@ export function loadEnv(opts = {}) {
       if (!env[key]) warn(`${key} is not set (allowed in ${env.NODE_ENV}, REQUIRED in production)`);
     }
     if (env.MEDICAL_DATA_ENCRYPTION_KEY && !isValidMedicalKey(env.MEDICAL_DATA_ENCRYPTION_KEY)) {
-      warn('MEDICAL_DATA_ENCRYPTION_KEY is set but is not 64 hex characters; will be rejected in production');
+      warn(`MEDICAL_DATA_ENCRYPTION_KEY is set but is not 64 hex characters; will be rejected in production (current length: ${env.MEDICAL_DATA_ENCRYPTION_KEY.length})`);
     }
     if (env.STRIPE_SECRET_KEY && env.STRIPE_SECRET_KEY.startsWith('sk_live_') === false) {
-      warn('STRIPE_SECRET_KEY is not a live-mode key; this is allowed outside production only');
+      warn(`STRIPE_SECRET_KEY is not a live-mode key; this is allowed outside production only (current key: ${env.STRIPE_SECRET_KEY})`);
     }
   }
 

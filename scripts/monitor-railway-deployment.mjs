@@ -138,7 +138,7 @@ export async function monitorRailwayDeployment(options = {}) {
   const fetchTimeoutMs = options.fetchTimeoutMs ?? DEFAULT_FETCH_TIMEOUT_MS;
 
   if (!/^[0-9a-f]{40,64}$/u.test(expectedSha)) {
-    throw new Error('GITHUB_SHA must be a full hexadecimal commit SHA.');
+    throw new Error(`GITHUB_SHA must be a full hexadecimal commit SHA. Received: ${expectedSha}`);
   }
   if (!apiUrl || !/^https:\/\//iu.test(apiUrl)) {
     throw new Error('API_URL must be the HTTPS URL of the production API.');

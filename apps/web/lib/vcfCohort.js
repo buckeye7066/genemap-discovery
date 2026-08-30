@@ -135,7 +135,8 @@ export async function parseVcfFile(file, { onProgress, maxKeys = MAX_KEYS_PER_FI
     };
   }
   if (typeof file.stream !== 'function') {
-    throw new Error(`${file.name}: streaming file reads are not supported in this browser`);
+    console.error(`${file.name}: streaming file reads are not supported in this browser`);
+    return { name: file.name, variantCount: 0, variantTypes: {}, keys: new Set(), keyMeta: new Map(), keysTruncated: false, bytes: file.size ?? 0 };
   }
 
   let stream = file.stream();
