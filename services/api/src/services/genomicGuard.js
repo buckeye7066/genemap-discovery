@@ -227,7 +227,7 @@ export async function assertNoRawGenomicLLM(prisma, userId, text) {
 
   if (process.env.ALLOW_GENOMIC_LLM_UPLOAD !== 'true') {
     // Log a warning and throw an error if the configuration is incorrect.
-    throw new ValidationError('Raw VCF/genomic file content is not allowed in LLM requests by default');
+    throw new ValidationError('Configuration error: Raw VCF/genomic file content is not allowed in LLM requests without setting ALLOW_GENOMIC_LLM_UPLOAD to true');
   }
 
   // Check if user is authenticated

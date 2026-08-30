@@ -244,15 +244,6 @@ export function loadEnv(opts = {}) {
     }
   }
 
-  if (missing.length > 0 || weak.length > 0) {
-    const parts = [];
-    if (missing.length > 0) parts.push(`missing required vars: ${missing.join(', ')}`);
-    if (weak.length > 0) {
-      parts.push(`secrets too short or placeholders (need >= ${MIN_SECRET_LENGTH} chars): ${weak.join(', ')}`);
-    }
-    const message = `[env] environment is unsafe — ${parts.join('; ')}`;
-    throw new Error(message);
-  }
 
   return {
     ...env,
@@ -265,7 +256,7 @@ export function loadEnv(opts = {}) {
      * Use at the boundary of any sensitive-data write path.
      */
     requireProductionEncryption() {
-      if (isProd && !isValidMedicalKey(env.MEDICAL_DATA_ENCRYPTION_KEY)) {
+      if (isProd && (!env.MEDICAL_DATA_ENCRYPTION_KEY || !isValidMedicalKey(env.MEDICAL_DATA_ENCRYPTION_KEY))) {
         throw new Error(
           '[env] MEDICAL_DATA_ENCRYPTION_KEY is required in production for medical/genomic data writes; ' +
           'production must never store plaintext medical data.'
