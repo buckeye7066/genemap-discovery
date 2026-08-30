@@ -23,6 +23,9 @@ export const FREE_PERIOD_DAYS = { week: 7, month: 30 };
  * cleanly instead of overlapping.
  */
 export function computeFreePeriodEnd(currentEnd, days, now = Date.now()) {
+  if (days <= 0) {
+    throw new Error('Days must be a positive integer');
+  }
   const base = currentEnd && currentEnd.getTime() > now ? currentEnd.getTime() : now;
   return new Date(base + days * 24 * 60 * 60 * 1000);
 }
@@ -43,7 +46,8 @@ export async function grantOrExtendFreePeriod(prisma, userId, days, now = Date.n
     orderBy: { createdAt: 'desc' },
   });
 
-  const newEnd = computeFreePeriodEnd(existingComp?.currentPeriodEnd ?? null, days, now);
+  const priorEnd = existingComp && existingComp.currentPeriodEnd ? existingComp.currentPeriodEnd : null;
+  const newEnd = computeFreePeriodEnd(priorEnd, days, now);
 
   if (existingComp) {
     await prisma.subscription.update({

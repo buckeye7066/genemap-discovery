@@ -138,6 +138,7 @@ export default function ProfilePage() {
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
     } catch (err) {
+      console.error("Profile picture upload error:", err);
       setError(err.message || "Failed to upload profile picture");
     } finally {
       setIsUploadingPicture(false);

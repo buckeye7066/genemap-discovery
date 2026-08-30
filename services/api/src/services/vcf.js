@@ -121,12 +121,12 @@ export function parseVcfText(text, { maxVariants = DEFAULT_MAX_VARIANTS } = {}) 
 
     const [chrom, pos, id, ref, altText, qual, filter, infoText, formatText, ...sampleColumns] = columns;
     const position = Number(pos);
-    if (!chrom || !Number.isInteger(position) || position <= 0 || !ref || !altText) continue;
+    if (!chrom || !Number.isInteger(position) || position < 0 || !ref || !altText) continue;
 
     const info = parseInfo(infoText);
     const samples = sampleNames.map((name, index) => ({
       name,
-      fields: parseSample(formatText, sampleColumns[index]),
+      fields: parseSample(formatText, sampleColumns[index] || ''),
     }));
     const primarySample = samples.find((sample) => sample.fields?.GT) || samples[0] || null;
     const normalizedRows = normalizeVcfAlleleRows({
@@ -274,6 +274,7 @@ async function enrichOneVariant(variant) {
     clinVarRecord = clinVarIds.length > 0 ? clinVarDetails?.result?.[clinVarIds[0]] : null;
   } catch (error) {
     console.error('Error retrieving ClinVar data:', error);
+    throw new Error('Failed to retrieve ClinVar data');
   }
   const clinVarClassification = extractClinVarClassification(clinVarRecord);
 

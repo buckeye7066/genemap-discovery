@@ -127,7 +127,10 @@ export async function resolvePublicationHpo(identifierValue, { fetchImpl = globa
   const identifier = typeof identifierValue === 'string'
     ? identifierValue.trim().toUpperCase()
     : '';
-  if (!HPO_ID.test(identifier) || typeof fetchImpl !== 'function') return null;
+  if (!HPO_ID.test(identifier) || typeof fetchImpl !== 'function') {
+    console.error('fetchImpl is not a valid function');
+    return null;
+  }
   const cached = cachedHpo(identifier);
   if (cached !== undefined) return cached;
 
