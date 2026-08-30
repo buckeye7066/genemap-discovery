@@ -191,6 +191,7 @@ export async function monitorRailwayDeployment(options = {}) {
           console.log(
             `Railway deployment ${deployment.id} and live /healthz both identify ${expectedSha}.`,
           );
+          console.log(`Exact deployed SHA: ${live.releaseSha}`);
           return { deployment, releaseSha: live.releaseSha, attempts: attempt };
         }
         lastObservation = `${lastObservation}; ${live.reason}`;
