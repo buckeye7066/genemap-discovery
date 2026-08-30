@@ -18,7 +18,7 @@ export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState('');
   const accountDeleted = new URLSearchParams(location.search).get('accountDeleted') === '1';
 
   // Runtime maintenance status. Render the static fallback immediately (no
@@ -69,7 +69,8 @@ export default function Login() {
       }
       navigate(redirectTo, { replace: true });
     } catch (err) {
-      setError(err?.message || "Authentication failed");
+      console.error(err);
+      setError("Authentication failed");
     } finally {
       setIsSubmitting(false);
     }

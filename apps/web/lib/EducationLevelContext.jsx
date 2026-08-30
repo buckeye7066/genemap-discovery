@@ -116,8 +116,8 @@ export const EducationLevelProvider = ({ children }) => {
     setLevelState(newLevel);
     try {
       localStorage.setItem(STORAGE_KEY, newLevel);
-    } catch {
-      // localStorage unavailable
+    } catch (error) {
+      console.error('Failed to set item in localStorage:', error);
     }
   }, []);
 

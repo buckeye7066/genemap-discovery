@@ -27,11 +27,12 @@ const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 const TOKEN_VERSION = 'v1';
 
 function getSecret() {
-  return (
-    process.env.CSRF_SECRET ||
-    process.env.COOKIE_SECRET ||
-    'change-this-secret-in-production'
-  );
+  const defaultSecret = 'change-this-secret-in-production';
+  const secret = process.env.CSRF_SECRET || process.env.COOKIE_SECRET;
+  if (secret === defaultSecret) {
+    console.error('CSRF secret not properly set in production environment.');
+  }
+  return secret || defaultSecret;
 }
 
 function b64url(input) {
@@ -72,17 +73,20 @@ function verifyCsrfTokenIntegrity(token, secret = getSecret()) {
   const [, userIdEnc, nonceEnc, sigEnc] = parts;
   const userId = fromB64url(userIdEnc);
   const nonce = fromB64url(nonceEnc);
-  if (!userId || !nonce) return null;
+  if (!userId || !nonce) {
+    console.warn('CSRF token verification failed: could not decode userId or nonce');
+    return null;
+  }
   const expected = signCsrf(userId, nonce, secret);
   if (!constantTimeEqual(sigEnc, expected)) {
-    console.warn('CSRF token verification failed: integrity check did not pass');
+    console.error('CSRF token verification failed: integrity check did not pass');
     return null;
   }
   return userId;
 }
 
 export function issueCsrfToken(userId, secret = getSecret()) {
-  const principal = userId || 'anon';
+  const principal = userId || `anon:${crypto.randomBytes(16).toString('base64url')}`;
   const nonce = crypto.randomBytes(24).toString('base64url');
   const sig = signCsrf(principal, nonce, secret);
   return `${TOKEN_VERSION}.${b64url(principal)}.${b64url(nonce)}.${sig}`;

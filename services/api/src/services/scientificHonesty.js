@@ -55,9 +55,8 @@ export function honestySystemMessage(persona = '') {
  */
 export function withHonestyPrefix(prompt, extra = '') {
   const value = String(prompt ?? '');
-  const hasTrustedPrefix = value.startsWith(SCIENTIFIC_HONESTY_DIRECTIVE)
-    && (value.length === SCIENTIFIC_HONESTY_DIRECTIVE.length
-      || value[SCIENTIFIC_HONESTY_DIRECTIVE.length] === '\n');
+  const hasTrustedPrefix = value.startsWith(SCIENTIFIC_HONESTY_DIRECTIVE) &&
+    value.slice(SCIENTIFIC_HONESTY_DIRECTIVE.length).match(/^\s*\n/);
   if (!hasTrustedPrefix) {
     const tail = extra ? `\n${extra}` : '';
     return `${SCIENTIFIC_HONESTY_DIRECTIVE}${tail}\n\n${value}`;
