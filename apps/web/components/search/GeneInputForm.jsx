@@ -54,8 +54,12 @@ export default function GeneInputForm({ onGenesSubmit, isLoading, initialGenes =
   };
 
   const handleRemoveGene = (geneToRemove) => {
-    setGenes((prevGenes) => prevGenes.filter(g => g !== geneToRemove));
-    alert(`${geneToRemove} has been removed from the list.`);
+    setGenes((prevGenes) => {
+      if (prevGenes.includes(geneToRemove)) {
+        toast(`${geneToRemove} has been removed from the list.`);
+      }
+      return prevGenes.filter(g => g !== geneToRemove);
+    });
   };
 
   const handleSubmit = (e) => {
@@ -167,7 +171,15 @@ export default function GeneInputForm({ onGenesSubmit, isLoading, initialGenes =
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={() => setGenes(set.genes)}
+                onClick={() => {
+                  if (geneInput.trim() || bulkText.trim() || genes.length > 0) {
+                    if (window.confirm('You have unsaved changes. Do you want to overwrite with an example set?')) {
+                      setGenes(set.genes);
+                    }
+                  } else {
+                    setGenes(set.genes);
+                  }
+                }}
                 disabled={isLoading}
                 className="text-xs"
               >

@@ -119,11 +119,11 @@ export function isEntrypoint(metaUrl, argvPath) {
 async function main() {
   if (process.env.RESTORE_RECONCILIATION_ACK !== REQUIRED_ACK) {
     throw new Error(
-      `Refusing to reconcile: set RESTORE_RECONCILIATION_ACK="${REQUIRED_ACK}" only inside an isolated restored environment with outbound application traffic disabled.`,
+      `Refusing to reconcile: Set the environment variable RESTORE_RECONCILIATION_ACK to "${REQUIRED_ACK}". This should only be done in an isolated restored environment where all outbound application traffic is disabled to prevent any unauthorized data exposure.`,
     );
   }
   if (!process.env.DATABASE_URL) {
-    throw new Error('DATABASE_URL must point to the isolated restored database.');
+    throw new Error('DATABASE_URL is required and must point to the isolated restored database. Ensure this variable is set in your environment variables with the correct database connection string format: "postgresql://user:password@localhost:5432/database" or similar depending on your database configuration.');
   }
 
   const prisma = new PrismaClient();

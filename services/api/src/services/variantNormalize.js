@@ -75,7 +75,9 @@ export function decomposeMultiallelic(ref, altText) {
 export function genomicHgvs({ chromosome, position, referenceAllele, alternateAllele, accession = null }) {
   const chrom = normalizeChromosome(chromosome);
   const prefix = accession || chrom;
-  if (!referenceAllele || !alternateAllele) return null;
+  if (!Number.isInteger(position) || position <= 0 || !referenceAllele || !alternateAllele) {
+    throw new Error('Invalid inputs for genomic HGVS: missing position or alleles');
+  }
   return `${prefix}:g.${position}${referenceAllele}>${alternateAllele}`;
 }
 
@@ -110,7 +112,7 @@ const DEFAULT_ANN_FIELDS = [
 function parsePipeAnnotations(value, fieldNames) {
   if (typeof value !== 'string' || !value || value === '.') return [];
   const fields = fieldNames || DEFAULT_ANN_FIELDS;
-  return value.split(',').filter(Boolean).map((entry) => {
+  return value.split(',').filter(entry => entry.trim() !== '').map((entry) => {
     const parts = entry.split('|');
     const record = {};
     fields.forEach((name, index) => {
