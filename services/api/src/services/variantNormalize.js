@@ -75,8 +75,8 @@ export function decomposeMultiallelic(ref, altText) {
 export function genomicHgvs({ chromosome, position, referenceAllele, alternateAllele, accession = null }) {
   const chrom = normalizeChromosome(chromosome);
   const prefix = accession || chrom;
-  if (!Number.isInteger(position) || position <= 0 || !referenceAllele || !alternateAllele) {
-    throw new Error('Invalid inputs for genomic HGVS: missing position or alleles');
+  if (!Number.isInteger(position) || position < 1 || !referenceAllele || !alternateAllele) {
+    throw new Error('Invalid inputs for genomic HGVS: invalid position or missing alleles');
   }
   return `${prefix}:g.${position}${referenceAllele}>${alternateAllele}`;
 }
@@ -130,7 +130,7 @@ export function extractAnnotations(info = {}, annotationHeaders = {}) {
 
 export function geneFromAnnotations({ ann = [], csq = [] } = {}) {
   for (const row of [...ann, ...csq]) {
-    const symbol = row.SYMBOL || row.Gene || row.Gene_Name;
+    const symbol = row.SYMBOL || row.Gene;
     if (typeof symbol === 'string' && symbol.trim()) return symbol.trim();
   }
   return null;

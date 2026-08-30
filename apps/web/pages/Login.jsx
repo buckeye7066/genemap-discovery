@@ -19,7 +19,11 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
-  const accountDeleted = new URLSearchParams(location.search).get('accountDeleted') === '1';
+  const accountDeletedParam = new URLSearchParams(location.search).get('accountDeleted');
+  const accountDeleted = accountDeletedParam === '1';
+  if (accountDeletedParam && accountDeletedParam !== '1') {
+    console.warn("Unexpected 'accountDeleted' parameter value: ", accountDeletedParam);
+  }
 
   // Runtime maintenance status. Render the static fallback immediately (no
   // flash of the wrong state), then follow the server's answer — the switch

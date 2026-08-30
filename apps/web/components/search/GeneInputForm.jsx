@@ -56,9 +56,11 @@ export default function GeneInputForm({ onGenesSubmit, isLoading, initialGenes =
   const handleRemoveGene = (geneToRemove) => {
     setGenes((prevGenes) => {
       if (prevGenes.includes(geneToRemove)) {
+        const updatedGenes = prevGenes.filter(g => g !== geneToRemove);
         toast(`${geneToRemove} has been removed from the list.`);
+        return updatedGenes;
       }
-      return prevGenes.filter(g => g !== geneToRemove);
+      return prevGenes;
     });
   };
 
@@ -74,6 +76,9 @@ export default function GeneInputForm({ onGenesSubmit, isLoading, initialGenes =
     }
     if (finalGenes.length > 0) {
       onGenesSubmit(finalGenes);
+    } else {
+      // Prevent submitting an empty gene list
+      return;
     }
   };
 
