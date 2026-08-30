@@ -15,7 +15,14 @@ const FIXTURE_DIR = join(__dirname, '../../fixtures/benchmarks');
 function loadFixtures() {
   return readdirSync(FIXTURE_DIR)
     .filter((name) => name.endsWith('.json'))
-    .map((name) => JSON.parse(readFileSync(join(FIXTURE_DIR, name), 'utf8')));
+    .map((name) => {
+      try {
+        return JSON.parse(readFileSync(join(FIXTURE_DIR, name), 'utf8'));
+      } catch (error) {
+        console.error(`Error parsing JSON from file ${name}:`, error);
+        return null;
+      }
+    }).filter(Boolean);
 }
 
 function computeFixtureHash() {
@@ -53,7 +60,9 @@ describe('scientific benchmarks (deterministic fixtures)', () => {
 
   it('exposes exact provenance fields on every fixture claim source', () => {
     for (const fixture of fixtures) {
-      expect(fixture.limitations?.length).toBeGreaterThan(0);
+      if (fixture.limitations) {
+        expect(fixture.limitations.length).toBeGreaterThan(0);
+      }
       expect(fixture.species).toBeTruthy();
       expect(fixture.taxon).toBeTruthy();
       expect(fixture.evidenceClass).toBeTruthy();

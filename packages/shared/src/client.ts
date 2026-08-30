@@ -282,7 +282,10 @@ export class ApiClient {
         headers: { 'Content-Type': 'application/json' },
       })
         .then(async (res) => {
-          if (!res.ok) return false;
+          if (!res.ok) {
+            console.error(`Error refreshing token: ${res.status} ${res.statusText}`);
+            return false;
+          }
           // /auth/refresh returns a fresh CSRF token in its body for cross-site
           // SPAs that cannot read the rotated cookie — cache it before retrying.
           const data = await res.json().catch(() => null);

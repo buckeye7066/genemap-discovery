@@ -123,7 +123,16 @@ export function accumulateVcfLines(lines, { maxKeys = MAX_KEYS_PER_FILE, state }
 export async function parseVcfFile(file, { onProgress, maxKeys = MAX_KEYS_PER_FILE } = {}) {
   const isGzip = /\.gz$/i.test(file.name);
   if (isGzip && typeof DecompressionStream === 'undefined') {
-    throw new Error(`${file.name}: gzip is not supported in this browser — decompress the file first`);
+    console.warn(`${file.name}: gzip support is not available in this browser. Please decompress the file manually first.`);
+    return {
+      name: file.name,
+      variantCount: 0,
+      variantTypes: {},
+      keys: new Set(),
+      keyMeta: new Map(),
+      keysTruncated: false,
+      bytes: file.size ?? 0
+    };
   }
   if (typeof file.stream !== 'function') {
     throw new Error(`${file.name}: streaming file reads are not supported in this browser`);

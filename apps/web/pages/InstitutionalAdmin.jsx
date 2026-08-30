@@ -115,9 +115,13 @@ export default function InstitutionalAdminPage() {
         : [inviteEmail.trim()];
 
       // Check if we have enough seats
-      const availableSeats = selectedLicense.maxSeats - selectedLicense.assignedSeats;
-      if (emails.length > availableSeats) {
-        throw new Error(`Not enough seats available. You have ${availableSeats} seats remaining.`);
+      if (selectedLicense) {
+        const availableSeats = selectedLicense.maxSeats - selectedLicense.assignedSeats;
+        if (emails.length > availableSeats) {
+          throw new Error(`Not enough seats available. You have ${availableSeats} seats remaining.`);
+        }
+      } else {
+        throw new Error('No license selected. Please select a license.');
       }
 
       for (const email of emails) {

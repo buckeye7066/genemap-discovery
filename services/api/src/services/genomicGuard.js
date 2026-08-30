@@ -227,7 +227,6 @@ export async function assertNoRawGenomicLLM(prisma, userId, text) {
 
   if (process.env.ALLOW_GENOMIC_LLM_UPLOAD !== 'true') {
     // Log a warning and throw an error if the configuration is incorrect.
-    console.warn('Warning: ALLOW_GENOMIC_LLM_UPLOAD is not set to true. This may prevent genomic uploads.')
     throw new ValidationError('Raw VCF/genomic file content is not allowed in LLM requests by default');
   }
 
