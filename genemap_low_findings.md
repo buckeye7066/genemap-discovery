@@ -1,6 +1,6 @@
 # Genemap — low / info findings (19)
 
-_Generated 2026-08-29T17:29:48. These are below the auto-fix bar and were left unchanged on purpose. Review and decide per item._
+_Generated 2026-08-30T00:49:48. These are below the auto-fix bar and were left unchanged on purpose. Review and decide per item._
 
 **Files with low/info issues:** 18
 
@@ -41,9 +41,6 @@ _Generated 2026-08-29T17:29:48. These are below the auto-fix bar and were left u
 ## `scripts/backup-snapshot.sh` (1)
 - [ ] line 109 **[low]** (edge-case) — **Date format handling in metadata**: The use of date in the ISO 8601 format is generally robust, but no checks are added to ensure the date is formatted correctly on all systems, which could lead to inconsistent backup metadata display on different locales or systems. _Suggested fix:_ Ensure appropriate date formatting and locale handling or provide guidelines for expected environments when running the script.
 
-## `services/api/prisma/migrations/20260629120000_user_profile_fields/migration.sql` (1)
-- [ ] line 19 **[low]** (correctness) — **Profile picture storage might be insecure or unvalidated**: The `profile_picture` column allows text input which could potentially lead to unsafe storage of URL links or unvalidated data, depending on application behavior. If arbitrary URLs are stored, this could contribute to security issues later if they point to malicious content. _Suggested fix:_ Implement validation for the `profile_picture` field to ensure it only contains valid, safe URLs and enforce application logic to sanitize inputs where necessary.
-
 ## `services/api/src/__tests__/projectApiContract.test.js` (1)
 - [ ] line 198 **[low]** (dead-code) — **Unused Variables in Entity Variables Mapping**: The ENTITY_VARIABLES object maps variable names to potential UI elements, but not all mappings are used in assertions or functionality within the tests, suggesting redundancy. _Suggested fix:_ Review the ENTITY_VARIABLES mapping and remove any unused variables or ensure they are utilized in the test cases to avoid confusion.
 
@@ -58,3 +55,6 @@ _Generated 2026-08-29T17:29:48. These are below the auto-fix bar and were left u
 
 ## `services/api/src/services/clinicalTrials.js` (1)
 - [ ] line 106 **[low]** (bug) — **Caching pageSize greater than 50 is allowed but limited**: The 'pageSize' parameter can be set to values greater than 50, which is acceptable in terms of request setup, but ultimately ignored when fetching data due to the hardcoded cap in the request parameters. _Suggested fix:_ Ensure that the logic accounts for this limitation and makes it clear to users what the maximum allowable page size is for requests.
+
+## `services/api/src/services/scientificHonesty.js` (1)
+- [ ] line 35 **[low]** (correctness) — **Inflexible Quiz Correctness Constraints**: The rigid constraints on quiz content may lead to exclusion of valid educational content based on emergent science, limiting educational value. _Suggested fix:_ Revise the quiz generation logic to allow handling of emerging findings with appropriate disclaimers without excluding them.

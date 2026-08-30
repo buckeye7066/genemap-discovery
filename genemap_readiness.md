@@ -2,13 +2,11 @@
 
 **Verdict: NOT PRODUCTION READY**
 
-- Gates passed: 11/14 evaluated (18 total)
-- Blocking failures: 3 (severity >= high)
+- Gates passed: 12/14 evaluated (18 total)
+- Blocking failures: 2 (severity >= high)
 
 ## Blockers
 
-- **Project builds** [critical] — build command failed
-  - Fix: Fix the compile/build errors.
 - **Test suite passes** [high] — tests were not run
   - Fix: Run the suite and fix failures.
 - **Dependencies are lock-pinned** [high] — no lockfile: java:apps/web/android
@@ -29,7 +27,7 @@
 
 | Gate | Status | Severity | Evidence |
 |---|---|---|---|
-| Project builds | FAIL | critical | build command failed |
+| Project builds | PASS | critical | build command exited 0 |
 | Changes can be build-verified | PASS | critical | build verification available |
 | No secret material committed | PASS | critical | no secret-shaped files tracked |
 | Dependencies are lock-pinned | FAIL | high | no lockfile: java:apps/web/android |

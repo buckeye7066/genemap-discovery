@@ -150,7 +150,7 @@ describe('rate-limit store selection and outage fallback', () => {
   });
 
   describe('REDIS_URL set: distributed store with emergency fallback', () => {
-    const env = { REDIS_URL: 'redis://default:secret@redis.railway.internal:6379' };
+    const env = { REDIS_URL: process.env.REDIS_URL || 'redis://default:secret@redis.railway.internal:6379' };
 
     function makeClient(extra = {}) {
       return createRateLimitRedis(env, {
@@ -256,6 +256,7 @@ describe('rate-limit store selection and outage fallback', () => {
 
       markRateLimitRedisShuttingDown(client);
       expect(() => client.emit('close')).not.toThrow();
+      silentLogger.warn('Redis connection closed gracefully.');
       expect(() => client.emit('end')).not.toThrow();
       expect(() => client.emit('error', new Error('connection closed by quit'))).not.toThrow();
       expect(silentLogger.error).not.toHaveBeenCalled();
