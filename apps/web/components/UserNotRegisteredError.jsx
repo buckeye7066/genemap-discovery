@@ -18,7 +18,7 @@ export default function UserNotRegisteredError() {
         </p>
         <button
           type="button"
-          onClick={() => (navigateToLogin ? navigateToLogin() : (window.location.href = '/'))}
+          onClick={() => (typeof navigateToLogin === 'function' ? navigateToLogin() : (window.location.href = '/'))}
           className="inline-flex items-center justify-center px-4 py-2 rounded-md bg-blue-600 text-white text-sm font-medium hover:bg-blue-700"
         >
           Sign in

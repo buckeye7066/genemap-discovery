@@ -32,7 +32,11 @@ export default function GenerateAppIcon() {
         Style: Renaissance meets modern genomics, clean lines, professional medical/scientific feel, Leonardo da Vinci anatomical study meets DNA research`,
         { size: '1024x1024', quality: 'hd' }
       );
-      setIconUrl(result.url);
+      if (result.url) {
+        setIconUrl(result.url);
+      } else {
+        console.error('No URL returned from API');
+      }
     } catch (error) {
       console.error("Failed to generate icon:", error);
     } finally {

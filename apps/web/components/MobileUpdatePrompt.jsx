@@ -37,7 +37,7 @@ export default function MobileUpdatePrompt() {
     try {
       await downloadAndApplyUpdate(detail.manifest);
     } catch (err) {
-      setError(err?.message || 'Update failed.');
+      setError(err?.message ? err.message : 'Update failed.');
       setState('error');
     }
   }, [detail, state]);

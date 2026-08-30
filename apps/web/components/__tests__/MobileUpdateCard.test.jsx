@@ -144,6 +144,8 @@ describe('MobileUpdateCard', () => {
     expect(sha256).toBeTruthy();
     stubFeed(noChecksum);
     render(<MobileUpdateCard />);
+    const { sha256: checksum } = noChecksum;
+    expect(checksum).toBeFalsy();
     fireEvent.click(screen.getByRole('button', { name: /check for updates/i }));
     expect(await screen.findByText(/missing a valid sha256/i)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /install/i })).not.toBeInTheDocument();
@@ -169,6 +171,7 @@ describe('MobileUpdateCard', () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')));
     render(<MobileUpdateCard />);
     fireEvent.click(screen.getByRole('button', { name: /check for updates/i }));
+    expect(await screen.findByText(/could not reach the update server/i)).toBeInTheDocument();
     expect(await screen.findByText(/could not reach the update server/i)).toBeInTheDocument();
   });
 });

@@ -20,7 +20,10 @@ export default function AiThinkingIndicator({
     const id = setInterval(() => {
       setElapsed(Math.floor((Date.now() - started) / 1000));
     }, 1000);
-    return () => clearInterval(id);
+    return () => {
+      clearInterval(id);
+      setElapsed(0); // Reset elapsed time on unmount
+    };
   }, []);
 
   return (

@@ -45,7 +45,8 @@ function createWindow() {
     let parsed;
     try {
       parsed = new URL(url);
-    } catch {
+    } catch (error) {
+      console.error('Failed to parse URL:', url, error);
       return { action: 'deny' };
     }
     if (parsed.protocol === 'https:' && ALLOWED_EXTERNAL_HOSTS.has(parsed.hostname)) {
@@ -66,8 +67,10 @@ function createWindow() {
       return;
     }
     const allowedDevOrigins = ['http://localhost:5173', 'http://127.0.0.1:5173'];
-    if (parsed.protocol === 'file:') return;
-    if (isDev && allowedDevOrigins.includes(parsed.origin)) return;
+    if (allowedDevOrigins.includes(parsed.origin)) return;
+    if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+      event.preventDefault();
+    }
     event.preventDefault();
   });
 
