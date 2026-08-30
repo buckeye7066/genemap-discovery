@@ -469,6 +469,7 @@ function GeneCard({ gene, rank, isSelected = false, onSelect = null }) {
                       </Badge>
                     </div>
                     <p className="font-medium text-slate-800">{displayClaimValue(claim.claim, 'Claim text not recorded')}</p>
+                    <p className="text-xs text-slate-600">Provenance: {displayClaimValue(claim.provenance, 'Provenance not recorded')}</p>
                     <dl className="grid sm:grid-cols-2 gap-x-4 gap-y-1 mt-2 text-slate-600">
                       <div><dt className="inline font-medium">Source: </dt><dd className="inline">{displayClaimValue(claim.source)}</dd></div>
                       <div><dt className="inline font-medium">Record ID: </dt><dd className="inline">{displayClaimValue(claim.recordId)}</dd></div>
