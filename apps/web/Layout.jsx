@@ -39,42 +39,42 @@ import { isNativeApp } from "./lib/platform";
 
 // "What do I want to learn?"
 const learnNav = [
-  { title: "Learn Genetics", url: createPageUrl("LearnGenetics"), icon: BookOpen },
-  { title: "Topic Explorer", url: createPageUrl("TopicExplorer"), icon: Sparkles },
-  { title: "Learning Path", url: createPageUrl("LearningPath"), icon: GraduationCap },
-  { title: "Take a Quiz", url: createPageUrl("QuizMode"), icon: HelpCircle },
+  { title: 'Learn Genetics', url: createPageUrl('LearnGenetics'), icon: BookOpen },
+  { title: 'Topic Explorer', url: createPageUrl('TopicExplorer'), icon: Sparkles },
+  { title: 'Learning Path', url: createPageUrl('LearningPath'), icon: GraduationCap },
+  { title: 'Take a Quiz', url: createPageUrl('QuizMode'), icon: HelpCircle },
 ];
 
 // "I want to find genes / ask questions."
 // (No "Home" entry — /home only redirects to /dashboard, which already has its
 // own nav item under Research; two links to one page was just confusing.)
 const discoverNav = [
-  { title: "Gene Search", url: createPageUrl("Search"), icon: Search },
+  { title: 'Gene Search', url: createPageUrl('Search'), icon: Search },
 ];
 
 // "I want to analyze data / run research workflows."
 const researchNav = [
-  { title: "Dashboard", url: createPageUrl("Dashboard"), icon: LayoutDashboard },
-  { title: "Research Mode", url: createPageUrl("ResearchMode"), icon: Microscope },
+  { title: 'Dashboard', url: createPageUrl('Dashboard'), icon: LayoutDashboard },
+  { title: 'Research Mode', url: createPageUrl('ResearchMode'), icon: Microscope },
 ];
 
 // "Where is my saved / sensitive data?"
 const myDataNav = [
-  { title: "Search History", url: createPageUrl("History"), icon: History },
+  { title: 'Search History', url: createPageUrl('History'), icon: History },
 ];
 
 const accountNav = [
-  { title: "Profile", url: createPageUrl("Profile"), icon: User },
-  { title: "Account & Privacy", url: createPageUrl("AccountSettings"), icon: ShieldOff },
+  { title: 'Profile', url: createPageUrl('Profile'), icon: User },
+  { title: 'Account & Privacy', url: createPageUrl('AccountSettings'), icon: ShieldOff },
   // Store policy: native builds get no upgrade entry point. The Premium page
   // itself is also gated, so deep links stay compliant too. (isNativeApp() is
   // constant for the app's lifetime, so module scope is safe.)
-  ...(isNativeApp() ? [] : [{ title: "Premium", url: createPageUrl("Premium"), icon: Crown }]),
+  ...(isNativeApp() ? [] : [{ title: 'Premium', url: createPageUrl('Premium'), icon: Crown }]),
   // Institutional licensing is gated on owning a license, not on the admin role
   // (see pages.config.js), so it belongs here — discoverable by actual license
   // owners — not mislabeled as an admin "Teams" tool in the admin section.
-  { title: "Institutional Licensing", url: createPageUrl("InstitutionalAdmin"), icon: Building2 },
-  { title: "Contact Support", url: createPageUrl("ContactSupport"), icon: Mail },
+  { title: 'Institutional Licensing', url: createPageUrl('InstitutionalAdmin'), icon: Building2 },
+  { title: 'Contact Support', url: createPageUrl('ContactSupport'), icon: Mail },
 ];
 
 // Admin-only. `superAdminOnly` items are additionally hidden from plain admins.
@@ -145,7 +145,9 @@ export default function Layout({ children, currentPageName }) {
   // keeps the sidebar uncluttered for the ~99% of users who are not admins.
   // (isAdminUser/isSuperAdmin live in lib/roles.js and are unit-tested.)
   const isAdmin = isAdminUser(user);
-  const visibleAdminNav = adminNav.filter((item) => !item.superAdminOnly || isSuperAdmin(user));
+  const visibleAdminNav = isAdmin
+    ? adminNav.filter((item) => !item.superAdminOnly || isSuperAdmin(user))
+    : [];
 
   // Add PWA meta tags and initialize cross-platform fixes
   useEffect(() => {
@@ -205,7 +207,7 @@ export default function Layout({ children, currentPageName }) {
       if (isNativeApp()) {
         navigator.serviceWorker.getRegistrations()
           .then((registrations) => registrations.forEach((r) => r.unregister()))
-          .catch(() => {});
+          .catch((error) => { console.error('Service worker unregistration failed:', error); });
         if (window.caches?.keys) {
           caches.keys().then((keys) => keys.forEach((k) => caches.delete(k))).catch(() => {});
         }

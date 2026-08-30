@@ -18,7 +18,11 @@ export default function MelissaBanner() {
   }, [user]);
 
   const handleDismiss = () => {
-    localStorage.setItem("melissa_upgrade_banner_dismissed", "true");
+    try {
+      localStorage.setItem("melissa_upgrade_banner_dismissed", "true");
+    } catch (e) {
+      console.error("Failed to dismiss the banner due to localStorage error", e);
+    }
     setShow(false);
   };
 

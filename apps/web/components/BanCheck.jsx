@@ -10,11 +10,16 @@ export default function BanCheck({ children }) {
   const [isBanned, setIsBanned] = useState(false);
 
   useEffect(() => {
-    setIsBanned(user?.banned === true);
+    setIsBanned(user && user.banned === true);
   }, [user]);
 
-  const handleLogout = () => {
-    apiClient.logout();
+  const handleLogout = async () => {
+    try {
+      await apiClient.logout();
+    } catch (error) {
+      console.error("Logout failed", error);
+      alert("Logout failed. Please try again.");
+    }
   };
 
   if (isLoadingAuth) {
