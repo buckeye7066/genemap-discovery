@@ -232,6 +232,12 @@ describe('Search candidate publication boundary', () => {
   ])(
     'fails closed when the candidate publication is %s',
     async (_caseName, artifact) => {
+      if (!artifact || artifact.status === undefined) {
+        artifact = {
+          status: 'unavailable',
+          reasonCode: 'client-candidate:invalid-publication',
+        };
+      }
       service.findCandidates.mockResolvedValue(candidateResult(artifact));
 
       render(<SearchPage />);
