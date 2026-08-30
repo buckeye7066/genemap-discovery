@@ -14,10 +14,6 @@ const HypothesisGenerator = lazy(() => import("../components/research/Hypothesis
 const ProjectManager = lazy(() => import("../components/research/ProjectManager"));
 const SequenceWorkbench = lazy(() => import("../components/research/SequenceWorkbench"));
 
-// Contained fallback for the lazy tab panels. Without a local Suspense
-// boundary these lazy imports suspended up to App.jsx's top-level Suspense,
-// which blanked the WHOLE page with a full-screen spinner while the chunk
-// loaded. Keeping the fallback here confines the loader to the tab content.
 const TabLoading = () => (
   <div className="flex flex-col items-center justify-center py-16 text-slate-500">
     <div className="w-10 h-10 border-4 border-indigo-100 border-t-indigo-600 rounded-full animate-spin mb-3" />
@@ -28,18 +24,9 @@ const TabLoading = () => (
 export default function ResearchMode() {
   const { user } = useAuth();
 
-  // Research Mode is an educational workspace, not a clinical or diagnostic
-  // feature. It must therefore be available to every authenticated learner.
-  // The former gate checked legacy profile values (researcher/phd/
-  // medical_professional) that are not used consistently by the current
-  // education-level picker, locking valid users out with no path forward.
-  // Scientific-claim and data-safety boundaries remain enforced by the tools
-  // themselves; this is only a navigation/accessibility decision.
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-indigo-50 p-4 sm:p-6">
       <div className="max-w-7xl mx-auto">
-        {/* Header */}
         <div className="text-center mb-8">
           <div className="flex justify-center mb-4">
             <div className="w-16 h-16 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-2xl flex items-center justify-center shadow-lg">
@@ -64,7 +51,6 @@ export default function ResearchMode() {
           </div>
         </div>
 
-        {/* Feature Tabs */}
         <Tabs defaultValue="hypothesis" className="space-y-6">
           <TabsList className="grid w-full grid-cols-3 h-auto">
             <TabsTrigger value="hypothesis" className="flex-col gap-1 py-3">

@@ -10,12 +10,6 @@ import LevelPicker from '@/components/education/LevelPicker';
 import { getTopicStatus as getStatus } from '@/lib/learningProgress';
 import { CheckCircle2, Circle, Lock, ArrowRight, GraduationCap, BookOpen, Trophy } from 'lucide-react';
 
-// One-line blurb per catalog category. The topic LIST itself is NOT defined
-// here — it comes from the canonical catalog the API serves (GET
-// /education/topics), the SAME source LearnGenetics and Premium use. Previously
-// this file hardcoded its own 23-topic curriculum, silently dropping 9 of the
-// 32 catalog topics (Gene Regulation, Epigenetics, Phylogenetics, Natural
-// Selection, Synthetic Biology, …). Deriving from the API makes drift impossible.
 const CATEGORY_BLURBS = {
   'DNA Basics': 'The building blocks of genetics',
   'How Genes Work': 'How genetic information flows',
@@ -40,8 +34,6 @@ export default function LearningPath() {
 
   const loadData = async () => {
     try {
-      // Pull the curriculum from the canonical topic catalog (same source as
-      // Learn Genetics) so every catalog topic is included — no hardcoded subset.
       const settled = await Promise.allSettled([
         apiClient.getTopics(),
         apiClient.getLearningProgress(),
@@ -64,7 +56,7 @@ export default function LearningPath() {
       if (progressRes.status === 'fulfilled') {
         setProgress(progressRes.value?.progress || []);
       } else {
-        setProgress([]); // Reset progress if the API call fails
+        setProgress([]);
       }
     } finally {
       setLoading(false);
@@ -78,18 +70,12 @@ export default function LearningPath() {
   const completedCount = completedTopics.length;
   const totalCount = allTopics.length;
   const overallProgress = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
-  // Bridge from educational completion into research/discovery modes. Unlocks
-  // once the learner has mastered enough topics, carrying lesson context
-  // (the most recently mastered topic) into the research search/explorer.
   const RESEARCH_UNLOCK_THRESHOLD = 3;
   const researchUnlocked = completedCount >= RESEARCH_UNLOCK_THRESHOLD;
   const lastMasteredTopic = completedTopics[completedTopics.length - 1];
   const goToResearch = () => {
     const params = new URLSearchParams();
     if (lastMasteredTopic) {
-      // Search.jsx reads `query` (as do the Dashboard and History links).
-      // Emitting `q` here meant the lesson context was silently dropped on
-      // arrival and the search box came up empty.
       params.set('query', lastMasteredTopic.title);
       params.set('from', 'learning-path');
       params.set('topic', lastMasteredTopic.id);

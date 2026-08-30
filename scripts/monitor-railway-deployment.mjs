@@ -213,7 +213,8 @@ const isMain = process.argv[1]
 
 if (isMain) {
   monitorRailwayDeployment().catch((error) => {
-    console.error(`::error title=Railway deployment verification failed::${error.message}`);
+    const sanitizedMessage = `An error occurred during deployment verification.`;
+    console.error(`::error title=Railway deployment verification failed::${sanitizedMessage}`);
     process.exitCode = 1;
   });
 }

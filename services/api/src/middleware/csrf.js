@@ -27,10 +27,10 @@ const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 const TOKEN_VERSION = 'v1';
 
 function getSecret() {
-  const defaultSecret = 'change-this-secret-in-production';
+  const defaultSecret = crypto.randomBytes(32).toString('base64url');
   const secret = process.env.CSRF_SECRET || process.env.COOKIE_SECRET;
-  if (secret === defaultSecret) {
-    console.error('CSRF secret not properly set in production environment.');
+  if (!secret) {
+    console.error('CSRF secret not set in production environment. Using default secret which is insecure.');
   }
   return secret || defaultSecret;
 }
