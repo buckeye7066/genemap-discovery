@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import DnaIcon from "../components/icons/DnaIcon";
-import { Search, AlertCircle, GitCompare, Library, Brain } from "lucide-react";
+import { Search as SearchIcon, AlertCircle, GitCompare, Library, Brain } from "lucide-react";
 
 import SearchForm from "../components/search/SearchForm";
 import GeneResults from "../components/search/GeneResults";
@@ -157,9 +157,6 @@ export default function SearchPage() {
       setSearchResults(base);
       setIsSearchLoading(false);
 
-      // A canonical terminal publication is the result of this request, not an
-      // evidence-free success. Keep it visible and do not enrich, compare, or
-      // persist it as a successful zero-candidate search.
       if (
         isTerminalCandidatePublication(base.publication)
         || isPartialEmptyCandidateResult(base)
@@ -427,7 +424,7 @@ export default function SearchPage() {
               <Card className="shadow-lg border-0 bg-white/80 backdrop-blur-sm">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-lg sm:text-xl">
-                    <Search className="w-5 h-5" />
+                    <SearchIcon className="w-5 h-5" />
                     Search by Phenotype
                   </CardTitle>
                 </CardHeader>
@@ -529,7 +526,7 @@ export default function SearchPage() {
                 className="mb-6 border-slate-300 bg-slate-50 text-slate-800 sm:mb-8"
                 role="status"
               >
-                <Search className="h-4 w-4" aria-hidden="true" />
+                <SearchIcon className="h-4 w-4" aria-hidden="true" />
                 <AlertDescription>
                   <span className="font-semibold">No candidate genes were generated.</span>{' '}
                   The reviewed search completed successfully, but returned no candidate leads.

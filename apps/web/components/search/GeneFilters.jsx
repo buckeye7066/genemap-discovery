@@ -3,7 +3,7 @@ const EVIDENCE_OPTIONS = Object.freeze([
   { value: 'human', label: 'Has human association evidence' },
   { value: 'animal', label: 'Has model-organism evidence' },
   { value: 'computational', label: 'Has computed association evidence' },
-  { value: 'unverified', label: 'Unverified AI leads only' },
+  { value: 'unverified', label: 'Unverified AI leads only (requires evidence)', className: 'font-semibold text-yellow-600' },
 ]);
 
 export default function GeneFilters({
@@ -123,7 +123,7 @@ export default function GeneFilters({
             className="w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-sm"
           >
             {EVIDENCE_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>{option.label}</option>
+              <option key={option.value} value={option.value} className={option.className || ''}>{option.label}</option>
             ))}
           </select>
         </div>
