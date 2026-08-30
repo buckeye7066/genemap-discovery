@@ -8,7 +8,7 @@ const ACCESS_TOKEN_EXPIRY = '15m';
 const REFRESH_TOKEN_EXPIRY = '7d';
 
 if (!JWT_SECRET || !JWT_REFRESH_SECRET) {
-  throw new Error('JWT_SECRET and JWT_REFRESH_SECRET must be set in environment variables');
+  throw new Error('Environment variables JWT_SECRET and JWT_REFRESH_SECRET must be set for JWT operations. Please ensure these are configured correctly.');
 }
 
 export async function hashPassword(password) {
@@ -34,6 +34,7 @@ export function verifyAccessToken(token) {
   try {
     return jwt.verify(token, JWT_SECRET);
   } catch (error) {
+    console.error('Access token verification failed:', error.message);
     return null;
   }
 }

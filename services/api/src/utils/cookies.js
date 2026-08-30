@@ -68,5 +68,9 @@ export function getCsrfCookieOptions({ maxAge } = {}) {
  * fastify-cookie's clearCookie itself and must not be supplied here.
  */
 export function getClearCookieOptions() {
-  return { ...baseOptions() };
+  return {
+    ...baseOptions(),
+    secure: isProd(),
+    sameSite: crossOrigin() ? 'none' : 'lax',
+  };
 }

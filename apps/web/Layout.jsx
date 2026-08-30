@@ -207,13 +207,17 @@ export default function Layout({ children, currentPageName }) {
       if (isNativeApp()) {
         navigator.serviceWorker.getRegistrations()
           .then((registrations) => registrations.forEach((r) => r.unregister()))
-          .catch((error) => { console.error('Service worker unregistration failed:', error); });
+          .catch((error) => {
+            alert('Failed to unregister service workers. Please try again later.');
+            console.error('Service worker unregistration failed:', error);
+          });
         if (window.caches?.keys) {
           caches.keys().then((keys) => keys.forEach((k) => caches.delete(k))).catch(() => {});
         }
       } else {
-        navigator.serviceWorker.register('/service-worker.js').catch(() => {
-          // Service worker registration failed, non-critical
+        navigator.serviceWorker.register('/service-worker.js').catch((error) => {
+          alert('Failed to register service worker. Some features may not work as expected.');
+          console.error('Service worker registration failed:', error);
         });
       }
     }

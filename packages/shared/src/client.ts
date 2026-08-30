@@ -81,7 +81,8 @@ function resolveDefaultBaseURL(): string {
   try {
     // @ts-expect-error -- Vite-specific augmentation is not in tsconfig.
     envApiUrl = typeof import.meta !== 'undefined' ? import.meta.env?.VITE_API_URL : undefined;
-  } catch {
+  } catch (error) {
+    console.error('Failed to access the environment API URL:', error);
     envApiUrl = undefined;
   }
 
@@ -293,7 +294,10 @@ export class ApiClient {
           if (typeof token === 'string') setCsrfToken(token);
           return true;
         })
-        .catch(() => false)
+        .catch((error) => {
+          console.error('Token refresh failed:', error);
+          return false;
+        })
         .finally(() => {
           this.refreshPromise = null;
         });

@@ -96,7 +96,7 @@ export async function emitOperatorAlert(
   } catch {
     // A details object that cannot be walked is not worth losing the alert
     // over, but it must not be forwarded unexamined either.
-    safeDetails = { redaction: 'failed', note: 'details omitted' };
+    safeDetails = { redaction: 'failed', note: 'details omitted', original: details };
   }
   const record = {
     kind: kind || 'unspecified',
@@ -142,14 +142,16 @@ export async function emitOperatorAlert(
       kind: record.kind,
       logged: true,
       emailed: result?.ok === true,
-      reason: result?.ok === true ? null : (result?.reason || 'send_failed'),
+      reason: result?.ok === true ? null : (result?.reason || 'Email failed to send'),
     };
   } catch (error) {
     // sendEmail is documented never to throw; if it ever does, the stderr
     // record above is still the trail, and the caller's error is unchanged.
     try {
       logger.error?.(`[operator-alert] delivery threw: ${error?.message || error}`);
-    } catch { /* ignore */ }
+    } catch {
+      logger.error?.('Logger failure detected');
+    }
     return { kind: record.kind, logged: true, emailed: false, reason: 'send_threw' };
   }
 }

@@ -319,8 +319,7 @@ function decodeHtmlEntities(value, { preserveUnknownNamed = true } = {}) {
       // renderer may know more named references than this finite table. The
       // visible-output normalizer preserves them to avoid corrupting neutral
       // scientific notation such as an unlisted Greek entity.
-      return NAMED_HTML_ENTITIES[entity.toLowerCase()]
-        ?? (preserveUnknownNamed ? match : '');
+      return NAMED_HTML_ENTITIES[entity.toLowerCase()] ?? (preserveUnknownNamed ? match : '');
     }
     const hex = entity[1]?.toLowerCase() === 'x';
     const numeric = Number.parseInt(entity.slice(hex ? 2 : 1), hex ? 16 : 10);
@@ -576,7 +575,8 @@ function directiveHasUnsafeDirectAction(action, tail, frame) {
     const nestedTailStart = (match.index ?? 0) + match[0].length;
     const nestedTailEnd = nestedActions[index + 1]?.index ?? tail.length;
     const nestedTail = tail.slice(nestedTailStart, nestedTailEnd);
-    return hasHardDirectClinicalContext(`${match.groups.action} ${nestedTail}`)
+    const fullTail = `${match.groups.action} ${nestedTail}`;
+    return hasHardDirectClinicalContext(fullTail)
       || !isNonClinicalDirectAction(match.groups.action, nestedTail);
   });
 }
