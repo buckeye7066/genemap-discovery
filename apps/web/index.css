@@ -23,13 +23,30 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
 }
 
 body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
+  min-height: 100dvh;
   overflow-x: hidden;
+}
+
+/* Tailwind's min-h-screen resolves to 100vh. Override it with the dynamic
+   viewport when supported so iOS Safari's expanding toolbar cannot obscure
+   the login and legal surfaces. */
+.min-h-screen {
+  min-height: 100vh;
+  min-height: 100dvh;
 }
 
 @keyframes float {

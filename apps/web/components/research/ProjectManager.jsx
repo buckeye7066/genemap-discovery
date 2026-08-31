@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { apiClient } from "@genemap/shared";
 import { useAuth } from '../../lib/AuthContext';
+import { downloadBlob } from '@/lib/browserFiles';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -545,14 +546,10 @@ export default function ProjectManager() {
                       };
                       
                       const blob = new Blob([JSON.stringify(projectSummary, null, 2)], { type: 'application/json' });
-                      const url = window.URL.createObjectURL(blob);
-                      const a = document.createElement('a');
-                      a.href = url;
-                      a.download = `${selectedProject.title.replace(/\s+/g, '-')}-summary.json`;
-                      document.body.appendChild(a);
-                      a.click();
-                      window.URL.revokeObjectURL(url);
-                      a.remove();
+                      downloadBlob(
+                        blob,
+                        `${selectedProject.title.replace(/\s+/g, '-')}-summary.json`,
+                      );
                     }}
                   >
                     <FileJson className="w-4 h-4" />

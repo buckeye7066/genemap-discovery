@@ -27,6 +27,7 @@ import {
 // deleteUser is available via apiClient.deleteUser
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
+import { downloadBlob } from "@/lib/browserFiles";
 import {
   Select,
   SelectContent,
@@ -131,14 +132,7 @@ export default function UsersLogPage() {
     ].join("\n");
 
     const blob = new Blob([csvContent], { type: "text/csv" });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `users-log-${format(new Date(), "yyyy-MM-dd")}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    window.URL.revokeObjectURL(url);
-    a.remove();
+    downloadBlob(blob, `users-log-${format(new Date(), "yyyy-MM-dd")}.csv`);
   };
 
   const getStats = () => {
