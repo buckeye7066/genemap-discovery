@@ -454,7 +454,9 @@ export default function Dashboard() {
                   {geneSets.slice(0, 6).map((set, index) => (
                     <Link
                       key={set.id || `${set.name}-${index}`}
-                      to={createPageUrl('Search')}
+                      to={`${createPageUrl('Search')}?${set.id
+                        ? `geneSetId=${encodeURIComponent(set.id)}`
+                        : 'view=saved-sets'}`}
                       className="block rounded-lg border border-slate-200 p-3 transition-colors hover:bg-slate-50"
                     >
                       <div className="mb-2 flex items-center justify-between gap-2">
