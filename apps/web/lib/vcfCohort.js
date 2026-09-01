@@ -135,8 +135,10 @@ export async function parseVcfFile(file, { onProgress, maxKeys = MAX_KEYS_PER_FI
     };
   }
   if (typeof file.stream !== 'function') {
-    console.error(`${file.name}: streaming file reads are not supported in this browser`);
-    return { name: file.name, variantCount: 0, variantTypes: {}, keys: new Set(), keyMeta: new Map(), keysTruncated: false, bytes: file.size ?? 0 };
+    // Must throw, never return an empty result: a caller that receives
+    // variantCount: 0 cannot tell "this browser cannot stream" from "this VCF
+    // genuinely has no variants", and would silently report a false negative.
+    throw new Error(`${file.name}: streaming file reads are not supported in this browser`);
   }
 
   let stream = file.stream();

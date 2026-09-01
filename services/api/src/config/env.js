@@ -228,7 +228,9 @@ export function loadEnv(opts = {}) {
       warn(`MEDICAL_DATA_ENCRYPTION_KEY is set but is not 64 hex characters; will be rejected in production (current length: ${env.MEDICAL_DATA_ENCRYPTION_KEY.length})`);
     }
     if (env.STRIPE_SECRET_KEY && env.STRIPE_SECRET_KEY.startsWith('sk_live_') === false) {
-      warn(`STRIPE_SECRET_KEY is not a live-mode key; this is allowed outside production only (current key: ${env.STRIPE_SECRET_KEY})`);
+      // NEVER interpolate the key itself: warn() goes to the production log
+      // stream, and STRIPE_SECRET_KEY is a live credential. Prefix only.
+      warn(`STRIPE_SECRET_KEY is not a live-mode key; this is allowed outside production only (prefix: ${env.STRIPE_SECRET_KEY.slice(0, 8)}...)`);
     }
   }
 

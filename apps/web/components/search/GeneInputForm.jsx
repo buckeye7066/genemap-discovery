@@ -36,10 +36,7 @@ export default function GeneInputForm({ onGenesSubmit, isLoading, initialGenes =
 
   const handleAddGene = () => {
     const newGene = geneInput.trim().toUpperCase();
-    if (!newGene) {
-    alert('Please enter a valid gene symbol.');
-    return;
-  };
+    if (!newGene) return;
     // Functional update (never read the array from a stale closure) + keep
     // focus in the input. Clicking the "+" button moves focus to the button,
     // so without this refocus the user's next keystrokes went nowhere and the
@@ -61,9 +58,12 @@ export default function GeneInputForm({ onGenesSubmit, isLoading, initialGenes =
       if (!prevGenes.includes(geneToRemove)) {
         return prevGenes;
       }
-      const updatedGenes = prevGenes.filter(g => g !== geneToRemove);
-      toast(`${geneToRemove} has been removed from the list.`);
-      return updatedGenes;
+      // No toast() here: there is no toast implementation in this app
+      // (components/ui/toaster.jsx is a no-op stub that exports only <Toaster/>),
+      // so the previous bare `toast(...)` call threw a ReferenceError on every
+      // gene removal. A state updater must stay pure anyway — StrictMode calls
+      // it twice — so any future notification belongs in the click handler.
+      return prevGenes.filter(g => g !== geneToRemove);
     });
   };
 

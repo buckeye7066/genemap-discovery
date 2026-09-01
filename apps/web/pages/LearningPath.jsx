@@ -81,7 +81,7 @@ export default function LearningPath() {
       params.set('topic', lastMasteredTopic.id);
     }
     const qs = params.toString();
-    navigate(`/research-mode${qs ? `?${qs}` : ''}`);
+    navigate(`/search${qs ? `?${qs}` : ''}`);
   };
 
   if (needsOnboarding) {

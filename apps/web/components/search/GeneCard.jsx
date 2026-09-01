@@ -233,7 +233,7 @@ function aiLeadStatus(claim) {
 function provenanceRoleLabel(claim) {
   const role = claimProvenanceRole(claim);
   if (role === 'association_evidence') return 'Association evidence';
-  if (role === 'ai_candidate_lead') return 'AI candidate lead (Unverified)';  // <== Enhanced UI to indicate unverified AI leads
+  if (role === 'ai_candidate_lead') return 'AI candidate lead';
   return 'Identity / ontology / follow-up metadata';
 }
 
