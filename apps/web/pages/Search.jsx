@@ -103,6 +103,34 @@ export default function SearchPage() {
   React.useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const queryParam = urlParams.get('query');
+    const geneSetId = urlParams.get('geneSetId');
+
+    if (geneSetId) {
+      apiClient.getGeneSets()
+        .then((sets) => {
+          const requestedSet = Array.isArray(sets)
+            ? sets.find((set) => set.id === geneSetId)
+            : null;
+          if (requestedSet) {
+            handleLoadGeneSet(requestedSet);
+          } else {
+            setShowSavedSets(true);
+            setError('That saved gene set was not found. Choose another set below.');
+          }
+        })
+        .catch((loadError) => {
+          log.error('Could not open saved gene set:', loadError);
+          setShowSavedSets(true);
+          setError(getErrorMessage(loadError) || 'Could not load saved gene sets.');
+        });
+      return;
+    }
+
+    if (urlParams.get('view') === 'saved-sets') {
+      setShowSavedSets(true);
+      return;
+    }
+
     if (queryParam) {
       setSearchQuery(queryParam);
       const resolved = resolvePublicationUrlReference(queryParam);

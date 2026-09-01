@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Download, Info, Lightbulb, Loader2, Sparkles } from 'lucide-react';
+import { Download, Info, Lightbulb, Loader2, Save, Sparkles } from 'lucide-react';
 import {
   MANDATED_RESEARCH_EXAMPLES,
   isValidAggregateSampleCount,
@@ -121,6 +121,8 @@ export default function HypothesisGenerator() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [hypotheses, setHypotheses] = useState(null);
   const [error, setError] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveMessage, setSaveMessage] = useState('');
 
   const sampleCountIsValid = isValidAggregateSampleCount(sampleCount);
   const modalities = selectedModalities(dataTypes);
@@ -216,6 +218,33 @@ export default function HypothesisGenerator() {
         : (err?.message || 'The structured research request could not be generated. Please try again.'));
     } finally {
       setIsGenerating(false);
+    }
+  };
+
+  const handleSaveAsProject = async () => {
+    if (!hypotheses || !hasReusablePublicationContent(hypotheses.publication)) return;
+
+    setIsSaving(true);
+    setSaveMessage('');
+    try {
+      const focusLabel = describeResearchFocus(hypotheses.focus);
+      const saved = await apiClient.createProject({
+        title: `Research hypothesis — ${focusLabel === 'None' ? hypotheses.objective : focusLabel}`.slice(0, 200),
+        description: 'Saved from GeneMap’s guided research hypothesis generator.',
+        genes: [],
+        metadata: {
+          kind: 'research_hypothesis',
+          hypothesis: hypotheses,
+        },
+      });
+      setSaveMessage(saved?.id
+        ? 'Saved to Research Projects.'
+        : 'Saved to Research Projects.');
+    } catch (saveError) {
+      console.error('Error saving hypothesis project:', saveError);
+      setSaveMessage(saveError?.message || 'Could not save this hypothesis. Please try again.');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -459,14 +488,33 @@ export default function HypothesisGenerator() {
                 </div>
               </div>
               {hasReusablePublicationContent(hypotheses.publication) && (
-                <Button type="button" variant="outline" onClick={handleDownload}>
-                  <Download className="mr-2 h-4 w-4" />
-                  Download Markdown
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleSaveAsProject}
+                    disabled={isSaving}
+                  >
+                    {isSaving
+                      ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      : <Save className="mr-2 h-4 w-4" />}
+                    Save to Projects
+                  </Button>
+                  <Button type="button" variant="outline" onClick={handleDownload}>
+                    <Download className="mr-2 h-4 w-4" />
+                    Download Markdown
+                  </Button>
+                </div>
               )}
             </div>
           </CardHeader>
           <CardContent className="space-y-4 pt-6">
+            {saveMessage && (
+              <Alert className="border-blue-200 bg-blue-50">
+                <Info className="h-4 w-4 text-blue-600" />
+                <AlertDescription>{saveMessage}</AlertDescription>
+              </Alert>
+            )}
             <PublicationState artifact={hypotheses.publication} />
             {hypotheses.analysis && hasReusablePublicationContent(hypotheses.publication) && (
               <>
