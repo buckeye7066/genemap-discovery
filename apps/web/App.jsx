@@ -40,7 +40,10 @@ const AuthenticatedApp = () => {
     return <LoadingSpinner />;
   }
 
-  if (authError) {
+  // auth_required is the normal anonymous/logged-out state. Let it flow to
+  // the unauthenticated router below so first-time visitors reach /login.
+  // Only exceptional authentication failures belong on an error screen.
+  if (authError && authError.type !== 'auth_required') {
     if (authError.type === 'user_not_registered') {
       return <UserNotRegisteredError />;
     }
