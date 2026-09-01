@@ -46,8 +46,8 @@ jobs:
           VITE_API_URL: http://localhost:3000
       - name: Verify publication bundle excludes clinical code
         run: node scripts/verify-publication-bundle.mjs
-      - name: Install Chromium
-        run: pnpm --filter @genemap/web exec playwright install --with-deps chromium
+      - name: Install Chromium and WebKit browser engines
+        run: pnpm --filter @genemap/web exec playwright install --with-deps chromium webkit
       - name: Authenticated publication-boundary browser journeys
         run: pnpm --filter @genemap/web exec playwright test tests/e2e/public-surface.spec.js tests/e2e/publication-boundary.spec.js
         env:

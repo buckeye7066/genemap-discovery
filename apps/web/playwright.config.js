@@ -1,5 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
+const mobileCompatibility = /mobile Safari and Android profiles/;
+
 /**
  * E2E config for the public/auth and publication-boundary surfaces. It can run
  * against a deployed URL or an exact-head `vite preview` artifact. No LLM keys
@@ -36,6 +38,9 @@ export default defineConfig({
     actionTimeout: 10_000,
   },
   projects: [
-    { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
+    { name: 'desktop-chromium', use: { ...devices['Desktop Chrome'] } },
+    { name: 'desktop-webkit', use: { ...devices['Desktop Safari'] } },
+    { name: 'mobile-safari', grep: mobileCompatibility, use: { ...devices['iPhone 13'] } },
+    { name: 'mobile-chrome', grep: mobileCompatibility, use: { ...devices['Pixel 5'] } },
   ],
 });

@@ -95,6 +95,16 @@ const AuthenticatedApp = () => {
                 }
               />
             ))}
+          {publicPageKeys.has('Login') && (
+            <Route
+              path="/Login"
+              element={
+                <ErrorBoundary name="Login">
+                  <Pages.Login />
+                </ErrorBoundary>
+              }
+            />
+          )}
           <Route path="*" element={<Navigate to="/login" replace state={{ from: location }} />} />
         </Routes>
       </Suspense>

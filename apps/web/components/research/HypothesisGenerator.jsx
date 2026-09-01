@@ -21,6 +21,7 @@ import {
   publicationHpoReference,
 } from '@/lib/publicationConceptCatalog';
 import { safeModelMarkdownComponents } from '../shared/safeModelMarkdown';
+import { downloadBlob } from '@/lib/browserFiles';
 import PublicationState, {
   enforcePublicationContentType,
   hasReusablePublicationContent,
@@ -247,14 +248,7 @@ export default function HypothesisGenerator() {
       '',
     ].join('\n');
     const blob = new Blob([header, analysis], { type: 'text/markdown;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = `genemap-hypothesis-${Date.now()}.md`;
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-    URL.revokeObjectURL(url);
+    downloadBlob(blob, `genemap-hypothesis-${Date.now()}.md`);
   };
 
   return (
