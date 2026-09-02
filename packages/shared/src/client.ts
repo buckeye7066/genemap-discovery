@@ -46,13 +46,10 @@ import type { PublicationArtifact } from './publicationStatus.js';
 /**
  * Resolve the API base URL.
  *
- *  1. `VITE_API_URL` if injected by the bundler (Vite production builds bake
- *     the value at build time, so this is preferred when available).
- *  2. `http://localhost:3000` when the SPA is served from localhost.
- *  3. Empty string ("") for production deploys where a reverse proxy /
- *     Vercel rewrite forwards `/api/*` and `/auth/*` to the API. We do NOT
- *     hard-code `/api` here because rewriting that consistently across
- *     every endpoint requires per-deploy proxy config.
+ *  1. Empty string ("") for hosted HTTPS web deployments so authenticated
+ *     requests use same-origin Vercel rewrites and first-party cookies.
+ *  2. `VITE_API_URL` for native, desktop, and other non-hosted runtimes.
+ *  3. `http://localhost:3000` for local development when no URL is injected.
  *
  * Override at runtime by passing a baseURL to the ApiClient constructor.
  */
@@ -87,17 +84,30 @@ function resolveDefaultBaseURL(): string {
   }
 
   const cleanedEnv = sanitizeBaseURL(envApiUrl);
-  if (cleanedEnv) return cleanedEnv;
 
   if (typeof window !== 'undefined') {
-    const host = window.location.hostname;
-    if (host === 'localhost' || host === '127.0.0.1') {
-      return 'http://localhost:3000';
+    const { hostname, protocol } = window.location;
+    const isLocalHost = hostname === 'localhost' || hostname === '127.0.0.1';
+
+    // Native Capacitor and local development run on localhost (sometimes over
+    // HTTPS), where there is no Vercel proxy. Keep using an explicit injected
+    // API URL there, falling back to the local API during development.
+    if (isLocalHost) {
+      return cleanedEnv || 'http://localhost:3000';
     }
-    // Production: assume same-origin proxy. Empty string keeps fetch URLs
-    // relative ("/auth/me") so the browser sends them to the same host.
-    return '';
+
+    // Hosted HTTPS web deployments must use the same-origin Vercel rewrites.
+    // A baked VITE_API_URL that points at Railway would make auth cookies
+    // third-party and browsers can reject them, leaving login apparently
+    // successful but every subsequent authenticated request unauthorized.
+    if (protocol === 'https:') {
+      return '';
+    }
   }
+
+  // Desktop/file runtimes and non-HTTPS custom environments have no hosted
+  // same-origin proxy, so retain the configured direct API endpoint.
+  if (cleanedEnv) return cleanedEnv;
 
   return 'http://localhost:3000';
 }
