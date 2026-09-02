@@ -881,14 +881,14 @@ function sanitizeNarrativeArtifact(result, {
  * no safe block remains, retain the existing fail-closed withheld result.
  */
 function narrativeSafetyBlocks(normalized) {
-  const headings = [...normalized.matchAll(/^#{1,6}\\s+.+$/gmu)];
+  const headings = [...normalized.matchAll(/^#{1,6}\s+.+$/gmu)];
   if (headings.length === 0) {
-    return normalized.split(/\\n\\s*\\n/gu);
+    return normalized.split(/\n\s*\n/gu);
   }
 
   const blocks = [];
   const preamble = normalized.slice(0, headings[0].index).trim();
-  if (preamble) blocks.push(...preamble.split(/\\n\\s*\\n/gu));
+  if (preamble) blocks.push(...preamble.split(/\n\s*\n/gu));
 
   for (let index = 0; index < headings.length; index += 1) {
     const start = headings[index].index;
