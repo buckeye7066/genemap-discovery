@@ -880,6 +880,24 @@ function sanitizeNarrativeArtifact(result, {
  * unsafe blocks, re-scan the combined remainder, and publish it as partial. If
  * no safe block remains, retain the existing fail-closed withheld result.
  */
+function narrativeSafetyBlocks(normalized) {
+  const headings = [...normalized.matchAll(/^#{1,6}\\s+.+$/gmu)];
+  if (headings.length === 0) {
+    return normalized.split(/\\n\\s*\\n/gu);
+  }
+
+  const blocks = [];
+  const preamble = normalized.slice(0, headings[0].index).trim();
+  if (preamble) blocks.push(...preamble.split(/\\n\\s*\\n/gu));
+
+  for (let index = 0; index < headings.length; index += 1) {
+    const start = headings[index].index;
+    const end = headings[index + 1]?.index ?? normalized.length;
+    blocks.push(normalized.slice(start, end));
+  }
+  return blocks;
+}
+
 function sanitizeResearchNarrativeArtifact(result, {
   maxLength,
   correlationId,
@@ -898,8 +916,7 @@ function sanitizeResearchNarrativeArtifact(result, {
     });
   }
 
-  const safeBlocks = normalized
-    .split(/\n\s*\n/gu)
+  const safeBlocks = narrativeSafetyBlocks(normalized)
     .map((block) => block.trim())
     .filter((block) => block && !containsProhibitedClinicalGuidance(block));
   const safeNarrative = safeBlocks.join('\n\n');
