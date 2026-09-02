@@ -15,7 +15,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: production-smoke
+  group: ${{ github.event_name == 'pull_request' && format('production-smoke-pr-{0}', github.event.pull_request.number) || 'production-smoke-prod' }}
   cancel-in-progress: true
 
 env:
