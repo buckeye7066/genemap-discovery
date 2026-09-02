@@ -43,10 +43,8 @@ describe('genetics education publication boundary', () => {
     const raw = [
       '## The Big Picture',
       'DNA stores hereditary information in cells.',
-      '',
       '## Unsafe Provider Paragraph',
       'Take aspirin.',
-      '',
       '## Key Takeaways',
       '- DNA can be copied before cell division.',
     ].join('\n');
@@ -59,6 +57,7 @@ describe('genetics education publication boundary', () => {
     });
     expect(result.content).toContain('DNA stores hereditary information');
     expect(result.content).toContain('DNA can be copied');
+    expect(result.content).not.toContain('Unsafe Provider Paragraph');
     expect(result.content).not.toContain('aspirin');
     expect(result.limitations).not.toHaveLength(0);
   });
