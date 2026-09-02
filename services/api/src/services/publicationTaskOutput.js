@@ -873,6 +873,68 @@ function sanitizeNarrativeArtifact(result, {
   });
 }
 
+/**
+ * Research narratives are long, multi-section provider outputs. A single unsafe
+ * paragraph must never leak, but it also should not erase unrelated safe
+ * hypotheses and study-design content. Remove complete unsafe blocks, re-scan
+ * the combined remainder, and publish it as partial. If no safe block remains,
+ * retain the existing fail-closed withheld result.
+ */
+function sanitizeResearchNarrativeArtifact(result, {
+  maxLength,
+  correlationId,
+  emptyReasonCode,
+}) {
+  if (typeof result !== 'string' || !containsProhibitedClinicalGuidance(result)) {
+    return sanitizeNarrativeArtifact(result, { maxLength, correlationId, emptyReasonCode });
+  }
+
+  const normalized = normalizeNarrativeFormatting(result);
+  if (!normalized) {
+    return createPublicationArtifact({
+      status: PUBLICATION_STATUSES.UNAVAILABLE,
+      reasonCode: emptyReasonCode,
+      correlationId,
+    });
+  }
+
+  const safeBlocks = normalized
+    .split(/\n\s*\n/gu)
+    .map((block) => block.trim())
+    .filter((block) => block && !containsProhibitedClinicalGuidance(block));
+  const safeNarrative = safeBlocks.join('\n\n');
+
+  if (!safeNarrative || containsProhibitedClinicalGuidance(safeNarrative)) {
+    return createPublicationArtifact({
+      status: PUBLICATION_STATUSES.WITHHELD,
+      reasonCode: 'clinical_boundary',
+      correlationId,
+    });
+  }
+
+  const cleaned = safeNarrative.slice(0, maxLength);
+  if (!cleaned || containsProhibitedClinicalGuidance(cleaned)) {
+    return createPublicationArtifact({
+      status: PUBLICATION_STATUSES.WITHHELD,
+      reasonCode: 'clinical_boundary',
+      correlationId,
+    });
+  }
+
+  return createPublicationArtifact({
+    status: PUBLICATION_STATUSES.PARTIAL,
+    content: cleaned,
+    reasonCode: 'clinical_sections_withheld',
+    correlationId,
+    limitations: [
+      'One or more provider sections crossed the non-clinical publication boundary and were omitted.',
+      ...(safeNarrative.length > maxLength
+        ? ['The remaining safe response exceeded the local publication length limit and was truncated.']
+        : []),
+    ],
+  });
+}
+
 function parseJsonCandidate(result) {
   if (isPlainObject(result) || Array.isArray(result)) return result;
   if (typeof result !== 'string') return null;
@@ -1354,10 +1416,15 @@ export function sanitizePublicationArtifact(publicationTask, taskInput, result, 
     });
   }
 
-  const artifact = sanitizeNarrativeArtifact(provider.text, {
-    ...taskConfig,
-    correlationId,
-  });
+  const artifact = RESEARCH_TASKS.has(publicationTask)
+    ? sanitizeResearchNarrativeArtifact(provider.text, {
+      ...taskConfig,
+      correlationId,
+    })
+    : sanitizeNarrativeArtifact(provider.text, {
+      ...taskConfig,
+      correlationId,
+    });
   if (provider.completion !== 'truncated'
     || ![PUBLICATION_STATUSES.AVAILABLE, PUBLICATION_STATUSES.PARTIAL].includes(artifact.status)) {
     return artifact;
