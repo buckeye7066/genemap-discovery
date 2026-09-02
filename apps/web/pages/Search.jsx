@@ -380,6 +380,8 @@ export default function SearchPage() {
   };
 
   const handleLoadGeneSet = (geneSet) => {
+    // Clear any prior errors when a new set is loaded to avoid stale alerts
+    setError(null);
     setUserInputGenes(geneSet.genes);
     setShowSavedSets(false);
     if (searchResults) {
@@ -644,12 +646,20 @@ export default function SearchPage() {
         )}
 
         {showSavedSets && (
-          <Suspense fallback={<p className="text-sm text-slate-500">Loading saved sets…</p>}>
-            <SavedGeneSets
-              onLoad={handleLoadGeneSet}
-              onClose={() => setShowSavedSets(false)}
-            />
-          </Suspense>
+          <>
+            {error && (
+              <Alert variant="destructive" className="mb-4">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+            <Suspense fallback={<p className="text-sm text-slate-500">Loading saved sets…</p>}>
+              <SavedGeneSets
+                onLoad={handleLoadGeneSet}
+                onClose={() => setShowSavedSets(false)}
+              />
+            </Suspense>
+          </>
         )}
 
         {selectedGenes.length > 0 && !showComparison && !showSavedSets && (
