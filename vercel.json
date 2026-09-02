@@ -6,6 +6,50 @@
   "outputDirectory": "apps/web/dist",
   "rewrites": [
     {
+      "source": "/auth/:path*",
+      "destination": "https://genemap-api-production.up.railway.app/auth/:path*"
+    },
+    {
+      "source": "/billing/:path*",
+      "destination": "https://genemap-api-production.up.railway.app/billing/:path*"
+    },
+    {
+      "source": "/education/:path*",
+      "destination": "https://genemap-api-production.up.railway.app/education/:path*"
+    },
+    {
+      "source": "/llm/:path*",
+      "destination": "https://genemap-api-production.up.railway.app/llm/:path*"
+    },
+    {
+      "source": "/genomics/:path*",
+      "destination": "https://genemap-api-production.up.railway.app/genomics/:path*"
+    },
+    {
+      "source": "/entities/:path*",
+      "destination": "https://genemap-api-production.up.railway.app/entities/:path*"
+    },
+    {
+      "source": "/admin/:path*",
+      "destination": "https://genemap-api-production.up.railway.app/admin/:path*"
+    },
+    {
+      "source": "/account/:path*",
+      "destination": "https://genemap-api-production.up.railway.app/account/:path*"
+    },
+    {
+      "source": "/health/:path*",
+      "destination": "https://genemap-api-production.up.railway.app/health/:path*"
+    },
+    {
+      "source": "/healthz",
+      "destination": "https://genemap-api-production.up.railway.app/healthz"
+    },
+    {
+      "source": "/readyz",
+      "destination": "https://genemap-api-production.up.railway.app/readyz"
+    },
+    {
       "source": "/((?!assets/|icons/|\\.well-known/).*)",
       "destination": "/index.html"
     }
