@@ -363,6 +363,30 @@ describe('sanitizePublicationTaskOutput', () => {
     expect(result).not.toContain('//another.example');
   });
 
+  it('omits unsafe research sections while preserving unrelated safe hypotheses', () => {
+    const mixed = [
+      '# Aggregate hypothesis',
+      'Variant burden may differ between the two deidentified cohorts.',
+      '',
+      'The patient should begin treatment and take 5 mg daily.',
+      '',
+      '## Study design',
+      'The analysis would compare aggregate variant counts with prespecified quality-control thresholds.',
+    ].join('\n');
+    const publication = sanitizePublicationTaskOutput(RESEARCH_TASK, {}, mixed);
+    const content = expectPublication(publication, {
+      status: 'partial',
+      reasonCode: 'clinical_sections_withheld',
+    });
+
+    expect(content).toContain('Aggregate hypothesis');
+    expect(content).toContain('Study design');
+    expect(content).not.toContain('patient');
+    expect(content).not.toContain('5 mg');
+    expect(publication.limitations).toHaveLength(1);
+    expect(__test.containsProhibitedClinicalGuidance(content)).toBe(false);
+  });
+
   it('withholds clinical guidance from research and learning publication tasks', () => {
     const clinical = 'The patient should begin treatment and take 5 mg daily.';
     for (const publication of [
