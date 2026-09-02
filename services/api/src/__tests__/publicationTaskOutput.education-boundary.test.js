@@ -39,6 +39,30 @@ describe('genetics education publication boundary', () => {
     expect(result).not.toContain('<img');
   });
 
+  it('preserves safe lesson sections while withholding a clinical paragraph', () => {
+    const raw = [
+      '## The Big Picture',
+      'DNA stores hereditary information in cells.',
+      '',
+      '## Unsafe Provider Paragraph',
+      'Take aspirin.',
+      '',
+      '## Key Takeaways',
+      '- DNA can be copied before cell division.',
+    ].join('\n');
+
+    const result = sanitizeEducation(raw);
+
+    expect(result).toMatchObject({
+      status: 'partial',
+      reasonCode: 'clinical_sections_withheld',
+    });
+    expect(result.content).toContain('DNA stores hereditary information');
+    expect(result.content).toContain('DNA can be copied');
+    expect(result.content).not.toContain('aspirin');
+    expect(result.limitations).not.toHaveLength(0);
+  });
+
   it.each([
     'Take aspirin.',
     'Aspirin is recommended.',
