@@ -47,6 +47,15 @@ async function closeDisposableAccount(page, credentials, registrationAttempted) 
   if (!response.ok()) {
     throw new Error(`Disposable account cleanup failed: ${response.status()} ${await response.text()}`);
   }
+
+  const afterDelete = await page.request.get('/auth/me');
+  if (afterDelete.status() !== 401) {
+    throw new Error(`Deleted account retained a session: ${afterDelete.status()} ${await afterDelete.text()}`);
+  }
+  const deletedLogin = await page.request.post('/auth/login', { data: credentials });
+  if (deletedLogin.status() !== 401) {
+    throw new Error(`Deleted account could still sign in: ${deletedLogin.status()} ${await deletedLogin.text()}`);
+  }
 }
 
 test('complete authenticated production journey persists data across logout and login', async ({ page }, testInfo) => {
@@ -147,12 +156,18 @@ test('complete authenticated production journey persists data across logout and 
 
     await page.goto('/search');
     await expect(page.getByRole('heading', { name: 'Phenotype → Gene Discovery', exact: true })).toBeVisible();
-    const candidatePromise = page.waitForResponse(
-      (response) => response.url().includes('/llm/invoke') && response.request().method() === 'POST',
-      { timeout: 120_000 },
-    );
-    await page.getByRole('button', { name: 'short stature', exact: true }).click();
-    const candidateResponse = await candidatePromise;
+    const [candidateResponse] = await Promise.all([
+      page.waitForResponse(
+        (response) => response.url().includes('/llm/invoke') && response.request().method() === 'POST',
+        { timeout: 120_000 },
+      ),
+      page
+        .getByRole('heading', { name: 'Start Your Discovery', exact: true })
+        .locator('..')
+        .locator('..')
+        .getByRole('button', { name: 'short stature', exact: true })
+        .click(),
+    ]);
     expect(candidateResponse.status(), await candidateResponse.text()).toBe(200);
     const candidate = await candidateResponse.json();
     expect(['available', 'partial']).toContain(candidate?.publication?.status);
@@ -197,7 +212,7 @@ test('complete authenticated production journey persists data across logout and 
     expect(typeof hypothesis?.publication?.content).toBe('string');
     expect(hypothesis.publication.content.trim().length).toBeGreaterThan(50);
 
-    await expect(page.getByRole('heading', { name: 'Generated Research Hypotheses', exact: true })).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText('Generated Research Hypotheses', { exact: true })).toBeVisible({ timeout: 30_000 });
     const projectPromise = page.waitForResponse(
       (response) => response.url().includes('/entities/projects') && response.request().method() === 'POST',
       { timeout: 30_000 },
