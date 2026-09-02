@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const provider = vi.hoisted(() => ({
   generateExplanation: vi.fn(),
-  generateImage: vi.fn(),
   generateQuiz: vi.fn(),
   generateChatResponse: vi.fn(),
 }));
@@ -36,7 +35,6 @@ describe('education model-publication recovery switch', () => {
 
   it.each([
     ['/education/explain', { topic, level: 'undergraduate' }],
-    ['/education/image', { topic, level: 'undergraduate' }],
     ['/education/quiz', { topic, level: 'undergraduate', questionCount: 3 }],
     ['/education/chat', {
       publicationTask: 'genetics_education',
@@ -72,7 +70,6 @@ describe('education model-publication recovery switch', () => {
     expect(body.details.publication.correlationId).toMatch(/^[A-Za-z0-9]/u);
     expect(prisma.learningSession.count).not.toHaveBeenCalled();
     expect(provider.generateExplanation).not.toHaveBeenCalled();
-    expect(provider.generateImage).not.toHaveBeenCalled();
     expect(provider.generateQuiz).not.toHaveBeenCalled();
     expect(provider.generateChatResponse).not.toHaveBeenCalled();
   });

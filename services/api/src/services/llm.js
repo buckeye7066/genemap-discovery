@@ -294,17 +294,6 @@ export async function generateChatResponse(
   return includeMetadata ? normalized : normalized.text;
 }
 
-export async function generateImage(
-  prompt,
-  { size = '1024x1024', quality = 'standard', timeoutMs = DEFAULT_TIMEOUT_MS, allowGenomic = false } = {}
-) {
-  assertProviderPayloadAllowed(prompt, allowGenomic);
-  return withProviderRetry(
-    () => openaiService.generateImage(prompt, { size, quality, timeoutMs }),
-    { provider: 'openai' }
-  );
-}
-
 export async function generateQuiz(prompt, { provider, model, maxTokens = 3000, timeoutMs = DEFAULT_TIMEOUT_MS, allowGenomic = false, includeMetadata = false } = {}) {
   assertProviderPayloadAllowed(prompt, allowGenomic);
   const protectedPrompt = withHonestyPrefix(prompt, QUIZ_HONESTY_NOTE);

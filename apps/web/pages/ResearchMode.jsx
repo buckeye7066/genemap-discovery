@@ -46,7 +46,7 @@ export default function ResearchMode() {
             </Badge>
             <Badge variant="outline" className="border-green-500 text-green-700">
               <TrendingUp className="w-3 h-3 mr-1" />
-              Available to learners
+              Premium workspace
             </Badge>
           </div>
         </div>

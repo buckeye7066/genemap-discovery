@@ -50,6 +50,7 @@ describe('grantOrExtendFreePeriod', () => {
     const existingEnd = new Date(Date.now() + 3 * DAY);
     prisma._store.subscription.push({
       id: 'existing', userId: 'u1', status: 'active', planType: 'admin_granted',
+      stripeCustomerId: null, stripeSubscriptionId: null,
       currentPeriodEnd: existingEnd, createdAt: new Date(),
     });
 
@@ -86,5 +87,30 @@ describe('grantOrExtendFreePeriod', () => {
     expect(u1Subs).toHaveLength(1);
     expect(u2Subs).toHaveLength(1);
     expect(u1Subs[0].id).not.toBe(u2Subs[0].id);
+  });
+
+  it('does not mistake a Stripe-linked legacy row for a valid complimentary entitlement', async () => {
+    prisma._store.subscription.push({
+      id: 'tainted-comp',
+      userId: 'u1',
+      status: 'active',
+      planType: 'admin_granted',
+      stripeCustomerId: 'cus_legacy',
+      stripeSubscriptionId: 'sub_legacy',
+      currentPeriodEnd: new Date(Date.now() + 5 * DAY),
+      createdAt: new Date(),
+    });
+
+    await grantOrExtendFreePeriod(prisma, 'u1', FREE_PERIOD_DAYS.week);
+
+    const grants = prisma._store.subscription.filter((row) => (
+      row.userId === 'u1' && row.planType === 'admin_granted'
+    ));
+    expect(grants).toHaveLength(2);
+    expect(grants.some((row) => (
+      row.id !== 'tainted-comp'
+      && row.stripeCustomerId == null
+      && row.stripeSubscriptionId == null
+    ))).toBe(true);
   });
 });

@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "node --watch --env-file=.env src/index.js",
-    "start": "node --env-file=.env src/index.js",
+    "dev": "node --watch --env-file-if-exists=.env src/index.js",
+    "start": "node --env-file-if-exists=.env src/index.js",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
@@ -26,7 +26,6 @@
     "@fastify/rate-limit": "^10.1.1",
     "@genemap/shared": "workspace:*",
     "@prisma/client": "^6.19.3",
-    "@sentry/node": "^10.70.0",
     "bcrypt": "^5.1.1",
     "fastify": "^5.12.1",
     "ioredis": "^5.11.1",

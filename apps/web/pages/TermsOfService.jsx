@@ -6,7 +6,7 @@ import { FileText, ArrowLeft } from "lucide-react";
  * Terms for the public education/research product. These terms mirror the
  * publication boundary enforced in both the web app and API.
  */
-const UPDATED = "August 6, 2026";
+const UPDATED = "September 2, 2026";
 const CONTACT = "support@axiombiolabs.org";
 
 function Section({ title, children }) {
@@ -58,20 +58,20 @@ export default function TermsOfService() {
             </p>
           </Section>
 
-          <Section title="Publication boundary">
+          <Section title="Health-data and assistant boundary">
             <p>
-              The public route graph does not provide personal medical-record upload, personal VCF analysis,
-              diagnosis, individualized risk interpretation, clinical decision support, pharmacogenomic
-              recommendations, medication selection, or dosing. Profile, project, annotation, and support
-              fields can still accept free text. You must not submit personal medical records, personal genomic
-              files, protected health information, or patient-identifying information in any field, or try to
-              use or bypass GeneMap for clinical purposes.
+              Premium users may choose to process their own lab documents in the browser and save the extracted,
+              structured result for educational assistant use. Storage and model analysis require separate
+              consent. This functionality does not provide diagnosis, individualized risk determination,
+              clinical decision support, pharmacogenomic recommendations, medication selection, or dosing.
+              Do not use or bypass GeneMap for clinical purposes.
             </p>
           </Section>
 
           <Section title="Acceptable use">
             <ul className="list-disc ml-5 space-y-1">
-              <li>Do not submit personal medical, genomic, or patient-identifying information.</li>
+              <li>Submit only your own information or information you have explicit authority to process.</li>
+              <li>Do not submit data that must be handled under a business associate agreement unless GeneMap has executed the required agreement.</li>
               <li>Do not use the service for unlawful purposes or attempt to breach or bypass its security.</li>
               <li>Do not misrepresent AI-generated content as validated scientific or clinical fact.</li>
             </ul>
@@ -79,20 +79,21 @@ export default function TermsOfService() {
 
           <Section title="Subscriptions & billing">
             <p>
-              Paid plans are billed through Stripe on a recurring basis until canceled. You can manage or
-              cancel your subscription from your account; access continues through the end of the paid period.
+              Paid plans are billed through Stripe on a recurring basis until canceled. Personal subscriptions
+              can be managed through the Stripe portal linked from the Premium page. The institutional
+              dashboard assigns already-purchased seats but does not change capacity, tier, or billing; use the
+              support form for those requests. Access is derived from the current server-side Stripe status.
               Fees are non-refundable except where required by law.
             </p>
           </Section>
 
           <Section title="Your content">
             <p>
-              You retain ownership of research prompts, notes, and other content you submit. You grant us a
+              You retain ownership of research prompts, notes, health content, and other content you submit. You grant us a
               limited license to process it solely to provide the service, including sending bounded task
-              inputs to the configured AI provider and identifiers or search terms to the scientific lookup
-              services described in the Privacy Policy. You must have the right to submit that content, and
-              you must not submit personal medical, genomic, protected-health, or patient-identifying
-              information. See our{" "}
+              inputs—and, only with separate analysis consent, bounded profile and saved health context—to the
+              configured AI provider, and identifiers or search terms to the scientific lookup services
+              described in the Privacy Policy. You must have the right to submit that content. See our{" "}
               <Link to="/privacypolicy" className="text-blue-600 hover:underline">Privacy Policy</Link>.
             </p>
           </Section>
@@ -125,4 +126,3 @@ export default function TermsOfService() {
     </div>
   );
 }
-

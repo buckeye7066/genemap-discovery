@@ -9,6 +9,9 @@ describe('published agent boundary', () => {
       expect(config).toContain(
         "'@genemap/shared': path.resolve(__dirname, '../../packages/shared/src/client.ts')",
       );
+      expect(config).toContain(
+        "'@genemap/shared/associationClaim': path.resolve(__dirname, '../../packages/shared/src/associationClaim.ts')",
+      );
       expect(config).not.toContain(
         "'@genemap/shared': path.resolve(__dirname, '../../packages/shared/src/index.ts')",
       );

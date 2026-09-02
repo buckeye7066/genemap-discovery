@@ -1,5 +1,11 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
-import { buildTestApp, createPrismaMock, authCookie, seedAuthUser } from './setup.js';
+import {
+  buildTestApp,
+  createPrismaMock,
+  authCookie,
+  seedAuthUser,
+  seedPremiumSubscription,
+} from './setup.js';
 
 let app;
 let prisma;
@@ -18,6 +24,8 @@ beforeEach(() => {
   prisma._reset();
   seedAuthUser(prisma, OWNER);
   seedAuthUser(prisma, MEMBER);
+  seedPremiumSubscription(prisma, OWNER.userId);
+  seedPremiumSubscription(prisma, MEMBER.userId);
 });
 
 const ownerCookie = () => authCookie(OWNER, prisma);
@@ -81,14 +89,96 @@ describe('Project collaborator role enforcement', () => {
 });
 
 describe('Institutional license seat safety', () => {
-  function seedLicense({ maxSeats = 1 } = {}) {
+  function seedLicense({
+    id = 'lic-1',
+    maxSeats = 1,
+    status = 'active',
+    startDate,
+    endDate,
+    stripeCustomerId = 'cus_institution_owner',
+  } = {}) {
+    const now = Date.now();
     const license = {
-      id: 'lic-1', maxSeats, assignedSeats: 0, adminUsers: [OWNER.userId],
-      status: 'active', createdAt: new Date(), updatedAt: new Date(),
+      id, maxSeats, assignedSeats: 0, adminUsers: [OWNER.userId],
+      organizationName: 'Test Institute', contactEmail: 'billing@example.com', licenseType: 'team',
+      status, startDate: startDate || new Date(now - 60_000),
+      endDate: endDate || new Date(now + 86_400_000), renewalDate: new Date(now + 86_400_000),
+      autoRenew: true, stripeCustomerId, stripeSubscriptionId: 'sub_institution_owner',
+      pricing: { monthly: 7.99 },
+      createdAt: new Date(), updatedAt: new Date(),
     };
     prisma._store.institutionalLicense.push(license);
     return license;
   }
+
+  it('returns only the owner-facing license projection and withholds Stripe/internal ownership fields', async () => {
+    const license = seedLicense({ maxSeats: 5 });
+    license.assignments = [{
+      id: 'seat-safe', userEmail: 'seat@example.com', status: 'active',
+      department: 'Research', assignedBy: OWNER.userId, invitationSent: false,
+      createdAt: new Date(), updatedAt: new Date(),
+    }];
+    license.usageLogs = [{
+      id: 'usage-safe', userEmail: 'seat@example.com', action: 'seat_assigned',
+      metadata: { assignedBy: OWNER.userId }, createdAt: new Date(),
+    }];
+
+    const res = await app.inject({
+      method: 'GET', url: '/entities/licenses', headers: { cookie: ownerCookie() },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const [returned] = JSON.parse(res.body).licenses;
+    expect(returned).toMatchObject({
+      id: license.id,
+      organizationName: 'Test Institute',
+      canManageBilling: true,
+      assignments: [expect.objectContaining({ userEmail: 'seat@example.com' })],
+      usageLogs: [expect.objectContaining({ action: 'seat_assigned' })],
+    });
+    expect(returned).not.toHaveProperty('adminUsers');
+    expect(returned).not.toHaveProperty('stripeCustomerId');
+    expect(returned).not.toHaveProperty('stripeSubscriptionId');
+    expect(returned).not.toHaveProperty('pricing');
+    expect(returned.assignments[0]).not.toHaveProperty('assignedBy');
+    expect(returned.usageLogs[0]).not.toHaveProperty('metadata');
+  });
+
+  it('allows a historical owner to view renewal state without restoring the expired tier', async () => {
+    seedLicense({ status: 'expired', endDate: new Date(Date.now() - 1_000) });
+
+    const res = await app.inject({
+      method: 'GET', url: '/entities/licenses', headers: { cookie: ownerCookie() },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body).licenses).toHaveLength(1);
+  });
+
+  it('does not grant organization management to an assigned institutional seat', async () => {
+    const license = seedLicense({ maxSeats: 5 });
+    prisma._store.licenseAssignment.push({
+      id: 'member-seat',
+      licenseId: license.id,
+      userEmail: MEMBER.email,
+      status: 'active',
+      license,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/entities/licenses',
+      headers: { cookie: authCookie(MEMBER, prisma) },
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(JSON.parse(res.body)).toMatchObject({
+      code: 'ENTITLEMENT_REQUIRED',
+      details: { entitlement: { feature: 'institution.manage', currentTier: 'institutional' } },
+    });
+  });
 
   it('assigns a seat, then rejects a duplicate active seat for the same user', async () => {
     seedLicense({ maxSeats: 5 });
@@ -154,6 +244,100 @@ describe('Institutional license seat safety', () => {
       headers: { cookie: authCookie(MEMBER, prisma) }, payload: { userEmail: 'x@example.com' },
     });
     expect(res.statusCode).toBe(403);
+  });
+
+  it('cannot assign seats to an expired target license through another valid administrator entitlement', async () => {
+    const now = Date.now();
+    seedLicense({ endDate: new Date(now - 1_000) });
+    seedLicense({ id: 'lic-current', maxSeats: 5 });
+
+    const res = await app.inject({
+      method: 'POST', url: '/entities/licenses/lic-1/assign',
+      headers: { cookie: ownerCookie() }, payload: { userEmail: 'late@example.com' },
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body).error).toMatch(/active, current license/i);
+    expect(prisma._store.licenseAssignment).toHaveLength(0);
+    expect(prisma._store.institutionalLicense.find((row) => row.id === 'lic-1').assignedSeats).toBe(0);
+  });
+
+  it('assigns a bulk seat request atomically and normalizes every email', async () => {
+    seedLicense({ maxSeats: 3 });
+
+    const res = await app.inject({
+      method: 'POST', url: '/entities/licenses/lic-1/assign-bulk',
+      headers: { cookie: ownerCookie() },
+      payload: {
+        userEmails: [' First@Example.com ', 'second@example.com'],
+        department: 'Research',
+      },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body).assignments.map((row) => row.userEmail)).toEqual([
+      'first@example.com',
+      'second@example.com',
+    ]);
+    expect(prisma._store.licenseAssignment).toHaveLength(2);
+    expect(prisma._store.licenseUsageLog).toHaveLength(2);
+    expect(prisma._store.institutionalLicense[0].assignedSeats).toBe(2);
+  });
+
+  it('leaves the full batch unapplied when capacity is insufficient', async () => {
+    seedLicense({ maxSeats: 1 });
+
+    const res = await app.inject({
+      method: 'POST', url: '/entities/licenses/lic-1/assign-bulk',
+      headers: { cookie: ownerCookie() },
+      payload: { userEmails: ['one@example.com', 'two@example.com'] },
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(prisma._store.licenseAssignment).toHaveLength(0);
+    expect(prisma._store.licenseUsageLog).toHaveLength(0);
+    expect(prisma._store.institutionalLicense[0].assignedSeats).toBe(0);
+  });
+
+  it('leaves the new addresses unapplied when any address already has a seat', async () => {
+    seedLicense({ maxSeats: 4 });
+    const first = await app.inject({
+      method: 'POST', url: '/entities/licenses/lic-1/assign',
+      headers: { cookie: ownerCookie() }, payload: { userEmail: 'existing@example.com' },
+    });
+    expect(first.statusCode).toBe(200);
+
+    const res = await app.inject({
+      method: 'POST', url: '/entities/licenses/lic-1/assign-bulk',
+      headers: { cookie: ownerCookie() },
+      payload: { userEmails: ['existing@example.com', 'new@example.com'] },
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(prisma._store.licenseAssignment.map((row) => row.userEmail)).toEqual([
+      'existing@example.com',
+    ]);
+    expect(prisma._store.institutionalLicense[0].assignedSeats).toBe(1);
+  });
+
+  it('rejects invalid or repeated email addresses before reserving seats', async () => {
+    seedLicense({ maxSeats: 4 });
+
+    const invalid = await app.inject({
+      method: 'POST', url: '/entities/licenses/lic-1/assign-bulk',
+      headers: { cookie: ownerCookie() },
+      payload: { userEmails: ['not-an-email', 'valid@example.com'] },
+    });
+    expect(invalid.statusCode).toBe(400);
+
+    const duplicate = await app.inject({
+      method: 'POST', url: '/entities/licenses/lic-1/assign-bulk',
+      headers: { cookie: ownerCookie() },
+      payload: { userEmails: ['same@example.com', 'Same@Example.com'] },
+    });
+    expect(duplicate.statusCode).toBe(400);
+    expect(prisma._store.licenseAssignment).toHaveLength(0);
+    expect(prisma._store.institutionalLicense[0].assignedSeats).toBe(0);
   });
 });
 

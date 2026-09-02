@@ -8,17 +8,18 @@ import { routeLabel } from '../middleware/errorHandler.js';
 // ─── routeLabel (no user values in structured logs) ──────────────────────────
 describe('routeLabel', () => {
   it('prefers the route pattern, which carries no user values', () => {
-    const req = { routeOptions: { url: '/genomics/gene/:symbol' }, url: '/genomics/gene/BRCA1?token=secret' };
-    expect(routeLabel(req)).toBe('/genomics/gene/:symbol');
+    const req = { routeOptions: { url: '/genomics/phenotype/search' }, url: '/genomics/phenotype/search?q=seizure&token=secret' };
+    expect(routeLabel(req)).toBe('/genomics/phenotype/search');
   });
 
   it('strips the query string when no route pattern is available (e.g. 404s)', () => {
     // request.routerPath was removed in Fastify v5; without routeOptions.url the
     // old code logged the FULL url incl. query — which can be PII on a medical app.
-    const req = { url: '/genomics/variant/search?q=patient%20phenotype&token=abc' };
-    expect(routeLabel(req)).toBe('/genomics/variant/search');
+    const req = { url: '/genomics/phenotype/search?q=private-patient-value&token=abc' };
+    expect(routeLabel(req)).toBe('/genomics/phenotype/search');
     expect(routeLabel(req)).not.toContain('?');
-    expect(routeLabel(req)).not.toContain('phenotype');
+    expect(routeLabel(req)).not.toContain('private-patient-value');
+    expect(routeLabel(req)).not.toContain('abc');
   });
 
   it('is safe when url is missing', () => {
@@ -126,7 +127,6 @@ vi.mock('../services/llm.js', async (importOriginal) => {
     ...actual,
     generateExplanation: vi.fn(async (p, o) => `EXPL(${p.length}):${o.maxTokens}`),
     generateChatResponse: vi.fn(async (m, o) => `CHAT(${m.length}):${o.maxTokens}`),
-    generateImage: vi.fn(async (_p, o) => ({ url: `https://img/${o.size}` })),
   };
 });
 
@@ -149,12 +149,25 @@ describe('LLM route input bounds', () => {
       prisma._store.user.find((u) => u.id === where.id) || null,
     );
     prisma._store.user.push({
-      id: 'free-user', email: 'free@example.com', role: 'user',
-      banned: false, subscriptions: [], createdAt: new Date(), updatedAt: new Date(),
+      id: 'premium-user', email: 'premium@example.com', role: 'user',
+      banned: false,
+      subscriptions: [{
+        status: 'active',
+        planType: 'month',
+        stripeCustomerId: 'cus_reliability',
+        stripeSubscriptionId: 'sub_reliability',
+        currentPeriodEnd: new Date(Date.now() + 86_400_000),
+      }],
+      createdAt: new Date(),
+      updatedAt: new Date(),
     });
   });
 
-  const cookie = () => authCookie({ userId: 'free-user', email: 'free@example.com', role: 'user' });
+  const cookie = () => authCookie({
+    userId: 'premium-user',
+    email: 'premium@example.com',
+    role: 'user',
+  });
 
   it('rejects an over-long raw prompt with 400 before provider execution', async () => {
     const res = await app.inject({
@@ -200,11 +213,4 @@ describe('LLM route input bounds', () => {
     expect(res.statusCode).toBe(400);
   });
 
-  it('rejects arbitrary chat regardless of message count or size', async () => {
-    const res = await app.inject({
-      method: 'POST', url: '/llm/chat', headers: { cookie: cookie() },
-      payload: { messages: [{ role: 'user', content: 'x' }] },
-    });
-    expect(res.statusCode).toBe(400);
-  });
 });

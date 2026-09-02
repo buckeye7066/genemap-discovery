@@ -24,11 +24,8 @@ import {
 import { 
   Users, 
   UserPlus, 
-  Mail, 
   Shield, 
   CheckCircle, 
-  XCircle, 
-  Clock,
   Trash2,
   Info,
   Crown
@@ -36,9 +33,9 @@ import {
 
 export default function ProjectCollaboration({ project, onUpdate }) {
   const [collaborators, setCollaborators] = useState([]);
-  const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteRole, setInviteRole] = useState("viewer");
-  const [isInviting, setIsInviting] = useState(false);
+  const [collaboratorEmail, setCollaboratorEmail] = useState("");
+  const [collaboratorRole, setCollaboratorRole] = useState("viewer");
+  const [isAdding, setIsAdding] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const { user } = useAuth();
   // Only the owner may add or remove collaborators; the server enforces this
@@ -59,31 +56,31 @@ export default function ProjectCollaboration({ project, onUpdate }) {
     }
   };
 
-  const handleInvite = async () => {
-    if (!inviteEmail.trim()) return;
+  const handleAddCollaborator = async () => {
+    if (!collaboratorEmail.trim()) return;
 
-    setIsInviting(true);
+    setIsAdding(true);
     try {
       // POST /entities/projects/:id/collaborators takes exactly { userEmail, role }.
       // This used to send `user_email` (400 every time) plus a `permissions`
       // object the server has no column for. `role` IS the permission model,
       // and it is validated server-side against COLLABORATOR_ROLES.
       await apiClient.addCollaborator(project.id, {
-        userEmail: inviteEmail.trim(),
-        role: inviteRole,
+        userEmail: collaboratorEmail.trim(),
+        role: collaboratorRole,
       });
 
-      setInviteEmail("");
-      setInviteRole("viewer");
+      setCollaboratorEmail("");
+      setCollaboratorRole("viewer");
       setDialogOpen(false);
       await loadCollaborators();
       if (onUpdate) onUpdate();
 
     } catch (err) {
-      console.error("Error sending invitation:", err);
-      alert("Failed to send invitation. Please try again.");
+      console.error("Error adding collaborator:", err);
+      alert(err?.message || "Failed to add collaborator. Confirm they already have a GeneMap account and try again.");
     } finally {
-      setIsInviting(false);
+      setIsAdding(false);
     }
   };
 
@@ -126,37 +123,36 @@ export default function ProjectCollaboration({ project, onUpdate }) {
             <DialogTrigger asChild>
               <Button className="bg-blue-600 hover:bg-blue-700 gap-2">
                 <UserPlus className="w-4 h-4" />
-                Invite
+                Add collaborator
               </Button>
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
-                <DialogTitle>Invite Collaborator</DialogTitle>
+                <DialogTitle>Add registered collaborator</DialogTitle>
               </DialogHeader>
               <div className="space-y-4 pt-4">
                 <Alert className="bg-blue-50 border-blue-200">
                   <Info className="h-4 w-4 text-blue-600" />
                   <AlertDescription className="text-blue-900 text-sm">
-                    <strong>Secure Collaboration:</strong> Invited users will receive an email and 
-                    can access the project once they accept. You can revoke access at any time.
+                    <strong>Direct membership:</strong> This immediately adds an existing GeneMap account by exact email. No invitation email or acceptance step exists. You can revoke access at any time.
                   </AlertDescription>
                 </Alert>
 
                 <div>
-                  <Label htmlFor="invite-email">Collaborator Email *</Label>
+                  <Label htmlFor="collaborator-email">Collaborator Email *</Label>
                   <Input
-                    id="invite-email"
+                    id="collaborator-email"
                     type="email"
                     placeholder="colleague@university.edu"
-                    value={inviteEmail}
-                    onChange={(e) => setInviteEmail(e.target.value)}
+                    value={collaboratorEmail}
+                    onChange={(e) => setCollaboratorEmail(e.target.value)}
                     className="mt-1"
                   />
                 </div>
 
                 <div>
-                  <Label htmlFor="invite-role">Role *</Label>
-                  <Select value={inviteRole} onValueChange={setInviteRole}>
+                  <Label htmlFor="collaborator-role">Role *</Label>
+                  <Select value={collaboratorRole} onValueChange={setCollaboratorRole}>
                     <SelectTrigger className="mt-1">
                       <SelectValue />
                     </SelectTrigger>
@@ -179,36 +175,27 @@ export default function ProjectCollaboration({ project, onUpdate }) {
                           </div>
                         </div>
                       </SelectItem>
-                      <SelectItem value="owner">
-                        <div className="flex items-center gap-2">
-                          <Crown className="w-4 h-4" />
-                          <div>
-                            <p className="font-medium">Owner</p>
-                            <p className="text-xs text-slate-500">Full control</p>
-                          </div>
-                        </div>
-                      </SelectItem>
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-slate-500 mt-1">
-                    Owners can delete, Editors can modify, Viewers can only read
+                    Editors can modify project content; Viewers can only read it. Ownership cannot be delegated.
                   </p>
                 </div>
 
                 <Button
-                  onClick={handleInvite}
-                  disabled={isInviting || !inviteEmail.trim()}
+                  onClick={handleAddCollaborator}
+                  disabled={isAdding || !collaboratorEmail.trim()}
                   className="w-full bg-blue-600 hover:bg-blue-700"
                 >
-                  {isInviting ? (
+                  {isAdding ? (
                     <>
-                      <Mail className="w-4 h-4 mr-2 animate-pulse" />
-                      Sending Invitation...
+                      <UserPlus className="w-4 h-4 mr-2 animate-pulse" />
+                      Adding collaborator...
                     </>
                   ) : (
                     <>
-                      <Mail className="w-4 h-4 mr-2" />
-                      Send Invitation
+                      <UserPlus className="w-4 h-4 mr-2" />
+                      Add collaborator
                     </>
                   )}
                 </Button>
@@ -222,7 +209,7 @@ export default function ProjectCollaboration({ project, onUpdate }) {
           <div className="text-center py-8">
             <Users className="w-12 h-12 mx-auto mb-3 text-slate-300" />
             <p className="text-slate-500 text-sm mb-3">No collaborators yet</p>
-            <p className="text-xs text-slate-400">Invite team members to collaborate on this project</p>
+            <p className="text-xs text-slate-400">Add registered team members by exact account email</p>
           </div>
         ) : (
           <div className="space-y-3">

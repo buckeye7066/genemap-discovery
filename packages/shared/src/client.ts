@@ -1,18 +1,20 @@
 import type {
   ApiRequestOptions,
   User,
+  ProfileUpdateRequest,
   RegisterRequest,
   LoginRequest,
   AuthResponse,
   CheckoutSessionRequest,
   CheckoutSessionResponse,
+  CheckoutActivationStatus,
   PortalSessionRequest,
   PortalSessionResponse,
+  BillingCatalog,
   InstitutionalCheckoutRequest,
   TopicCategory,
   ExplanationRequest,
   EducationSource,
-  ImageGenerationRequest,
   QuizRequest,
   ChatRequest,
   LearningProgress,
@@ -22,11 +24,17 @@ import type {
   PublicationTaskRequest,
   SearchHistoryEntry,
   ActivityEntry,
+  AssistantChatRequest,
+  AssistantChatResponse,
+  AssistantId,
+  Conversation,
+  MedicalData,
   GeneSet,
   Project,
   ProjectVersion,
   Collaborator,
   Message,
+  SupportMessageRequest,
   License,
   LicenseSeatAssignment,
   ConsentRecord,
@@ -499,11 +507,14 @@ export class ApiClient {
   getMe(): Promise<User> {
     return this.request('/auth/me');
   }
-  updateProfile(data: Partial<User>): Promise<User> {
+  updateProfile(data: ProfileUpdateRequest): Promise<User> {
     return this.request('/auth/me', { method: 'PUT', body: JSON.stringify(data) });
   }
 
   // ─── Billing ───────────────────────────────────────────────────────
+  getBillingCatalog(): Promise<BillingCatalog> {
+    return this.request('/billing/catalog');
+  }
   createCheckoutSession(data: CheckoutSessionRequest): Promise<CheckoutSessionResponse> {
     return this.request('/billing/checkout-session', { method: 'POST', body: JSON.stringify(data) });
   }
@@ -512,6 +523,9 @@ export class ApiClient {
   }
   createInstitutionalCheckout(data: InstitutionalCheckoutRequest): Promise<CheckoutSessionResponse> {
     return this.request('/billing/institutional-checkout', { method: 'POST', body: JSON.stringify(data) });
+  }
+  getCheckoutActivationStatus(sessionId: string): Promise<CheckoutActivationStatus> {
+    return this.request(`/billing/checkout-status?sessionId=${encodeURIComponent(sessionId)}`);
   }
 
   // ─── Education ──────────────────────────────────────────────────────
@@ -529,16 +543,6 @@ export class ApiClient {
     tier: string;
   }> {
     return this.request('/education/explain', { method: 'POST', body: JSON.stringify(data) });
-  }
-  generateImage(data: ImageGenerationRequest): Promise<{
-    publication: PublicationArtifact<{ imageUrl: string; revisedPrompt: string | null }>;
-    topic: string;
-    topicMetadata: Topic & { category: string; catalogVersion: number };
-    level: string;
-    usage: unknown;
-    tier: string;
-  }> {
-    return this.request('/education/image', { method: 'POST', body: JSON.stringify(data) });
   }
   generateQuiz(data: QuizRequest): Promise<{
     publication: PublicationArtifact<unknown[]>;
@@ -580,7 +584,6 @@ export class ApiClient {
     // get the narrow contract above, while plain-JS or casted callers still
     // cannot smuggle model/image/task controls into the request body.
     const llmOptions: PublicationInvocationOptions = {};
-    if (options?.provider !== undefined) llmOptions.provider = options.provider;
     if (options?.temperature !== undefined) llmOptions.temperature = options.temperature;
     if (options?.maxTokens !== undefined) llmOptions.maxTokens = options.maxTokens;
     return this.request('/llm/invoke', {
@@ -675,6 +678,47 @@ export class ApiClient {
     const res = await this.request<{ entries: SearchHistoryEntry[] }>('/entities/search-history');
     return res.entries;
   }
+
+  // ─── Encrypted health records ───────────────────────────────
+  async getMedicalData<T = unknown>(dataType?: string): Promise<Array<MedicalData<T>>> {
+    const query = dataType ? `?dataType=${encodeURIComponent(dataType)}` : '';
+    const res = await this.request<{ records: Array<MedicalData<T>> }>(`/entities/medical-data${query}`);
+    return res.records;
+  }
+  async createMedicalData<T = unknown>(data: Omit<MedicalData<T>, 'id' | 'createdAt' | 'updatedAt'>): Promise<MedicalData<T>> {
+    const res = await this.request<{ record: MedicalData<T> }>('/entities/medical-data', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+    return res.record;
+  }
+  async updateMedicalData<T = unknown>(id: string, data: Partial<MedicalData<T>>): Promise<MedicalData<T>> {
+    const res = await this.request<{ record: MedicalData<T> }>(`/entities/medical-data/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+    return res.record;
+  }
+  deleteMedicalData(id: string): Promise<{ success: boolean }> {
+    return this.request(`/entities/medical-data/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  }
+
+  // ─── Profile-aware assistants ──────────────────────────────
+  chatWithAssistant(assistant: AssistantId, data: AssistantChatRequest): Promise<AssistantChatResponse> {
+    return this.request(`/assistants/${assistant}/chat`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+      timeoutMs: 45_000,
+    });
+  }
+  async getConversations(assistantType?: AssistantId): Promise<Conversation[]> {
+    const query = assistantType ? `?assistantType=${encodeURIComponent(assistantType)}` : '';
+    const res = await this.request<{ conversations: Conversation[] }>(`/entities/conversations${query}`);
+    return res.conversations;
+  }
+  deleteConversation(id: string): Promise<{ success: boolean; deleted: boolean }> {
+    return this.request(`/entities/conversations/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  }
   async saveSearchHistory(data: Omit<SearchHistoryEntry, 'id'>): Promise<SearchHistoryEntry> {
     const res = await this.request<{ entry: SearchHistoryEntry }>('/entities/search-history', {
       method: 'POST',
@@ -764,7 +808,7 @@ export class ApiClient {
     const res = await this.request<{ messages: Message[] }>('/entities/messages');
     return res.messages;
   }
-  async sendMessage(data: Omit<Message, 'id'>): Promise<Message> {
+  async sendMessage(data: SupportMessageRequest): Promise<Message> {
     const res = await this.request<{ message: Message }>('/entities/messages', {
       method: 'POST',
       body: JSON.stringify(data),
@@ -786,6 +830,16 @@ export class ApiClient {
       { method: 'POST', body: JSON.stringify(data) }
     );
     return res.assignment;
+  }
+  async assignLicenseSeats(
+    licenseId: string,
+    data: { userEmails: string[]; department?: string | null }
+  ): Promise<LicenseSeatAssignment[]> {
+    const res = await this.request<{ assignments: LicenseSeatAssignment[] }>(
+      `/entities/licenses/${licenseId}/assign-bulk`,
+      { method: 'POST', body: JSON.stringify(data) }
+    );
+    return res.assignments;
   }
   removeLicenseSeat(licenseId: string, assignmentId: string): Promise<{ success: boolean }> {
     return this.request(`/entities/licenses/${licenseId}/assignments/${assignmentId}`, { method: 'DELETE' });
@@ -831,6 +885,13 @@ export class ApiClient {
       body: JSON.stringify(data),
     });
     return res.record;
+  }
+  async recordConsents(data: Array<Omit<ConsentRecord, 'id'>>): Promise<ConsentRecord[]> {
+    const res = await this.request<{ records: ConsentRecord[] }>('/entities/consent/batch', {
+      method: 'POST',
+      body: JSON.stringify({ choices: data }),
+    });
+    return res.records;
   }
   async getConsentRecords(): Promise<ConsentRecord[]> {
     const res = await this.request<{ records: ConsentRecord[] }>('/entities/consent');

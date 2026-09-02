@@ -4,11 +4,12 @@ import { errorHandler } from '../middleware/errorHandler.js';
 
 const boundary = vi.hoisted(() => ({
   enforceUsageLimit: vi.fn(),
+  finalizeUsageSession: vi.fn(),
   generateChatResponse: vi.fn(),
   generateExplanation: vi.fn(),
-  generateImage: vi.fn(),
   generateQuiz: vi.fn(),
   recordUsage: vi.fn(),
+  releaseUsageReservation: vi.fn(),
 }));
 
 vi.mock('../middleware/auth.js', () => ({
@@ -22,7 +23,10 @@ vi.mock('../middleware/entitlements.js', () => ({
     request.entitlements = { isPremium: false, tier: 'free', limits: {} };
   }),
   enforceUsageLimit: boundary.enforceUsageLimit,
+  finalizeUsageSession: boundary.finalizeUsageSession,
+  requireResearchAi: vi.fn(async () => {}),
   recordUsage: boundary.recordUsage,
+  releaseUsageReservation: boundary.releaseUsageReservation,
 }));
 
 vi.mock('../services/genomicGuard.js', () => ({
@@ -32,7 +36,6 @@ vi.mock('../services/genomicGuard.js', () => ({
 vi.mock('../services/llm.js', () => ({
   generateChatResponse: boundary.generateChatResponse,
   generateExplanation: boundary.generateExplanation,
-  generateImage: boundary.generateImage,
   generateQuiz: boundary.generateQuiz,
 }));
 
@@ -61,7 +64,7 @@ const aggregateRequest = {
 
 function createRoutePrisma() {
   const sessions = [];
-  return {
+  const database = {
     sessions,
     learningSession: {
       count: vi.fn(async () => 0),
@@ -80,6 +83,8 @@ function createRoutePrisma() {
       update: vi.fn(async ({ data }) => data),
     },
   };
+  database.$transaction = vi.fn(async (callback) => callback(database));
+  return database;
 }
 
 describe('publication route contracts without the full application harness', () => {
@@ -93,6 +98,18 @@ describe('publication route contracts without the full application harness', () 
       request.usageInfo = { used: 0, limit: 5, remaining: 5 };
     });
     boundary.recordUsage.mockResolvedValue(null);
+    boundary.releaseUsageReservation.mockResolvedValue(undefined);
+    boundary.finalizeUsageSession.mockImplementation(async (database, request, args) => (
+      database.learningSession.create({
+        data: {
+          userId: request.user.userId,
+          topic: args.topic,
+          level: args.level,
+          type: args.counted ? args.type : `${args.type}_status`,
+          content: args.content,
+        },
+      })
+    ));
     boundary.generateExplanation.mockResolvedValue({
       text: 'DNA and inherited variation can be studied with bounded research methods.',
       completion: 'complete',
@@ -110,11 +127,6 @@ describe('publication route contracts without the full application harness', () 
       }],
       completion: 'complete',
     });
-    boundary.generateImage.mockResolvedValue({
-      url: 'https://provider.example/dna.png',
-      revisedPrompt: 'A neutral educational diagram of DNA.',
-    });
-
     prisma = createRoutePrisma();
     app = Fastify({ logger: false });
     app.decorate('prisma', prisma);
@@ -169,29 +181,6 @@ describe('publication route contracts without the full application harness', () 
     });
     expect(body).not.toHaveProperty('explanation');
     expect(prisma.sessions[0].content.publication).toEqual(body.publication);
-  });
-
-  it('fails generated images closed before quota or provider access', async () => {
-    const response = await app.inject({
-      method: 'POST',
-      url: '/education/image',
-      payload: { topic: 'what-is-dna', level: 'undergraduate' },
-    });
-
-    expect(response.statusCode).toBe(200);
-    const body = JSON.parse(response.body);
-    expect(body.publication).toMatchObject({
-      contractVersion: 1,
-      status: 'unavailable',
-      content: null,
-      reasonCode: 'image_output_verification_unavailable',
-    });
-    expect(body).not.toHaveProperty('imageUrl');
-    expect(body).not.toHaveProperty('revisedPrompt');
-    expect(boundary.enforceUsageLimit).not.toHaveBeenCalled();
-    expect(boundary.generateImage).not.toHaveBeenCalled();
-    expect(prisma.learningSession.create).not.toHaveBeenCalled();
-    expect(prisma.sessions).toEqual([]);
   });
 
   it('maps provider timeout to unavailable and persists no provider text', async () => {

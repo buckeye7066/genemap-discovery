@@ -6,7 +6,6 @@ import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
 import { PrismaClient } from '@prisma/client';
 import { loadEnv } from './config/env.js';
-import { initSentry } from './config/sentry.js';
 import { releaseSha } from './config/releaseIdentity.js';
 import {
   createEmergencyRateLimitHook,
@@ -29,8 +28,8 @@ import adminRoutes from './routes/admin.js';
 import entityRoutes from './routes/entities.js';
 import genomicsRoutes from './routes/genomics.js';
 import publicationConceptRoutes from './routes/publicationConcepts.js';
-import clinicalTrialRoutes from './routes/clinicalTrials.js';
 import clientErrorRoutes from './routes/clientError.js';
+import assistantRoutes from './routes/assistants.js';
 import {
   accountClosureCleanupStatus,
   createAccountClosureStripeClient,
@@ -52,11 +51,6 @@ const AUTH_RATE_LIMIT_MAX = 10;
 // loadEnv() throws in production if required secrets are missing.
 const env = loadEnv();
 const currentReleaseSha = releaseSha(process.env);
-
-// initSentry() is a deliberate NO-OP STUB that always returns false. SENTRY_DSN
-// is read nowhere in the tree, so it can never be 'set' into working -- saying
-// 'no-op unless SENTRY_DSN set' implied a switch that does not exist.
-const sentryEnabled = initSentry(env);
 
 const prisma = new PrismaClient({
   log: env.isDevelopment ? ['query', 'warn', 'error'] : ['error'],
@@ -183,8 +177,8 @@ await fastify.register(adminRoutes, { prefix: '/admin' });
 await fastify.register(entityRoutes, { prefix: '/entities' });
 await fastify.register(genomicsRoutes, { prefix: '/genomics' });
 await fastify.register(publicationConceptRoutes, { prefix: '/genomics/publication-concepts' });
-await fastify.register(clinicalTrialRoutes, { prefix: '/clinical-trials' });
 await fastify.register(clientErrorRoutes);
+await fastify.register(assistantRoutes, { prefix: '/assistants' });
 
 fastify.get(
   '/healthz',
@@ -263,7 +257,7 @@ const start = async () => {
     accountClosureCleanupTimer = setInterval(runAccountClosureCleanup, 15 * 60 * 1000);
     accountClosureCleanupTimer.unref?.();
     fastify.log.info(
-      { port: env.PORT, host: env.HOST, env: env.NODE_ENV, sentry: sentryEnabled },
+      { port: env.PORT, host: env.HOST, env: env.NODE_ENV },
       'API listening'
     );
   } catch (err) {

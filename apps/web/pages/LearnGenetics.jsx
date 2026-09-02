@@ -73,7 +73,7 @@ export default function LearnGenetics() {
   if (needsOnboarding) {
     return (
       <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
-        <LevelPicker onComplete={() => {}} showTitle={true} />
+        <LevelPicker showTitle />
       </div>
     );
   }

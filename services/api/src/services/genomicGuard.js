@@ -2,9 +2,9 @@
 //
 // GeneMap's core privacy promise is that RAW genomic file content (a VCF, or a
 // dump of variant rows) never leaves the platform for a cloud LLM unless the
-// user has explicitly opted in AND consented. The reference-database enrichment
-// path (genomicDatabases.js / vcf.js) is deterministic and never touches an LLM,
-// but the free-text AI surfaces (the /llm proxy AND the /education explain+chat
+// user has explicitly opted in AND consented. The published route map has no
+// raw-genomic upload route, but the AI surfaces (structured /llm tasks and
+// /education explain+chat
 // prompts, which prepend user-supplied context) are a place raw VCF text could
 // be smuggled to OpenAI/Anthropic.
 //
@@ -18,9 +18,9 @@
 // headers, bare/tab-delimited/compact/HGVS variant rows — even a single one —
 // JSON/CSV variant records, and base64/gzip/data-URI encoded VCFs, which it
 // decodes and re-checks). A sufficiently novel encoding could still slip past a
-// text heuristic; the load-bearing privacy guarantee is architectural — raw VCF
-// is parsed locally (services/vcf.js) and never sent to a cloud LLM by default,
-// and this guard blocks the free-text AI surfaces unless opt-in + consent.
+// text heuristic; the load-bearing privacy guarantee is architectural — no
+// published route accepts raw VCF, and this guard blocks AI requests unless an
+// operator explicitly enables the path and the user has current consent.
 
 import { gunzipSync } from 'node:zlib';
 import { ValidationError } from '../utils/errors.js';
@@ -173,9 +173,9 @@ function tryDecodeBase64(b64) {
  * HGVS mention inside a sentence, so genetics education still works.
  *
  * A heuristic cannot catch every possible encoding of genomic data; this closes
- * the concrete, known evasions. The authoritative privacy guarantee is that raw
- * VCF is parsed locally (services/vcf.js) and never sent to a cloud LLM by
- * default — this detector is the backstop for the free-text AI surfaces.
+ * the concrete, known evasions. The authoritative privacy guarantee is that the
+ * published route map accepts no raw VCF upload; this detector is the backstop
+ * for text smuggled into an otherwise valid AI request.
  */
 export function looksLikeRawGenomicContent(text, _depth = 0) {
   if (typeof text !== 'string' || !text) return false;

@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeAll, afterAll, afterEach } from 'vitest';
-import { buildTestApp, createPrismaMock, authCookie } from './setup.js';
+import {
+  buildTestApp,
+  createPrismaMock,
+  authCookie,
+  seedAuthUser,
+  seedPremiumSubscription,
+} from './setup.js';
 import { enrichGenes, validateHpoTerms } from '../services/genomicDatabases.js';
 
 function jsonResponse(data) {
@@ -91,6 +97,8 @@ describe('POST /genomics/enrich', () => {
   beforeAll(async () => {
     prisma = createPrismaMock();
     app = await buildTestApp(prisma, { includeGenomics: true, csrf: false });
+    seedAuthUser(prisma, { userId: 'u1', email: 'u@e.com', role: 'user' });
+    seedPremiumSubscription(prisma, 'u1');
   });
   afterAll(async () => { await app.close(); });
   afterEach(() => vi.unstubAllGlobals());

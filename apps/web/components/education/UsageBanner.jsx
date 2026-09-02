@@ -5,6 +5,20 @@ import { Button } from '@/components/ui/button';
 import { Crown, AlertCircle } from 'lucide-react';
 import { isNativeApp } from '@/lib/platform';
 
+export const EDUCATION_USAGE_LIMIT_KEYS = Object.freeze({
+  explanation: 'explanations_per_day',
+  quiz: 'quizzes_per_day',
+  chat: 'chat_messages_per_day',
+});
+
+export function isNearFreeEducationLimit(todayUsage = {}, limits = {}) {
+  return Object.entries(EDUCATION_USAGE_LIMIT_KEYS).some(([usageKey, limitKey]) => {
+    const used = todayUsage[usageKey];
+    const limit = limits[limitKey];
+    return Number.isFinite(used) && Number.isFinite(limit) && limit > 0 && used >= limit - 1;
+  });
+}
+
 export default function UsageBanner() {
   const navigate = useNavigate();
   const [entitlements, setEntitlements] = useState(null);
@@ -28,11 +42,7 @@ export default function UsageBanner() {
 
   const usage = entitlements.todayUsage || {};
   const limits = entitlements.limits || {};
-  const isNearLimit = Object.entries(usage).some(([key, val]) => {
-    const limitKey = `${key}s_per_day`;
-    const limit = limits[limitKey];
-    return limit && val >= limit - 1;
-  });
+  const isNearLimit = isNearFreeEducationLimit(usage, limits);
 
   if (!isNearLimit) return null;
 

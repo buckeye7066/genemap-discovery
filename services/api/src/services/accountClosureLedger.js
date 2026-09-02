@@ -5,6 +5,7 @@ import { releaseSha } from '../config/releaseIdentity.js';
 const LEDGER_TIMEOUT_MS = 8_000;
 const MIN_LEDGER_SECRET_LENGTH = 32;
 const MAX_LEDGER_CLOCK_SKEW_MS = 5 * 60 * 1000;
+const MAX_LEDGER_PAGES = 10_000;
 const IDENTITY_KEY_ID = /^[A-Za-z0-9._-]{1,64}$/u;
 
 function codedError(message, statusCode, code) {
@@ -21,6 +22,14 @@ function safeHttpsUrl(value) {
   } catch {
     return null;
   }
+}
+
+function isUsableSecret(value) {
+  if (typeof value !== 'string' || value.length < MIN_LEDGER_SECRET_LENGTH) return false;
+  const normalized = value.toLowerCase();
+  return !normalized.includes('replace_with')
+    && !normalized.includes('placeholder')
+    && !normalized.includes('change-in-production');
 }
 
 function signature(secret, timestamp, body) {
@@ -58,7 +67,7 @@ function parseIdentityKeyConfig(value) {
     if (delimiter <= 0) return { valid: false, keys: [], reason: 'invalid_entry' };
     const id = entry.slice(0, delimiter).trim();
     const secret = entry.slice(delimiter + 1).trim();
-    if (!IDENTITY_KEY_ID.test(id) || secret.length < MIN_LEDGER_SECRET_LENGTH || seen.has(id)) {
+    if (!IDENTITY_KEY_ID.test(id) || !isUsableSecret(secret) || seen.has(id)) {
       return { valid: false, keys: [], reason: 'invalid_entry' };
     }
     seen.add(id);
@@ -129,7 +138,7 @@ async function fetchWithTimeout(
 function ledgerConfig(env = process.env) {
   const writeUrl = safeHttpsUrl(env.ACCOUNT_CLOSURE_LEDGER_WRITE_URL);
   const readUrl = safeHttpsUrl(env.ACCOUNT_CLOSURE_LEDGER_READ_URL);
-  const secret = (typeof env.ACCOUNT_CLOSURE_LEDGER_SECRET === 'string' && env.ACCOUNT_CLOSURE_LEDGER_SECRET.length >= MIN_LEDGER_SECRET_LENGTH)
+  const secret = isUsableSecret(env.ACCOUNT_CLOSURE_LEDGER_SECRET)
     ? env.ACCOUNT_CLOSURE_LEDGER_SECRET
     : '';
   const identity = parseIdentityKeyConfig(env.ACCOUNT_CLOSURE_LEDGER_IDENTITY_KEYS);
@@ -194,6 +203,43 @@ function validateWriteAcknowledgement(response, rawBody, secret, receiptId) {
       'ACCOUNT_DELETE_LEDGER_WRITE_FAILED',
     );
   }
+}
+
+function validReadTombstone(item) {
+  if (!item || item.event !== 'account_deletion_authorized') return false;
+  if (item.version !== 1 && item.version !== 2) return false;
+  if (typeof item.receiptId !== 'string' || !item.receiptId.trim()) return false;
+  if (typeof item.userIdHash !== 'string' || !/^[a-f0-9]{64}$/u.test(item.userIdHash)) return false;
+  return item.version === 1
+    || (typeof item.identityKeyId === 'string' && IDENTITY_KEY_ID.test(item.identityKeyId));
+}
+
+function parseReadPage(rawBody) {
+  let payload;
+  try {
+    payload = JSON.parse(rawBody);
+  } catch {
+    throw codedError(
+      'Deletion-ledger reconciliation received invalid JSON.',
+      503,
+      'ACCOUNT_DELETE_LEDGER_INVALID_RESPONSE',
+    );
+  }
+  const legacy = Array.isArray(payload);
+  const tombstones = legacy ? payload : payload?.tombstones;
+  const nextCursor = legacy ? null : (payload?.nextCursor ?? null);
+  if (
+    !Array.isArray(tombstones)
+    || (nextCursor !== null && (typeof nextCursor !== 'string' || !nextCursor.trim() || nextCursor.length > 128))
+    || tombstones.some((item) => !validReadTombstone(item))
+  ) {
+    throw codedError(
+      'Deletion-ledger reconciliation received an invalid response contract.',
+      503,
+      'ACCOUNT_DELETE_LEDGER_INVALID_RESPONSE',
+    );
+  }
+  return { tombstones, nextCursor };
 }
 
 /**
@@ -317,65 +363,77 @@ export function createAccountClosureLedger({
         'ACCOUNT_DELETE_LEDGER_UNAVAILABLE',
       );
     }
-    const timestamp = new Date().toISOString();
-    const body = '';
-    let response;
-    let rawBody;
-    try {
-      ({ response, consumed: rawBody } = await fetchWithTimeout(
-        fetchImpl,
-        config.readUrl,
-        {
-          method: 'GET',
-          headers: {
-            accept: 'application/json',
-            'x-genemap-ledger-timestamp': timestamp,
-            'x-genemap-ledger-signature': `sha256=${signature(config.secret, timestamp, body)}`,
+    const allTombstones = [];
+    const receiptIds = new Set();
+    const cursors = new Set();
+    let cursor = null;
+
+    for (let pageNumber = 0; pageNumber < MAX_LEDGER_PAGES; pageNumber += 1) {
+      const timestamp = new Date().toISOString();
+      const body = '';
+      const readUrl = new URL(config.readUrl);
+      readUrl.searchParams.set('limit', '1000');
+      if (cursor) readUrl.searchParams.set('cursor', cursor);
+      let response;
+      let rawBody;
+      try {
+        ({ response, consumed: rawBody } = await fetchWithTimeout(
+          fetchImpl,
+          readUrl.href,
+          {
+            method: 'GET',
+            headers: {
+              accept: 'application/json',
+              'x-genemap-ledger-timestamp': timestamp,
+              'x-genemap-ledger-signature': `sha256=${signature(config.secret, timestamp, body)}`,
+            },
           },
-        },
-        { consume: (result) => (result?.ok ? result.text() : Promise.resolve('')) },
-      ));
-    } catch {
-      throw codedError(
-        'Deletion-ledger reconciliation could not reach or finish reading the external ledger.',
-        503,
-        'ACCOUNT_DELETE_LEDGER_READ_FAILED',
-      );
+          { consume: (result) => (result?.ok ? result.text() : Promise.resolve('')) },
+        ));
+      } catch {
+        throw codedError(
+          'Deletion-ledger reconciliation could not reach or finish reading the external ledger.',
+          503,
+          'ACCOUNT_DELETE_LEDGER_READ_FAILED',
+        );
+      }
+      if (!response?.ok) {
+        throw codedError(
+          `Deletion-ledger reconciliation received HTTP ${response?.status || 'unknown'} from the external ledger.`,
+          503,
+          'ACCOUNT_DELETE_LEDGER_READ_FAILED',
+        );
+      }
+      verifySignedResponse(response, rawBody, config.secret);
+      const page = parseReadPage(rawBody);
+      for (const tombstone of page.tombstones) {
+        if (receiptIds.has(tombstone.receiptId)) {
+          throw codedError(
+            'Deletion-ledger reconciliation received a duplicate deletion receipt.',
+            503,
+            'ACCOUNT_DELETE_LEDGER_INVALID_RESPONSE',
+          );
+        }
+        receiptIds.add(tombstone.receiptId);
+        allTombstones.push(tombstone);
+      }
+      if (page.nextCursor === null) return allTombstones;
+      if (cursors.has(page.nextCursor)) {
+        throw codedError(
+          'Deletion-ledger reconciliation received a repeated page cursor.',
+          503,
+          'ACCOUNT_DELETE_LEDGER_INVALID_RESPONSE',
+        );
+      }
+      cursors.add(page.nextCursor);
+      cursor = page.nextCursor;
     }
-    if (!response?.ok) {
-      throw codedError(
-        `Deletion-ledger reconciliation received HTTP ${response?.status || 'unknown'} from the external ledger.`,
-        503,
-        'ACCOUNT_DELETE_LEDGER_READ_FAILED',
-      );
-    }
-    verifySignedResponse(response, rawBody, config.secret);
-    let payload;
-    try {
-      payload = JSON.parse(rawBody);
-    } catch {
-      throw codedError(
-        'Deletion-ledger reconciliation received invalid JSON.',
-        503,
-        'ACCOUNT_DELETE_LEDGER_INVALID_RESPONSE',
-      );
-    }
-    const tombstones = Array.isArray(payload) ? payload : payload?.tombstones;
-    if (!Array.isArray(tombstones)) {
-      throw codedError(
-        'Deletion-ledger reconciliation received an invalid response contract.',
-        503,
-        'ACCOUNT_DELETE_LEDGER_INVALID_RESPONSE',
-      );
-    }
-    return tombstones.filter((item) => {
-      if (!item || item.event !== 'account_deletion_authorized') return false;
-      if (item.version !== 1 && item.version !== 2) return false;
-      if (typeof item.receiptId !== 'string' || typeof item.userIdHash !== 'string') return false;
-      if (!/^[a-f0-9]{64}$/u.test(item.userIdHash)) return false;
-      return item.version === 1
-        || (typeof item.identityKeyId === 'string' && IDENTITY_KEY_ID.test(item.identityKeyId));
-    });
+
+    throw codedError(
+      'Deletion-ledger reconciliation exceeded the maximum signed page count.',
+      503,
+      'ACCOUNT_DELETE_LEDGER_INVALID_RESPONSE',
+    );
   }
 
   return {
@@ -412,8 +470,10 @@ export const __test = {
   headerValue,
   identityCandidates,
   identityHash,
+  isUsableSecret,
   ledgerConfig,
   parseIdentityKeyConfig,
+  parseReadPage,
   releaseSha,
   safeHttpsUrl,
   signature,

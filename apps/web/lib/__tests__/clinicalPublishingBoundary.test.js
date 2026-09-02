@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   HIGH_RISK_CLINICAL_AI_ENABLED,
@@ -125,6 +125,11 @@ describe('clinical publishing boundary', () => {
 
     expect(support).not.toContain('apiClient.invokeLLM');
     expect(support).not.toContain('AI Draft');
+    expect(support).toContain('apiClient.getMyMessages');
+    expect(support).toContain('isIssue');
+    expect(support).not.toContain('Dr. John White');
+    expect(support).not.toContain('24-48 hours');
+    expect(support).not.toContain('message_theme_color');
     expect(pageConfig).not.toContain("import('./pages/IconGenerator')");
     expect(pageConfig).not.toContain('"IconGenerator"');
   });
@@ -212,18 +217,14 @@ describe('clinical publishing boundary', () => {
     expect(projects).toContain('do not include personal');
   });
 
-  it('ships no high-risk endpoint methods in the public shared client', () => {
+  it('ships owner-scoped health and assistant methods without clinical genomics methods', () => {
     const sharedClient = read('../../../../packages/shared/src/client.ts');
 
     for (const forbidden of [
-      '/entities/medical-data',
-      '/entities/conversations',
       '/genomics/vcf',
       '/genomics/variant',
       '/genomics/clinvar',
       '/clinical-trials',
-      'getMedicalData(',
-      'getConversations(',
       'searchVariants(',
       'searchPhenotypes(',
       'parseVcf(',
@@ -238,6 +239,9 @@ describe('clinical publishing boundary', () => {
 
     expect(sharedClient).toContain('/genomics/enrich');
     expect(sharedClient).toContain('/genomics/publication-concepts/search');
+    expect(sharedClient).toContain('/entities/medical-data');
+    expect(sharedClient).toContain('/entities/conversations');
+    expect(sharedClient).toContain('/assistants/${assistant}/chat');
 
     const adminRoute = read('../../../../services/api/src/routes/admin.js');
     expect(adminRoute).not.toContain("fastify.get('/self-test'");
@@ -326,27 +330,23 @@ describe('clinical publishing boundary', () => {
     const terms = read('../../pages/TermsOfService.jsx');
     const premium = read('../../pages/Premium.jsx');
 
-    expect(privacy).toContain('Publication-mode data boundary');
-    expect(privacy).not.toContain('Health &amp; genetic data you upload');
-    expect(privacy).not.toContain('Delete any uploaded record from the Medical Data page');
+    expect(privacy).toContain('Health and model-execution boundary');
+    expect(privacy).toContain('Optional health and assistant content:');
+    expect(privacy).toContain('encrypted at rest and owner-scoped');
     expect(privacy).not.toContain('Access to account data is scoped to the signed-in user');
     expect(privacy).toContain('authorized Axiom Biolabs operators');
-    for (const provider of ['Vercel:', 'Railway:', 'Resend:', 'Sentry:', 'Redis rate-limit operator:', 'NLM Clinical Tables']) {
+    for (const provider of ['Vercel:', 'Railway:', 'Resend:', 'Redis rate-limit operator:', 'NLM Clinical Tables']) {
       expect(privacy).toContain(provider);
     }
-    expect(terms).not.toContain('The published service does not accept personal medical records');
-    expect(terms).toContain('fields can still accept free text');
-    expect(terms).not.toContain('AI providers acting as our processors');
+    expect(terms).toContain('Health-data and assistant boundary');
+    expect(terms).toContain('Storage and model analysis require separate');
+    expect(terms).toContain('configured AI provider');
     expect(premium).toContain('Saved gene sets & research projects');
+    expect(premium).toContain('Encrypted health profile and parsed lab records');
+    expect(premium).toContain('Profile-aware Anastasia and Robert with context receipts');
     expect(premium).not.toContain('VCF analysis & clinical tools');
     expect(premium).not.toContain('All visualization tools');
 
-    const playListing = read('../../../../docs/play-store/listing.md');
-    expect(playListing).not.toContain('compare expression, interactions');
-    expect(playListing).not.toContain('Data Visualization Hub');
-    expect(playListing).toContain('Draft only');
-    expect(playListing).toContain('finite catalog of reviewed genetics topics');
-    expect(playListing).not.toContain('Ready-to-paste');
   });
 
   it('keeps operational error signals finite and non-identifying', () => {
@@ -354,8 +354,6 @@ describe('clinical publishing boundary', () => {
     const clientRoute = read('../../../../services/api/src/routes/clientError.js');
     const errorHandler = read('../../../../services/api/src/middleware/errorHandler.js');
     const firstLogin = read('../../../../services/api/src/services/firstLoginNotifier.js');
-    const browserSentry = read('../sentry.js');
-    const apiSentry = read('../../../../services/api/src/config/sentry.js');
 
     expect(browserReporter).toContain('JSON.stringify({ eventCode, errorClass })');
     for (const forbidden of ['err.message', 'err.stack', 'window.location', 'statusCode: info']) {
@@ -370,22 +368,21 @@ describe('clinical publishing boundary', () => {
     for (const forbidden of ['sendEmail', 'user.email', 'user.fullName', 'FIRST_LOGIN_REPORT_EMAIL']) {
       expect(firstLogin).not.toContain(forbidden);
     }
-    for (const sentry of [browserSentry, apiSentry]) {
-      expect(sentry).not.toContain('@sentry/');
-      expect(sentry).toContain('return false');
-    }
+    expect(existsSync(new URL('../sentry.js', import.meta.url))).toBe(false);
+    expect(existsSync(new URL('../../../../services/api/src/config/sentry.js', import.meta.url))).toBe(false);
+    expect(read('../../package.json')).not.toContain('@sentry/react');
+    expect(read('../../../../services/api/package.json')).not.toContain('@sentry/node');
   });
 
-  it('keeps profile fields outside personalized clinical promises', () => {
+  it('routes health content through the consent-gated flow without clinical promises', () => {
     const profile = read('../../pages/Profile.jsx');
 
     expect(profile).toContain('Learning & Research Profile');
-    expect(profile).toContain('Do not enter personal medical records');
-    expect(profile).toContain('personal genomic data');
-    expect(profile).toContain('protected health information');
-    expect(profile).not.toContain('AI Personalization');
-    expect(profile).not.toContain('personalized explanations');
-    expect(profile).not.toContain('research opportunities');
+    expect(profile).toContain('premium assistants');
+    expect(profile).toContain('consent-gated Health Data flow');
+    expect(profile).toContain('do not place another person');
+    expect(profile).not.toContain('diagnosis');
+    expect(profile).not.toContain('treatment recommendation');
   });
 
   it('keeps candidate-search scope and provenance truthful', () => {

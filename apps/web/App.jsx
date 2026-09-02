@@ -1,7 +1,5 @@
 import { Suspense } from 'react';
-import { lazyWithRetry } from '@/lib/lazyWithRetry';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
-import { Toaster } from "@/components/ui/toaster"
 import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClientInstance } from '@/lib/query-client'
 import NavigationTracker from '@/lib/NavigationTracker'
@@ -13,12 +11,18 @@ import { isAdminUser, isSuperAdmin } from '@/lib/roles';
 import { EducationLevelProvider } from '@/lib/EducationLevelContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import LoadingSpinner from '@/components/LoadingSpinner';
+import { upgradeUrl, userHasFeature } from '@/lib/tierAccess';
 
-const VisualEditAgent = import.meta.env.DEV
-  ? lazyWithRetry(() => import('@/lib/VisualEditAgent'))
-  : () => null;
-
-const { Pages, Layout, mainPage, publicPages = [], adminPages = [], superAdminPages = [], openPages = [] } = pagesConfig;
+const {
+  Pages,
+  Layout,
+  mainPage,
+  publicPages = [],
+  adminPages = [],
+  superAdminPages = [],
+  openPages = [],
+  featurePages = {},
+} = pagesConfig;
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
 const MainPage = mainPageKey ? Pages[mainPageKey] : () => null;
 const publicPageKeys = new Set(publicPages);
@@ -137,6 +141,12 @@ const AuthenticatedApp = () => {
               (adminPageKeys.has(path) && !userIsAdmin) ||
               (superAdminPageKeys.has(path) && !userIsSuperAdmin) ? (
                 <Navigate to="/" replace />
+              ) : featurePages[path] && !userHasFeature(user, featurePages[path]) ? (
+                <Navigate
+                  to={upgradeUrl(featurePages[path])}
+                  replace
+                  state={{ blockedPage: path, requiredFeature: featurePages[path] }}
+                />
               ) : (
                 <LayoutWrapper currentPageName={path}>
                   <ErrorBoundary name={path}>
@@ -163,12 +173,6 @@ function App() {
             <NavigationTracker />
             <AuthenticatedApp />
           </Router>
-          <Toaster />
-          {import.meta.env.DEV && (
-            <Suspense fallback={null}>
-              <VisualEditAgent />
-            </Suspense>
-          )}
         </QueryClientProvider>
       </EducationLevelProvider>
     </AuthProvider>

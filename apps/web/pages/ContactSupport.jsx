@@ -1,324 +1,212 @@
-import React, { useState, useEffect } from "react";
-import { apiClient } from "@genemap/shared";
-import { useAuth } from "../lib/AuthContext";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { apiClient } from '@genemap/shared';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  MessageSquare,
-  Send,
-  Loader2,
+  AlertCircle,
   CheckCircle2,
+  Loader2,
   Mail,
-  Palette
-} from "lucide-react";
+  MessageSquare,
+  RefreshCw,
+  Send,
+} from 'lucide-react';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+
+function messageTime(value) {
+  const date = new Date(value || 0);
+  return Number.isFinite(date.getTime()) ? date.toLocaleString() : 'Date unavailable';
+}
 
 export default function ContactSupport() {
-  const { user } = useAuth();
-  const [subject, setSubject] = useState("");
-  const [message, setMessage] = useState("");
+  const [subject, setSubject] = useState('');
+  const [message, setMessage] = useState('');
   const [isIssue, setIsIssue] = useState(false);
+  const [messages, setMessages] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [success, setSuccess] = useState(false);
-  const [error, setError] = useState(null);
-  const [showCustomize, setShowCustomize] = useState(false);
-  
-  // Customization options
-  const [themeColor, setThemeColor] = useState("blue");
-  const [fontSize, setFontSize] = useState("medium");
-  const [fontFamily, setFontFamily] = useState("default");
+  const [isLoadingMessages, setIsLoadingMessages] = useState(true);
+  const [notice, setNotice] = useState('');
+  const [error, setError] = useState('');
+
+  const loadMessages = useCallback(async () => {
+    setIsLoadingMessages(true);
+    try {
+      const records = await apiClient.getMyMessages();
+      setMessages(Array.isArray(records) ? records : []);
+    } catch (loadError) {
+      setError(loadError?.message || 'Support messages could not be loaded.');
+    } finally {
+      setIsLoadingMessages(false);
+    }
+  }, []);
 
   useEffect(() => {
-    if (user) {
-      if (user.message_theme_color) setThemeColor(user.message_theme_color);
-      if (user.message_font_size) setFontSize(user.message_font_size);
-      if (user.message_font_family) setFontFamily(user.message_font_family);
+    void loadMessages();
+  }, [loadMessages]);
+
+  const repliesByParent = useMemo(() => {
+    const output = new Map();
+    for (const record of messages) {
+      if (!record.parentId || record.direction !== 'received') continue;
+      const list = output.get(record.parentId) || [];
+      list.push(record);
+      output.set(record.parentId, list);
     }
-  }, [user]);
+    return output;
+  }, [messages]);
 
-  const saveCustomization = async () => {
-    try {
-      await apiClient.updateProfile({
-        message_theme_color: themeColor,
-        message_font_size: fontSize,
-        message_font_family: fontFamily
-      });
-      setSuccess(true);
-      setTimeout(() => setSuccess(false), 2000);
-    } catch (err) {
-      setError("Failed to save customization");
-    }
-  };
+  const threads = useMemo(() => messages.filter((record) => (
+    !record.parentId && record.direction === 'sent'
+  )), [messages]);
 
-  const getThemeClasses = () => {
-    const themes = {
-      blue: "from-blue-600 to-indigo-600",
-      purple: "from-purple-600 to-pink-600",
-      green: "from-green-600 to-emerald-600",
-      red: "from-red-600 to-rose-600",
-      orange: "from-orange-600 to-amber-600",
-      slate: "from-slate-600 to-gray-600"
-    };
-    return themes[themeColor] || themes.blue;
-  };
-
-  const getButtonTheme = () => {
-    const themes = {
-      blue: "bg-blue-600 hover:bg-blue-700",
-      purple: "bg-purple-600 hover:bg-purple-700",
-      green: "bg-green-600 hover:bg-green-700",
-      red: "bg-red-600 hover:bg-red-700",
-      orange: "bg-orange-600 hover:bg-orange-700",
-      slate: "bg-slate-600 hover:bg-slate-700"
-    };
-    return themes[themeColor] || themes.blue;
-  };
-
-  const getFontSizeClass = () => {
-    const sizes = {
-      small: "text-sm",
-      medium: "text-base",
-      large: "text-lg"
-    };
-    return sizes[fontSize] || sizes.medium;
-  };
-
-  const getFontFamilyClass = () => {
-    const fonts = {
-      default: "font-sans",
-      serif: "font-serif",
-      mono: "font-mono"
-    };
-    return fonts[fontFamily] || fonts.default;
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    
-    if (!subject.trim() || !message.trim()) {
-      setError("Please fill in both subject and message");
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    const cleanSubject = subject.trim();
+    const cleanMessage = message.trim();
+    if (!cleanSubject || !cleanMessage) {
+      setError('Enter both a subject and message.');
       return;
     }
 
     setIsSubmitting(true);
-    setError(null);
-
+    setError('');
+    setNotice('');
     try {
       await apiClient.sendMessage({
-        subject,
-        body: message,
-        category: isIssue ? "issue" : "general"
+        subject: cleanSubject,
+        body: cleanMessage,
+        isIssue,
       });
-
-      setSuccess(true);
-      setSubject("");
-      setMessage("");
+      setSubject('');
+      setMessage('');
       setIsIssue(false);
-
-      setTimeout(() => setSuccess(false), 5000);
-    } catch (err) {
-      setError("Failed to send message. Please try again.");
+      setNotice('Your message was delivered to the support inbox. Replies will appear below.');
+      await loadMessages();
+    } catch (sendError) {
+      setError(sendError?.message || 'The support message could not be sent.');
     } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <div className={`min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-6 ${getFontFamilyClass()}`}>
-      <div className="max-w-3xl mx-auto">
-        <div className="text-center mb-8">
-          <div className="flex justify-center items-center gap-2 mb-4">
-            <div className={`w-16 h-16 bg-gradient-to-r ${getThemeClasses()} rounded-2xl flex items-center justify-center shadow-lg`}>
-              <MessageSquare className="w-8 h-8 text-white" />
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowCustomize(!showCustomize)}
-              className="gap-2"
-            >
-              <Palette className="w-4 h-4" />
-              Customize
-            </Button>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-4 sm:p-6">
+      <div className="mx-auto max-w-4xl space-y-6">
+        <div className="text-center">
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 shadow-lg">
+            <MessageSquare className="h-8 w-8 text-white" />
           </div>
-          <h1 className={`text-4xl font-bold text-slate-900 mb-4 ${getFontSizeClass()}`}>
-            Contact Dr. John White
-          </h1>
-          <p className={`text-lg text-slate-600 ${getFontSizeClass()}`}>
-            Send a message about the platform, request features, or report issues
-          </p>
+          <h1 className="text-3xl font-bold text-slate-900">Contact support</h1>
+          <p className="mt-2 text-slate-600">Ask about the platform, request a feature, or report a technical issue.</p>
         </div>
 
-        {/* Customization Panel */}
-        {showCustomize && (
-          <Card className="mb-6 shadow-lg border-2 border-purple-200">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Palette className="w-5 h-5 text-purple-600" />
-                Customize Your Messaging Experience
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid md:grid-cols-3 gap-4">
-                <div>
-                  <Label>Theme Color</Label>
-                  <Select value={themeColor} onValueChange={setThemeColor}>
-                    <SelectTrigger className="mt-1">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="blue">Blue</SelectItem>
-                      <SelectItem value="purple">Purple</SelectItem>
-                      <SelectItem value="green">Green</SelectItem>
-                      <SelectItem value="red">Red</SelectItem>
-                      <SelectItem value="orange">Orange</SelectItem>
-                      <SelectItem value="slate">Slate</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div>
-                  <Label>Font Size</Label>
-                  <Select value={fontSize} onValueChange={setFontSize}>
-                    <SelectTrigger className="mt-1">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="small">Small</SelectItem>
-                      <SelectItem value="medium">Medium</SelectItem>
-                      <SelectItem value="large">Large</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div>
-                  <Label>Font Style</Label>
-                  <Select value={fontFamily} onValueChange={setFontFamily}>
-                    <SelectTrigger className="mt-1">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="default">Default (Sans)</SelectItem>
-                      <SelectItem value="serif">Serif</SelectItem>
-                      <SelectItem value="mono">Monospace</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <Button onClick={saveCustomization} className={`w-full ${getButtonTheme()} gap-2`}>
-                <CheckCircle2 className="w-4 h-4" />
-                Save Preferences
-              </Button>
-            </CardContent>
-          </Card>
-        )}
-
-        {success && (
-          <Alert className="mb-6 bg-green-50 border-green-200">
-            <CheckCircle2 className="h-4 w-4 text-green-600" />
-            <AlertDescription className="text-green-800">
-              Message sent successfully! Dr. White will respond to you soon.
-            </AlertDescription>
+        {notice && (
+          <Alert className="border-emerald-200 bg-emerald-50 text-emerald-900">
+            <CheckCircle2 className="h-4 w-4" />
+            <AlertTitle>Message delivered</AlertTitle>
+            <AlertDescription>{notice}</AlertDescription>
           </Alert>
         )}
-
         {error && (
-          <Alert variant="destructive" className="mb-6">
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Action not completed</AlertTitle>
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
 
-        <Card className="shadow-lg">
+        <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Mail className="w-5 h-5" />
-              New Message
-            </CardTitle>
+            <CardTitle className="flex items-center gap-2"><Mail className="h-5 w-5" />New support message</CardTitle>
+            <CardDescription>Messages are stored in your account so you can see the reply in this page.</CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-6">
-              <div>
+            <form onSubmit={handleSubmit} className="space-y-5">
+              <div className="space-y-2">
                 <Label htmlFor="subject">Subject</Label>
                 <Input
                   id="subject"
-                  placeholder="Brief description of your message"
                   value={subject}
-                  onChange={(e) => setSubject(e.target.value)}
-                  className="mt-1"
+                  onChange={(event) => setSubject(event.target.value)}
+                  maxLength={300}
+                  placeholder="Brief description of your message"
                   disabled={isSubmitting}
                 />
               </div>
-
-              <div>
-                <div className="mb-2">
-                  <Label htmlFor="message">Message</Label>
-                </div>
+              <div className="space-y-2">
+                <Label htmlFor="message">Message</Label>
                 <Textarea
                   id="message"
-                  placeholder="Describe your question, feedback, or issue in detail..."
                   value={message}
-                  onChange={(e) => setMessage(e.target.value)}
-                  className="h-40"
+                  onChange={(event) => setMessage(event.target.value)}
+                  maxLength={20000}
+                  rows={7}
+                  placeholder="Describe your question, feedback, or issue in detail."
                   disabled={isSubmitting}
                 />
               </div>
-
-              <div className="flex items-center space-x-2">
+              <label className="flex items-center gap-2 text-sm text-slate-700">
                 <Checkbox
-                  id="is-issue"
                   checked={isIssue}
-                  onCheckedChange={setIsIssue}
+                  onCheckedChange={(checked) => setIsIssue(checked === true)}
                   disabled={isSubmitting}
                 />
-                <Label
-                  htmlFor="is-issue"
-                  className="text-sm font-normal cursor-pointer"
-                >
-                  This is a technical issue or bug report
-                </Label>
-              </div>
-
+                This is a technical issue or bug report
+              </label>
               <Button
                 type="submit"
+                className="w-full bg-blue-700 hover:bg-blue-800"
                 disabled={isSubmitting || !subject.trim() || !message.trim()}
-                className={`w-full ${getButtonTheme()} gap-2`}
               >
-                {isSubmitting ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Sending...
-                  </>
-                ) : (
-                  <>
-                    <Send className="w-4 h-4" />
-                    Send Message to Dr. White
-                  </>
-                )}
+                {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                {isSubmitting ? 'Sending…' : 'Send to support'}
               </Button>
             </form>
           </CardContent>
         </Card>
 
-        <Card className={`mt-6 ${themeColor === 'blue' ? 'bg-blue-50 border-blue-200' : themeColor === 'purple' ? 'bg-purple-50 border-purple-200' : themeColor === 'green' ? 'bg-green-50 border-green-200' : themeColor === 'red' ? 'bg-red-50 border-red-200' : themeColor === 'orange' ? 'bg-orange-50 border-orange-200' : 'bg-slate-50 border-slate-200'}`}>
-          <CardContent className="pt-6">
-            <h3 className="font-semibold text-slate-900 mb-2">About Response Times</h3>
-            <p className="text-sm text-slate-700">
-              Dr. John White personally reviews and responds to all messages. 
-              You'll typically receive a response within 24-48 hours. 
-              For urgent technical issues, please mark them as such.
-            </p>
+        <Card>
+          <CardHeader className="flex flex-row items-start justify-between gap-3">
+            <div>
+              <CardTitle>Your support messages</CardTitle>
+              <CardDescription>Administrator replies appear inside the original thread.</CardDescription>
+            </div>
+            <Button variant="outline" size="sm" onClick={loadMessages} disabled={isLoadingMessages}>
+              <RefreshCw className={`h-4 w-4 ${isLoadingMessages ? 'animate-spin' : ''}`} />Refresh
+            </Button>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {isLoadingMessages && !threads.length && <p className="text-sm text-slate-500">Loading support messages…</p>}
+            {!isLoadingMessages && !threads.length && <p className="text-sm text-slate-500">No support messages yet.</p>}
+            {threads.map((thread) => {
+              const replies = repliesByParent.get(thread.id) || [];
+              return (
+                <article key={thread.id} className="rounded-xl border border-slate-200 bg-white p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h2 className="font-semibold text-slate-900">{thread.subject}</h2>
+                    <span className="text-xs text-slate-500">{messageTime(thread.createdAt)}</span>
+                  </div>
+                  <p className="mt-2 whitespace-pre-wrap text-sm text-slate-700">{thread.body}</p>
+                  <div className="mt-3 flex gap-2 text-xs">
+                    <span className="rounded-full bg-slate-100 px-2 py-1 text-slate-700">{thread.status || 'open'}</span>
+                    {thread.isIssue && <span className="rounded-full bg-amber-100 px-2 py-1 text-amber-800">technical issue</span>}
+                  </div>
+                  {replies.map((reply) => (
+                    <div key={reply.id} className="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-sm font-semibold text-blue-950">Support reply</p>
+                        <span className="text-xs text-blue-700">{messageTime(reply.createdAt)}</span>
+                      </div>
+                      <p className="mt-2 whitespace-pre-wrap text-sm text-blue-950">{reply.body}</p>
+                    </div>
+                  ))}
+                </article>
+              );
+            })}
           </CardContent>
         </Card>
       </div>

@@ -13,7 +13,6 @@ vi.mock('../services/llm.js', () => ({
   generateExplanation: vi.fn(async () => 'explanation body'),
   generateChatResponse: vi.fn(async () => 'chat'),
   generateQuiz: vi.fn(async () => [{ question: 'q', options: ['a', 'b'], correctIndex: 0, explanation: 'e' }]),
-  generateImage: vi.fn(async () => ({ url: 'https://img/x' })),
 }));
 
 // ─── Pure unit tests ─────────────────────────────────────────────────────────

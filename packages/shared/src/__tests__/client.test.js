@@ -88,6 +88,14 @@ describe('Auth methods', () => {
   });
 });
 
+describe('Billing methods', () => {
+  it('getBillingCatalog() should GET the server-verified Stripe catalog', async () => {
+    await client.getBillingCatalog();
+    expect(fetchCalls[0].url).toBe('http://localhost:3000/billing/catalog');
+    expect(fetchCalls[0].method).toBeUndefined();
+  });
+});
+
 // ── Entity endpoints ─────────────────────────────────────────────────────────
 
 describe('Entity methods', () => {
@@ -283,10 +291,7 @@ describe('Published genomics methods', () => {
 describe('Publication boundary', () => {
   const retiredMethods = [
     'invokeLLM',
-    'getMedicalData',
     'saveMedicalData',
-    'deleteMedicalData',
-    'getConversations',
     'saveConversation',
     'updateConversation',
     'lookupVariant',
@@ -309,6 +314,57 @@ describe('Publication boundary', () => {
   }
 });
 
+describe('Published health and assistant contracts', () => {
+  it('reads owner-scoped health records with an encoded data type filter', async () => {
+    await client.getMedicalData('lab result');
+    expect(fetchCalls[0].url).toBe(
+      'http://localhost:3000/entities/medical-data?dataType=lab%20result',
+    );
+    expect(fetchCalls[0].method).toBeUndefined();
+  });
+
+  it('creates and deletes health records through the protected entity routes', async () => {
+    const record = {
+      dataType: 'lab_result',
+      title: 'Panel',
+      content: { schemaVersion: 1, parserVerified: true, observations: [] },
+    };
+    await client.createMedicalData(record);
+    expect(fetchCalls[0].url).toBe('http://localhost:3000/entities/medical-data');
+    expect(fetchCalls[0].method).toBe('POST');
+    expect(JSON.parse(fetchCalls[0].body)).toEqual(record);
+
+    await client.deleteMedicalData('record/1');
+    expect(fetchCalls[1].url).toBe('http://localhost:3000/entities/medical-data/record%2F1');
+    expect(fetchCalls[1].method).toBe('DELETE');
+  });
+
+  it('uses the finite assistant route and filters conversation history by persona', async () => {
+    await client.chatWithAssistant('anastasia', {
+      message: 'Explain my selected result.',
+      recordIds: ['record-1'],
+    });
+    expect(fetchCalls[0].url).toBe('http://localhost:3000/assistants/anastasia/chat');
+    expect(fetchCalls[0].method).toBe('POST');
+    expect(JSON.parse(fetchCalls[0].body)).toEqual({
+      message: 'Explain my selected result.',
+      recordIds: ['record-1'],
+    });
+
+    await client.getConversations('robert');
+    expect(fetchCalls[1].url).toBe(
+      'http://localhost:3000/entities/conversations?assistantType=robert',
+    );
+    expect(fetchCalls[1].method).toBeUndefined();
+
+    await client.deleteConversation('conversation/1');
+    expect(fetchCalls[2].url).toBe(
+      'http://localhost:3000/entities/conversations/conversation%2F1',
+    );
+    expect(fetchCalls[2].method).toBe('DELETE');
+  });
+});
+
 // ── Consent and deletion requests ────────────────────────────────────────────────────────────
 
 describe('Consent and data deletion methods', () => {
@@ -316,6 +372,16 @@ describe('Consent and data deletion methods', () => {
     await client.recordConsent({ consentType: 'privacy_policy', version: '1.0', granted: true });
     expect(fetchCalls[0].url).toBe('http://localhost:3000/entities/consent');
     expect(fetchCalls[0].method).toBe('POST');
+  });
+
+  it('recordConsents() should atomically POST /entities/consent/batch', async () => {
+    await client.recordConsents([
+      { consentType: 'medical_data_storage', version: '1.0', granted: true },
+      { consentType: 'medical_data_ai_analysis', version: '1.0', granted: false },
+    ]);
+    expect(fetchCalls[0].url).toBe('http://localhost:3000/entities/consent/batch');
+    expect(fetchCalls[0].method).toBe('POST');
+    expect(JSON.parse(fetchCalls[0].body).choices).toHaveLength(2);
   });
 
   it('getConsentRecords() should GET /entities/consent', async () => {

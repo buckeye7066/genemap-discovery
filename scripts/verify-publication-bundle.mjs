@@ -65,8 +65,6 @@ const forbiddenContent = [
   'Anastasia (Counselor)',
   'Medical Data Upload Types',
   'Medical Records',
-  '/entities/medical-data',
-  '/entities/conversations',
   '/genomics/vcf',
   '/genomics/variant',
   '/genomics/clinvar',
@@ -121,14 +119,7 @@ const pagesSourceDir = path.join(webRoot, 'pages');
 // Every entry needs a written reason. Adding a name here is a conscious
 // decision to ship the file but never the route; it is not a way to silence
 // the check.
-const unroutedPageReasons = new Map([
-  [
-    'IconGenerator',
-    'Developer-only PWA icon generation utility. Never part of the product '
-      + 'surface; kept out of both the route map and the lazy-import graph, and '
-      + 'regression-locked by apps/web/lib/__tests__/clinicalPublishingBoundary.test.js.',
-  ],
-]);
+const unroutedPageReasons = new Map();
 
 function readRouteMap(source) {
   const block = /export\s+const\s+PAGES\s*=\s*\{([\s\S]*?)\n\}/u.exec(source);

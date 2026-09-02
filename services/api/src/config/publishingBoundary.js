@@ -29,8 +29,6 @@ const HIDDEN_PATH_PREFIXES = Object.freeze([
   '/genomics/vcf',
   '/genomics/variant',
   '/genomics/clinvar',
-  '/entities/medical-data',
-  '/entities/conversations',
   '/admin/self-test',
 ]);
 const MAX_PATH_DECODE_PASSES = 2;
@@ -38,7 +36,6 @@ const MAX_PATH_DECODE_PASSES = 2;
 const ROUTE_OWNED_TASKS = new Map([
   ['/education/explain', PUBLICATION_TASKS.GENETICS_EDUCATION],
   ['/education/quiz', PUBLICATION_TASKS.GENETICS_EDUCATION],
-  ['/education/image', PUBLICATION_TASKS.GENETICS_EDUCATION],
 ]);
 
 const CLIENT_TASK_ROUTES = new Map([
@@ -55,6 +52,10 @@ const SAFE_NON_GENERATION_EDUCATION_ROUTES = new Set([
   '/education/topics',
   '/education/progress',
   '/education/entitlements',
+]);
+
+const SERVER_CONTEXT_GENERATION_ROUTES = new Set([
+  '/assistants/:assistanttype/chat',
 ]);
 
 function rawPathname(url = '') {
@@ -166,6 +167,13 @@ export function publicationBoundaryDecision({ url, routeUrl, body } = {}) {
 
   const path = policyPath({ routeUrl, url });
   if (SAFE_NON_GENERATION_EDUCATION_ROUTES.has(path)) return null;
+  if (SERVER_CONTEXT_GENERATION_ROUTES.has(path)) {
+    const forbidden = ['context', 'messages', 'options', 'prompt', 'system', 'systemPrompt'];
+    if (forbidden.some((field) => Object.prototype.hasOwnProperty.call(body || {}, field))) {
+      return block('Assistant context and system instructions are assembled by the server.');
+    }
+    return null;
+  }
 
   const routeOwnedTask = ROUTE_OWNED_TASKS.get(path);
   const allowedClientTasks = CLIENT_TASK_ROUTES.get(path);
@@ -270,4 +278,5 @@ export const __test = {
   routeOwnedTaskPaths: () => new Set(ROUTE_OWNED_TASKS.keys()),
   clientTaskRoutePaths: () => new Set(CLIENT_TASK_ROUTES.keys()),
   safeNonGenerationRoutePaths: () => new Set(SAFE_NON_GENERATION_EDUCATION_ROUTES),
+  serverContextGenerationRoutePaths: () => new Set(SERVER_CONTEXT_GENERATION_ROUTES),
 };

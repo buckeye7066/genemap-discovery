@@ -106,6 +106,60 @@ describe('POST /auth/register', () => {
 
     expect(res.statusCode).toBe(400);
   });
+
+  it('blocks an active pre-banned email before creating an account or session', async () => {
+    prisma._store.preBannedUser.push({
+      id: 'pre-ban-register',
+      email: 'blocked@example.com',
+      status: 'active',
+      reason: 'Existing restriction',
+      bannedBy: 'admin-1',
+      createdAt: new Date(),
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/auth/register',
+      payload: { email: 'BLOCKED@example.com', password: 'StrongPass1!' },
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(prisma._store.user).toHaveLength(0);
+    expect(prisma._store.session).toHaveLength(0);
+    expect(prisma._store.subscription).toHaveLength(0);
+  });
+
+  it('rolls back the entire account when the configured trial cannot be persisted', async () => {
+    prisma.subscription.create.mockRejectedValueOnce(new Error('subscription unavailable'));
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/auth/register',
+      payload: { email: 'no-partial-account@example.com', password: 'StrongPass1!' },
+    });
+
+    expect(res.statusCode).toBe(500);
+    expect(prisma._store.user).toHaveLength(0);
+    expect(prisma._store.session).toHaveLength(0);
+    expect(prisma._store.subscription).toHaveLength(0);
+    expect(prisma._store.auditLog).toHaveLength(0);
+  });
+
+  it('rolls back account, trial, and session when the registration receipt fails', async () => {
+    prisma.auditLog.create.mockRejectedValueOnce(new Error('audit unavailable'));
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/auth/register',
+      payload: { email: 'no-unreceipted-account@example.com', password: 'StrongPass1!' },
+    });
+
+    expect(res.statusCode).toBe(500);
+    expect(prisma._store.user).toHaveLength(0);
+    expect(prisma._store.session).toHaveLength(0);
+    expect(prisma._store.subscription).toHaveLength(0);
+    expect(prisma._store.auditLog).toHaveLength(0);
+  });
 });
 
 // ─── POST /auth/register — always-on new-signup free trial ─────────────────
@@ -265,6 +319,58 @@ describe('POST /auth/login', () => {
     expect(res.statusCode).toBe(401);
     const body = JSON.parse(res.body);
     expect(body.error).toMatch(/suspended/i);
+  });
+
+  it('atomically triggers a matching pre-ban and writes its receipt', async () => {
+    prisma._store.preBannedUser.push({
+      id: 'login-pre-ban',
+      email: 'alice@example.com',
+      status: 'active',
+      reason: 'Pre-existing restriction',
+      bannedBy: 'admin-1',
+      createdAt: new Date(),
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/auth/login',
+      payload: { email: 'alice@example.com', password: 'CorrectPass1!' },
+    });
+
+    expect(res.statusCode).toBe(401);
+    expect(prisma._store.user[0]).toMatchObject({
+      banned: true,
+      banReason: 'Pre-existing restriction',
+      bannedBy: 'admin-1',
+    });
+    expect(prisma._store.preBannedUser[0].status).toBe('triggered');
+    expect(prisma._store.auditLog).toEqual(expect.arrayContaining([
+      expect.objectContaining({ action: 'user.pre_ban_triggered', entityId: 'user-1' }),
+    ]));
+    expect(prisma._store.session).toHaveLength(0);
+  });
+
+  it('rolls back both pre-ban writes when the required receipt fails', async () => {
+    prisma._store.preBannedUser.push({
+      id: 'login-pre-ban-audit-failure',
+      email: 'alice@example.com',
+      status: 'active',
+      reason: 'Pre-existing restriction',
+      bannedBy: 'admin-1',
+      createdAt: new Date(),
+    });
+    prisma.auditLog.create.mockRejectedValueOnce(new Error('audit unavailable'));
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/auth/login',
+      payload: { email: 'alice@example.com', password: 'CorrectPass1!' },
+    });
+
+    expect(res.statusCode).toBe(500);
+    expect(prisma._store.user[0].banned).toBe(false);
+    expect(prisma._store.preBannedUser[0].status).toBe('active');
+    expect(prisma._store.session).toHaveLength(0);
   });
 });
 
@@ -437,7 +543,7 @@ describe('PUT /auth/me', () => {
       payload: {
         displayName: 'Alice Updated',
         fullName: 'Alice B. Smith',
-        educationLevel: 'phd',
+        educationLevel: 'graduate',
       },
     });
 
@@ -445,7 +551,49 @@ describe('PUT /auth/me', () => {
     const body = JSON.parse(res.body);
     expect(body.display_name).toBe('Alice Updated');
     expect(body.full_name).toBe('Alice B. Smith');
-    expect(body.education_level).toBe('phd');
+    expect(body.education_level).toBe('graduate');
+  });
+
+  it('rejects unsupported or unbounded profile fields instead of dropping them silently', async () => {
+    const cookie = authCookie({ userId: 'user-1', email: 'alice@example.com', role: 'user' });
+
+    const unsupported = await app.inject({
+      method: 'PUT',
+      url: '/auth/me',
+      headers: { cookie },
+      payload: { message_theme_color: 'purple' },
+    });
+    const invalidAge = await app.inject({
+      method: 'PUT',
+      url: '/auth/me',
+      headers: { cookie },
+      payload: { age: 999 },
+    });
+    const oversized = await app.inject({
+      method: 'PUT',
+      url: '/auth/me',
+      headers: { cookie },
+      payload: { researchInterests: 'x'.repeat(5_001) },
+    });
+
+    expect(unsupported.statusCode).toBe(400);
+    expect(invalidAge.statusCode).toBe(400);
+    expect(oversized.statusCode).toBe(400);
+  });
+
+  it('rolls back a profile update when its required audit receipt fails', async () => {
+    const cookie = authCookie({ userId: 'user-1', email: 'alice@example.com', role: 'user' });
+    prisma.auditLog.create.mockRejectedValueOnce(new Error('audit unavailable'));
+
+    const res = await app.inject({
+      method: 'PUT',
+      url: '/auth/me',
+      headers: { cookie },
+      payload: { fullName: 'Must Roll Back' },
+    });
+
+    expect(res.statusCode).toBe(500);
+    expect(prisma._store.user.find((row) => row.id === 'user-1').fullName).not.toBe('Must Roll Back');
   });
 
   it('should reject unauthenticated update', async () => {

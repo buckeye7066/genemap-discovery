@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const provider = vi.hoisted(() => ({
   generateExplanation: vi.fn(),
-  generateImage: vi.fn(),
   generateQuiz: vi.fn(),
   generateChatResponse: vi.fn(),
 }));
@@ -151,33 +150,6 @@ describe('education route publication boundaries', () => {
         explanation: 'DNA stores hereditary information.',
       },
     ]);
-  });
-
-  it('does not invoke or publish generated-image pixels without OCR/moderation proof', async () => {
-    provider.generateImage.mockResolvedValue({
-      url: 'https://official-provider.example/generated-image.png',
-      revisedPrompt: 'Diagram based on [untrusted](https://tracker.example/pixel).',
-    });
-
-    const response = await app.inject({
-      method: 'POST',
-      url: '/education/image',
-      headers: { cookie },
-      payload: { topic, level: 'undergraduate' },
-    });
-
-    expect(response.statusCode).toBe(200);
-    const body = JSON.parse(response.payload);
-    expect(body.publication).toMatchObject({
-      contractVersion: 1,
-      status: 'unavailable',
-      content: null,
-      reasonCode: 'image_output_verification_unavailable',
-    });
-    expect(body).not.toHaveProperty('imageUrl');
-    expect(body).not.toHaveProperty('revisedPrompt');
-    expect(provider.generateImage).not.toHaveBeenCalled();
-    expect(JSON.stringify(prisma._store.learningSession)).not.toContain('generated-image.png');
   });
 
   it.each([

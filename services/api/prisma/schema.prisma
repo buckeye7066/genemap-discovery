@@ -9,7 +9,7 @@ datasource db {
 
 model User {
   id                    String    @id @default(uuid())
-  email                 String    @unique
+  email                 String    @unique @db.Citext
   passwordHash          String    @map("password_hash")
   role                  String    @default("user")
   educationLevel        String?   @map("education_level")
@@ -102,7 +102,7 @@ model InstitutionalLicense {
   renewalDate          DateTime @map("renewal_date")
   autoRenew            Boolean  @default(false) @map("auto_renew")
   stripeCustomerId     String?  @map("stripe_customer_id")
-  stripeSubscriptionId String?  @map("stripe_subscription_id")
+  stripeSubscriptionId String?  @unique @map("stripe_subscription_id")
   pricing              Json
   adminUsers           String[] @map("admin_users")
   createdAt            DateTime @default(now()) @map("created_at")
@@ -157,6 +157,7 @@ model AuditLog {
   user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([userId, createdAt])
+  @@index([entityType, entityId, createdAt])
   @@map("audit_log")
 }
 

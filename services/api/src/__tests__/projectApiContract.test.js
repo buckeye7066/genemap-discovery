@@ -22,7 +22,13 @@ import { readFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
-import { buildTestApp, createPrismaMock, authCookie, seedAuthUser } from './setup.js';
+import {
+  buildTestApp,
+  createPrismaMock,
+  authCookie,
+  seedAuthUser,
+  seedPremiumSubscription,
+} from './setup.js';
 
 const webRoot = fileURLToPath(new URL('../../../../apps/web', import.meta.url));
 
@@ -41,6 +47,8 @@ beforeEach(() => {
   prisma._reset();
   seedAuthUser(prisma, OWNER);
   seedAuthUser(prisma, MATE);
+  seedPremiumSubscription(prisma, OWNER.userId);
+  seedPremiumSubscription(prisma, MATE.userId);
 });
 
 const cookie = () => authCookie(OWNER, prisma);

@@ -3,15 +3,8 @@ import ReactDOM from 'react-dom/client'
 import App from '@/App.jsx'
 import '@/index.css'
 import { reportClientError } from '@/lib/reportClientError.js'
-import { initSentry } from '@/lib/sentry.js'
 import { isNativeApp } from '@/lib/platform.js'
 import { startMobileUpdateNotifier } from '@/lib/mobileUpdateNotifier.js'
-
-// initSentry() is a deliberate NO-OP STUB that always returns false and captures
-// nothing. VITE_SENTRY_DSN is read nowhere, so there is no env var that turns
-// this on. Browser exception export stays disabled: stacks can carry user text.
-initSentry()
-
 
 // Capture uncaught errors and unhandled promise rejections once, at bootstrap,
 // and report them to the backend. POST /report-client-error accepts two enum

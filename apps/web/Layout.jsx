@@ -4,11 +4,8 @@ import { createPageUrl } from "@/utils";
 import DnaIcon from "./components/icons/DnaIcon";
 import BanCheck from "./components/BanCheck";
 import DemographicCheck from "./components/DemographicCheck";
-import MelissaBanner from "./components/MelissaBanner";
-import PlatformCompatibility from "./components/PlatformCompatibility";
-import UniversalLinkHandler from "./components/UniversalLinkHandler";
 import { getBrowserEnvironment } from "./components/shared/safeNavigate";
-import { Search, User, Crown, History, BarChart3, Microscope, LayoutDashboard, MessageSquare, Building2, ShieldOff, Mail, Crown as CrownIcon, Users, Sparkles, BookOpen, GraduationCap, HelpCircle, Route } from "lucide-react";
+import { Search, User, Crown, History, BarChart3, Microscope, LayoutDashboard, MessageSquare, Building2, ShieldOff, Mail, Users, Sparkles, BookOpen, GraduationCap, HelpCircle, HeartPulse, Bot } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -24,12 +21,12 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { Badge } from "@/components/ui/badge";
-import MobileOptimization from "./components/MobileOptimization";
 import MobileUpdatePrompt from "./components/MobileUpdatePrompt";
 import { useEducationLevel, EDUCATION_LEVELS } from "./lib/EducationLevelContext";
 import { useAuth } from "./lib/AuthContext";
 import { isAdminUser, isSuperAdmin } from "./lib/roles";
 import { isNativeApp } from "./lib/platform";
+import { upgradeUrl, userHasFeature } from "./lib/tierAccess";
 
 // Navigation is organized around user *intent* (Learn -> Discover -> Research ->
 // My Data -> Account) rather than by internal feature area. Each group maps to a
@@ -49,18 +46,20 @@ const learnNav = [
 // (No "Home" entry — /home only redirects to /dashboard, which already has its
 // own nav item under Research; two links to one page was just confusing.)
 const discoverNav = [
-  { title: 'Gene Search', url: createPageUrl('Search'), icon: Search },
+  { title: 'Gene Search', url: createPageUrl('Search'), icon: Search, feature: 'research.search' },
 ];
 
 // "I want to analyze data / run research workflows."
 const researchNav = [
-  { title: 'Dashboard', url: createPageUrl('Dashboard'), icon: LayoutDashboard },
-  { title: 'Research Mode', url: createPageUrl('ResearchMode'), icon: Microscope },
+  { title: 'Dashboard', url: createPageUrl('Dashboard'), icon: LayoutDashboard, feature: 'research.workspace' },
+  { title: 'Research Mode', url: createPageUrl('ResearchMode'), icon: Microscope, feature: 'research.workspace' },
 ];
 
 // "Where is my saved / sensitive data?"
 const myDataNav = [
-  { title: 'Search History', url: createPageUrl('History'), icon: History },
+  { title: 'Search History', url: createPageUrl('History'), icon: History, feature: 'research.search' },
+  { title: 'Health Data', url: createPageUrl('HealthData'), icon: HeartPulse, feature: 'health.records' },
+  { title: 'Assistants', url: createPageUrl('Assistants'), icon: Bot, feature: 'assistants.profile_context' },
 ];
 
 const accountNav = [
@@ -73,7 +72,7 @@ const accountNav = [
   // Institutional licensing is gated on owning a license, not on the admin role
   // (see pages.config.js), so it belongs here — discoverable by actual license
   // owners — not mislabeled as an admin "Teams" tool in the admin section.
-  { title: 'Institutional Licensing', url: createPageUrl('InstitutionalAdmin'), icon: Building2 },
+  { title: 'Institutional Licensing', url: createPageUrl('InstitutionalAdmin'), icon: Building2, feature: 'institution.manage', lockedLabel: 'Institution' },
   { title: 'Contact Support', url: createPageUrl('ContactSupport'), icon: Mail },
 ];
 
@@ -148,6 +147,15 @@ export default function Layout({ children, currentPageName }) {
   const visibleAdminNav = isAdmin
     ? adminNav.filter((item) => !item.superAdminOnly || isSuperAdmin(user))
     : [];
+  const tierAwareNav = (items) => items.map((item) => (
+    userHasFeature(user, item.feature)
+      ? item
+      : {
+          ...item,
+          url: upgradeUrl(item.feature),
+          badge: item.lockedLabel || 'Premium',
+        }
+  ));
 
   // Add PWA meta tags and initialize cross-platform fixes
   useEffect(() => {
@@ -228,9 +236,6 @@ export default function Layout({ children, currentPageName }) {
   return (
     <BanCheck>
       <DemographicCheck>
-        <PlatformCompatibility />
-        <UniversalLinkHandler />
-        <MelissaBanner />
         <SidebarProvider>
           <div className="h-full flex w-full overflow-hidden bg-gradient-to-br from-slate-50 to-blue-50" style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}>
         <Sidebar className="border-r border-slate-200/50">
@@ -248,10 +253,10 @@ export default function Layout({ children, currentPageName }) {
           
           <SidebarContent className="p-2 scrollbar-thin">
             <NavGroup label="Learn" items={learnNav} pathname={location.pathname} accent="blue" />
-            <NavGroup label="Discover" items={discoverNav} pathname={location.pathname} accent="slate" />
-            <NavGroup label="Research" items={researchNav} pathname={location.pathname} accent="slate" />
-            <NavGroup label="My Data" items={myDataNav} pathname={location.pathname} accent="slate" />
-            <NavGroup label="Account" items={accountNav} pathname={location.pathname} accent="slate" />
+            <NavGroup label="Discover" items={tierAwareNav(discoverNav)} pathname={location.pathname} accent="slate" />
+            <NavGroup label="Research" items={tierAwareNav(researchNav)} pathname={location.pathname} accent="slate" />
+            <NavGroup label="My Data" items={tierAwareNav(myDataNav)} pathname={location.pathname} accent="slate" />
+            <NavGroup label="Account" items={tierAwareNav(accountNav)} pathname={location.pathname} accent="slate" />
             {isAdmin && (
               <NavGroup label="Admin" items={visibleAdminNav} pathname={location.pathname} accent="purple" />
             )}
@@ -310,10 +315,6 @@ export default function Layout({ children, currentPageName }) {
 
           <div className="flex-1 overflow-auto min-h-0">
             <MobileUpdatePrompt />
-
-            <div className="block sm:hidden p-4">
-              <MobileOptimization />
-            </div>
 
             {children}
 

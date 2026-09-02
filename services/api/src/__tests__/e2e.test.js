@@ -14,13 +14,12 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
-import { buildTestApp, createPrismaMock } from './setup.js';
+import { buildTestApp, createPrismaMock, seedPremiumSubscription } from './setup.js';
 import { hashPassword } from '../utils/auth.js';
 
 vi.mock('../services/llm.js', () => ({
   generateExplanation: vi.fn(async (prompt, opts) => `EXPL:${prompt.length}:${opts.maxTokens}`),
   generateChatResponse: vi.fn(async (msgs, opts) => `CHAT:${msgs.length}:${opts.maxTokens}`),
-  generateImage: vi.fn(async (prompt, opts) => ({ url: `https://img/${opts.size}` })),
 }));
 
 vi.mock('stripe', () => {
@@ -35,11 +34,29 @@ vi.mock('stripe', () => {
       webhooks: { constructEvent: construct },
       checkout: { sessions: { create: vi.fn(async () => ({ id: 'cs_test', url: 'https://stripe/sess' })) } },
       billingPortal: { sessions: { create: vi.fn(async () => ({ url: 'https://stripe/portal' })) } },
+      prices: { retrieve: vi.fn(async (id) => ({
+        id,
+        active: true,
+        type: 'recurring',
+        unit_amount: 999,
+        currency: 'usd',
+        recurring: { interval: id.endsWith('yearly') ? 'year' : 'month' },
+      })) },
       subscriptions: {
         retrieve: vi.fn(async () => ({
           status: 'active',
           current_period_end: Math.floor(Date.now() / 1000) + 86400,
-          items: { data: [{ price: { recurring: { interval: 'month' } } }] },
+          items: { data: [{
+            price: {
+              id: 'price_test_monthly',
+              active: true,
+              type: 'recurring',
+              unit_amount: 999,
+              currency: 'usd',
+              recurring: { interval: 'month' },
+            },
+            quantity: 1,
+          }] },
         })),
       },
     };
@@ -67,6 +84,8 @@ const originalEnv = { ...process.env };
 beforeAll(async () => {
   process.env.STRIPE_SECRET_KEY = 'sk_test_123';
   process.env.STRIPE_WEBHOOK_SECRET = 'whsec_test_123';
+  process.env.STRIPE_PRICE_MONTHLY = 'price_test_monthly';
+  process.env.STRIPE_PRICE_YEARLY = 'price_test_yearly';
   prisma = createPrismaMock();
   app = await buildTestApp(prisma, {
     csrf: false,
@@ -200,7 +219,7 @@ describe('E2E — auth flow', () => {
 });
 
 describe('E2E — LLM flow', () => {
-  it('anonymous → 401, free user → success persists usage, exhausted → 403', async () => {
+  it('anonymous → 401, free research → 403, premium research → success with persisted usage', async () => {
     const anon = await app.inject({
       method: 'POST',
       url: '/llm/invoke',
@@ -209,6 +228,20 @@ describe('E2E — LLM flow', () => {
     expect(anon.statusCode).toBe(401);
 
     const { cookieHeader, userId } = await registerAndLogin('llm@example.com');
+    const free = await app.inject({
+      method: 'POST',
+      url: '/llm/invoke',
+      headers: { cookie: cookieHeader },
+      payload: STRUCTURED_LLM_PAYLOAD,
+    });
+    expect(free.statusCode).toBe(403);
+    expect(JSON.parse(free.body)).toMatchObject({
+      code: 'ENTITLEMENT_REQUIRED',
+      details: { entitlement: { feature: 'research.ai', currentTier: 'free' } },
+    });
+    expect(prisma._store.learningSession).toHaveLength(0);
+
+    seedPremiumSubscription(prisma, userId);
     for (let i = 0; i < 5; i++) {
       const ok = await app.inject({
         method: 'POST',
@@ -222,14 +255,6 @@ describe('E2E — LLM flow', () => {
       (s) => s.userId === userId && s.type === 'explanation',
     );
     expect(persisted).toHaveLength(5);
-
-    const blocked = await app.inject({
-      method: 'POST',
-      url: '/llm/invoke',
-      headers: { cookie: cookieHeader },
-      payload: STRUCTURED_LLM_PAYLOAD,
-    });
-    expect(blocked.statusCode).toBe(403);
   });
 });
 
@@ -248,26 +273,17 @@ describe('E2E — billing / entitlement flow', () => {
     expect(res.statusCode).toBe(400);
   });
 
-  it('Stripe webhook activates a subscription, then LLM calls bypass the free-tier limit', async () => {
+  it('Stripe webhook activates a subscription before premium LLM access is granted', async () => {
     const { cookieHeader, userId } = await registerAndLogin('billing@example.com');
 
-    // Hit the free-tier limit first.
-    for (let i = 0; i < 5; i++) {
-      const r = await app.inject({
-        method: 'POST',
-        url: '/llm/invoke',
-        headers: { cookie: cookieHeader },
-        payload: STRUCTURED_LLM_PAYLOAD,
-      });
-      expect(r.statusCode).toBe(200);
-    }
-    const stuck = await app.inject({
+    const beforeWebhook = await app.inject({
       method: 'POST',
       url: '/llm/invoke',
       headers: { cookie: cookieHeader },
       payload: STRUCTURED_LLM_PAYLOAD,
     });
-    expect(stuck.statusCode).toBe(403);
+    expect(beforeWebhook.statusCode).toBe(403);
+    expect(prisma._store.learningSession).toHaveLength(0);
 
     // Drive the real webhook handler with a checkout.session.completed event.
     StripeModule.__setNextEvent({
@@ -304,7 +320,7 @@ describe('E2E — billing / entitlement flow', () => {
     const u = prisma._store.user.find((x) => x.id === userId);
     u.subscriptions = subs;
 
-    // Now LLM calls should succeed past the previous free-tier ceiling.
+    // Only the signed webhook-backed entitlement opens the premium route.
     const ok = await app.inject({
       method: 'POST',
       url: '/llm/invoke',
@@ -319,6 +335,8 @@ describe('E2E — core GeneMap workflow (gene-set round-trip)', () => {
   it('user creates → lists → updates a gene set; cross-user mutations are denied', async () => {
     const a = await registerAndLogin('a@example.com');
     const b = await registerAndLogin('b@example.com');
+    seedPremiumSubscription(prisma, a.userId);
+    seedPremiumSubscription(prisma, b.userId);
 
     // A creates a gene set.
     const created = await app.inject({

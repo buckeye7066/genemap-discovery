@@ -6,7 +6,6 @@ import { __test as llmInternals } from '../routes/llm.js';
 vi.mock('../services/llm.js', () => ({
   generateExplanation: vi.fn(async () => 'provider output must never be reached while disabled'),
   generateChatResponse: vi.fn(),
-  generateImage: vi.fn(),
 }));
 
 let app;
@@ -49,7 +48,13 @@ beforeEach(() => {
     email: 'recovery@example.com',
     role: 'user',
     banned: false,
-    subscriptions: [],
+    subscriptions: [{
+      status: 'active',
+      planType: 'month',
+      stripeCustomerId: 'cus_recovery',
+      stripeSubscriptionId: 'sub_recovery',
+      currentPeriodEnd: new Date(Date.now() + 86_400_000),
+    }],
     createdAt: new Date(),
     updatedAt: new Date(),
   });

@@ -436,7 +436,8 @@ const SELF_TEST_ENV = {
   STRIPE_PRICE_DEPT_YEARLY: 'price_selftestDeptYearly',
   STRIPE_PRICE_ENT_MONTHLY: 'price_selftestEntMonthly',
   STRIPE_PRICE_ENT_YEARLY: 'price_selftestEntYearly',
-  OPENAI_API_KEY: 'sk-selftest-openai-placeholder',
+  OPENAI_API_KEY: 'sk-proj-selftest-012345678901234567890',
+  LLM_TEXT_MODEL: 'gpt-4o-mini',
   ACCOUNT_CLOSURE_LEDGER_WRITE_URL: 'https://ledger.example.com/write',
   ACCOUNT_CLOSURE_LEDGER_READ_URL: 'https://ledger.example.com/read',
   ACCOUNT_CLOSURE_LEDGER_SECRET: 'l'.repeat(48),
@@ -508,7 +509,11 @@ export function runSelfTest(now = new Date()) {
     ...SELF_TEST_ENV,
     ACCOUNT_CLOSURE_LEDGER_IDENTITY_KEYS: '',
   }).checks;
-  if (!brokenLedger.some((c) => c.id === 'accountClosure.ledger' && c.status === 'fail')) {
+  if (!brokenLedger.some((c) => (
+    c.id === 'env.loadEnv'
+    && c.status === 'fail'
+    && c.message.includes('ACCOUNT_CLOSURE_LEDGER_IDENTITY_KEYS')
+  ))) {
     problems.push('verifier did not reject a missing deletion-ledger identity key ring');
   }
 

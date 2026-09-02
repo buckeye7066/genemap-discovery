@@ -113,8 +113,8 @@ export default function ProfilePage() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (!file.type.startsWith('image/')) {
-      setError('Please upload an image file');
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      setError('Please upload a PNG, JPEG, or WebP image');
       return;
     }
 
@@ -279,7 +279,7 @@ export default function ProfilePage() {
                   <input
                     id="profile-picture"
                     type="file"
-                    accept="image/*"
+                    accept="image/png,image/jpeg,image/webp"
                     onChange={handleProfilePictureUpload}
                     className="hidden"
                     disabled={isUploadingPicture}
@@ -350,6 +350,7 @@ export default function ProfilePage() {
                         placeholder="(555) 123-4567"
                         value={phoneNumber}
                         onChange={(e) => setPhoneNumber(e.target.value)}
+                        maxLength={40}
                         className="pl-10"
                       />
                     </div>
@@ -396,6 +397,7 @@ export default function ProfilePage() {
                         placeholder="Your full name"
                         value={fullName}
                         onChange={(e) => setFullName(e.target.value)}
+                        maxLength={200}
                         className="pl-10"
                       />
                     </div>
@@ -409,6 +411,8 @@ export default function ProfilePage() {
                       placeholder="Your age"
                       value={age}
                       onChange={(e) => setAge(e.target.value)}
+                      min={1}
+                      max={130}
                       className="mt-1"
                     />
                   </div>
@@ -440,6 +444,7 @@ export default function ProfilePage() {
                       placeholder="e.g., Biology, Medicine, Genetics"
                       value={fieldOfStudy}
                       onChange={(e) => setFieldOfStudy(e.target.value)}
+                      maxLength={160}
                       className="mt-1"
                     />
                   </div>
@@ -458,6 +463,7 @@ export default function ProfilePage() {
                       placeholder="Describe your research interests (e.g., cancer genomics, rare diseases, population genetics)"
                       value={researchInterests}
                       onChange={(e) => setResearchInterests(e.target.value)}
+                      maxLength={5000}
                       className="mt-1 h-20"
                     />
                   </div>
@@ -469,6 +475,7 @@ export default function ProfilePage() {
                       placeholder="List your current research projects or areas of focus"
                       value={currentProjects}
                       onChange={(e) => setCurrentProjects(e.target.value)}
+                      maxLength={5000}
                       className="mt-1 h-20"
                     />
                   </div>
@@ -480,6 +487,7 @@ export default function ProfilePage() {
                       placeholder="Notable publications, presentations, or research achievements"
                       value={publications}
                       onChange={(e) => setPublications(e.target.value)}
+                      maxLength={8000}
                       className="mt-1 h-24"
                     />
                   </div>
@@ -500,6 +508,7 @@ export default function ProfilePage() {
                         placeholder="https://linkedin.com/in/yourprofile"
                         value={linkedinUrl}
                         onChange={(e) => setLinkedinUrl(e.target.value)}
+                        maxLength={500}
                         className="pl-10"
                       />
                     </div>
@@ -514,6 +523,7 @@ export default function ProfilePage() {
                         placeholder="0000-0000-0000-0000"
                         value={orcidId}
                         onChange={(e) => setOrcidId(e.target.value)}
+                        maxLength={32}
                         className="pl-10"
                       />
                     </div>
@@ -527,9 +537,9 @@ export default function ProfilePage() {
                   <Sparkles className="h-4 w-4 text-blue-600" />
                   <AlertDescription className="text-blue-900 text-sm">
                     Your selected education level may adjust the reading level of education features.
-                    Other optional profile fields are stored with your account and are not for clinical
-                    interpretation. Do not enter personal medical records, personal genomic data,
-                    protected health information, or patient identifiers.
+                    Other optional profile fields are stored with your account and can personalize the
+                    premium assistants. Put health records only in the consent-gated Health Data flow;
+                    do not place another person&apos;s medical data or patient identifiers in this profile.
                   </AlertDescription>
                 </Alert>
 

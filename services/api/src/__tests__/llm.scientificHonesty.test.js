@@ -5,7 +5,6 @@ const provider = vi.hoisted(() => ({
   openaiTextLegacy: vi.fn(),
   openaiChatResult: vi.fn(),
   openaiChatLegacy: vi.fn(),
-  openaiImage: vi.fn(),
   anthropicTextLegacy: vi.fn(),
   anthropicChatLegacy: vi.fn(),
 }));
@@ -15,7 +14,6 @@ vi.mock('../services/openai.js', () => ({
   generateText: provider.openaiTextLegacy,
   generateChatResponseResult: provider.openaiChatResult,
   generateChatResponse: provider.openaiChatLegacy,
-  generateImage: provider.openaiImage,
 }));
 
 // Deliberately expose only the legacy methods on this provider so both wrapper

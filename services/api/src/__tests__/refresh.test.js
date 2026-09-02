@@ -15,6 +15,8 @@ afterAll(async () => app.close());
 
 beforeEach(async () => {
   prisma._reset();
+  prisma.session.create.mockClear();
+  prisma.session.deleteMany.mockClear();
   const passwordHash = await hashPassword('CorrectPass1!');
   prisma._store.user.push({
     id: 'user-1',
@@ -84,6 +86,59 @@ describe('POST /auth/refresh', () => {
     const sessions = prisma._store.session;
     expect(sessions.length).toBe(1);
     expect(sessions[0].refreshTokenHash).not.toBe(refreshToken);
+  });
+
+  it('rejects reuse of the consumed refresh token without creating another session', async () => {
+    const refreshToken = await seedSession();
+    const first = await app.inject({
+      method: 'POST',
+      url: '/auth/refresh',
+      headers: { cookie: `refreshToken=${refreshToken}` },
+    });
+    expect(first.statusCode).toBe(200);
+
+    const reused = await app.inject({
+      method: 'POST',
+      url: '/auth/refresh',
+      headers: { cookie: `refreshToken=${refreshToken}` },
+    });
+    expect(reused.statusCode).toBe(401);
+    expect(prisma._store.session).toHaveLength(1);
+  });
+
+  it('does not mint a replacement when another request already consumed the session', async () => {
+    const refreshToken = await seedSession();
+    prisma.session.deleteMany.mockResolvedValueOnce({ count: 0 });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/auth/refresh',
+      headers: { cookie: `refreshToken=${refreshToken}` },
+    });
+
+    expect(res.statusCode).toBe(401);
+    expect(prisma.session.create).not.toHaveBeenCalled();
+    expect(res.cookies.map((cookie) => cookie.name)).toEqual(expect.arrayContaining([
+      'accessToken',
+      'refreshToken',
+      'csrfToken',
+    ]));
+  });
+
+  it('rolls consumption back when the replacement session cannot be persisted', async () => {
+    const refreshToken = await seedSession();
+    const originalHash = prisma._store.session[0].refreshTokenHash;
+    prisma.session.create.mockRejectedValueOnce(new Error('session storage unavailable'));
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/auth/refresh',
+      headers: { cookie: `refreshToken=${refreshToken}` },
+    });
+
+    expect(res.statusCode).toBe(500);
+    expect(prisma._store.session).toHaveLength(1);
+    expect(prisma._store.session[0].refreshTokenHash).toBe(originalHash);
   });
 
   it('rejects when the user is banned', async () => {

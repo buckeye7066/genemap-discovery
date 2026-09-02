@@ -6,7 +6,6 @@ type IsAssignable<Source, Target> = [Source] extends [Target] ? true : false;
 
 // Supported settings remain assignable.
 type _SupportedOptionsAreAccepted = Assert<IsAssignable<{
-  provider: 'anthropic';
   temperature: number;
   maxTokens: number;
 }, PublicationInvocationOptions>>;
@@ -17,6 +16,9 @@ type _BroadLLMOptionsAreRejected = Reject<
 >;
 type _ModelIsRejected = Reject<
   IsAssignable<{ model: string }, PublicationInvocationOptions>
+>;
+type _ProviderIsRejected = Reject<
+  IsAssignable<{ provider: 'anthropic' }, PublicationInvocationOptions>
 >;
 type _SizeIsRejected = Reject<
   IsAssignable<{ size: string }, PublicationInvocationOptions>

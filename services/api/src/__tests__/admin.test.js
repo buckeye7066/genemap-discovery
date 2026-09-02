@@ -164,6 +164,27 @@ describe('POST /admin/ban', () => {
 
     expect(res.statusCode).toBe(404);
   });
+
+  it('rolls the ban back when its required audit receipt cannot be written', async () => {
+    prisma._store.user.push({
+      id: 'target-audit-failure',
+      email: 'audit-failure@example.com',
+      role: 'user',
+      banned: false,
+      createdAt: new Date(),
+    });
+    prisma.auditLog.create.mockRejectedValueOnce(new Error('audit unavailable'));
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/admin/ban',
+      headers: { cookie: adminCookie },
+      payload: { userId: 'target-audit-failure', reason: 'Must be atomic' },
+    });
+
+    expect(res.statusCode).toBe(500);
+    expect(prisma._store.user.find((user) => user.id === 'target-audit-failure').banned).toBe(false);
+  });
 });
 
 // ─── POST /admin/unban ──────────────────────────────────────────────────────
@@ -227,6 +248,31 @@ describe('POST /admin/unban', () => {
     });
 
     expect(res.statusCode).toBe(400);
+  });
+
+  it('rolls an unban back when its required audit receipt fails', async () => {
+    prisma._store.user.push({
+      id: 'still-banned',
+      email: 'still-banned@example.com',
+      role: 'user',
+      banned: true,
+      banReason: 'Existing reason',
+      createdAt: new Date(),
+    });
+    prisma.auditLog.create.mockRejectedValueOnce(new Error('audit unavailable'));
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/admin/unban',
+      headers: { cookie: adminCookie },
+      payload: { userId: 'still-banned' },
+    });
+
+    expect(res.statusCode).toBe(500);
+    expect(prisma._store.user.find((user) => user.id === 'still-banned')).toMatchObject({
+      banned: true,
+      banReason: 'Existing reason',
+    });
   });
 });
 
@@ -542,6 +588,79 @@ describe('GET /admin/messages', () => {
   });
 });
 
+describe('support message actions', () => {
+  function seedQuestion() {
+    prisma._store.message.push({
+      id: 'support-question',
+      senderId: REGULAR.userId,
+      receiverId: null,
+      subject: 'Upload question',
+      body: 'My file did not parse.',
+      category: 'support',
+      status: 'open',
+      parentId: null,
+      metadata: { isIssue: true },
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+  }
+
+  it('persists an owner-visible reply and status change atomically', async () => {
+    seedQuestion();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/admin/messages/support-question/reply',
+      headers: { cookie: adminCookie },
+      payload: { body: 'Please retry with the supported PDF format.' },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(prisma._store.message).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        parentId: 'support-question',
+        receiverId: REGULAR.userId,
+        category: 'support',
+      }),
+    ]));
+    expect(prisma._store.message.find((row) => row.id === 'support-question').status).toBe('replied');
+    expect(prisma._store.auditLog).toEqual(expect.arrayContaining([
+      expect.objectContaining({ action: 'support.reply_sent', entityId: 'support-question' }),
+    ]));
+  });
+
+  it('rolls back the reply if its required audit receipt fails', async () => {
+    seedQuestion();
+    prisma.auditLog.create.mockRejectedValueOnce(new Error('audit unavailable'));
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/admin/messages/support-question/reply',
+      headers: { cookie: adminCookie },
+      payload: { body: 'This must not commit without its receipt.' },
+    });
+
+    expect(res.statusCode).toBe(500);
+    expect(prisma._store.message).toHaveLength(1);
+    expect(prisma._store.message[0].status).toBe('open');
+  });
+
+  it('cannot reply to an arbitrary non-support message', async () => {
+    seedQuestion();
+    prisma._store.message[0].category = 'private';
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/admin/messages/support-question/reply',
+      headers: { cookie: adminCookie },
+      payload: { body: 'No' },
+    });
+
+    expect(res.statusCode).toBe(404);
+    expect(prisma._store.message).toHaveLength(1);
+  });
+});
+
 // ─── POST /admin/pre-ban ─────────────────────────────────────────────────────
 
 describe('POST /admin/pre-ban', () => {
@@ -589,6 +708,32 @@ describe('POST /admin/pre-ban', () => {
     });
     expect(res.statusCode).toBe(400);
   });
+
+  it('does not retain a pre-ban when its required audit receipt fails', async () => {
+    prisma.auditLog.create.mockRejectedValueOnce(new Error('audit unavailable'));
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/admin/pre-ban',
+      headers: { cookie: adminCookie },
+      payload: { email: 'not-persisted@example.com', reason: 'Must be atomic' },
+    });
+
+    expect(res.statusCode).toBe(500);
+    expect(prisma._store.preBannedUser).toHaveLength(0);
+  });
+
+  it('does not let a plain admin pre-ban an existing super admin', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/admin/pre-ban',
+      headers: { cookie: adminCookie },
+      payload: { email: SUPER.email, reason: 'Privilege bypass attempt' },
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(prisma._store.user.find((user) => user.id === SUPER.userId).banned).toBe(false);
+  });
 });
 
 // ─── POST /admin/grant-premium ──────────────────────────────────────────────
@@ -598,6 +743,10 @@ describe('POST /admin/grant-premium', () => {
   // success tests are written against `adminCookie`; shadow it with the super
   // cookie so they exercise the authorized path without per-test edits.
   const adminCookie = superCookie;
+
+  beforeEach(() => {
+    prisma._store.user.push({ id: 'target-user', email: 'premium-target@example.com', role: 'user' });
+  });
 
   it('denies a plain admin (403) — revenue bypass is super_admin-only', async () => {
     const res = await app.inject({
@@ -638,6 +787,57 @@ describe('POST /admin/grant-premium', () => {
     });
 
     expect(res.statusCode).toBe(400);
+  });
+
+  it('reuses one active admin grant instead of creating competing tier rows', async () => {
+    const first = await app.inject({
+      method: 'POST',
+      url: '/admin/grant-premium',
+      headers: { cookie: adminCookie },
+      payload: { userId: 'target-user' },
+    });
+    const second = await app.inject({
+      method: 'POST',
+      url: '/admin/grant-premium',
+      headers: { cookie: adminCookie },
+      payload: { userId: 'target-user' },
+    });
+
+    expect(first.statusCode).toBe(200);
+    expect(second.statusCode).toBe(200);
+    expect(prisma._store.subscription.filter((row) => (
+      row.userId === 'target-user' && row.planType === 'admin_granted' && row.status === 'active'
+    ))).toHaveLength(1);
+  });
+
+  it('rolls the premium grant back when its required audit receipt fails', async () => {
+    prisma.auditLog.create.mockRejectedValueOnce(new Error('audit unavailable'));
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/admin/grant-premium',
+      headers: { cookie: adminCookie },
+      payload: { userId: 'target-user' },
+    });
+
+    expect(res.statusCode).toBe(500);
+    expect(prisma._store.subscription.filter((row) => row.userId === 'target-user')).toHaveLength(0);
+  });
+
+  it('retries a serializable conflict before committing the grant', async () => {
+    const conflict = new Error('write conflict');
+    conflict.code = 'P2034';
+    prisma.$transaction.mockRejectedValueOnce(conflict);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/admin/grant-premium',
+      headers: { cookie: adminCookie },
+      payload: { userId: 'target-user' },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(prisma._store.subscription.filter((row) => row.userId === 'target-user')).toHaveLength(1);
   });
 });
 
@@ -695,6 +895,8 @@ describe('POST /admin/grant-free-period', () => {
       userId: 'comp-target',
       status: 'active',
       planType: 'admin_granted',
+      stripeCustomerId: null,
+      stripeSubscriptionId: null,
       currentPeriodEnd: existingEnd,
       createdAt: new Date(),
     });
@@ -763,6 +965,7 @@ describe('POST /admin/grant-free-period', () => {
     // One user already has a comp — it should be extended, not duplicated.
     prisma._store.subscription.push({
       id: 'sub-a', userId: 'u-a', status: 'active', planType: 'admin_granted',
+      stripeCustomerId: null, stripeSubscriptionId: null,
       currentPeriodEnd: new Date(Date.now() + 2 * DAY), createdAt: new Date(),
     });
 
@@ -784,6 +987,34 @@ describe('POST /admin/grant-free-period', () => {
     expect(compRows.some((s) => s.userId === 'u-b')).toBe(true);
     // u-a still has exactly one comp row (extended in place).
     expect(compRows.filter((s) => s.userId === 'u-a')).toHaveLength(1);
+  });
+
+  it('rolls back an individual free-period grant if audit persistence fails', async () => {
+    prisma.auditLog.create.mockRejectedValueOnce(new Error('audit unavailable'));
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/admin/grant-free-period',
+      headers: { cookie: adminCookie },
+      payload: { userId: 'comp-target', period: 'week' },
+    });
+
+    expect(res.statusCode).toBe(500);
+    expect(prisma._store.subscription.filter((row) => row.userId === 'comp-target')).toHaveLength(0);
+  });
+
+  it('rolls back every bulk grant if the single required audit receipt fails', async () => {
+    prisma.auditLog.create.mockRejectedValueOnce(new Error('audit unavailable'));
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/admin/grant-free-period',
+      headers: { cookie: adminCookie },
+      payload: { scope: 'all', period: 'week' },
+    });
+
+    expect(res.statusCode).toBe(500);
+    expect(prisma._store.subscription).toHaveLength(0);
   });
 });
 
@@ -855,6 +1086,28 @@ describe('POST /admin/revoke-free-period', () => {
     });
     expect(res.statusCode).toBe(403);
   });
+
+  it('rolls a revoke back when its required audit receipt fails', async () => {
+    prisma._store.user.push({ id: 'rev-audit-target', email: 'rev-audit@test.com', role: 'user' });
+    prisma._store.subscription.push({
+      id: 'rev-audit-comp',
+      userId: 'rev-audit-target',
+      status: 'active',
+      planType: 'admin_granted',
+      currentPeriodEnd: new Date(Date.now() + DAY),
+    });
+    prisma.auditLog.create.mockRejectedValueOnce(new Error('audit unavailable'));
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/admin/revoke-free-period',
+      headers: { cookie: adminCookie },
+      payload: { userId: 'rev-audit-target' },
+    });
+
+    expect(res.statusCode).toBe(500);
+    expect(prisma._store.subscription.find((row) => row.id === 'rev-audit-comp').status).toBe('active');
+  });
 });
 
 // ─── POST /admin/grant-admin ────────────────────────────────────────────────
@@ -895,6 +1148,33 @@ describe('POST /admin/grant-admin', () => {
         data: { role: 'admin' },
       }),
     );
+  });
+
+  it('rolls the role change back when its required audit receipt fails', async () => {
+    prisma._store.user.push({ id: 'atomic-promotion', email: 'atomic@test.com', role: 'user' });
+    prisma.auditLog.create.mockRejectedValueOnce(new Error('audit unavailable'));
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/admin/grant-admin',
+      headers: { cookie: superCookie },
+      payload: { userId: 'atomic-promotion' },
+    });
+
+    expect(res.statusCode).toBe(500);
+    expect(prisma._store.user.find((user) => user.id === 'atomic-promotion').role).toBe('user');
+  });
+
+  it('cannot demote a super admin through the grant-admin endpoint', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/admin/grant-admin',
+      headers: { cookie: superCookie },
+      payload: { userId: SUPER.userId },
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(prisma._store.user.find((user) => user.id === SUPER.userId).role).toBe('super_admin');
   });
 });
 

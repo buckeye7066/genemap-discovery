@@ -42,7 +42,6 @@ describe('ApiClient.invokePublicationTask', () => {
       publicationTask: 'aggregate_genomics_research',
       taskInput: TASK_INPUT,
       options: {
-        provider: 'anthropic',
         temperature: 0.25,
         maxTokens: 640,
       },

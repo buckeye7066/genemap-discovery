@@ -18,6 +18,7 @@ vi.mock('../middleware/entitlements.js', () => ({
     request.entitlements = { isPremium: false };
   }),
   enforceUsageLimit: mocks.enforceUsageLimit,
+  requireResearchAi: vi.fn(async () => {}),
   recordUsage: vi.fn(async () => {}),
 }));
 
@@ -86,6 +87,7 @@ describe('/llm/invoke generation option validation', () => {
   });
 
   it.each([
+    ['provider', 'anthropic'],
     ['model', 'caller-selected-model'],
     ['size', '2048x2048'],
     ['quality', 'hd'],

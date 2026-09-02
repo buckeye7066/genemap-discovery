@@ -133,7 +133,7 @@ export function checksumMatches(expected, actual) {
  */
 export function parseUpdateManifest(raw) {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
-    throw new Error('Update feed is not available yet (no manifest published).');
+    throw new Error('No signed update manifest is published for this channel.');
   }
   const record = /** @type {Record<string, unknown>} */ (raw);
   const { version, url, sha256 } = record;
@@ -229,7 +229,7 @@ export async function fetchUpdateManifest({
   try {
     parsed = await response.json();
   } catch {
-    throw new Error('Update feed is not available yet (no manifest published).');
+    throw new Error('No signed update manifest is published for this channel.');
   }
   return parseUpdateManifest(parsed);
 }

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { authenticate } from '../middleware/auth.js';
+import { requireResearchSearch } from '../middleware/entitlements.js';
 import { searchPublicationConcepts } from '../services/publicationResolvers.js';
 
 const searchSchema = z.object({
@@ -14,6 +15,7 @@ const searchSchema = z.object({
  */
 export default async function publicationConceptRoutes(fastify) {
   fastify.addHook('preHandler', authenticate);
+  fastify.addHook('preHandler', requireResearchSearch);
 
   fastify.get('/search', async (request) => {
     const { q, kind } = searchSchema.parse(request.query || {});

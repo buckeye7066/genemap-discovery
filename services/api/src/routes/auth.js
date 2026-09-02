@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import crypto from 'crypto';
 import {
   hashPassword,
   verifyPassword,
@@ -11,21 +12,22 @@ import {
 } from '../utils/auth.js';
 import { authenticate } from '../middleware/auth.js';
 import { ensureCsrfCookie } from '../middleware/csrf.js';
-import { ValidationError, UnauthorizedError } from '../utils/errors.js';
+import { ForbiddenError, ValidationError, UnauthorizedError } from '../utils/errors.js';
 import { createAuditLog } from '../utils/audit.js';
 import { recordSuccessfulLogin } from '../services/firstLoginNotifier.js';
 import { getAuthCookieOptions, getClearCookieOptions } from '../utils/cookies.js';
 import { signupTrialGrant } from '../utils/signupTrial.js';
 import { grantOrExtendFreePeriod, FREE_PERIOD_DAYS } from '../utils/freePeriod.js';
+import { resolveEntitlements } from '../middleware/entitlements.js';
+import { withSerializableRetry } from '../utils/transactions.js';
 
 /**
  * Lower-case + trim the email before any DB lookup or write so the same
  * physical address can never produce two distinct users.
  *
- * NOTE: this runs on the application layer because the `users.email` column
- * is a plain `text UNIQUE`. A future migration should switch the column to
- * `citext` (and drop the application-side normalisation) — see
- * services/api/prisma/migrations/2_email_citext_*.sql when that ships.
+ * The database column is also case-insensitive (`citext`); keeping this
+ * normalization at the edge gives consistent display and token payloads while
+ * the database constraint closes races and non-application write paths.
  */
 function normalizeEmail(email) {
   return String(email).trim().toLowerCase();
@@ -86,6 +88,55 @@ const loginSchema = z.object({
   password: z.string(),
 });
 
+const EDUCATION_LEVELS = [
+  'elementary',
+  'middle_school',
+  'high_school',
+  'undergraduate',
+  'graduate',
+  'postgraduate',
+];
+
+function optionalProfileText(max) {
+  return z.preprocess(
+    (value) => value === '' ? null : value,
+    z.string().trim().max(max).nullable(),
+  ).optional();
+}
+
+const profilePictureField = z.preprocess(
+  (value) => value === '' ? null : value,
+  z.string().max(750_000).refine((value) => (
+    /^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/u.test(value)
+    || /^https:\/\/[^\s]+$/u.test(value)
+  ), 'profilePicture must be a supported image data URL or HTTPS URL').nullable(),
+).optional();
+
+const profileUpdateSchema = z.object({
+  displayName: optionalProfileText(160),
+  fullName: optionalProfileText(200),
+  phoneNumber: optionalProfileText(40),
+  educationLevel: z.preprocess(
+    (value) => value === '' ? null : value,
+    z.enum(EDUCATION_LEVELS).nullable(),
+  ).optional(),
+  demographicsCollected: z.boolean().optional(),
+  mailingListOptIn: z.boolean().optional(),
+  age: z.preprocess(
+    (value) => value === '' || value === null ? null : Number(value),
+    z.number().int().min(1).max(130).nullable(),
+  ).optional(),
+  fieldOfStudy: optionalProfileText(160),
+  researchInterests: optionalProfileText(5_000),
+  currentProjects: optionalProfileText(5_000),
+  publications: optionalProfileText(8_000),
+  linkedinUrl: optionalProfileText(500),
+  orcidId: optionalProfileText(32),
+  profilePicture: profilePictureField,
+}).strict().refine((value) => Object.keys(value).length > 0, {
+  message: 'At least one profile field is required',
+});
+
 /**
  * Build the canonical "current user" payload returned by GET and PUT /auth/me.
  *
@@ -98,49 +149,13 @@ const loginSchema = z.object({
  *
  * Returns null if the user no longer exists.
  */
-async function serializeMe(prisma, userId, email) {
-  const [user, licenseAssignment] = await Promise.all([
-    prisma.user.findUnique({
-      where: { id: userId },
-      include: {
-        subscriptions: {
-          // Keep in lock-step with checkEducationEntitlement: premium requires
-          // an active/trialing AND unexpired subscription. currentPeriodEnd ===
-          // null is treated as no-expiry (legacy rows).
-          where: {
-            status: { in: ['active', 'trialing'] },
-            OR: [{ currentPeriodEnd: null }, { currentPeriodEnd: { gt: new Date() } }],
-          },
-          orderBy: { createdAt: 'desc' },
-          take: 1,
-        },
-      },
-    }),
-    prisma.licenseAssignment.findFirst({
-      where: { userEmail: email, status: 'active' },
-      include: { license: true },
-    }),
+async function serializeMe(prisma, userId) {
+  const [user, entitlements] = await Promise.all([
+    prisma.user.findUnique({ where: { id: userId } }),
+    resolveEntitlements(prisma, userId),
   ]);
 
   if (!user) return null;
-
-  const isAdmin = user.role === 'admin' || user.role === 'super_admin';
-  const isPremium = Boolean(
-    isAdmin ||
-      (user.subscriptions?.length ?? 0) > 0 ||
-      (licenseAssignment && licenseAssignment.license?.status === 'active')
-  );
-
-  const entitlements = {
-    isPremium,
-    isAdmin,
-    licenseInfo: licenseAssignment
-      ? {
-          organizationName: licenseAssignment.license.organizationName,
-          licenseType: licenseAssignment.license.licenseType,
-        }
-      : null,
-  };
 
   return {
     id: user.id,
@@ -263,62 +278,68 @@ export default async function authRoutes(fastify) {
     }
     const parsed = registerSchema.parse(request.body);
     const email = normalizeEmail(parsed.email);
-
-    const existingUser = await prisma.user.findUnique({ where: { email } });
-    if (existingUser) {
-      throw new ValidationError('Email already registered');
-    }
-
     const passwordHash = await hashPassword(parsed.password);
-
-    // SECURITY: never assign admin/super_admin during public self-registration.
-    // ADMIN_EMAILS is only used during the initial bootstrap script
-    // (scripts/grant-admin.js); a fresh signup is always 'user'.
-    const user = await prisma.user.create({
-      data: {
-        email,
-        passwordHash,
-        role: 'user',
-      },
-    });
-
-    await createAuditLog(prisma, {
-      userId: user.id,
-      action: 'user.register',
-      entityType: 'user',
-      entityId: user.id,
-    });
-
-    // Always-on new-signup free trial: every newly-created user gets their OWN
-    // free period starting now, via the SAME admin_granted Subscription row the
-    // admin "grant free period" feature uses (utils/freePeriod.js), so a later
-    // admin grant EXTENDS this window instead of double-stacking a second row.
-    // ON by default (SIGNUP_TRIAL_ENABLED) — a fresh deploy grants every new
-    // user 7 free days with no env configuration required. Best-effort: never
-    // fail registration because the comp write fails.
     const trial = signupTrialGrant(process.env);
-    if (trial) {
-      try {
-        await grantOrExtendFreePeriod(prisma, user.id, FREE_PERIOD_DAYS[trial.period]);
-      } catch (err) {
-        request.log?.warn?.({ err: err?.message, userId: user.id }, 'signup trial grant failed');
+    const userId = crypto.randomUUID();
+    const accessToken = generateAccessToken({ userId, email, role: 'user' });
+    const refreshToken = generateRefreshToken({ userId });
+    const refreshTokenHash = await hashRefreshToken(refreshToken);
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+    const user = await withSerializableRetry(prisma, async (tx) => {
+      const [existingUser, preBanMatch] = await Promise.all([
+        tx.user.findUnique({ where: { email } }),
+        tx.preBannedUser.findFirst({
+          where: {
+            status: 'active',
+            email: { equals: email, mode: 'insensitive' },
+          },
+        }),
+      ]);
+      if (existingUser) throw new ValidationError('Email already registered');
+      if (preBanMatch) {
+        throw new ForbiddenError('Registration is not available for this account');
       }
-    }
+
+      // SECURITY: public registration always creates a standard user. The
+      // account, configured trial, session, and required registration receipt
+      // form one commit so the caller never receives a partially provisioned
+      // account that contradicts the advertised tier state.
+      const created = await tx.user.create({
+        data: {
+          id: userId,
+          email,
+          passwordHash,
+          role: 'user',
+        },
+      });
+
+      if (trial) {
+        await grantOrExtendFreePeriod(tx, created.id, FREE_PERIOD_DAYS[trial.period]);
+      }
+
+      await tx.session.create({
+        data: { userId: created.id, refreshTokenHash, expiresAt },
+      });
+
+      await createAuditLog(tx, {
+        userId: created.id,
+        action: 'user.register',
+        entityType: 'user',
+        entityId: created.id,
+        metadata: {
+          trialPeriod: trial?.period || null,
+          trialDays: trial?.days || 0,
+        },
+      }, { required: true });
+
+      return created;
+    });
 
     // Registration issues a session immediately, so it IS the first sign-in.
     // Fire-and-forget: stamping last_login_at / notifying the owner must never
     // affect the response.
     void recordSuccessfulLogin({ prisma, user, method: 'register' });
-
-    const accessToken = generateAccessToken({ userId: user.id, email: user.email, role: user.role });
-    const refreshToken = generateRefreshToken({ userId: user.id });
-
-    const refreshTokenHash = await hashRefreshToken(refreshToken);
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-
-    await prisma.session.create({
-      data: { userId: user.id, refreshTokenHash, expiresAt },
-    });
 
     // Issue CSRF cookie on register so the SPA can immediately make
     // state-changing calls (logout, profile update) without a /auth/me
@@ -373,18 +394,32 @@ export default async function authRoutes(fastify) {
     });
 
     if (preBanMatch) {
-      await prisma.user.update({
-        where: { id: user.id },
-        data: {
-          banned: true,
-          banReason: preBanMatch.reason || 'Pre-ban triggered',
-          bannedDate: new Date(),
-          bannedBy: preBanMatch.bannedBy,
-        },
-      });
-      await prisma.preBannedUser.update({
-        where: { id: preBanMatch.id },
-        data: { status: 'triggered', triggeredAt: new Date() },
+      await withSerializableRetry(prisma, async (tx) => {
+        const activeMatch = await tx.preBannedUser.findFirst({
+          where: { id: preBanMatch.id, status: 'active' },
+        });
+        if (!activeMatch) return;
+
+        await tx.user.update({
+          where: { id: user.id },
+          data: {
+            banned: true,
+            banReason: activeMatch.reason || 'Pre-ban triggered',
+            bannedDate: new Date(),
+            bannedBy: activeMatch.bannedBy,
+          },
+        });
+        await tx.preBannedUser.update({
+          where: { id: activeMatch.id },
+          data: { status: 'triggered', triggeredAt: new Date() },
+        });
+        await createAuditLog(tx, {
+          userId: user.id,
+          action: 'user.pre_ban_triggered',
+          entityType: 'user',
+          entityId: user.id,
+          metadata: { preBanId: activeMatch.id },
+        }, { required: true });
       });
       throw new UnauthorizedError('Account has been suspended');
     }
@@ -493,12 +528,36 @@ export default async function authRoutes(fastify) {
     const newHash = await hashRefreshToken(newRefresh);
     const newExpires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
-    await prisma.session.delete({ where: { id: matched.id } }).catch((err) => {
-      request.log?.warn?.({ err: err?.message, sessionId: matched.id }, 'failed to delete old session');
-    });
-    await prisma.session.create({
-      data: { userId: user.id, refreshTokenHash: newHash, expiresAt: newExpires },
-    });
+    try {
+      await prisma.$transaction(async (tx) => {
+        // Consume the presented session and create its replacement in one
+        // commit. `deleteMany` makes concurrent refreshes deterministic: only
+        // the transaction that consumes exactly one live row may mint a new
+        // token. If replacement persistence fails, the delete rolls back and
+        // the caller can safely retry the original token.
+        const consumed = await tx.session.deleteMany({
+          where: {
+            id: matched.id,
+            userId: user.id,
+            expiresAt: { gt: new Date() },
+          },
+        });
+        if (consumed.count !== 1) {
+          throw new UnauthorizedError('Refresh token has already been used');
+        }
+        await tx.session.create({
+          data: { userId: user.id, refreshTokenHash: newHash, expiresAt: newExpires },
+        });
+      });
+    } catch (error) {
+      if (error instanceof UnauthorizedError) {
+        reply
+          .clearCookie('accessToken', getClearCookieOptions())
+          .clearCookie('refreshToken', getClearCookieOptions())
+          .clearCookie('csrfToken', getClearCookieOptions());
+      }
+      throw error;
+    }
 
     const csrfToken = ensureCsrfCookie(request, reply);
 
@@ -509,7 +568,7 @@ export default async function authRoutes(fastify) {
   });
 
   fastify.get('/me', { preHandler: authenticateOrRefresh }, async (request, reply) => {
-    const me = await serializeMe(prisma, request.user.userId, request.user.email);
+    const me = await serializeMe(prisma, request.user.userId);
     if (!me) {
       throw new UnauthorizedError('User not found');
     }
@@ -534,7 +593,7 @@ export default async function authRoutes(fastify) {
       linkedinUrl,
       orcidId,
       profilePicture,
-    } = request.body || {};
+    } = profileUpdateSchema.parse(request.body || {});
 
     const data = {};
     if (displayName !== undefined) data.displayName = displayName;
@@ -542,12 +601,9 @@ export default async function authRoutes(fastify) {
     if (phoneNumber !== undefined) data.phoneNumber = phoneNumber;
     if (educationLevel !== undefined) data.educationLevel = educationLevel;
     if (demographicsCollected !== undefined) data.demographicsCollected = demographicsCollected;
-    if (mailingListOptIn !== undefined) data.mailingListOptIn = Boolean(mailingListOptIn);
+    if (mailingListOptIn !== undefined) data.mailingListOptIn = mailingListOptIn;
     if (age !== undefined) {
-      // The age input is a free <input type="number"> — empty string clears it,
-      // anything non-numeric is ignored rather than throwing a Prisma type error.
-      const parsed = age === '' || age === null ? null : Number.parseInt(age, 10);
-      data.age = Number.isNaN(parsed) ? null : parsed;
+      data.age = age;
     }
     if (fieldOfStudy !== undefined) data.fieldOfStudy = fieldOfStudy;
     if (researchInterests !== undefined) data.researchInterests = researchInterests;
@@ -557,24 +613,25 @@ export default async function authRoutes(fastify) {
     if (orcidId !== undefined) data.orcidId = orcidId;
     if (profilePicture !== undefined) data.profilePicture = profilePicture;
 
-    await prisma.user.update({
-      where: { id: request.user.userId },
-      data,
-    });
-
-    await createAuditLog(prisma, {
-      userId: request.user.userId,
-      action: 'user.update_profile',
-      entityType: 'user',
-      entityId: request.user.userId,
-      metadata: { fields: Object.keys(data) },
+    await prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: request.user.userId },
+        data,
+      });
+      await createAuditLog(tx, {
+        userId: request.user.userId,
+        action: 'user.update_profile',
+        entityType: 'user',
+        entityId: request.user.userId,
+        metadata: { fields: Object.keys(data) },
+      }, { required: true });
     });
 
     // Return the SAME canonical shape as GET /auth/me (incl. `entitlements`).
     // The SPA's applyUser() replaces the auth user with this payload; returning
     // a narrower object dropped entitlements and made premium users appear
     // downgraded until a full reload.
-    const me = await serializeMe(prisma, request.user.userId, request.user.email);
+    const me = await serializeMe(prisma, request.user.userId);
     if (!me) {
       throw new UnauthorizedError('User not found');
     }

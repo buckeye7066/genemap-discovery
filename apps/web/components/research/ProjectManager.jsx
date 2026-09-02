@@ -560,7 +560,7 @@ export default function ProjectManager() {
                     <h4 className="font-semibold text-slate-900 mb-2 text-sm">Sharing Options:</h4>
                     <ul className="space-y-1 text-xs text-slate-700">
                       <li>• JSON summary: Reviewable project metadata for research collaboration</li>
-                      <li>• Team access: Invite collaborators in the Team tab</li>
+                      <li>• Team access: Add registered collaborators in the Team tab</li>
                       <li>• Do not enter or export personal, patient, or individual genomic data</li>
                     </ul>
                   </div>

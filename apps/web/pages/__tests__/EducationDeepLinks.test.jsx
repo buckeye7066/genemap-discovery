@@ -10,7 +10,6 @@ vi.mock('@genemap/shared', () => ({
   apiClient: {
     getTopics: vi.fn(),
     getExplanation: vi.fn(),
-    generateImage: vi.fn(),
     chat: vi.fn(),
     generateQuiz: vi.fn(),
     updateLearningProgress: vi.fn(),
@@ -24,7 +23,6 @@ vi.mock('@/lib/EducationLevelContext', () => ({
   }),
 }));
 vi.mock('@/components/education/AdaptiveExplanation', () => ({ default: () => null }));
-vi.mock('@/components/education/AdaptiveImage', () => ({ default: () => null }));
 vi.mock('@/components/education/LevelPicker', () => ({ default: () => null }));
 vi.mock('@/components/education/UsageBanner', () => ({ default: () => null }));
 vi.mock('@/components/shared/MedicalDisclaimer', () => ({ default: () => null }));
@@ -60,7 +58,6 @@ describe('education deep-link catalog boundary', () => {
     expect(screen.queryByText(/take tylenol/i)).not.toBeInTheDocument();
     await waitFor(() => expect(apiClient.getTopics).toHaveBeenCalledOnce());
     expect(apiClient.getExplanation).not.toHaveBeenCalled();
-    expect(apiClient.generateImage).not.toHaveBeenCalled();
     expect(apiClient.chat).not.toHaveBeenCalled();
   });
 

@@ -2,10 +2,7 @@
  * Operator alerting for failures that MUST reach a human.
  *
  * Deliberately built on the channel this repository already has rather than a
- * new vendor: `services/email.js` (Resend) addressed to `ADMIN_EMAILS`. Note
- * that `config/sentry.js` is an intentional NO-OP in the education/research
- * publication build — routing alerts there would silently drop them, which is
- * exactly the failure mode this module exists to prevent.
+ * new vendor: `services/email.js` (Resend) addressed to `ADMIN_EMAILS`.
  *
  * Two properties matter more than delivery guarantees:
  *

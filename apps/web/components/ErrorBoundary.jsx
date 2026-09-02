@@ -2,7 +2,6 @@ import React from "react";
 import { AlertTriangle, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { reportClientError } from "@/lib/reportClientError.js";
-import { captureException } from "@/lib/sentry.js";
 
 export class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -17,9 +16,6 @@ export class ErrorBoundary extends React.Component {
   componentDidCatch(error, errorInfo) {
     console.error(`[ErrorBoundary${this.props.name ? `: ${this.props.name}` : ''}]`, error, errorInfo);
     reportClientError(error, { componentStack: errorInfo?.componentStack });
-    // Render errors are swallowed here and never reach window.onerror, so report
-    // them to Sentry explicitly (no-op when Sentry isn't configured).
-    captureException(error);
   }
 
   render() {

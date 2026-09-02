@@ -9,7 +9,6 @@ vi.mock('../services/llm.js', () => ({
     return opts.includeMetadata ? { text, completion: 'complete' } : text;
   }),
   generateChatResponse: vi.fn(async (msgs, opts) => `CHAT(${msgs.length}):${opts.maxTokens}`),
-  generateImage: vi.fn(async (prompt, opts) => ({ url: `https://img/${opts.size}` })),
 }));
 
 let app;
@@ -78,7 +77,13 @@ beforeEach(() => {
     email: 'premium@example.com',
     role: 'user',
     banned: false,
-    subscriptions: [{ status: 'active' }],
+    subscriptions: [{
+      status: 'active',
+      planType: 'month',
+      stripeCustomerId: 'cus_premium_user',
+      stripeSubscriptionId: 'sub_premium_user',
+      currentPeriodEnd: new Date(Date.now() + 86_400_000),
+    }],
     createdAt: new Date(),
     updatedAt: new Date(),
   });
@@ -90,24 +95,6 @@ describe('LLM route protection', () => {
       method: 'POST',
       url: '/llm/invoke',
       payload: { prompt: 'hello' },
-    });
-    expect(res.statusCode).toBe(401);
-  });
-
-  it('rejects anonymous /llm/chat calls', async () => {
-    const res = await app.inject({
-      method: 'POST',
-      url: '/llm/chat',
-      payload: { messages: [{ role: 'user', content: 'hi' }] },
-    });
-    expect(res.statusCode).toBe(401);
-  });
-
-  it('rejects anonymous /llm/image calls', async () => {
-    const res = await app.inject({
-      method: 'POST',
-      url: '/llm/image',
-      payload: { prompt: 'hi' },
     });
     expect(res.statusCode).toBe(401);
   });
@@ -128,38 +115,30 @@ describe('LLM route protection', () => {
     expect(llmInternals.clampTemperature(0.4)).toBe(0.4);
   });
 
-  it('successful free-tier /llm/invoke returns a canonical publication envelope', async () => {
-    // Pre-fill learningSession so we are nowhere near the daily limit
-    prisma.learningSession.count = vi.fn(async () => 0);
-    prisma.licenseAssignment.findFirst = vi.fn(async () => null);
-    prisma.user.findUnique = vi.fn(async ({ where }) => prisma._store.user.find((u) => u.id === where.id));
-
+  it('rejects a free-tier research invocation with a machine-readable entitlement response', async () => {
     const res = await app.inject({
       method: 'POST',
       url: '/llm/invoke',
       headers: { cookie: authCookie({ userId: 'free-user', email: 'free@example.com', role: 'user' }) },
       payload: invokePayload({ maxTokens: 999999 }),
     });
-    expect(res.statusCode).toBe(200);
+    expect(res.statusCode).toBe(403);
     const body = JSON.parse(res.body);
-    expect(body.disclaimer).toMatch(/educational/i);
-    expect(body.publication).toMatchObject({
-      contractVersion: 1,
-      status: 'available',
-      reasonCode: null,
+    expect(body).toMatchObject({
+      code: 'ENTITLEMENT_REQUIRED',
+      details: {
+        entitlement: {
+          feature: 'research.ai',
+          requiredTier: 'premium',
+          currentTier: 'free',
+        },
+      },
     });
-    expect(body).not.toHaveProperty('result');
-    // Server clamped maxTokens, never sent the user's giant value
-    expect(body.publication.content).toMatch(/EXPL\(\d+\):\d+$/);
-    const reportedMax = Number(body.publication.content.split(':')[1]);
-    expect(reportedMax).toBeLessThanOrEqual(llmInternals.DEFAULT_MAX_TOKENS);
+    expect(prisma._store.learningSession).toHaveLength(0);
   });
 
-  it('refuses /llm/invoke when daily free-tier explanations are exhausted', async () => {
-    // Force usage limit to be hit
+  it('enforces the research tier before consulting any legacy free-use counter', async () => {
     prisma.learningSession.count = vi.fn(async () => 9999);
-    prisma.licenseAssignment.findFirst = vi.fn(async () => null);
-    prisma.user.findUnique = vi.fn(async ({ where }) => prisma._store.user.find((u) => u.id === where.id));
 
     const res = await app.inject({
       method: 'POST',
@@ -169,17 +148,14 @@ describe('LLM route protection', () => {
     });
     expect(res.statusCode).toBe(403);
     const body = JSON.parse(res.body);
-    expect(body.error).toMatch(/daily limit/i);
+    expect(body.code).toBe('ENTITLEMENT_REQUIRED');
+    expect(prisma.learningSession.count).not.toHaveBeenCalled();
   });
 
-  it('persistently increments usage across multiple successful calls and blocks once the limit is hit', async () => {
-    // No per-test vi.fn override here — beforeEach already wires count/find
-    // to the in-memory store so we exercise the actual persistent counter.
-    // Free-tier explanations_per_day = 5.
-    const cookie = authCookie({ userId: 'free-user', email: 'free@example.com', role: 'user' });
+  it('persistently records premium research invocations without applying the free education quota', async () => {
+    const cookie = authCookie({ userId: 'premium-user', email: 'premium@example.com', role: 'user' });
 
-    // 5 successful calls should all return 200 and persist a learning session each.
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < 6; i++) {
       const res = await app.inject({
         method: 'POST',
         url: '/llm/invoke',
@@ -189,47 +165,41 @@ describe('LLM route protection', () => {
       expect(res.statusCode).toBe(200);
     }
 
-    // After 5 successful calls, the LearningSession store must contain 5
-    // 'explanation' rows for this user — proves usage is *persistent*.
     const persisted = prisma._store.learningSession.filter(
-      (s) => s.userId === 'free-user' && s.type === 'explanation',
+      (s) => s.userId === 'premium-user' && s.type === 'explanation',
     );
-    expect(persisted).toHaveLength(5);
-
-    // The 6th call must be denied by the limit check.
-    const blocked = await app.inject({
-      method: 'POST',
-      url: '/llm/invoke',
-      headers: { cookie },
-      payload: invokePayload(),
-    });
-    expect(blocked.statusCode).toBe(403);
-    expect(JSON.parse(blocked.body).error).toMatch(/daily limit/i);
-
-    // And no extra row was written for the denied call.
-    expect(
-      prisma._store.learningSession.filter(
-        (s) => s.userId === 'free-user' && s.type === 'explanation',
-      ),
-    ).toHaveLength(5);
+    expect(persisted).toHaveLength(6);
   });
 
-  it('retired arbitrary chat never consumes usage and structured invoke remains available', async () => {
-    const cookie = authCookie({ userId: 'free-user', email: 'free@example.com', role: 'user' });
+  it('does not publish research content when its required audit write cannot commit', async () => {
+    prisma.auditLog.create.mockRejectedValueOnce(new Error('audit storage unavailable'));
 
-    const blocked = await app.inject({
+    const res = await app.inject({
       method: 'POST',
-      url: '/llm/chat',
-      headers: { cookie },
-      payload: { messages: [{ role: 'user', content: 'arbitrary' }] },
+      url: '/llm/invoke',
+      headers: {
+        cookie: authCookie({ userId: 'premium-user', email: 'premium@example.com', role: 'user' }),
+      },
+      payload: invokePayload(),
     });
-    expect(blocked.statusCode).toBeGreaterThanOrEqual(400);
-    expect(prisma._store.learningSession).toHaveLength(0);
 
+    expect(res.statusCode).toBe(503);
+    expect(JSON.parse(res.body)).toMatchObject({
+      code: 'RESULT_ACCOUNTING_UNAVAILABLE',
+      error: 'Research result accounting is temporarily unavailable. Please retry shortly.',
+    });
+    expect(res.body).not.toContain('EXPL(');
+    expect(prisma._store.learningSession).toEqual([]);
+    expect(prisma._store.auditLog).toEqual([]);
+  });
+
+  it('keeps the premium structured invoke route available', async () => {
     const stillOk = await app.inject({
       method: 'POST',
       url: '/llm/invoke',
-      headers: { cookie },
+      headers: {
+        cookie: authCookie({ userId: 'premium-user', email: 'premium@example.com', role: 'user' }),
+      },
       payload: invokePayload(),
     });
     expect(stillOk.statusCode).toBe(200);
@@ -241,7 +211,7 @@ describe('LLM route protection', () => {
       throw new Error('upstream timeout');
     });
 
-    const cookie = authCookie({ userId: 'free-user', email: 'free@example.com', role: 'user' });
+    const cookie = authCookie({ userId: 'premium-user', email: 'premium@example.com', role: 'user' });
     const res = await app.inject({
       method: 'POST',
       url: '/llm/invoke',
@@ -261,10 +231,10 @@ describe('LLM route protection', () => {
     expect(body).not.toHaveProperty('result');
 
     const charged = prisma._store.learningSession.filter(
-      (s) => s.userId === 'free-user' && s.type === 'explanation',
+      (s) => s.userId === 'premium-user' && s.type === 'explanation',
     );
     const persistedStatus = prisma._store.learningSession.filter(
-      (s) => s.userId === 'free-user' && s.type === 'publication_status',
+      (s) => s.userId === 'premium-user' && s.type === 'publication_status',
     );
     expect(charged).toHaveLength(0);
     expect(persistedStatus).toHaveLength(1);
@@ -288,7 +258,7 @@ describe('LLM route protection', () => {
       method: 'POST',
       url: '/llm/invoke',
       headers: {
-        cookie: authCookie({ userId: 'free-user', email: 'free@example.com', role: 'user' }),
+        cookie: authCookie({ userId: 'premium-user', email: 'premium@example.com', role: 'user' }),
       },
       payload: invokePayload(),
     });
@@ -316,7 +286,7 @@ describe('LLM route protection', () => {
       method: 'POST',
       url: '/llm/invoke',
       headers: {
-        cookie: authCookie({ userId: 'free-user', email: 'free@example.com', role: 'user' }),
+        cookie: authCookie({ userId: 'premium-user', email: 'premium@example.com', role: 'user' }),
       },
       payload: invokePayload({ maxTokens: 100, [field]: value }),
     });
@@ -333,7 +303,7 @@ describe('LLM route protection', () => {
       method: 'POST',
       url: '/llm/invoke',
       headers: {
-        cookie: authCookie({ userId: 'free-user', email: 'free@example.com', role: 'user' }),
+        cookie: authCookie({ userId: 'premium-user', email: 'premium@example.com', role: 'user' }),
       },
       payload: {
         publicationTask: 'aggregate_genomics_research',

@@ -1,11 +1,155 @@
 import { authenticate } from '../middleware/auth.js';
+import { requireFeature } from '../middleware/entitlements.js';
 import { logMedicalAccess } from '../middleware/accessLog.js';
+import { FEATURES } from '../config/entitlementCatalog.js';
 import { createAuditLog } from '../utils/audit.js';
 import { encrypt, decrypt } from '../utils/encryption.js';
 import { ValidationError, NotFoundError, ForbiddenError } from '../utils/errors.js';
+import {
+  MEDICAL_DATA_STORAGE_CONSENT,
+  requireLatestConsent,
+  validateHealthRecordContent,
+} from '../services/healthRecords.js';
 
 function normalizeEmail(email) {
   return String(email || '').trim().toLowerCase();
+}
+
+const EMAIL_ADDRESS = /^[^\s@]+@[^\s@]+\.[^\s@]+$/u;
+
+function normalizeSeatEmails(values) {
+  if (!Array.isArray(values) || values.length === 0) {
+    throw new ValidationError('At least one user email is required');
+  }
+  if (values.length > 100) throw new ValidationError('No more than 100 seats can be assigned at once');
+  const emails = values.map(normalizeEmail);
+  if (emails.some((email) => !EMAIL_ADDRESS.test(email))) {
+    throw new ValidationError('Every seat assignment needs a valid email address');
+  }
+  if (new Set(emails).size !== emails.length) {
+    throw new ValidationError('Duplicate email addresses are not allowed in one assignment request');
+  }
+  return emails;
+}
+
+function assertLicenseCanAssignSeats(license, now = new Date()) {
+  const startDate = new Date(license?.startDate);
+  const endDate = new Date(license?.endDate);
+  if (
+    license?.status !== 'active'
+    || !Number.isFinite(startDate.getTime())
+    || !Number.isFinite(endDate.getTime())
+    || startDate > now
+    || endDate <= now
+  ) {
+    throw new ValidationError('Seats can only be assigned to an active, current license');
+  }
+}
+
+function publicOwnedLicense(license) {
+  return {
+    id: license.id,
+    organizationName: license.organizationName,
+    contactEmail: license.contactEmail,
+    licenseType: license.licenseType,
+    maxSeats: license.maxSeats,
+    assignedSeats: license.assignedSeats,
+    status: license.status,
+    startDate: license.startDate,
+    endDate: license.endDate,
+    renewalDate: license.renewalDate,
+    autoRenew: Boolean(license.autoRenew),
+    canManageBilling: Boolean(license.stripeCustomerId),
+    assignments: (license.assignments || []).map((assignment) => ({
+      id: assignment.id,
+      userEmail: assignment.userEmail,
+      status: assignment.status,
+      department: assignment.department || null,
+      createdAt: assignment.createdAt,
+      updatedAt: assignment.updatedAt,
+    })),
+    usageLogs: (license.usageLogs || []).map((entry) => ({
+      id: entry.id,
+      userEmail: entry.userEmail,
+      action: entry.action,
+      createdAt: entry.createdAt,
+    })),
+  };
+}
+
+function publicSupportMessage(message, userId) {
+  return {
+    id: message.id,
+    subject: message.subject,
+    body: message.body,
+    category: 'support',
+    status: message.status,
+    parentId: message.parentId || null,
+    isIssue: message.metadata?.isIssue === true,
+    direction: message.senderId === userId ? 'sent' : 'received',
+    createdAt: message.createdAt,
+    updatedAt: message.updatedAt,
+  };
+}
+
+async function assignLicenseSeats(prisma, { license, emails, department, assignedBy }) {
+  const now = new Date();
+  assertLicenseCanAssignSeats(license, now);
+  try {
+    return await prisma.$transaction(async (tx) => {
+      const existing = await tx.licenseAssignment.findMany({
+        where: { licenseId: license.id, userEmail: { in: emails }, status: 'active' },
+      });
+      if (existing.length) {
+        throw new ValidationError('At least one user already has an active seat on this license');
+      }
+
+      // Reserve the complete batch with one conditional update. Either every
+      // requested seat fits or none are written; a bulk operation cannot leave a
+      // half-assigned organization after the first bad address or full seat pool.
+      const updated = await tx.institutionalLicense.updateMany({
+        where: {
+          id: license.id,
+          status: 'active',
+          startDate: { lte: now },
+          endDate: { gt: now },
+          assignedSeats: { lte: license.maxSeats - emails.length },
+        },
+        data: { assignedSeats: { increment: emails.length } },
+      });
+      if (updated.count !== 1) throw new ValidationError('No available seats for this assignment');
+
+      const assignments = [];
+      for (const userEmail of emails) {
+        assignments.push(await tx.licenseAssignment.create({
+          data: {
+            licenseId: license.id,
+            userEmail,
+            assignedBy,
+            status: 'active',
+            department: department || null,
+          },
+        }));
+        await tx.licenseUsageLog.create({
+          data: {
+            licenseId: license.id,
+            userEmail,
+            action: 'seat_assigned',
+            metadata: { assignedBy, department: department || null },
+          },
+        });
+      }
+      return assignments;
+    });
+  } catch (error) {
+    // Production also has a partial unique index on active
+    // (license_id,user_email). Translate a concurrent collision into the same
+    // stable client error instead of leaking it as a 500.
+    if (error?.code === 'P2002') {
+      throw new ValidationError('At least one user already has an active seat on this license');
+    }
+    throw error;
+  }
 }
 
 // Roles assignable to a project collaborator. 'owner' is intentionally excluded
@@ -47,6 +191,46 @@ function assertJsonSize(val, field, max = LIMIT.json) {
   if (serialized.length > max) throw new ValidationError(`${field} is too large`);
 }
 
+function parseConsentChoice(value, index = null) {
+  const field = index == null ? 'consent' : `choices[${index}]`;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new ValidationError(`${field} must be an object`);
+  }
+  const { consentType, version, granted, metadata } = value;
+  if (!consentType || !version || granted === undefined) {
+    throw new ValidationError(`${field}: consentType, version, and granted are required`);
+  }
+  assertString(consentType, `${field}.consentType`, LIMIT.name);
+  assertString(version, `${field}.version`, LIMIT.name);
+  if (typeof granted !== 'boolean') {
+    throw new ValidationError(`${field}.granted must be a boolean`);
+  }
+  assertJsonSize(metadata, `${field}.metadata`);
+  return { consentType, version, granted, metadata: metadata || null };
+}
+
+async function createConsentRecord(tx, request, choice) {
+  const created = await tx.consentRecord.create({
+    data: {
+      userId: request.user.userId,
+      ...choice,
+      ipAddress: request.ip || request.headers['x-forwarded-for'] || null,
+    },
+  });
+  await createAuditLog(tx, {
+    userId: request.user.userId,
+    action: 'consent_recorded',
+    entityType: 'consent_record',
+    entityId: created.id,
+    metadata: {
+      consentType: choice.consentType,
+      version: choice.version,
+      granted: choice.granted,
+    },
+  }, { required: true });
+  return created;
+}
+
 /**
  * Centralised access guard for any project-scoped resource (versions,
  * annotations, collaborators). Owners always have access; collaborators
@@ -81,27 +265,37 @@ async function requireProjectAccess(prisma, projectId, userId, roles = ['owner',
   return { project, role: collab.role };
 }
 
-/**
- * Throws ForbiddenError unless the requester has previously granted a
- * matching consent record. Does not check that the consent has been revoked
- * — clients should call /entities/consent again to overwrite.
- */
-async function requireConsent(prisma, userId, consentType, minVersion) {
-  const consent = await prisma.consentRecord.findFirst({
-    where: { userId, consentType, version: minVersion, granted: true },
-    orderBy: { createdAt: 'desc' },
-  });
-
-  if (!consent) {
-    throw new ForbiddenError(`Consent required: ${consentType} v${minVersion}`);
-  }
-}
-
 const SELF_SERVICE_PURGE_TYPES = Object.freeze([
   'medicalData',
   'aiConversations',
   'searchHistory',
 ]);
+
+const ENTITY_FEATURE_GUARDS = new Map([
+  [FEATURES.RESEARCH_SEARCH, requireFeature(FEATURES.RESEARCH_SEARCH)],
+  [FEATURES.RESEARCH_WORKSPACE, requireFeature(FEATURES.RESEARCH_WORKSPACE)],
+  [FEATURES.HEALTH_RECORDS, requireFeature(FEATURES.HEALTH_RECORDS)],
+  [FEATURES.PROFILE_ASSISTANTS, requireFeature(FEATURES.PROFILE_ASSISTANTS)],
+  [FEATURES.INSTITUTION_MANAGEMENT, requireFeature(FEATURES.INSTITUTION_MANAGEMENT)],
+]);
+
+function featureForEntityRoute(routeUrl) {
+  const path = String(routeUrl || '').split('?')[0];
+  if (path.includes('/medical-data')) return FEATURES.HEALTH_RECORDS;
+  if (path.includes('/conversations')) return FEATURES.PROFILE_ASSISTANTS;
+  if (path.includes('/search-history')) return FEATURES.RESEARCH_SEARCH;
+  if (path.includes('/gene-sets') || path.includes('/projects')) {
+    return FEATURES.RESEARCH_WORKSPACE;
+  }
+  if (path.includes('/licenses')) return FEATURES.INSTITUTION_MANAGEMENT;
+  return null;
+}
+
+async function enforceEntityFeature(request) {
+  const feature = featureForEntityRoute(request.routeOptions?.url || request.url);
+  if (!feature) return;
+  await ENTITY_FEATURE_GUARDS.get(feature)(request);
+}
 
 /**
  * Process the currently implemented, limited content purge in one transaction.
@@ -132,6 +326,7 @@ export default async function entityRoutes(fastify) {
   const prisma = fastify.prisma;
 
   fastify.addHook('preHandler', authenticate);
+  fastify.addHook('preHandler', enforceEntityFeature);
 
   // ─── Search History ─────────────────────────────────────────
   fastify.get('/search-history', async (request) => {
@@ -209,6 +404,7 @@ export default async function entityRoutes(fastify) {
   // every read is audit-logged via logMedicalAccess.
   fastify.get('/medical-data', { preHandler: logMedicalAccess('medical_data.read') }, async (request) => {
     const { dataType } = request.query;
+    assertString(dataType, 'dataType', LIMIT.name);
     const where = { userId: request.user.userId };
     if (dataType) where.dataType = dataType;
 
@@ -219,7 +415,9 @@ export default async function entityRoutes(fastify) {
 
     const decryptedRecords = records.map((record) => ({
       ...record,
+      title: decrypt(record.title),
       content: decrypt(record.content),
+      fileUrl: decrypt(record.fileUrl),
       metadata: decrypt(record.metadata),
     }));
 
@@ -235,49 +433,52 @@ export default async function entityRoutes(fastify) {
     assertJsonSize(content, 'content');
     assertJsonSize(metadata, 'metadata');
 
-    // Consent gate runs before write. Legacy medical-data routes remain blocked
-    // in the publication build; this path is not a HIPAA-readiness claim.
-    // Storing genetic / medical data without an active consent record is a hard
-    // failure regardless of authentication state.
-    await requireConsent(prisma, request.user.userId, 'medical_data_storage', '1.0');
-
-    const encryptedContent = encrypt(content);
+    const validatedContent = validateHealthRecordContent(dataType, content);
+    const encryptedContent = encrypt(validatedContent);
     // `metadata` is a free-form blob that can carry the same genetic/clinical
     // detail as `content`, so it must be encrypted at rest too — otherwise the
     // "never store plaintext medical data" guarantee has a plaintext sibling.
     // It is never used in a WHERE filter, so encrypting it costs no query path.
     const encryptedMetadata = metadata != null ? encrypt(metadata) : null;
 
-    const record = await prisma.medicalData.create({
-      data: {
-        userId: request.user.userId,
-        dataType,
-        title: title || null,
-        content: encryptedContent,
-        fileUrl: fileUrl || null,
-        metadata: encryptedMetadata,
-      },
-    });
-
-    await createAuditLog(
-      prisma,
-      {
+    const record = await prisma.$transaction(async (tx) => {
+      // The consent check, encrypted write, and durable action receipt commit
+      // together. A failed audit insert cannot leave an unreceipted health row.
+      await requireLatestConsent(tx, request.user.userId, MEDICAL_DATA_STORAGE_CONSENT);
+      const created = await tx.medicalData.create({
+        data: {
+          userId: request.user.userId,
+          dataType,
+          title: title ? encrypt(title) : null,
+          content: encryptedContent,
+          fileUrl: fileUrl ? encrypt(fileUrl) : null,
+          metadata: encryptedMetadata,
+        },
+      });
+      await createAuditLog(tx, {
         userId: request.user.userId,
         action: 'medical_data.write',
         entityType: 'medical_data',
-        entityId: record.id,
+        entityId: created.id,
         metadata: { dataType },
-      },
-      { required: true }
-    );
+      }, { required: true });
+      return created;
+    });
 
-    return { record: { ...record, content, metadata: metadata ?? null } };
+    return {
+      record: {
+        ...record,
+        title: title ?? null,
+        content: validatedContent,
+        fileUrl: fileUrl ?? null,
+        metadata: metadata ?? null,
+      },
+    };
   });
 
   // Partial update. `content` is shallow-merged into the existing (decrypted)
-  // content blob so a caller can patch a single field (e.g. parsed VCF
-  // variants) without having to resend the whole record and risk clobbering
-  // the AI summary / gene list produced at upload time.
+  // content blob so a caller can patch one health-profile field without
+  // resending and potentially clobbering the remaining structured record.
   fastify.put('/medical-data/:id', { preHandler: logMedicalAccess('medical_data.write') }, async (request) => {
     const { id } = request.params;
     const { dataType, title, content, metadata, fileUrl } = request.body || {};
@@ -287,66 +488,75 @@ export default async function entityRoutes(fastify) {
     assertJsonSize(content, 'content');
     assertJsonSize(metadata, 'metadata');
 
-    const existing = await prisma.medicalData.findFirst({
-      where: { id, userId: request.user.userId },
-    });
-    if (!existing) throw new ValidationError('Medical record not found');
+    const { record, mergedContent } = await prisma.$transaction(async (tx) => {
+      const existing = await tx.medicalData.findFirst({
+        where: { id, userId: request.user.userId },
+      });
+      if (!existing) throw new ValidationError('Medical record not found');
+      await requireLatestConsent(tx, request.user.userId, MEDICAL_DATA_STORAGE_CONSENT);
 
-    const data = {};
-    if (dataType !== undefined) data.dataType = dataType;
-    if (title !== undefined) data.title = title || null;
-    if (fileUrl !== undefined) data.fileUrl = fileUrl || null;
-    // Encrypt metadata at rest (see POST handler); null clears it.
-    if (metadata !== undefined) data.metadata = metadata != null ? encrypt(metadata) : null;
+      const data = {};
+      if (dataType !== undefined) data.dataType = dataType;
+      if (title !== undefined) data.title = title ? encrypt(title) : null;
+      if (fileUrl !== undefined) data.fileUrl = fileUrl ? encrypt(fileUrl) : null;
+      // Encrypt metadata at rest (see POST handler); null clears it.
+      if (metadata !== undefined) data.metadata = metadata != null ? encrypt(metadata) : null;
 
-    let mergedContent = decrypt(existing.content);
-    if (content !== undefined) {
-      const current =
-        mergedContent && typeof mergedContent === 'object' && !Array.isArray(mergedContent)
-          ? mergedContent
+      let nextContent = decrypt(existing.content);
+      if (content !== undefined) {
+        const current =
+          nextContent && typeof nextContent === 'object' && !Array.isArray(nextContent)
+            ? nextContent
+            : {};
+        const contentPatch = content && typeof content === 'object' && !Array.isArray(content)
+          ? content
           : {};
-      const patch = content && typeof content === 'object' && !Array.isArray(content) ? content : {};
-      mergedContent = { ...current, ...patch };
-      data.content = encrypt(mergedContent);
-    }
+        nextContent = { ...current, ...contentPatch };
+      }
+      // A dataType-only update still has to validate the existing content
+      // against the new schema. Otherwise a caller could relabel arbitrary text
+      // as a parser-structured lab document and have it enter assistant context.
+      if (content !== undefined || dataType !== undefined) {
+        nextContent = validateHealthRecordContent(dataType ?? existing.dataType, nextContent);
+        data.content = encrypt(nextContent);
+      }
 
-    const record = await prisma.medicalData.update({
-      where: { id: existing.id },
-      data,
-    });
-
-    await createAuditLog(
-      prisma,
-      {
+      const updated = await tx.medicalData.update({ where: { id: existing.id }, data });
+      await createAuditLog(tx, {
         userId: request.user.userId,
         action: 'medical_data.write',
         entityType: 'medical_data',
-        entityId: record.id,
-        metadata: { dataType: record.dataType, update: true },
-      },
-      { required: true }
-    );
+        entityId: updated.id,
+        metadata: { dataType: updated.dataType, update: true },
+      }, { required: true });
+      return { record: updated, mergedContent: nextContent };
+    });
 
-    return { record: { ...record, content: mergedContent, metadata: record.metadata ? decrypt(record.metadata) : null } };
+    return {
+      record: {
+        ...record,
+        title: title !== undefined ? title : decrypt(record.title),
+        content: mergedContent,
+        fileUrl: fileUrl !== undefined ? fileUrl : decrypt(record.fileUrl),
+        metadata: record.metadata ? decrypt(record.metadata) : null,
+      },
+    };
   });
 
   fastify.delete('/medical-data/:id', { preHandler: logMedicalAccess('medical_data.delete') }, async (request) => {
     const { id } = request.params;
-    const result = await prisma.medicalData.deleteMany({
-      where: { id, userId: request.user.userId },
-    });
-
-    await createAuditLog(
-      prisma,
-      {
+    await prisma.$transaction(async (tx) => {
+      const result = await tx.medicalData.deleteMany({
+        where: { id, userId: request.user.userId },
+      });
+      await createAuditLog(tx, {
         userId: request.user.userId,
         action: 'medical_data.delete',
         entityType: 'medical_data',
         entityId: id,
         metadata: { deletedCount: result.count },
-      },
-      { required: true }
-    );
+      }, { required: true });
+    });
 
     return { success: true };
   });
@@ -374,57 +584,26 @@ export default async function entityRoutes(fastify) {
     return { conversations: decrypted };
   });
 
-  fastify.post('/conversations', async (request) => {
-    const { assistantType, title, messages, metadata } = request.body || {};
-    if (!assistantType || !messages) throw new ValidationError('assistantType and messages are required');
-    assertString(assistantType, 'assistantType', LIMIT.name);
-    assertString(title, 'title', LIMIT.name);
-    assertJsonSize(messages, 'messages');
-    assertJsonSize(metadata, 'metadata');
-
-    const conversation = await prisma.aIConversation.create({
-      data: {
-        userId: request.user.userId,
-        assistantType,
-        // The client derives the title from the first user message (see
-        // usePersistConversation), so it can carry the same PHI as the body —
-        // encrypt it too.
-        title: title ? encrypt(title) : null,
-        messages: encrypt(messages),
-        metadata: metadata != null ? encrypt(metadata) : null,
-      },
-    });
-    // Return plaintext to the caller (who just sent it) rather than ciphertext.
-    return { conversation: { ...conversation, title: title ?? null, messages, metadata: metadata ?? null } };
-  });
-
-  fastify.put('/conversations/:id', async (request) => {
+  fastify.delete('/conversations/:id', async (request) => {
     const { id } = request.params;
-    const { title, messages, metadata } = request.body || {};
-    assertString(title, 'title', LIMIT.name);
-    assertJsonSize(messages, 'messages');
-    assertJsonSize(metadata, 'metadata');
-
-    const existing = await prisma.aIConversation.findUnique({ where: { id } });
-    if (!existing) throw new NotFoundError('Conversation not found');
-    if (existing.userId !== request.user.userId) throw new ForbiddenError();
-
-    const conversation = await prisma.aIConversation.update({
-      where: { id },
-      data: {
-        ...(title !== undefined && { title: title ? encrypt(title) : null }),
-        ...(messages !== undefined && { messages: encrypt(messages) }),
-        ...(metadata !== undefined && { metadata: metadata != null ? encrypt(metadata) : null }),
-      },
+    const result = await prisma.$transaction(async (tx) => {
+      // Bind deletion to both the opaque id and authenticated owner. Returning
+      // the same success shape for zero rows avoids exposing whether another
+      // account has a conversation with a guessed id.
+      const deleted = await tx.aIConversation.deleteMany({
+        where: { id, userId: request.user.userId },
+      });
+      await createAuditLog(tx, {
+        userId: request.user.userId,
+        action: 'assistant.conversation.delete',
+        entityType: 'ai_conversation',
+        entityId: id,
+        metadata: { deletedCount: deleted.count },
+      }, { required: true });
+      return deleted;
     });
-    return {
-      conversation: {
-        ...conversation,
-        title: decrypt(conversation.title),
-        messages: decrypt(conversation.messages),
-        metadata: decrypt(conversation.metadata),
-      },
-    };
+
+    return { success: true, deleted: result.count === 1 };
   });
 
   // ─── Gene Sets ──────────────────────────────────────────────
@@ -685,25 +864,46 @@ export default async function entityRoutes(fastify) {
       orderBy: { createdAt: 'desc' },
       take: 50,
     });
-    return { messages };
+    return {
+      messages: messages.map((message) => publicSupportMessage(
+        message,
+        request.user.userId,
+      )),
+    };
   });
 
   fastify.post('/messages', async (request) => {
-    const { subject, body, category } = request.body || {};
-    if (!subject || !body) throw new ValidationError('subject and body are required');
+    const { subject, body, isIssue, category } = request.body || {};
+    if (subject == null || body == null) {
+      throw new ValidationError('subject and body are required');
+    }
     assertString(subject, 'subject', LIMIT.name);
     assertString(body, 'body', LIMIT.text);
-    assertString(category, 'category', LIMIT.name);
+    const normalizedSubject = subject.trim();
+    const normalizedBody = body.trim();
+    if (!normalizedSubject || !normalizedBody) {
+      throw new ValidationError('subject and body are required');
+    }
+    if (isIssue !== undefined && typeof isIssue !== 'boolean') {
+      throw new ValidationError('isIssue must be a boolean');
+    }
+    // `category` is accepted only for the previous web build during a rolling
+    // deploy. Normalize it into the single queue rather than storing a record
+    // that the administrator inbox cannot see.
+    if (category !== undefined && !['support', 'general', 'issue'].includes(category)) {
+      throw new ValidationError('category must identify a support message');
+    }
 
     const message = await prisma.message.create({
       data: {
         senderId: request.user.userId,
-        subject,
-        body,
-        category: category || 'support',
+        subject: normalizedSubject,
+        body: normalizedBody,
+        category: 'support',
+        metadata: { isIssue: isIssue === true || category === 'issue' },
       },
     });
-    return { message };
+    return { message: publicSupportMessage(message, request.user.userId) };
   });
 
   // ─── Institutional License Management ──────────────────────
@@ -719,7 +919,7 @@ export default async function entityRoutes(fastify) {
         usageLogs: { take: 50, orderBy: { createdAt: 'desc' } },
       },
     });
-    return { licenses };
+    return { licenses: licenses.map(publicOwnedLicense) };
   });
 
   fastify.post('/licenses/:id/assign', async (request) => {
@@ -727,58 +927,38 @@ export default async function entityRoutes(fastify) {
     const { userEmail, department } = request.body || {};
     if (!userEmail) throw new ValidationError('userEmail is required');
 
-    const normalizedEmail = normalizeEmail(userEmail);
+    const [normalizedEmail] = normalizeSeatEmails([userEmail]);
 
     const license = await prisma.institutionalLicense.findUnique({ where: { id } });
     if (!license) throw new NotFoundError('License not found');
     if (!license.adminUsers.includes(request.user.userId)) throw new ForbiddenError();
 
-    // Atomic seat reservation: increment assignedSeats only if it remains
-    // strictly less than maxSeats. updateMany returns 0 affected rows when
-    // the predicate fails, which we treat as "no available seats". This
-    // avoids the TOCTOU race where two parallel POSTs both observe an
-    // empty seat and both succeed.
-    const assignment = await prisma.$transaction(async (tx) => {
-      // Reject a second active seat for the same person on the same license.
-      // Without this, re-assigning an already-seated user double-counts a seat
-      // and lets one person consume the whole pool. (There is no DB-level
-      // partial-unique constraint for status='active', so we enforce it here
-      // inside the transaction.)
-      const existing = await tx.licenseAssignment.findFirst({
-        where: { licenseId: id, userEmail: normalizedEmail, status: 'active' },
-      });
-      if (existing) {
-        throw new ValidationError('This user already has an active seat on this license');
-      }
-
-      const updated = await tx.institutionalLicense.updateMany({
-        where: { id, assignedSeats: { lt: license.maxSeats } },
-        data: { assignedSeats: { increment: 1 } },
-      });
-      if (updated.count !== 1) {
-        throw new ValidationError('No available seats');
-      }
-      return tx.licenseAssignment.create({
-        data: {
-          licenseId: id,
-          userEmail: normalizedEmail,
-          assignedBy: request.user.userId,
-          status: 'active',
-          department: department || null,
-        },
-      });
-    });
-
-    await prisma.licenseUsageLog.create({
-      data: {
-        licenseId: id,
-        userEmail: normalizeEmail(userEmail),
-        action: 'seat_assigned',
-        metadata: { assignedBy: request.user.userId, department: department || null },
-      },
+    const [assignment] = await assignLicenseSeats(prisma, {
+      license,
+      emails: [normalizedEmail],
+      department,
+      assignedBy: request.user.userId,
     });
 
     return { assignment };
+  });
+
+  fastify.post('/licenses/:id/assign-bulk', async (request) => {
+    const { id } = request.params;
+    const { userEmails, department } = request.body || {};
+    assertString(department, 'department', LIMIT.name);
+    const emails = normalizeSeatEmails(userEmails);
+    const license = await prisma.institutionalLicense.findUnique({ where: { id } });
+    if (!license) throw new NotFoundError('License not found');
+    if (!license.adminUsers.includes(request.user.userId)) throw new ForbiddenError();
+
+    const assignments = await assignLicenseSeats(prisma, {
+      license,
+      emails,
+      department,
+      assignedBy: request.user.userId,
+    });
+    return { assignments };
   });
 
   fastify.delete('/licenses/:id/assignments/:assignmentId', async (request) => {
@@ -809,39 +989,34 @@ export default async function entityRoutes(fastify) {
     return result;
   });
 
-  // ─── Consent Records (legacy; not a HIPAA claim) ───────────
-  fastify.post('/consent', async (request) => {
-    const { consentType, version, granted } = request.body || {};
-    if (!consentType || !version || granted === undefined) {
-      throw new ValidationError('consentType, version, and granted are required');
+  // ─── Consent Records (versioned privacy choices; not a HIPAA claim) ────────
+  fastify.post('/consent/batch', async (request) => {
+    const choices = request.body?.choices;
+    if (!Array.isArray(choices) || choices.length < 1 || choices.length > 20) {
+      throw new ValidationError('choices must contain between 1 and 20 consent records');
     }
-    assertString(consentType, 'consentType', LIMIT.name);
-    assertString(version, 'version', LIMIT.name);
-    if (typeof granted !== 'boolean') throw new ValidationError('granted must be a boolean');
-    assertJsonSize(request.body.metadata, 'metadata');
+    const parsed = choices.map((choice, index) => parseConsentChoice(choice, index));
+    const keys = parsed.map((choice) => `${choice.consentType}\u0000${choice.version}`);
+    if (new Set(keys).size !== keys.length) {
+      throw new ValidationError('A consent type and version may appear only once per batch');
+    }
 
-    const record = await prisma.consentRecord.create({
-      data: {
-        userId: request.user.userId,
-        consentType,
-        version,
-        granted,
-        ipAddress: request.ip || request.headers['x-forwarded-for'] || null,
-        metadata: request.body.metadata || null,
-      },
+    // All choices and all required audit receipts share one transaction. The
+    // browser can therefore never report a failed privacy save after only one
+    // of its two switches was committed.
+    const records = await prisma.$transaction(async (tx) => {
+      const created = [];
+      for (const choice of parsed) {
+        created.push(await createConsentRecord(tx, request, choice));
+      }
+      return created;
     });
+    return { records };
+  });
 
-    await createAuditLog(
-      prisma,
-      {
-        userId: request.user.userId,
-        action: 'consent_recorded',
-        entityType: 'consent_record',
-        entityId: record.id,
-        metadata: { consentType, version, granted },
-      },
-      { required: true }
-    );
+  fastify.post('/consent', async (request) => {
+    const choice = parseConsentChoice(request.body);
+    const record = await prisma.$transaction((tx) => createConsentRecord(tx, request, choice));
 
     return { record };
   });
@@ -856,25 +1031,23 @@ export default async function entityRoutes(fastify) {
 
   // ─── Limited self-service content purge ─────────────────────
   fastify.post('/data-deletion-request', async (request, reply) => {
-    const deletionRequest = await prisma.dataDeletionRequest.create({
-      data: {
-        userId: request.user.userId,
-        status: 'pending',
-        deletedTypes: [...SELF_SERVICE_PURGE_TYPES],
-      },
-    });
-
-    await createAuditLog(
-      prisma,
-      {
+    const deletionRequest = await prisma.$transaction(async (tx) => {
+      const created = await tx.dataDeletionRequest.create({
+        data: {
+          userId: request.user.userId,
+          status: 'pending',
+          deletedTypes: [...SELF_SERVICE_PURGE_TYPES],
+        },
+      });
+      await createAuditLog(tx, {
         userId: request.user.userId,
         action: 'data_deletion_requested',
         entityType: 'data_deletion_request',
-        entityId: deletionRequest.id,
+        entityId: created.id,
         metadata: { deletedTypes: [...SELF_SERVICE_PURGE_TYPES] },
-      },
-      { required: true }
-    );
+      }, { required: true });
+      return created;
+    });
 
     // This limited purge runs immediately. A full account/processor deletion
     // requires the separately reviewed workflow documented in DATA_RETENTION.
@@ -995,3 +1168,12 @@ export default async function entityRoutes(fastify) {
     return { success: true };
   });
 }
+
+export const __test = {
+  assignLicenseSeats,
+  featureForEntityRoute,
+  normalizeSeatEmails,
+  processDeletionRequest,
+  publicOwnedLicense,
+  requireProjectAccess,
+};

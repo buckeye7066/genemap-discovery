@@ -28,9 +28,6 @@
     "components/icons/**/*.jsx",
     "components/shared/**/*.js",
     "components/shared/**/*.jsx",
-    "components/MobileOptimization.jsx",
-    "components/PlatformCompatibility.jsx",
-    "components/UniversalLinkHandler.jsx",
     "components/UserNotRegisteredError.jsx"
   ],
   "exclude": ["node_modules", "dist", "public/service-worker.js"]

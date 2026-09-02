@@ -5,7 +5,12 @@ import {
   PUBLICATION_STATUSES,
 } from '@genemap/shared';
 import { authenticate } from '../middleware/auth.js';
-import { checkEducationEntitlement, enforceUsageLimit } from '../middleware/entitlements.js';
+import {
+  checkEducationEntitlement,
+  enforceUsageLimit,
+  finalizeUsageSession,
+  releaseUsageReservation,
+} from '../middleware/entitlements.js';
 import * as llm from '../services/llm.js';
 import {
   withHonestyPrefix,
@@ -24,6 +29,7 @@ import {
 } from '../config/educationCatalog.js';
 import { composePublicationPrompt } from '../config/publicationTaskContracts.js';
 import { assertModelPublicationEnabled } from './llm.js';
+import { textRuntimeConfig } from '../config/llmRuntime.js';
 
 const EDUCATION_LEVELS = [
   'elementary',
@@ -33,10 +39,13 @@ const EDUCATION_LEVELS = [
   'graduate',
   'postgraduate',
 ];
-const EDU_TEXT_PROVIDER = process.env.LLM_TEXT_PROVIDER || 'openai';
-const EDU_TEXT_MODEL = process.env.LLM_EDU_TEXT_MODEL
-  || (EDU_TEXT_PROVIDER === 'openai' || EDU_TEXT_PROVIDER === 'gpt' ? 'gpt-4o-mini' : undefined);
+const EDU_TEXT_RUNTIME = textRuntimeConfig('education');
 const EDU_TIMEOUT_MS = Number(process.env.LLM_EDU_TIMEOUT_MS || 24_000);
+const USAGE_RESERVATION_TYPES = [
+  'quota_reservation:explanation',
+  'quota_reservation:quiz',
+  'quota_reservation:chat',
+];
 
 const levelField = z.enum(EDUCATION_LEVELS);
 const topicField = z.string()
@@ -45,11 +54,6 @@ const topicField = z.string()
   .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/u);
 
 const explainSchema = z.object({
-  topic: topicField,
-  level: levelField,
-}).strict();
-
-const imageSchema = z.object({
   topic: topicField,
   level: levelField,
 }).strict();
@@ -141,23 +145,13 @@ async function persistPublicationSession(prisma, request, {
   metadata = {},
 }) {
   if (!request.user?.userId) return;
-  const sessionType = canUsePublicationContent(publication) ? type : `${type}_status`;
-  try {
-    await prisma.learningSession.create({
-      data: {
-        userId: request.user.userId,
-        topic: topic.id,
-        level,
-        type: sessionType,
-        content: { publication, ...metadata },
-      },
-    });
-  } catch {
-    request.log.warn(
-      { type: sessionType },
-      'education publication session persistence failed',
-    );
-  }
+  await finalizeUsageSession(prisma, request, {
+    topic: topic.id,
+    level,
+    type,
+    content: { publication, ...metadata },
+    counted: canUsePublicationContent(publication),
+  });
 }
 
 function replayPublication(session, index) {
@@ -234,17 +228,15 @@ function modelRoutePreHandlers(prepareRequest) {
   ];
 }
 
-function disabledImagePreHandlers(prepareRequest) {
-  return [
-    authenticate,
-    checkEducationEntitlement,
-    requireModelPublicationEnabled,
-    prepareRequest,
-  ];
-}
-
 export default async function educationRoutes(fastify) {
   const prisma = fastify.prisma;
+
+  // A reservation is normally finalized by the handler. Release it when a
+  // later guard or handler throws so validation/provider failures do not pin a
+  // free-tier allowance. Process crashes are covered by the reservation TTL.
+  fastify.addHook('onError', async (request) => {
+    await releaseUsageReservation(prisma, request);
+  });
 
   fastify.get('/topics', async (request, reply) => {
     reply.header('Cache-Control', 'public, max-age=3600, s-maxage=86400');
@@ -279,7 +271,8 @@ export default async function educationRoutes(fastify) {
     let publication;
     try {
       const providerResult = await llm.generateExplanation(withHonestyPrefix(prompt), {
-        model: EDU_TEXT_MODEL,
+        provider: EDU_TEXT_RUNTIME.provider,
+        model: EDU_TEXT_RUNTIME.model,
         maxTokens: 1400,
         timeoutMs: EDU_TIMEOUT_MS,
         allowGenomic,
@@ -318,29 +311,6 @@ export default async function educationRoutes(fastify) {
     };
   });
 
-  fastify.post('/image', {
-    preHandler: disabledImagePreHandlers(prepareEducationRequest(imageSchema)),
-  }, async (request) => {
-    const { topic, level } = request.educationInput;
-    // Pixel output is not publishable until it has a reviewed OCR/moderation
-    // boundary. A safe prompt and revised-prompt text do not prove that the
-    // rendered image lacks medication or diagnostic instructions.
-    const publication = unavailablePublication(
-      request,
-      'education-image',
-      'image_output_verification_unavailable',
-    );
-
-    return {
-      publication,
-      topic: topic.id,
-      topicMetadata: topicMetadata(topic),
-      level,
-      usage: request.usageInfo || null,
-      tier: request.entitlements?.tier || 'free',
-    };
-  });
-
   fastify.post('/quiz', {
     preHandler: modelRoutePreHandlers(prepareEducationRequest(quizSchema)),
   }, async (request) => {
@@ -374,7 +344,8 @@ export default async function educationRoutes(fastify) {
     let publication;
     try {
       const providerResult = await llm.generateQuiz(withHonestyPrefix(prompt, QUIZ_HONESTY_NOTE), {
-        model: EDU_TEXT_MODEL,
+        provider: EDU_TEXT_RUNTIME.provider,
+        model: EDU_TEXT_RUNTIME.model,
         maxTokens: 1800,
         timeoutMs: EDU_TIMEOUT_MS,
         allowGenomic,
@@ -473,7 +444,10 @@ export default async function educationRoutes(fastify) {
   fastify.get('/progress', { preHandler: authenticate }, async (request) => {
     const [sessions, progress] = await Promise.all([
       prisma.learningSession.findMany({
-        where: { userId: request.user.userId },
+        where: {
+          userId: request.user.userId,
+          type: { notIn: USAGE_RESERVATION_TYPES },
+        },
         orderBy: { createdAt: 'desc' },
         take: 50,
       }),
@@ -526,8 +500,12 @@ export default async function educationRoutes(fastify) {
     let todayUsage = null;
 
     if (!request.entitlements.isPremium) {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
+      const current = new Date();
+      const today = new Date(Date.UTC(
+        current.getUTCFullYear(),
+        current.getUTCMonth(),
+        current.getUTCDate(),
+      ));
 
       const grouped = await prisma.learningSession.groupBy({
         by: ['type'],
@@ -535,7 +513,7 @@ export default async function educationRoutes(fastify) {
         _count: { type: true },
       });
 
-      todayUsage = { explanation: 0, image: 0, quiz: 0, chat: 0 };
+      todayUsage = { explanation: 0, quiz: 0, chat: 0 };
       for (const row of grouped) {
         if (row.type in todayUsage) {
           todayUsage[row.type] = row._count.type;
@@ -544,10 +522,7 @@ export default async function educationRoutes(fastify) {
     }
 
     return {
-      tier: request.entitlements.tier,
-      isPremium: request.entitlements.isPremium,
-      isInstitutional: request.entitlements.isInstitutional,
-      limits: request.entitlements.limits,
+      ...request.entitlements,
       todayUsage,
     };
   });

@@ -23,16 +23,18 @@ const validateHpoTerms = vi.fn(async () => ({
 }));
 
 vi.mock('../services/genomicDatabases.js', () => ({
-  lookupVariant: vi.fn(),
-  searchVariants: vi.fn(),
-  lookupGene: vi.fn(),
-  searchClinVar: vi.fn(),
   searchPhenotypes: vi.fn(),
   enrichGenes,
   validateHpoTerms,
 }));
 
-import { authCookie, buildTestApp, createPrismaMock } from './setup.js';
+import {
+  authCookie,
+  buildTestApp,
+  createPrismaMock,
+  seedAuthUser,
+  seedPremiumSubscription,
+} from './setup.js';
 
 const user = { userId: 'provenance-user', email: 'provenance@example.com', role: 'user' };
 
@@ -43,6 +45,8 @@ describe('POST /genomics/enrich timestamp semantics', () => {
   beforeEach(async () => {
     prisma = createPrismaMock();
     app = await buildTestApp(prisma, { csrf: false, includeGenomics: true });
+    seedAuthUser(prisma, user);
+    seedPremiumSubscription(prisma, user.userId);
   });
 
   afterEach(async () => {

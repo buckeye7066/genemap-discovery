@@ -4,7 +4,6 @@
 import { realpathSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { PrismaClient } from '@prisma/client';
 import { createAccountClosureLedger } from '../services/api/src/services/accountClosureLedger.js';
 import { finalizeAuthorizedDatabaseDeletion } from '../services/api/src/services/accountClosure.js';
 
@@ -126,6 +125,11 @@ async function main() {
     throw new Error('DATABASE_URL is required and must point to the isolated restored database. Ensure this variable is set in your environment variables with the correct database connection string format: "postgresql://user:password@localhost:5432/database" or similar depending on your database configuration.');
   }
 
+  // Keep the Prisma runtime behind the destructive CLI acknowledgement. This
+  // module is also imported by pure reconciliation tests and operational
+  // tooling; those consumers must not require a generated Prisma client merely
+  // to inspect or exercise the restore rules.
+  const { PrismaClient } = await import('@prisma/client');
   const prisma = new PrismaClient();
   try {
     const result = await reconcileRestoredDatabase({

@@ -7,7 +7,7 @@ import { ShieldCheck, ArrowLeft } from "lucide-react";
  * published data flows and the fail-closed boundary around personal clinical
  * and genomic information. Have counsel review before commercial reliance.
  */
-const UPDATED = "August 10, 2026";
+const UPDATED = "September 2, 2026";
 const CONTACT = "dr.johnwhite@axiombiolabs.org";
 
 function Section({ title, children }) {
@@ -44,9 +44,11 @@ export default function PrivacyPolicy() {
               wrong and must not be used for clinical decisions.
             </p>
             <p>
-              The public service is not designed for clinical use and is not represented as HIPAA-compliant
-              or authorized to process protected health information. Do not submit personal medical records,
-              personal genomic files, protected health information, or information that identifies a patient.
+              The service is not designed for clinical use and is not represented as HIPAA-compliant or as a
+              medical-record system. Premium users may choose to store their own health profile and locally
+              extracted lab-document content for educational use. Do not submit another person&apos;s information,
+              data you lack authority to process, or data that your organization requires to be handled under
+              a business associate agreement.
             </p>
           </Section>
 
@@ -69,6 +71,13 @@ export default function PrivacyPolicy() {
                 project versions, annotations, and support messages.
               </li>
               <li>
+                <strong>Optional health and assistant content:</strong> health-profile fields, structured lab
+                observations, locally extracted document text, parser provenance, and assistant conversations
+                you choose to save. The original lab file is processed in the browser and is not uploaded by
+                this flow. Saved health content, record titles, conversation messages, and related metadata are
+                encrypted at rest and owner-scoped.
+              </li>
+              <li>
                 <strong>Technical and security data:</strong> request IP and device metadata, requested
                 routes or assets, consent and audit records, exceptions, performance information, and
                 operational logs.
@@ -85,11 +94,6 @@ export default function PrivacyPolicy() {
                 receive the raw email, name, profile, searches, research content, or medical information.
                 The tombstone exists to stop an older database backup from resurrecting a deleted account.
               </li>
-              <li>
-                <strong>Legacy data:</strong> earlier releases may have stored medical-record or
-                AI-conversation records. Encrypted legacy columns may remain in the hosted database, but the
-                public generation routes do not use them. You may request their export or deletion.
-              </li>
             </ul>
           </Section>
 
@@ -98,19 +102,21 @@ export default function PrivacyPolicy() {
               We use information to authenticate accounts, provide searches and structured education or
               early-research features, record learning progress, maintain saved projects, process
               subscriptions, respond to support and deletion requests, protect the service, and produce
-              aggregate operational analytics. We do not sell personal data or use it for third-party
-              advertising.
+              aggregate operational analytics. With separate, current consent, profile-aware assistants use
+              owner-scoped profile, research, and saved health context to answer the user&apos;s question and return
+              a context receipt. We do not sell personal data or use it for third-party advertising.
             </p>
           </Section>
 
-          <Section title="Publication-mode data boundary">
+          <Section title="Health and model-execution boundary">
             <p>
-              The public build does not provide routes for personal medical-record upload, personal VCF
-              analysis, diagnosis, individualized risk interpretation, pharmacogenomic recommendations,
-              medication selection, or dosing. Public model-execution routes accept only finite, versioned,
-              structured education and exploratory-research tasks. Free-text profile, project, annotation,
-              and support fields still exist, so do not place personal medical, genomic, or
-              patient-identifying information in any field.
+              The health-document flow performs PDF text extraction and OCR in the browser, validates and
+              normalizes the result, and sends only the structured result and bounded extracted text to the
+              encrypted record API. The profile-aware assistant route builds context on the server from records
+              owned by the authenticated user; it does not accept a caller-supplied system prompt or context
+              object. Health storage and model analysis require separate versioned consents, and the latest
+              revocation supersedes an older grant. GeneMap still does not provide diagnosis, individualized
+              risk determination, clinical decision support, medication selection, or dosing.
             </p>
           </Section>
 
@@ -141,14 +147,16 @@ export default function PrivacyPolicy() {
               <li>
                 <strong>Railway:</strong> active API and PostgreSQL host. It stores or processes account,
                 authentication and session data, research content, search history, projects, billing
-                identifiers, operational logs, and encrypted legacy medical or conversation columns.
+                identifiers, operational logs, and encrypted health-record and assistant-conversation columns.
               </li>
               <li>
                 <strong>OpenAI API and Anthropic API:</strong> OpenAI is the default text-generation provider
                 unless deployment configuration selects Anthropic as the alternate. The selected provider
                 receives versioned structured education or aggregate early-research inputs, resolved
-                gene or ontology identifiers, and generated output. Application error messages and
-                stacks are not sent to these providers.
+                gene or ontology identifiers, and generated output. When a user separately consents to
+                health-data analysis, the selected provider also receives the bounded server-built profile,
+                research, and saved health context needed for that assistant request. Application error
+                messages and stacks are not sent to these providers.
               </li>
               <li>
                 <strong>Stripe:</strong> processes web subscription checkout, customer and subscription
@@ -161,14 +169,10 @@ export default function PrivacyPolicy() {
                 processor register before public production reliance.
               </li>
               <li>
-                <strong>Resend:</strong> the email integration remains installed but is not invoked by the
-                current publication build. First-login identity and error-report emails are disabled.
-                Any future service-email flow requires a new purpose, field, and retention review.
-              </li>
-              <li>
-                <strong>Sentry:</strong> external browser and API exception export is disabled in the
-                current publication build even if a DSN is configured. Application errors are reduced to
-                finite local operational events and are not sent to Sentry.
+                <strong>Resend:</strong> when configured, receives finite, redacted operational alerts for
+                critical account-deletion failures. Those alerts exclude account identifiers, names,
+                addresses, user content, error stacks, and health data. It is not used for collaborator or
+                institutional-seat invitations.
               </li>
               <li>
                 <strong>Redis rate-limit operator:</strong> if configured, receives rate-limit keys and
@@ -198,6 +202,8 @@ export default function PrivacyPolicy() {
           <Section title="Your choices & rights">
             <ul className="list-disc ml-5 space-y-1">
               <li>View and edit the profile fields available in your account.</li>
+              <li>Grant or revoke health storage and assistant-analysis consent separately.</li>
+              <li>Delete individual saved health records and assistant conversations.</li>
               <li>Request an export or deletion of your account and associated application data.</li>
               <li>Ask us to identify and remove legacy records retained from an earlier release.</li>
               <li>Opt out of the mailing list from your profile settings.</li>

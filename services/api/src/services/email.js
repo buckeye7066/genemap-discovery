@@ -3,7 +3,8 @@
 // Intentionally defensive: a failure to send an email must NEVER bubble up and
 // break the request it was triggered from. Every path returns a small result
 // object and swallows errors. When RESEND_API_KEY is absent (local dev/tests)
-// we log and no-op so the rest of the app behaves identically.
+// we return an explicit skipped result so callers and logs can distinguish a
+// deliberately unconfigured sender from a successful delivery.
 
 import { Resend } from 'resend';
 

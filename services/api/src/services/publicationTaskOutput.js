@@ -757,16 +757,29 @@ function containsPassiveClinicalAction(value) {
   });
 }
 
-function containsProhibitedClinicalGuidance(value) {
-  if (typeof value !== 'string' || !value.trim()) return false;
+/**
+ * Build the normalized text projections used by clinical-output safety gates.
+ * `unsafeEncoding` fails closed for ambiguous entities and mixed-script
+ * confusables before any caller-specific policy patterns run.
+ */
+export function projectClinicalSafetyText(value) {
+  if (typeof value !== 'string' || !value.trim()) {
+    return { unsafeEncoding: false, texts: [] };
+  }
   // CommonMark decodes the complete HTML named-reference table. This service
   // intentionally keeps only a small reviewed decoder; an unrecognized entity
   // in visible text therefore fails closed instead of being deleted from the
   // safety projection while the browser renders a confusable character.
   const visibleMarkup = stripRenderedMarkupForSafety(value);
-  if (containsUnsupportedNamedHtmlEntity(visibleMarkup)) return true;
-  if (containsSuspiciousClinicalConfusable(value)) return true;
-  const policyTexts = new Set([
+  if (
+    containsUnsupportedNamedHtmlEntity(visibleMarkup)
+    || containsSuspiciousClinicalConfusable(value)
+  ) {
+    return { unsafeEncoding: true, texts: [] };
+  }
+  return {
+    unsafeEncoding: false,
+    texts: [...new Set([
     collapseObfuscatedClinicalWords(semanticSafetyText(value)),
     collapseObfuscatedClinicalWords(semanticSafetyText(value, { separatePunctuation: true })),
     // Keep the boundary-preserving projections above for rendered directives,
@@ -777,8 +790,14 @@ function containsProhibitedClinicalGuidance(value) {
       separatePunctuation: true,
       joinLineBreaks: true,
     })),
-  ]);
-  return [...policyTexts].some((policyText) => {
+    ])],
+  };
+}
+
+function containsProhibitedClinicalGuidance(value) {
+  const projection = projectClinicalSafetyText(value);
+  if (projection.unsafeEncoding) return true;
+  return projection.texts.some((policyText) => {
     const withoutAllowedDisclaimers = removeAllowedBoundaryDisclaimers(policyText);
     return CLINICAL_GUIDANCE_PATTERNS.some((pattern) => pattern.test(withoutAllowedDisclaimers))
       || containsActivePersonPercentageAdministration(withoutAllowedDisclaimers)
@@ -880,20 +899,32 @@ function sanitizeNarrativeArtifact(result, {
  * unsafe blocks, re-scan the combined remainder, and publish it as partial. If
  * no safe block remains, retain the existing fail-closed withheld result.
  */
-function narrativeSafetyBlocks(normalized) {
-  const headings = [...normalized.matchAll(/^#{1,6}\s+.+$/gmu)];
+function narrativeSafetyBlocks(value) {
+  const normalizedLines = value.replace(/\r\n?/gu, '\n');
+  const headings = [...normalizedLines.matchAll(/^#{1,6}\s+.+$/gmu)];
   if (headings.length === 0) {
-    return normalized.split(/\n\s*\n/gu);
+    return normalizedLines.split(/\n\s*\n/gu);
   }
 
   const blocks = [];
-  const preamble = normalized.slice(0, headings[0].index).trim();
+  const preamble = normalizedLines.slice(0, headings[0].index).trim();
   if (preamble) blocks.push(...preamble.split(/\n\s*\n/gu));
 
   for (let index = 0; index < headings.length; index += 1) {
     const start = headings[index].index;
-    const end = headings[index + 1]?.index ?? normalized.length;
-    blocks.push(normalized.slice(start, end));
+    const end = headings[index + 1]?.index ?? normalizedLines.length;
+    const section = normalizedLines.slice(start, end).trim();
+    const firstLineEnd = section.indexOf('\n');
+    const heading = firstLineEnd === -1 ? section : section.slice(0, firstLineEnd).trim();
+    const body = firstLineEnd === -1 ? '' : section.slice(firstLineEnd + 1).trim();
+    const paragraphs = body ? body.split(/\n\s*\n/gu).filter(Boolean) : [];
+
+    // Bind a heading to its first paragraph so an unsafe heading cannot be
+    // detached from apparently safe body text. Later paragraphs are separate
+    // omission units: one unsafe paragraph must not erase an earlier safe
+    // hypothesis in the same headed section.
+    blocks.push(paragraphs.length > 0 ? `${heading}\n${paragraphs[0]}` : heading);
+    blocks.push(...paragraphs.slice(1));
   }
   return blocks;
 }
@@ -907,17 +938,14 @@ function sanitizeResearchNarrativeArtifact(result, {
     return sanitizeNarrativeArtifact(result, { maxLength, correlationId, emptyReasonCode });
   }
 
-  const normalized = normalizeNarrativeFormatting(result);
-  if (!normalized) {
-    return createPublicationArtifact({
-      status: PUBLICATION_STATUSES.UNAVAILABLE,
-      reasonCode: emptyReasonCode,
-      correlationId,
-    });
-  }
-
-  const safeBlocks = narrativeSafetyBlocks(normalized)
+  // Classify the original provider blocks before markup normalization. If the
+  // normalizer ran first, malformed HTML such as an angle bracket inside a
+  // quoted attribute could erase the unsafe word boundary and make a clinical
+  // directive appear safe. Only blocks safe in both representations survive.
+  const safeBlocks = narrativeSafetyBlocks(result)
     .map((block) => block.trim())
+    .filter((block) => block && !containsProhibitedClinicalGuidance(block))
+    .map((block) => normalizeNarrativeFormatting(block))
     .filter((block) => block && !containsProhibitedClinicalGuidance(block));
   const safeNarrative = safeBlocks.join('\n\n');
 

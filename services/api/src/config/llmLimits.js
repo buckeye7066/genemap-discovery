@@ -24,10 +24,10 @@ function positiveIntFromEnv(name, fallback) {
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : fallback;
 }
 
-// Max characters for a single-prompt completion (/llm/invoke, /llm/image).
+// Max characters for a single-prompt completion (/llm/invoke).
 export const MAX_PROMPT_CHARS = positiveIntFromEnv('LLM_MAX_PROMPT_CHARS', 200_000);
 
-// Max characters for any one message in a chat array (/llm/chat, /education/chat).
+// Max characters for any one message in a chat array (/education/chat and assistants).
 export const MAX_MESSAGE_CHARS = positiveIntFromEnv('LLM_MAX_MESSAGE_CHARS', 200_000);
 
 // Max number of turns in a chat array.

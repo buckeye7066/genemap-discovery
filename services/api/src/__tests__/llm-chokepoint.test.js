@@ -5,7 +5,6 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vites
 vi.mock('../services/openai.js', () => ({
   generateText: vi.fn(async () => 'OK_TEXT'),
   generateChatResponse: vi.fn(async () => 'OK_CHAT'),
-  generateImage: vi.fn(async () => ({ url: 'https://img/ok' })),
 }));
 vi.mock('../services/anthropic.js', () => ({
   generateText: vi.fn(async () => 'OK_TEXT_A'),
@@ -15,7 +14,6 @@ vi.mock('../services/anthropic.js', () => ({
 import {
   generateExplanation,
   generateChatResponse,
-  generateImage,
   generateQuiz,
   extractProviderText,
   assertProviderPayloadAllowed,
@@ -112,10 +110,6 @@ describe('every exported provider function enforces the chokepoint end-to-end', 
       ]),
     ).rejects.toThrow(/not allowed/i);
     expect(openai.generateChatResponse).not.toHaveBeenCalled();
-  });
-  it('generateImage refuses a VCF prompt', async () => {
-    await expect(generateImage(VCF)).rejects.toThrow(/not allowed/i);
-    expect(openai.generateImage).not.toHaveBeenCalled();
   });
   it('generateQuiz refuses a VCF prompt', async () => {
     await expect(generateQuiz(VCF)).rejects.toThrow(/not allowed/i);

@@ -4,7 +4,11 @@ import {
   PUBLICATION_STATUSES,
 } from '@genemap/shared';
 import { authenticate } from '../middleware/auth.js';
-import { checkEducationEntitlement, enforceUsageLimit, recordUsage } from '../middleware/entitlements.js';
+import {
+  checkEducationEntitlement,
+  recordUsage,
+  requireResearchAi,
+} from '../middleware/entitlements.js';
 import { generateExplanation } from '../services/llm.js';
 import { withHonestyPrefix } from '../services/scientificHonesty.js';
 import { assertNoRawGenomicLLM } from '../services/genomicGuard.js';
@@ -18,6 +22,7 @@ import {
   parsePublicationTaskInput,
 } from '../config/publicationTaskContracts.js';
 import { resolvePublicationTaskReferences } from '../services/publicationResolvers.js';
+import { textRuntimeConfig } from '../config/llmRuntime.js';
 
 const ABSOLUTE_MAX_TOKENS = 4096;
 const DEFAULT_MAX_TOKENS = 1500;
@@ -30,16 +35,12 @@ const STRUCTURED_LLM_TASKS = new Set([
 ]);
 const INVOKE_BODY_KEYS = new Set(['publicationTask', 'taskInput', 'options']);
 const GENERATION_OPTION_KEYS = new Set([
-  'provider',
   'temperature',
   'maxTokens',
 ]);
 
 const LLM_TIMEOUT_MS = Number(process.env.LLM_TIMEOUT_MS || 30_000);
-const INVOKE_TEXT_PROVIDER = process.env.LLM_TEXT_PROVIDER || 'openai';
-const INVOKE_TEXT_MODEL = process.env.LLM_INVOKE_TEXT_MODEL
-  || process.env.LLM_EDU_TEXT_MODEL
-  || (INVOKE_TEXT_PROVIDER === 'openai' || INVOKE_TEXT_PROVIDER === 'gpt' ? 'gpt-4o-mini' : undefined);
+const INVOKE_TEXT_RUNTIME = textRuntimeConfig('invoke');
 
 /** Return the exact state used by both /readyz and provider-facing routes. */
 export function isModelPublicationEnabled(source = process.env) {
@@ -109,23 +110,6 @@ function validateGenerationOptions(options) {
   }
   if (!hasOnlyKeys(options, GENERATION_OPTION_KEYS)) {
     throw new ValidationError('generation options contain unsupported fields');
-  }
-  if (options.provider != null) {
-    // GATED (2026-08-20, owner instruction "gate genemap's findings").
-    // A caller-selectable provider let a BROWSER client route this request to
-    // Anthropic regardless of the deployment's LLM_TEXT_PROVIDER -- so the
-    // processor register could not honestly say which processor receives user
-    // text. The deployment now decides. Rejecting is deliberate: silently
-    // ignoring the field would leave the caller believing it chose, which is
-    // the same class of false claim this gate exists to remove.
-    if (process.env.LLM_ALLOW_CALLER_PROVIDER !== 'true') {
-      throw new ValidationError(
-        'provider is chosen by the deployment (LLM_TEXT_PROVIDER) and cannot be set by the caller',
-      );
-    }
-    if (!['openai', 'anthropic'].includes(options.provider)) {
-      throw new ValidationError('provider must be openai or anthropic');
-    }
   }
   for (const field of ['temperature', 'maxTokens']) {
     if (options[field] != null
@@ -243,15 +227,12 @@ function unavailablePublication(request, error) {
 
 export default async function llmRoutes(fastify, options = {}) {
   const prisma = fastify.prisma;
-  const accessGuards = [
+  const invokeGuards = [
     authenticate,
     checkEducationEntitlement,
+    requireResearchAi,
     requireModelPublicationEnabled,
-  ];
-  const invokeGuards = [
-    ...accessGuards,
     prepareStructuredRequest,
-    enforceUsageLimit,
     prepareStructuredInvocation(options.publicationResolverDependencies || {}),
   ];
 
@@ -271,8 +252,8 @@ export default async function llmRoutes(fastify, options = {}) {
     let publication;
     try {
       const providerResult = await generateExplanation(withHonestyPrefix(prompt), {
-        provider: generationOptions.provider,
-        model: generationOptions.provider ? undefined : INVOKE_TEXT_MODEL,
+        provider: INVOKE_TEXT_RUNTIME.provider,
+        model: INVOKE_TEXT_RUNTIME.model,
         maxTokens,
         temperature,
         timeoutMs: LLM_TIMEOUT_MS,
@@ -292,48 +273,49 @@ export default async function llmRoutes(fastify, options = {}) {
 
     const publicationHasContent = canUsePublicationContent(publication);
     const sessionType = publicationHasContent ? 'explanation' : 'publication_status';
-    await recordUsage(prisma, request.user.userId, sessionType, {
-      maxTokens,
-      provider: generationOptions.provider || null,
-      publicationTask,
-      publication,
-      publicationStatus: publication.status,
-      publicationReasonCode: publication.reasonCode,
-    });
+    try {
+      await prisma.$transaction(async (tx) => {
+        await recordUsage(tx, request.user.userId, sessionType, {
+          maxTokens,
+          provider: INVOKE_TEXT_RUNTIME.provider,
+          publicationTask,
+          publication,
+          publicationStatus: publication.status,
+          publicationReasonCode: publication.reasonCode,
+        });
 
-    await createAuditLog(prisma, {
-      userId: request.user.userId,
-      action: 'llm_invoke',
-      entityType: 'llm',
-      metadata: {
-        publicationTask,
-        taskInputVersion: taskInput.version,
-        maxTokens,
-        provider: generationOptions.provider || null,
-        publicationStatus: publication.status,
-        publicationReasonCode: publication.reasonCode,
-      },
-    });
+        await createAuditLog(tx, {
+          userId: request.user.userId,
+          action: 'llm_invoke',
+          entityType: 'llm',
+          metadata: {
+            publicationTask,
+            taskInputVersion: taskInput.version,
+            maxTokens,
+            provider: INVOKE_TEXT_RUNTIME.provider,
+            publicationStatus: publication.status,
+            publicationReasonCode: publication.reasonCode,
+          },
+        }, { required: true });
+      });
+    } catch (error) {
+      if (error?.code === 'USAGE_ACCOUNTING_UNAVAILABLE') throw error;
+      request.log.error(
+        { code: error?.code || 'RESEARCH_RESULT_ACCOUNTING_FAILED' },
+        'research result accounting transaction failed',
+      );
+      const unavailable = new AppError(
+        'Research result accounting is temporarily unavailable. Please retry shortly.',
+        503,
+      );
+      unavailable.code = 'RESULT_ACCOUNTING_UNAVAILABLE';
+      throw unavailable;
+    }
 
     return {
       publication,
       disclaimer: 'For educational purposes only. Not medical advice.',
     };
-  });
-
-  // These legacy routes are intentionally retired. They authenticate and honor
-  // the recovery switch, then reject immediately without resolver, quota, raw
-  // genomic inspection, provider, audit, or persistence work.
-  fastify.post('/chat', { preHandler: accessGuards }, async () => {
-    throw new ValidationError(
-      'arbitrary chat is not available; use a structured publication task or the guided genetics tutor',
-    );
-  });
-
-  fastify.post('/image', { preHandler: accessGuards }, async () => {
-    throw new ValidationError(
-      'arbitrary image generation is not available; use the bounded genetics education image route',
-    );
   });
 }
 

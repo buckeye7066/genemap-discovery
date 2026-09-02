@@ -50,6 +50,14 @@ describe('restore-independent account closure ledger', () => {
       ...ENV,
       ACCOUNT_CLOSURE_LEDGER_IDENTITY_KEYS: '',
     })).toMatchObject({ configured: false, identityKeysConfigured: false });
+    expect(accountClosureLedgerStatus({
+      ...ENV,
+      ACCOUNT_CLOSURE_LEDGER_SECRET: 'REPLACE_WITH_32_PLUS_CHAR_RANDOM_TRANSPORT_SECRET',
+    })).toMatchObject({ configured: false, secretConfigured: false });
+    expect(accountClosureLedgerStatus({
+      ...ENV,
+      ACCOUNT_CLOSURE_LEDGER_IDENTITY_KEYS: 'current=REPLACE_WITH_32_PLUS_CHAR_IDENTITY_KEY',
+    })).toMatchObject({ configured: false, identityKeysConfigured: false });
   });
 
   it('refuses an incomplete tombstone before sending it externally', async () => {
@@ -180,9 +188,8 @@ describe('restore-independent account closure ledger', () => {
           receiptId: 'receipt-legacy',
           userIdHash: 'c'.repeat(64),
         },
-        { version: 3, event: 'account_deletion_authorized', receiptId: 'wrong-version', userIdHash: 'd'.repeat(64) },
-        { version: 2, event: 'other', receiptId: 'wrong-event', userIdHash: 'e'.repeat(64), identityKeyId: '2026-08' },
       ],
+      nextCursor: null,
     });
     const fetchImpl = vi.fn(async () => signedResponse(responseBody));
     const ledger = createAccountClosureLedger({ env: ENV, fetchImpl });
@@ -195,6 +202,76 @@ describe('restore-independent account closure ledger', () => {
       'receipt-legacy',
     ]);
     expect(fetchImpl.mock.calls[0][1]).toMatchObject({ method: 'GET' });
+    expect(fetchImpl.mock.calls[0][0]).toContain('limit=1000');
+  });
+
+  it('reads every signed page and rejects cursor loops, duplicates, or malformed tombstones', async () => {
+    const pages = [
+      {
+        tombstones: [{
+          version: 2,
+          event: 'account_deletion_authorized',
+          receiptId: 'receipt-page-1',
+          userIdHash: 'a'.repeat(64),
+          identityKeyId: '2026-08',
+        }],
+        nextCursor: 'cursor-1',
+      },
+      {
+        tombstones: [{
+          version: 1,
+          event: 'account_deletion_authorized',
+          receiptId: 'receipt-page-2',
+          userIdHash: 'b'.repeat(64),
+        }],
+        nextCursor: null,
+      },
+    ];
+    const fetchImpl = vi.fn(async () => signedResponse(JSON.stringify(pages.shift())));
+    const ledger = createAccountClosureLedger({ env: ENV, fetchImpl });
+
+    await expect(ledger.listTombstones()).resolves.toEqual(expect.arrayContaining([
+      expect.objectContaining({ receiptId: 'receipt-page-1' }),
+      expect.objectContaining({ receiptId: 'receipt-page-2' }),
+    ]));
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(fetchImpl.mock.calls[1][0]).toContain('cursor=cursor-1');
+
+    const malformedBody = JSON.stringify({
+      tombstones: [{ version: 3, event: 'account_deletion_authorized', receiptId: 'bad', userIdHash: 'c'.repeat(64) }],
+      nextCursor: null,
+    });
+    const malformed = createAccountClosureLedger({
+      env: ENV,
+      fetchImpl: vi.fn(async () => signedResponse(malformedBody)),
+    });
+    await expect(malformed.listTombstones()).rejects.toMatchObject({
+      code: 'ACCOUNT_DELETE_LEDGER_INVALID_RESPONSE',
+    });
+
+    const duplicateBody = JSON.stringify({
+      tombstones: [
+        { version: 1, event: 'account_deletion_authorized', receiptId: 'duplicate', userIdHash: 'd'.repeat(64) },
+        { version: 1, event: 'account_deletion_authorized', receiptId: 'duplicate', userIdHash: 'd'.repeat(64) },
+      ],
+      nextCursor: null,
+    });
+    const duplicate = createAccountClosureLedger({
+      env: ENV,
+      fetchImpl: vi.fn(async () => signedResponse(duplicateBody)),
+    });
+    await expect(duplicate.listTombstones()).rejects.toMatchObject({
+      code: 'ACCOUNT_DELETE_LEDGER_INVALID_RESPONSE',
+    });
+
+    const loopBody = JSON.stringify({ tombstones: [], nextCursor: 'same-cursor' });
+    const loop = createAccountClosureLedger({
+      env: ENV,
+      fetchImpl: vi.fn(async () => signedResponse(loopBody)),
+    });
+    await expect(loop.listTombstones()).rejects.toMatchObject({
+      code: 'ACCOUNT_DELETE_LEDGER_INVALID_RESPONSE',
+    });
   });
 
   it('rejects unsigned or tampered restore-ledger responses', async () => {

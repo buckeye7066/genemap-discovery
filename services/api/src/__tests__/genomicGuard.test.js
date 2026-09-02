@@ -12,7 +12,6 @@ import {
 vi.mock('../services/llm.js', () => ({
   generateExplanation: vi.fn(async () => 'MOCK_EXPLANATION'),
   generateChatResponse: vi.fn(async () => 'MOCK_CHAT'),
-  generateImage: vi.fn(async () => ({ url: 'https://img/mock' })),
   generateQuiz: vi.fn(async () => [{ question: 'q', options: ['a', 'b', 'c', 'd'], correctIndex: 0, explanation: 'e' }]),
 }));
 
@@ -221,8 +220,8 @@ describe('no-cloud-genomic default is enforced on every cloud-AI route', () => {
     vi.clearAllMocks();
     delete process.env.ALLOW_GENOMIC_LLM_UPLOAD;
 
-    // Wire the entitlement middleware against the in-memory store: a free user
-    // with zero usage so requests reach the handler (and thus the guard).
+    // Wire an entitled user so the paid research route reaches its payload
+    // boundary; education remains available to the same principal.
     prisma.learningSession.count = vi.fn(async () => 0);
     prisma.licenseAssignment.findFirst = vi.fn(async () => null);
     prisma.user.findUnique = vi.fn(async ({ where }) =>
@@ -233,7 +232,13 @@ describe('no-cloud-genomic default is enforced on every cloud-AI route', () => {
       email: user.email,
       role: 'user',
       banned: false,
-      subscriptions: [],
+      subscriptions: [{
+        status: 'active',
+        planType: 'month',
+        stripeCustomerId: 'cus_guard_user',
+        stripeSubscriptionId: 'sub_guard_user',
+        currentPeriodEnd: new Date(Date.now() + 86_400_000),
+      }],
       createdAt: new Date(),
       updatedAt: new Date(),
     });
@@ -250,55 +255,6 @@ describe('no-cloud-genomic default is enforced on every cloud-AI route', () => {
     expect(llmService.generateExplanation).not.toHaveBeenCalled();
   });
 
-  it('/llm/chat rejects a pasted VCF by default and never calls the provider', async () => {
-    const res = await app.inject({
-      method: 'POST',
-      url: '/llm/chat',
-      headers: { cookie: authCookie(user, prisma) },
-      payload: { messages: [{ role: 'user', content: RAW_VCF }] },
-    });
-    expect(res.statusCode).toBe(400);
-    expect(llmService.generateChatResponse).not.toHaveBeenCalled();
-  });
-
-  it('/llm/chat rejects ARRAY-form content that hides a VCF (non-string-content bypass)', async () => {
-    const res = await app.inject({
-      method: 'POST',
-      url: '/llm/chat',
-      headers: { cookie: authCookie(user, prisma) },
-      payload: { messages: [{ role: 'user', content: [{ type: 'text', text: RAW_VCF }] }] },
-    });
-    expect(res.statusCode).toBe(400);
-    expect(llmService.generateChatResponse).not.toHaveBeenCalled();
-  });
-
-  it('/llm/chat rejects clean content that hides a VCF in tool_calls arguments', async () => {
-    const res = await app.inject({
-      method: 'POST',
-      url: '/llm/chat',
-      headers: { cookie: authCookie(user, prisma) },
-      payload: {
-        messages: [
-          { role: 'user', content: 'Summarize my results please' },
-          { role: 'assistant', content: 'sure', tool_calls: [{ id: 't1', type: 'function', function: { name: 'annotate', arguments: RAW_VCF } }] },
-        ],
-      },
-    });
-    expect(res.statusCode).toBe(400);
-    expect(llmService.generateChatResponse).not.toHaveBeenCalled();
-  });
-
-  it('/llm/image rejects a VCF prompt and never calls the provider', async () => {
-    const res = await app.inject({
-      method: 'POST',
-      url: '/llm/image',
-      headers: { cookie: authCookie(user, prisma) },
-      payload: { prompt: RAW_VCF },
-    });
-    expect(res.statusCode).toBe(400);
-    expect(llmService.generateImage).not.toHaveBeenCalled();
-  });
-
   it('/education/quiz rejects a VCF smuggled via the topic field', async () => {
     const res = await app.inject({
       method: 'POST',
@@ -308,17 +264,6 @@ describe('no-cloud-genomic default is enforced on every cloud-AI route', () => {
     });
     expect(res.statusCode).toBe(400);
     expect(llmService.generateQuiz).not.toHaveBeenCalled();
-  });
-
-  it('/education/image rejects a VCF smuggled via the topic field', async () => {
-    const res = await app.inject({
-      method: 'POST',
-      url: '/education/image',
-      headers: { cookie: authCookie(user, prisma) },
-      payload: { topic: RAW_VCF, level: 'undergraduate' },
-    });
-    expect(res.statusCode).toBe(400);
-    expect(llmService.generateImage).not.toHaveBeenCalled();
   });
 
   it('/education/explain rejects a VCF smuggled via the context field', async () => {

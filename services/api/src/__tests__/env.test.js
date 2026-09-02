@@ -24,7 +24,12 @@ function prodEnv(overrides = {}) {
     STRIPE_PRICE_DEPT_YEARLY: 'price_123456deptYearly',
     STRIPE_PRICE_ENT_MONTHLY: 'price_123456entMonthly',
     STRIPE_PRICE_ENT_YEARLY: 'price_123456entYearly',
-    OPENAI_API_KEY: 'sk-test',
+    OPENAI_API_KEY: 'sk-proj-test-fixture-012345678901234567890',
+    LLM_TEXT_MODEL: 'gpt-4o-mini',
+    ACCOUNT_CLOSURE_LEDGER_WRITE_URL: 'https://ledger.example.invalid/write',
+    ACCOUNT_CLOSURE_LEDGER_READ_URL: 'https://ledger.example.invalid/read',
+    ACCOUNT_CLOSURE_LEDGER_SECRET: 'l'.repeat(40),
+    ACCOUNT_CLOSURE_LEDGER_IDENTITY_KEYS: LEDGER_IDENTITY_KEYS,
     ...overrides,
   };
 }
@@ -34,12 +39,12 @@ describe('loadEnv (production)', () => {
     const env = loadEnv({ source: prodEnv() });
     expect(env.isProduction).toBe(true);
     expect(env.hasMedicalEncryption()).toBe(true);
-    expect(env.accountClosureLedgerConfigured()).toBe(false);
+    expect(env.accountClosureLedgerConfigured()).toBe(true);
     // Capacitor mobile origins are always appended (see corsAllowList).
     expect(env.corsAllowList()).toEqual(['https://app.example.com', 'https://localhost', 'capacitor://localhost']);
   });
 
-  it('recognizes a complete HTTPS deletion-ledger configuration without making it a startup prerequisite', () => {
+  it('recognizes a complete HTTPS deletion-ledger configuration', () => {
     const env = loadEnv({ source: prodEnv({
       ACCOUNT_CLOSURE_LEDGER_WRITE_URL: 'https://ledger.example.invalid/write',
       ACCOUNT_CLOSURE_LEDGER_READ_URL: 'https://ledger.example.invalid/read',
@@ -50,18 +55,43 @@ describe('loadEnv (production)', () => {
   });
 
   it.each([
+    'ACCOUNT_CLOSURE_LEDGER_WRITE_URL',
+    'ACCOUNT_CLOSURE_LEDGER_READ_URL',
+    'ACCOUNT_CLOSURE_LEDGER_SECRET',
+    'ACCOUNT_CLOSURE_LEDGER_IDENTITY_KEYS',
+  ])('throws when %s is missing in production', (key) => {
+    const source = prodEnv();
+    delete source[key];
+    expect(() => loadEnv({ source })).toThrowError(new RegExp(key));
+  });
+
+  it('rejects HTTP deletion-ledger endpoints in production', () => {
+    expect(() => loadEnv({ source: prodEnv({
+      ACCOUNT_CLOSURE_LEDGER_WRITE_URL: 'http://ledger.example.invalid/write',
+    }) })).toThrowError(/ACCOUNT_CLOSURE_LEDGER_WRITE_URL/);
+  });
+
+  it('rejects example deletion-ledger secrets in production', () => {
+    expect(() => loadEnv({ source: prodEnv({
+      ACCOUNT_CLOSURE_LEDGER_SECRET: 'REPLACE_WITH_32_PLUS_CHAR_RANDOM_TRANSPORT_SECRET',
+    }) })).toThrowError(/ACCOUNT_CLOSURE_LEDGER_SECRET/);
+    expect(() => loadEnv({ source: prodEnv({
+      ACCOUNT_CLOSURE_LEDGER_IDENTITY_KEYS: `current=${'REPLACE_WITH_32_PLUS_CHAR_IDENTITY_KEY'}`,
+    }) })).toThrowError(/ACCOUNT_CLOSURE_LEDGER_IDENTITY_KEYS/);
+  });
+
+  it.each([
     '',
     `bad id=${'i'.repeat(40)}`,
     `duplicate=${'i'.repeat(40)},duplicate=${'r'.repeat(40)}`,
     'current=short',
-  ])('does not accept an invalid deletion-ledger identity key ring: %s', (keyRing) => {
-    const env = loadEnv({ source: prodEnv({
+  ])('rejects an invalid deletion-ledger identity key ring at production startup: %s', (keyRing) => {
+    expect(() => loadEnv({ source: prodEnv({
       ACCOUNT_CLOSURE_LEDGER_WRITE_URL: 'https://ledger.example.invalid/write',
       ACCOUNT_CLOSURE_LEDGER_READ_URL: 'https://ledger.example.invalid/read',
       ACCOUNT_CLOSURE_LEDGER_SECRET: 'l'.repeat(40),
       ACCOUNT_CLOSURE_LEDGER_IDENTITY_KEYS: keyRing,
-    }) });
-    expect(env.accountClosureLedgerConfigured()).toBe(false);
+    }) })).toThrowError(/ACCOUNT_CLOSURE_LEDGER_IDENTITY_KEYS/);
   });
 
   it.each([
@@ -110,22 +140,51 @@ describe('loadEnv (production)', () => {
     const source = prodEnv();
     delete source.OPENAI_API_KEY;
     delete source.ANTHROPIC_API_KEY;
-    expect(() => loadEnv({ source })).toThrowError(/OPENAI_API_KEY or ANTHROPIC_API_KEY/);
+    expect(() => loadEnv({ source })).toThrowError(/OPENAI_API_KEY for LLM_TEXT_PROVIDER=openai/);
   });
 
-  it('allows missing LLM provider when SKIP_LLM_KEY_CHECK=1', () => {
-    const source = prodEnv();
-    delete source.OPENAI_API_KEY;
-    delete source.ANTHROPIC_API_KEY;
-    source.SKIP_LLM_KEY_CHECK = '1';
-    expect(() => loadEnv({ source })).not.toThrow();
+  it('requires the key for the selected model provider', () => {
+    expect(() => loadEnv({ source: prodEnv({
+      LLM_TEXT_PROVIDER: 'anthropic',
+      ANTHROPIC_API_KEY: undefined,
+    }) })).toThrowError(/ANTHROPIC_API_KEY for LLM_TEXT_PROVIDER=anthropic/);
+
+    const env = loadEnv({ source: prodEnv({
+      LLM_TEXT_PROVIDER: 'anthropic',
+      OPENAI_API_KEY: undefined,
+      ANTHROPIC_API_KEY: 'sk-ant-api03-test-fixture-012345678901234567890',
+      LLM_TEXT_MODEL: 'claude-sonnet-5',
+    }) });
+    expect(env.LLM_TEXT_PROVIDER).toBe('anthropic');
+  });
+
+  it('requires an explicit model compatible with the selected provider', () => {
+    const missingModel = prodEnv();
+    delete missingModel.LLM_TEXT_MODEL;
+    expect(() => loadEnv({ source: missingModel })).toThrowError(/LLM_TEXT_MODEL/);
+
+    expect(() => loadEnv({ source: prodEnv({
+      LLM_TEXT_PROVIDER: 'anthropic',
+      OPENAI_API_KEY: undefined,
+      ANTHROPIC_API_KEY: 'sk-ant-api03-test-fixture-012345678901234567890',
+      LLM_TEXT_MODEL: 'gpt-4o-mini',
+    }) })).toThrowError(/not compatible with LLM_TEXT_PROVIDER=anthropic/);
+
+    expect(() => loadEnv({ source: prodEnv({
+      LLM_TEXT_PROVIDER: 'openai',
+      LLM_TEXT_MODEL: 'claude-sonnet-5',
+    }) })).toThrowError(/not compatible with LLM_TEXT_PROVIDER=openai/);
+  });
+
+  it('rejects model-provider placeholder credentials', () => {
+    expect(() => loadEnv({ source: prodEnv({
+      OPENAI_API_KEY: 'sk-your-openai-api-key-placeholder-value',
+    }) })).toThrowError(/OPENAI_API_KEY/);
   });
 
   it('requireProductionEncryption() throws in prod when key missing', () => {
     const source = prodEnv();
     delete source.MEDICAL_DATA_ENCRYPTION_KEY;
-    // Avoid the loadEnv hard-fail by using SKIP path: still verify the helper
-    source.SKIP_LLM_KEY_CHECK = '1';
     expect(() => loadEnv({ source })).toThrowError(); // hard fail
   });
 });
@@ -148,6 +207,7 @@ describe('ENV_CONSTANTS', () => {
   it('exports the production-required list and ledger key validator', () => {
     expect(ENV_CONSTANTS.PRODUCTION_REQUIRED).toContain('MEDICAL_DATA_ENCRYPTION_KEY');
     expect(ENV_CONSTANTS.PRODUCTION_REQUIRED).toContain('JWT_SECRET');
+    expect(ENV_CONSTANTS.PRODUCTION_REQUIRED).toContain('LLM_TEXT_MODEL');
     expect(ENV_CONSTANTS.isValidLedgerIdentityKeyConfig(LEDGER_IDENTITY_KEYS)).toBe(true);
   });
 });

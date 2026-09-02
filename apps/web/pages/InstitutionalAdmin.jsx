@@ -22,7 +22,6 @@ import {
   Calendar,
   Crown,
   UserPlus,
-  Mail,
   AlertCircle,
   CheckCircle,
   Loader2,
@@ -47,13 +46,12 @@ export default function InstitutionalAdminPage() {
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
 
-  // Invitation state
-  const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
-  const [bulkInviteMode, setBulkInviteMode] = useState(false);
-  const [inviteEmail, setInviteEmail] = useState("");
+  const [assignmentDialogOpen, setAssignmentDialogOpen] = useState(false);
+  const [bulkAssignmentMode, setBulkAssignmentMode] = useState(false);
+  const [assignmentEmail, setAssignmentEmail] = useState("");
   const [bulkEmails, setBulkEmails] = useState("");
-  const [inviteDepartment, setInviteDepartment] = useState("");
-  const [isInviting, setIsInviting] = useState(false);
+  const [assignmentDepartment, setAssignmentDepartment] = useState("");
+  const [isAssigning, setIsAssigning] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -100,30 +98,30 @@ export default function InstitutionalAdminPage() {
     }
   };
 
-  const handleInviteUser = async () => {
-    if (!inviteEmail.trim() && !bulkEmails.trim()) {
+  const handleAssignUsers = async () => {
+    if (!assignmentEmail.trim() && !bulkEmails.trim()) {
       setError("Please enter at least one email address");
       return;
     }
 
-    if (!bulkInviteMode && !inviteEmail.trim()) {
-      setError("Please enter a valid email address for single invite");
+    if (!bulkAssignmentMode && !assignmentEmail.trim()) {
+      setError("Please enter an email address for the seat assignment");
       return;
     }
 
-    if (bulkInviteMode && !bulkEmails.trim()) {
-      setError("Please enter at least one email address for bulk invite");
+    if (bulkAssignmentMode && !bulkEmails.trim()) {
+      setError("Please enter at least one email address for bulk assignment");
       return;
     }
 
-    setIsInviting(true);
+    setIsAssigning(true);
     setError(null);
     setSuccess(null);
 
     try {
-      const emails = bulkInviteMode 
+      const emails = bulkAssignmentMode
         ? bulkEmails.split(/[,\n]/).map(e => e.trim()).filter(e => e)
-        : [inviteEmail.trim()];
+        : [assignmentEmail.trim()];
 
       // Check if we have enough seats
       if (selectedLicense) {
@@ -135,28 +133,26 @@ export default function InstitutionalAdminPage() {
         throw new Error('No license selected. Please select a license.');
       }
 
-      for (const email of emails) {
-        await apiClient.assignLicenseSeat(selectedLicense.id, {
-          userEmail: email,
-          department: inviteDepartment || null
-        });
-      }
+      await apiClient.assignLicenseSeats(selectedLicense.id, {
+        userEmails: emails,
+        department: assignmentDepartment || null,
+      });
 
-      setSuccess(`Successfully invited ${emails.length} user${emails.length > 1 ? 's' : ''}!`);
-      setInviteDialogOpen(false);
-      setInviteEmail("");
+      setSuccess(`Assigned ${emails.length} seat${emails.length > 1 ? 's' : ''}. Access is tied to ${emails.length > 1 ? 'those email addresses' : 'that email address'}.`);
+      setAssignmentDialogOpen(false);
+      setAssignmentEmail("");
       setBulkEmails("");
-      setInviteDepartment("");
+      setAssignmentDepartment("");
 
       // Reload data
       await loadData();
       await loadLicenseDetails(selectedLicense.id);
 
     } catch (err) {
-      console.error("Error inviting users:", err);
-      setError(err.message || "Failed to invite users");
+      console.error("Error assigning seats:", err);
+      setError(err.message || "Failed to assign seats");
     } finally {
-      setIsInviting(false);
+      setIsAssigning(false);
     }
   };
 
@@ -438,51 +434,51 @@ export default function InstitutionalAdminPage() {
                           <Download className="w-4 h-4" />
                           Export Report
                         </Button>
-                        <Dialog open={inviteDialogOpen} onOpenChange={setInviteDialogOpen}>
+                        <Dialog open={assignmentDialogOpen} onOpenChange={setAssignmentDialogOpen}>
                           <DialogTrigger asChild>
                             <Button className="bg-blue-600 hover:bg-blue-700 gap-2">
                               <UserPlus className="w-4 h-4" />
-                              Invite Users
+                              Assign Seats
                             </Button>
                           </DialogTrigger>
                           <DialogContent className="max-w-2xl">
                             <DialogHeader>
-                              <DialogTitle>Invite Users to {selectedLicense.organizationName}</DialogTitle>
+                              <DialogTitle>Assign seats for {selectedLicense.organizationName}</DialogTitle>
                             </DialogHeader>
                             <div className="space-y-4 pt-4">
                               <Alert className="bg-blue-50 border-blue-200">
                                 <AlertCircle className="h-4 w-4 text-blue-600" />
                                 <AlertDescription className="text-blue-900 text-sm">
-                                  Available seats: <strong>{selectedLicense.maxSeats - selectedLicense.assignedSeats}</strong> of {selectedLicense.maxSeats}
+                                  Available seats: <strong>{selectedLicense.maxSeats - selectedLicense.assignedSeats}</strong> of {selectedLicense.maxSeats}. No email is sent; access activates when a user signs in with the exact assigned address.
                                 </AlertDescription>
                               </Alert>
 
                               <div className="flex gap-2">
                                 <Button
-                                  variant={!bulkInviteMode ? "default" : "outline"}
+                                  variant={!bulkAssignmentMode ? "default" : "outline"}
                                   size="sm"
-                                  onClick={() => setBulkInviteMode(false)}
+                                  onClick={() => setBulkAssignmentMode(false)}
                                 >
                                   Single User
                                 </Button>
                                 <Button
-                                  variant={bulkInviteMode ? "default" : "outline"}
+                                  variant={bulkAssignmentMode ? "default" : "outline"}
                                   size="sm"
-                                  onClick={() => setBulkInviteMode(true)}
+                                  onClick={() => setBulkAssignmentMode(true)}
                                 >
-                                  Bulk Invite
+                                  Bulk Assignment
                                 </Button>
                               </div>
 
-                              {!bulkInviteMode ? (
+                              {!bulkAssignmentMode ? (
                                 <div>
-                                  <Label htmlFor="invite-email">Email Address</Label>
+                                  <Label htmlFor="assignment-email">Email Address</Label>
                                   <Input
-                                    id="invite-email"
+                                    id="assignment-email"
                                     type="email"
                                     placeholder="user@example.com"
-                                    value={inviteEmail}
-                                    onChange={(e) => setInviteEmail(e.target.value)}
+                                    value={assignmentEmail}
+                                    onChange={(e) => setAssignmentEmail(e.target.value)}
                                     className="mt-1"
                                   />
                                 </div>
@@ -504,26 +500,26 @@ export default function InstitutionalAdminPage() {
                                 <Input
                                   id="department"
                                   placeholder="e.g., Research, Clinical, IT"
-                                  value={inviteDepartment}
-                                  onChange={(e) => setInviteDepartment(e.target.value)}
+                                  value={assignmentDepartment}
+                                  onChange={(e) => setAssignmentDepartment(e.target.value)}
                                   className="mt-1"
                                 />
                               </div>
 
                               <Button
-                                onClick={handleInviteUser}
-                                disabled={isInviting || (!inviteEmail.trim() && !bulkEmails.trim())}
+                                onClick={handleAssignUsers}
+                                disabled={isAssigning || (!assignmentEmail.trim() && !bulkEmails.trim())}
                                 className="w-full bg-blue-600 hover:bg-blue-700"
                               >
-                                {isInviting ? (
+                                {isAssigning ? (
                                   <>
                                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                    Sending Invitations...
+                                    Assigning Seats...
                                   </>
                                 ) : (
                                   <>
-                                    <Mail className="w-4 h-4 mr-2" />
-                                    Send Invitation{bulkInviteMode ? 's' : ''}
+                                    <UserPlus className="w-4 h-4 mr-2" />
+                                    Assign Seat{bulkAssignmentMode ? 's' : ''}
                                   </>
                                 )}
                               </Button>
@@ -590,7 +586,7 @@ export default function InstitutionalAdminPage() {
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                       <BarChart3 className="w-5 h-5 text-purple-600" />
-                      Usage Analytics (Last 30 Days)
+                      Recent Usage Activity (up to 50 events)
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
@@ -727,7 +723,10 @@ export default function InstitutionalAdminPage() {
                     <Alert className="bg-amber-50 border-amber-200">
                       <AlertCircle className="h-4 w-4 text-amber-600" />
                       <AlertDescription className="text-amber-900 text-sm">
-                        Need to modify your license or add more seats? Contact support at support@genemap.com
+                        Need to modify your license or add more seats?{' '}
+                        <Link to={createPageUrl('ContactSupport')} className="font-semibold underline">
+                          Open the support form.
+                        </Link>
                       </AlertDescription>
                     </Alert>
                   </CardContent>

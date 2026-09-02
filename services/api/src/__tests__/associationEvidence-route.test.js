@@ -12,7 +12,12 @@ const evidenceService = vi.hoisted(() => ({
 
 vi.mock('../services/associationEvidenceContract.js', () => evidenceService);
 
-import { authCookie, buildTestApp, createPrismaMock } from './setup.js';
+import {
+  authCookie,
+  buildTestApp,
+  createPrismaMock,
+  seedPremiumSubscription,
+} from './setup.js';
 
 const user = {
   userId: 'association-route-user',
@@ -35,6 +40,7 @@ describe('POST /genomics/association-evidence', () => {
     prisma = createPrismaMock();
     app = await buildTestApp(prisma, { csrf: false, includeGenomics: true });
     cookie = authCookie(user, prisma);
+    seedPremiumSubscription(prisma, user.userId);
     evidenceService.getPublicationAssociationEvidence.mockResolvedValue({
       query: {
         ...query,

@@ -4,16 +4,34 @@ import { buildTestApp } from './setup.js';
 
 vi.mock('stripe', () => {
   let nextEvent = null;
+  const currentSubscriptionLine = () => {
+    const metadata = nextEvent?.data?.object?.metadata || {};
+    const priceKey = metadata.isInstitutional === 'true'
+      ? `${metadata.licenseType}_${metadata.billing}`
+      : metadata.plan || 'monthly';
+    return {
+      price: {
+        id: `price_test_${priceKey}`,
+        active: true,
+        type: 'recurring',
+        unit_amount: 999,
+        currency: 'usd',
+        recurring: { interval: priceKey.endsWith('yearly') ? 'year' : 'month' },
+      },
+      quantity: metadata.isInstitutional === 'true' ? Number(metadata.seats) : 1,
+    };
+  };
   const Stripe = function () {
     return {
       webhooks: { constructEvent: vi.fn(() => nextEvent) },
       checkout: { sessions: { create: vi.fn(async () => ({ id: 'cs_test', url: 'https://stripe/sess' })) } },
       billingPortal: { sessions: { create: vi.fn(async () => ({ url: 'https://stripe/portal' })) } },
+      prices: { retrieve: vi.fn(async (id) => ({ ...currentSubscriptionLine().price, id })) },
       subscriptions: {
         retrieve: vi.fn(async () => ({
           status: 'active',
           current_period_end: Math.floor(Date.now() / 1000) + 86400,
-          items: { data: [{ price: { recurring: { interval: 'month' } } }] },
+          items: { data: [currentSubscriptionLine()] },
         })),
       },
     };
@@ -86,6 +104,10 @@ runIfPostgres('Postgres integration smoke', () => {
   beforeAll(async () => {
     process.env.STRIPE_WEBHOOK_SECRET = 'whsec_test';
     process.env.STRIPE_SECRET_KEY = 'sk_test_mock';
+    process.env.STRIPE_PRICE_MONTHLY = 'price_test_monthly';
+    process.env.STRIPE_PRICE_YEARLY = 'price_test_yearly';
+    process.env.STRIPE_PRICE_TEAM_MONTHLY = 'price_test_team_monthly';
+    process.env.STRIPE_PRICE_TEAM_YEARLY = 'price_test_team_yearly';
     prisma = new PrismaClient();
     app = await buildTestApp(prisma, { csrf: false, includeBilling: true });
     Stripe = (await import('stripe')).default;
@@ -166,6 +188,7 @@ runIfPostgres('Postgres integration smoke', () => {
             organizationName: 'Integration Lab',
             contactEmail: 'admin@integration.test',
             licenseType: 'team',
+            billing: 'monthly',
             seats: '5',
           },
           subscription: 'sub_pg_license',

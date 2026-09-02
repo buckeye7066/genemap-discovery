@@ -15,8 +15,9 @@
  *   1. ROUTE_OWNED_TASKS                     - server-owned task, no client say
  *   2. CLIENT_TASK_ROUTES                    - versioned structured task contract
  *   3. SAFE_NON_GENERATION_EDUCATION_ROUTES  - explicitly non-generating
- *   4. HIDDEN_PATH_PREFIXES                  - 404'd before the handler
- *   5. BOUNDARY_COVERAGE_ALLOWLIST below     - with a written reason
+ *   4. SERVER_CONTEXT_GENERATION_ROUTES      - server-built context, strict body
+ *   5. HIDDEN_PATH_PREFIXES                  - 404'd before the handler
+ *   6. BOUNDARY_COVERAGE_ALLOWLIST below     - exceptional, justified routes
  *
  * Anything else fails, naming the offending path. The allowlist is the escape
  * hatch, and it costs a sentence of justification — which is the point. Do NOT
@@ -43,20 +44,7 @@ const PROVIDER_PACKAGES = ['@anthropic-ai/sdk', 'openai', '@google/generative-ai
  * Routes declared by a model-capable file that are nonetheless permitted.
  * Every entry needs a reason a reviewer can check. "It is fine" is not a reason.
  */
-const BOUNDARY_COVERAGE_ALLOWLIST = new Map([
-  [
-    'POST /llm/chat',
-    'Retired stub. publicationBoundaryDecision() reaches its isUnknownGenerationRoute '
-      + 'branch for any /llm path outside CLIENT_TASK_ROUTES and returns 403 before the '
-      + 'handler; the handler itself then throws ValidationError. Double-locked, no '
-      + 'provider call is reachable.',
-  ],
-  [
-    'POST /llm/image',
-    'Retired stub. Same isUnknownGenerationRoute 403 as POST /llm/chat, plus a handler '
-      + 'that throws ValidationError. No provider call is reachable.',
-  ],
-]);
+const BOUNDARY_COVERAGE_ALLOWLIST = new Map();
 
 // --- import-graph model-capability analysis -------------------------------
 
@@ -191,12 +179,14 @@ function joinPath(prefix, routePath) {
 const routeOwned = boundaryInternals.routeOwnedTaskPaths();
 const clientTask = boundaryInternals.clientTaskRoutePaths();
 const safeNonGeneration = boundaryInternals.safeNonGenerationRoutePaths();
+const serverContextGeneration = boundaryInternals.serverContextGenerationRoutePaths();
 const hiddenPrefixes = boundaryInternals.HIDDEN_PATH_PREFIXES;
 
 function coverageFor(fullPath) {
   if (routeOwned.has(fullPath)) return 'ROUTE_OWNED_TASKS';
   if (clientTask.has(fullPath)) return 'CLIENT_TASK_ROUTES';
   if (safeNonGeneration.has(fullPath)) return 'SAFE_NON_GENERATION_EDUCATION_ROUTES';
+  if (serverContextGeneration.has(fullPath)) return 'SERVER_CONTEXT_GENERATION_ROUTES';
   if (hiddenPrefixes.some((prefix) => fullPath === prefix || fullPath.startsWith(`${prefix}/`))) {
     return 'HIDDEN_PATH_PREFIXES';
   }
@@ -254,7 +244,8 @@ describe('API boundary enforcement sweep', () => {
         violations.push(
           `${label} (routes/${name}): declared by a model-capable route file but is not in `
             + 'ROUTE_OWNED_TASKS, CLIENT_TASK_ROUTES, SAFE_NON_GENERATION_EDUCATION_ROUTES, '
-            + 'HIDDEN_PATH_PREFIXES, or BOUNDARY_COVERAGE_ALLOWLIST. Register it with the '
+            + 'SERVER_CONTEXT_GENERATION_ROUTES, HIDDEN_PATH_PREFIXES, or '
+            + 'BOUNDARY_COVERAGE_ALLOWLIST. Register it with the '
             + 'publication boundary, or add an allowlist entry with a written reason.'
         );
       }

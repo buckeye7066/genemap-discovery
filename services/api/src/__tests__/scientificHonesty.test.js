@@ -1,5 +1,10 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
-import { buildTestApp, createPrismaMock, authCookie } from './setup.js';
+import {
+  buildTestApp,
+  createPrismaMock,
+  authCookie,
+  seedPremiumSubscription,
+} from './setup.js';
 import {
   SCIENTIFIC_HONESTY_DIRECTIVE,
   QUIZ_HONESTY_NOTE,
@@ -17,7 +22,6 @@ vi.mock('../services/llm.js', () => ({
   generateQuiz: vi.fn(async () => [
     { question: 'q', options: ['a', 'b', 'c', 'd'], correctIndex: 0, explanation: 'e' },
   ]),
-  generateImage: vi.fn(async () => ({ url: 'https://img/x' })),
 }));
 
 // ─── Pure unit tests: the directive and its helpers ──────────────────────────
@@ -187,6 +191,7 @@ describe('honesty directive is injected by AI routes', () => {
   });
 
   it('/llm/invoke injects the directive before the server-composed structured task', async () => {
+    seedPremiumSubscription(prisma, user.userId);
     const res = await app.inject({
       method: 'POST',
       url: '/llm/invoke',
@@ -214,14 +219,4 @@ describe('honesty directive is injected by AI routes', () => {
     expect(prompt).toContain('disease: "Cystic Fibrosis"');
   });
 
-  it('/llm/chat is retired and never reaches the provider', async () => {
-    const res = await app.inject({
-      method: 'POST',
-      url: '/llm/chat',
-      headers: { cookie: authCookie(user, prisma) },
-      payload: { messages: [{ role: 'user', content: 'What does BRCA1 do?' }] },
-    });
-    expect(res.statusCode).toBeGreaterThanOrEqual(400);
-    expect(llmService.generateChatResponse).not.toHaveBeenCalled();
-  });
 });

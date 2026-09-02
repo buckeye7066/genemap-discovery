@@ -2,7 +2,7 @@ import {
   claimProvenanceRole,
   deriveRankingBasisFromClaims,
   safeExternalHttpUrl,
-} from '../../../packages/shared/src/associationClaim.js';
+} from '@genemap/shared/associationClaim';
 import { isCanonicalPublicationArtifact } from '@genemap/shared/publicationStatus';
 import { copyText, downloadBlob } from './browserFiles';
 

@@ -68,8 +68,13 @@ const baseSchema = z.object({
   // LLM providers
   OPENAI_API_KEY: z.string().optional(),
   ANTHROPIC_API_KEY: z.string().optional(),
-  LLM_TEXT_PROVIDER: z.string().optional(),
-  LLM_IMAGE_PROVIDER: z.string().optional(),
+  LLM_TEXT_PROVIDER: z.enum(['openai', 'anthropic']).optional(),
+  LLM_TEXT_MODEL: z.string().trim().min(1).max(200).optional(),
+  LLM_ASSISTANT_MODEL: z.string().trim().min(1).max(200).optional(),
+  LLM_EDU_TEXT_MODEL: z.string().trim().min(1).max(200).optional(),
+  LLM_INVOKE_TEXT_MODEL: z.string().trim().min(1).max(200).optional(),
+  OPENAI_MODEL: z.string().trim().min(1).max(200).optional(),
+  ANTHROPIC_MODEL: z.string().trim().min(1).max(200).optional(),
 
   // Admin allowlist (comma-separated emails)
   ADMIN_EMAILS: z.string().optional(),
@@ -77,10 +82,10 @@ const baseSchema = z.object({
   // CSRF
   CSRF_SECRET: z.string().optional(),
 
-  // Restore-independent account-deletion ledger. These remain optional at
-  // process startup so an existing deployment stays probeable, but production
-  // launch verification and account deletion fail closed until URLs, the
-  // transport secret, and the rotation-safe identity key ring are configured.
+  // Restore-independent account-deletion ledger. The schema keeps these
+  // optional for local development, while PRODUCTION_REQUIRED below prevents a
+  // production process from starting if the advertised deletion flow cannot
+  // complete its independent authorization and restore reconciliation.
   ACCOUNT_CLOSURE_LEDGER_WRITE_URL: z.string().url().optional(),
   ACCOUNT_CLOSURE_LEDGER_READ_URL: z.string().url().optional(),
   ACCOUNT_CLOSURE_LEDGER_SECRET: z.string().optional(),
@@ -104,14 +109,38 @@ const PRODUCTION_REQUIRED = [
   'STRIPE_PRICE_DEPT_YEARLY',
   'STRIPE_PRICE_ENT_MONTHLY',
   'STRIPE_PRICE_ENT_YEARLY',
+  'LLM_TEXT_MODEL',
+  'ACCOUNT_CLOSURE_LEDGER_WRITE_URL',
+  'ACCOUNT_CLOSURE_LEDGER_READ_URL',
+  'ACCOUNT_CLOSURE_LEDGER_SECRET',
+  'ACCOUNT_CLOSURE_LEDGER_IDENTITY_KEYS',
 ];
 
-// At least one LLM provider key must be configured in production if any
-// LLM-backed routes are mounted (callers can opt-out via SKIP_LLM_KEY_CHECK=1
-// for narrow internal deployments that intentionally disable LLM features).
-function hasLLMProvider(env, source) {
-  if (source.SKIP_LLM_KEY_CHECK === '1') return true;
-  return Boolean(env.OPENAI_API_KEY || env.ANTHROPIC_API_KEY);
+// The published product mounts model-backed routes, so production cannot boot
+// without at least one provider. This has no bypass: a deployment that cannot
+// serve an advertised assistant must fail its release before accepting traffic.
+function selectedLLMProvider(env) {
+  return env.LLM_TEXT_PROVIDER || 'openai';
+}
+
+function isUsableProviderKey(provider, value) {
+  if (isWeakSecret(value)) return false;
+  if (provider === 'anthropic') return value.startsWith('sk-ant-');
+  return value.startsWith('sk-');
+}
+
+function hasLLMProvider(env) {
+  const provider = selectedLLMProvider(env);
+  return provider === 'anthropic'
+    ? isUsableProviderKey(provider, env.ANTHROPIC_API_KEY)
+    : isUsableProviderKey(provider, env.OPENAI_API_KEY);
+}
+
+function isCompatibleTextModel(provider, value) {
+  if (typeof value !== 'string' || !value.trim()) return false;
+  return provider === 'anthropic'
+    ? /^claude-[A-Za-z0-9._-]+$/u.test(value)
+    : /^(?:gpt-|chatgpt-|o\d+(?:-|$))[A-Za-z0-9._-]*$/iu.test(value);
 }
 
 function isWeakSecret(value) {
@@ -121,8 +150,19 @@ function isWeakSecret(value) {
   const lowered = value.toLowerCase();
   if (lowered.includes('change-in-production')) return true;
   if (lowered.includes('your-') && lowered.includes('-secret')) return true;
+  if (lowered.includes('replace_with')) return true;
+  if (lowered.includes('placeholder')) return true;
   if (lowered === 'test-cookie-secret') return true;
   return false;
+}
+
+function isHttpsUrl(value) {
+  if (typeof value !== 'string' || !value.trim()) return false;
+  try {
+    return new URL(value).protocol === 'https:';
+  } catch {
+    return false;
+  }
 }
 
 function isValidMedicalKey(value) {
@@ -155,7 +195,7 @@ function isValidLedgerIdentityKeyConfig(value) {
     if (delimiter <= 0) return false;
     const id = entry.slice(0, delimiter).trim();
     const secret = entry.slice(delimiter + 1).trim();
-    if (!LEDGER_IDENTITY_KEY_ID.test(id) || secret.length < MIN_SECRET_LENGTH || seen.has(id)) {
+    if (!LEDGER_IDENTITY_KEY_ID.test(id) || isWeakSecret(secret) || seen.has(id)) {
       return false;
     }
     seen.add(id);
@@ -185,6 +225,7 @@ export function loadEnv(opts = {}) {
 
   const missing = [];
   const weak = [];
+  const invalid = [];
 
   if (isProd) {
     for (const key of PRODUCTION_REQUIRED) {
@@ -216,8 +257,51 @@ export function loadEnv(opts = {}) {
         weak.push(`${key} (must be a real Stripe price_ id, not a placeholder)`);
       }
     }
-    if (!hasLLMProvider(env, source)) {
-      missing.push('OPENAI_API_KEY or ANTHROPIC_API_KEY (set SKIP_LLM_KEY_CHECK=1 to bypass)');
+    for (const key of [
+      'ACCOUNT_CLOSURE_LEDGER_WRITE_URL',
+      'ACCOUNT_CLOSURE_LEDGER_READ_URL',
+    ]) {
+      if (env[key] && !isHttpsUrl(env[key])) {
+        weak.push(`${key} (must be an HTTPS URL)`);
+      }
+    }
+    if (env.ACCOUNT_CLOSURE_LEDGER_SECRET && isWeakSecret(env.ACCOUNT_CLOSURE_LEDGER_SECRET)) {
+      weak.push('ACCOUNT_CLOSURE_LEDGER_SECRET (must be a non-placeholder secret with at least 32 characters)');
+    }
+    if (
+      env.ACCOUNT_CLOSURE_LEDGER_IDENTITY_KEYS
+      && !isValidLedgerIdentityKeyConfig(env.ACCOUNT_CLOSURE_LEDGER_IDENTITY_KEYS)
+    ) {
+      weak.push('ACCOUNT_CLOSURE_LEDGER_IDENTITY_KEYS (must be a valid non-placeholder identity key ring)');
+    }
+    if (env.OPENAI_API_KEY && !isUsableProviderKey('openai', env.OPENAI_API_KEY)) {
+      weak.push('OPENAI_API_KEY (must be a non-placeholder OpenAI API key)');
+    }
+    if (env.ANTHROPIC_API_KEY && !isUsableProviderKey('anthropic', env.ANTHROPIC_API_KEY)) {
+      weak.push('ANTHROPIC_API_KEY (must be a non-placeholder Anthropic API key)');
+    }
+    if (!hasLLMProvider(env)) {
+      const provider = selectedLLMProvider(env);
+      missing.push(provider === 'anthropic'
+        ? 'ANTHROPIC_API_KEY for LLM_TEXT_PROVIDER=anthropic'
+        : 'OPENAI_API_KEY for LLM_TEXT_PROVIDER=openai');
+    }
+    const provider = selectedLLMProvider(env);
+    for (const key of [
+      'LLM_TEXT_MODEL',
+      'LLM_ASSISTANT_MODEL',
+      'LLM_EDU_TEXT_MODEL',
+      'LLM_INVOKE_TEXT_MODEL',
+    ]) {
+      if (env[key] && !isCompatibleTextModel(provider, env[key])) {
+        invalid.push(`${key} is not compatible with LLM_TEXT_PROVIDER=${provider}`);
+      }
+    }
+    if (env.OPENAI_MODEL && !isCompatibleTextModel('openai', env.OPENAI_MODEL)) {
+      invalid.push('OPENAI_MODEL is not an OpenAI model name');
+    }
+    if (env.ANTHROPIC_MODEL && !isCompatibleTextModel('anthropic', env.ANTHROPIC_MODEL)) {
+      invalid.push('ANTHROPIC_MODEL is not an Anthropic model name');
     }
   } else {
     // dev/test: warn but do not throw
@@ -234,12 +318,13 @@ export function loadEnv(opts = {}) {
     }
   }
 
-  if (missing.length > 0 || weak.length > 0) {
+  if (missing.length > 0 || weak.length > 0 || invalid.length > 0) {
     const parts = [];
     if (missing.length > 0) parts.push(`missing required vars: ${missing.join(', ')}`);
     if (weak.length > 0) {
       parts.push(`secrets too short or placeholders (need >= ${MIN_SECRET_LENGTH} chars): ${weak.join(', ')}`);
     }
+    if (invalid.length > 0) parts.push(`invalid configuration: ${invalid.join(', ')}`);
     const message = `[env] production environment is unsafe — ${parts.join('; ')}`;
     if (isProd) {
       throw new Error(message);
@@ -275,17 +360,10 @@ export function loadEnv(opts = {}) {
         env.ACCOUNT_CLOSURE_LEDGER_WRITE_URL,
         env.ACCOUNT_CLOSURE_LEDGER_READ_URL,
       ];
-      const validUrls = urls.every((value) => {
-        if (!value) return false;
-        try {
-          return new URL(value).protocol === 'https:';
-        } catch {
-          return false;
-        }
-      });
+      const validUrls = urls.every(isHttpsUrl);
       return validUrls
         && typeof env.ACCOUNT_CLOSURE_LEDGER_SECRET === 'string'
-        && env.ACCOUNT_CLOSURE_LEDGER_SECRET.length >= MIN_SECRET_LENGTH
+        && !isWeakSecret(env.ACCOUNT_CLOSURE_LEDGER_SECRET)
         && isValidLedgerIdentityKeyConfig(env.ACCOUNT_CLOSURE_LEDGER_IDENTITY_KEYS);
     },
 
@@ -321,5 +399,9 @@ export const ENV_CONSTANTS = {
   MIN_SECRET_LENGTH,
   MEDICAL_KEY_HEX_LENGTH,
   PRODUCTION_REQUIRED,
+  isHttpsUrl,
+  isUsableProviderKey,
+  isCompatibleTextModel,
   isValidLedgerIdentityKeyConfig,
+  selectedLLMProvider,
 };

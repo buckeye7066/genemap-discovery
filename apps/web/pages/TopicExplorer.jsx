@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useEducationLevel } from '@/lib/EducationLevelContext';
 import AdaptiveExplanation from '@/components/education/AdaptiveExplanation';
-import AdaptiveImage from '@/components/education/AdaptiveImage';
 import LevelPicker from '@/components/education/LevelPicker';
 import UsageBanner from '@/components/education/UsageBanner';
 import MedicalDisclaimer from '@/components/shared/MedicalDisclaimer';
@@ -24,7 +23,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ArrowLeft, BookOpen, Image, MessageSquare, HelpCircle, RefreshCw } from 'lucide-react';
+import { ArrowLeft, BookOpen, MessageSquare, HelpCircle, RefreshCw } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 
 /**
@@ -70,16 +69,8 @@ const TUTOR_ACTIONS = Object.freeze([
   ['check_understanding', 'Check my understanding'],
 ]);
 
-function isSafeGeneratedImageUrl(value) {
-  return typeof value === 'string' && (
-    /^https:\/\/[^\s]+$/iu.test(value)
-    || /^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/u.test(value)
-  );
-}
-
 const INVALID_PUBLICATION_CORRELATION = Object.freeze({
   explanation: 'explanation:client-invalid-publication',
-  image: 'image:client-invalid-publication',
   chat: 'chat:client-invalid-publication',
 });
 
@@ -175,14 +166,12 @@ export default function TopicExplorer() {
   const publicationRequestRef = useRef({
     scope: publicationRequestScope,
     explanation: 0,
-    image: 0,
     chat: 0,
   });
   if (publicationRequestRef.current.scope !== publicationRequestScope) {
     publicationRequestRef.current = {
       scope: publicationRequestScope,
       explanation: publicationRequestRef.current.explanation + 1,
-      image: publicationRequestRef.current.image + 1,
       chat: publicationRequestRef.current.chat + 1,
     };
   }
@@ -194,10 +183,8 @@ export default function TopicExplorer() {
   const [explanationPublication, setExplanationPublication] = useState(null);
   const [explanationError, setExplanationError] = useState('');
   const [sources, setSources] = useState([]);
-  const [imagePublication, setImagePublication] = useState(null);
-  const [imageError, setImageError] = useState('');
   const [chatMessages, setChatMessages] = useState([]);
-  const [loading, setLoading] = useState({ explanation: false, image: false, chat: false });
+  const [loading, setLoading] = useState({ explanation: false, chat: false });
   const [publicationStateScope, setPublicationStateScope] = useState(publicationRequestScope);
 
   useEffect(() => {
@@ -205,10 +192,8 @@ export default function TopicExplorer() {
     setExplanationPublication(null);
     setExplanationError('');
     setSources([]);
-    setImagePublication(null);
-    setImageError('');
     setChatMessages([]);
-    setLoading({ explanation: false, image: false, chat: false });
+    setLoading({ explanation: false, chat: false });
   }, [publicationRequestScope]);
 
   useEffect(() => {
@@ -300,47 +285,6 @@ export default function TopicExplorer() {
     }
   };
 
-  const loadImage = async () => {
-    if (!topicId || catalogTopic?.id !== topicId) return;
-    const requestSequence = publicationRequestRef.current.image + 1;
-    publicationRequestRef.current.image = requestSequence;
-    const isCurrentRequest = () => (
-      publicationRequestRef.current.scope === publicationRequestScope
-      && publicationRequestRef.current.image === requestSequence
-    );
-    setLoading(prev => ({ ...prev, image: true }));
-    setImageError('');
-    try {
-      const res = await apiClient.generateImage({ topic: topicId, level: publicationLevel });
-      if (!isCurrentRequest()) return;
-      if (res?.topicMetadata?.id !== topicId) {
-        throw new Error('The server returned mismatched topic metadata.');
-      }
-      setImagePublication(publicationResponseOrUnavailable(
-        'image',
-        res?.publication,
-        (content) => Boolean(
-          content
-          && typeof content === 'object'
-          && isSafeGeneratedImageUrl(content.imageUrl)
-          && Object.prototype.hasOwnProperty.call(content, 'revisedPrompt')
-          && (content.revisedPrompt === null || typeof content.revisedPrompt === 'string'),
-        ),
-      ));
-      setTopicMetadata(catalogTopic);
-    } catch (err) {
-      if (isCurrentRequest()) {
-        const recoveryPublication = terminalPublicationArtifactFromError(err);
-        setImagePublication(recoveryPublication);
-        setImageError(recoveryPublication ? '' : (err?.message || 'Unable to generate an illustration.'));
-      }
-    } finally {
-      if (isCurrentRequest()) {
-        setLoading(prev => ({ ...prev, image: false }));
-      }
-    }
-  };
-
   const sendChat = async (interaction, label) => {
     if (!topicId || catalogTopic?.id !== topicId) return;
     const requestSequence = publicationRequestRef.current.chat + 1;
@@ -398,12 +342,10 @@ export default function TopicExplorer() {
   const visibleExplanationError = visibleCatalogError
     || (publicationScopeIsCurrent ? explanationError : '');
   const visibleSources = publicationScopeIsCurrent ? sources : [];
-  const visibleImagePublication = publicationScopeIsCurrent ? imagePublication : null;
-  const visibleImageError = publicationScopeIsCurrent ? imageError : '';
   const visibleChatMessages = publicationScopeIsCurrent ? chatMessages : [];
   const visibleLoading = publicationScopeIsCurrent
     ? loading
-    : { explanation: true, image: true, chat: true };
+    : { explanation: true, chat: true };
   const visibleTopicMetadata = publicationScopeIsCurrent ? topicMetadata : null;
   const visibleCatalogTopic = catalogTopic?.id === topicId ? catalogTopic : null;
   const topicTitle = visibleTopicMetadata?.title || visibleCatalogTopic?.title || 'Topic Explorer';
@@ -428,12 +370,9 @@ export default function TopicExplorer() {
       </div>
 
       <Tabs defaultValue="learn" className="w-full">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="learn" className="flex items-center gap-1">
             <BookOpen className="w-4 h-4" /> Learn
-          </TabsTrigger>
-          <TabsTrigger value="visual" className="flex items-center gap-1">
-            <Image className="w-4 h-4" /> Visual
           </TabsTrigger>
           <TabsTrigger value="tutor" className="flex items-center gap-1">
             <MessageSquare className="w-4 h-4" /> Tutor
@@ -455,21 +394,6 @@ export default function TopicExplorer() {
               {visibleExplanationError && <p className="mb-3 text-sm text-red-700" role="alert">{visibleExplanationError}</p>}
               <AdaptiveExplanation artifact={visibleExplanationPublication} loading={visibleLoading.explanation} level={level} />
               {!visibleLoading.explanation && publicationContent(visibleExplanationPublication) && <SourceList sources={visibleSources} />}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="visual" className="mt-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="text-lg">Visual Illustration</CardTitle>
-              <Button variant="outline" size="sm" onClick={loadImage} disabled={visibleLoading.image || catalogLoading || !visibleCatalogTopic}>
-                {visibleImagePublication ? 'Regenerate' : 'Generate'} Image
-              </Button>
-            </CardHeader>
-            <CardContent>
-              {visibleImageError && <p className="mb-3 text-sm text-red-700" role="alert">{visibleImageError}</p>}
-              <AdaptiveImage artifact={visibleImagePublication} loading={visibleLoading.image} level={level} topic={topicTitle} />
             </CardContent>
           </Card>
         </TabsContent>

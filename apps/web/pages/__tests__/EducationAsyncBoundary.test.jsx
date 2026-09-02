@@ -14,7 +14,6 @@ vi.mock('@genemap/shared', () => ({
     generateQuiz: vi.fn(),
     updateLearningProgress: vi.fn(),
     getExplanation: vi.fn(),
-    generateImage: vi.fn(),
     chat: vi.fn(),
   },
 }));
@@ -34,27 +33,6 @@ vi.mock('@/components/education/AdaptiveExplanation', async () => {
         data-publication-reason={artifact?.reasonCode || ''}
       >
         {loading ? 'explanation-loading' : artifact?.content || 'no-explanation'}
-        <PublicationState artifact={artifact} />
-      </div>
-    ),
-  };
-});
-vi.mock('@/components/education/AdaptiveImage', async () => {
-  const { default: PublicationState } = await vi.importActual('@/components/shared/PublicationState');
-  return {
-    default: ({ artifact, loading }) => (
-      <div
-        data-testid="adaptive-image"
-        data-publication-reason={artifact?.reasonCode || ''}
-      >
-        {loading
-          ? 'image-loading'
-          : [
-            artifact?.status || 'none',
-            artifact?.correlationId || 'no-correlation',
-            artifact?.content?.imageUrl || 'no-image',
-            artifact?.content?.revisedPrompt || 'no-prompt',
-          ].join(':')}
         <PublicationState artifact={artifact} />
       </div>
     ),
@@ -409,19 +387,14 @@ describe('education async publication boundaries', () => {
     expect(screen.getByText(`Explanation for ${savedLevel}.`)).toBeInTheDocument();
   });
 
-  it('keeps explanation, image, and chat completions independent and scoped to topic plus level', async () => {
+  it('keeps explanation and chat completions independent and scoped to topic plus level', async () => {
     const staleExplanation = deferred();
     const currentExplanation = deferred();
-    const staleImage = deferred();
-    const currentImage = deferred();
     const staleChat = deferred();
     const currentChat = deferred();
     apiClient.getExplanation
       .mockImplementationOnce(() => staleExplanation.promise)
       .mockImplementationOnce(() => currentExplanation.promise);
-    apiClient.generateImage
-      .mockImplementationOnce(() => staleImage.promise)
-      .mockImplementationOnce(() => currentImage.promise);
     apiClient.chat
       .mockImplementationOnce(() => staleChat.promise)
       .mockImplementationOnce(() => currentChat.promise);
@@ -429,21 +402,14 @@ describe('education async publication boundaries', () => {
     const path = '/topicexplorer?topic=what-is-dna';
     const { rerender } = render(routedElement(path, TopicExplorer));
     await waitFor(() => expect(apiClient.getExplanation).toHaveBeenCalledTimes(1));
-    fireEvent.click(screen.getByRole('button', { name: /^generate image$/i }));
     fireEvent.click(screen.getByRole('button', { name: /explain another way/i }));
-    await waitFor(() => expect(apiClient.generateImage).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(apiClient.chat).toHaveBeenCalledTimes(1));
 
     educationState.level = 'graduate';
     rerender(routedElement(path, TopicExplorer));
     expect(screen.getByTestId('adaptive-explanation')).toHaveTextContent('explanation-loading');
-    expect(screen.getByTestId('adaptive-image')).toHaveTextContent('none:no-correlation:no-image');
-    expect(screen.getByTestId('adaptive-image')).not.toHaveTextContent('stale.example');
     await waitFor(() => expect(apiClient.getExplanation).toHaveBeenCalledTimes(2));
-    await waitFor(() => expect(screen.getByRole('button', { name: /^generate image$/i })).not.toBeDisabled());
-    fireEvent.click(screen.getByRole('button', { name: /^generate image$/i }));
     fireEvent.click(screen.getByRole('button', { name: /give a general example/i }));
-    await waitFor(() => expect(apiClient.generateImage).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(apiClient.chat).toHaveBeenCalledTimes(2));
 
     await act(async () => {
@@ -452,23 +418,14 @@ describe('education async publication boundaries', () => {
         topicMetadata: { id: 'what-is-dna', title: 'What is DNA?' },
         sources: [],
       });
-      staleImage.resolve({
-        publication: publication({
-          imageUrl: 'https://stale.example/image.png',
-          revisedPrompt: null,
-        }, 'image:stale'),
-        topicMetadata: { id: 'what-is-dna', title: 'What is DNA?' },
-      });
       staleChat.reject(new Error('stale tutor failure'));
-      await Promise.allSettled([staleExplanation.promise, staleImage.promise, staleChat.promise]);
+      await Promise.allSettled([staleExplanation.promise, staleChat.promise]);
     });
 
     expect(screen.getByTestId('adaptive-explanation')).toHaveTextContent('explanation-loading');
-    expect(screen.getByRole('button', { name: /^generate image$/i })).toBeDisabled();
     expect(screen.getByRole('button', { name: /give a general example/i })).toBeDisabled();
     expect(screen.queryByText(/stale explanation/i)).toBeNull();
     expect(screen.queryByText(/stale tutor failure/i)).toBeNull();
-    expect(screen.getByTestId('adaptive-image')).not.toHaveTextContent('stale.example');
 
     await act(async () => {
       currentExplanation.resolve({
@@ -476,109 +433,16 @@ describe('education async publication boundaries', () => {
         topicMetadata: { id: 'what-is-dna', title: 'What is DNA?' },
         sources: [],
       });
-      currentImage.resolve({
-        publication: publication({
-          imageUrl: 'https://current.example/image.png',
-          revisedPrompt: null,
-        }, 'image:current'),
-        topicMetadata: { id: 'what-is-dna', title: 'What is DNA?' },
-      });
       currentChat.resolve({
         publication: publication('Current tutor response.', 'chat:current'),
         topicMetadata: { id: 'what-is-dna', title: 'What is DNA?' },
       });
-      await Promise.all([currentExplanation.promise, currentImage.promise, currentChat.promise]);
+      await Promise.all([currentExplanation.promise, currentChat.promise]);
     });
 
     expect(await screen.findByText('Current explanation.')).toBeInTheDocument();
-    expect(screen.getByTestId('adaptive-image')).toHaveTextContent('current.example/image.png');
     expect(await screen.findByText('Current tutor response.')).toBeInTheDocument();
     expect(screen.queryByText(/stale/i)).toBeNull();
-  });
-
-  it('requires an own null-or-string revisedPrompt before image content is reusable', async () => {
-    apiClient.getExplanation.mockResolvedValue({
-      publication: publication('Current explanation.', 'explanation:image-validator'),
-      topicMetadata: { id: 'what-is-dna', title: 'What is DNA?' },
-      sources: [],
-    });
-    apiClient.generateImage
-      .mockResolvedValueOnce({
-        publication: publication({ imageUrl: 'https://example.test/missing.png' }, 'image:missing'),
-        topicMetadata: { id: 'what-is-dna', title: 'What is DNA?' },
-      })
-      .mockResolvedValueOnce({
-        publication: publication({
-          imageUrl: 'https://example.test/number.png',
-          revisedPrompt: 42,
-        }, 'image:number'),
-        topicMetadata: { id: 'what-is-dna', title: 'What is DNA?' },
-      })
-      .mockResolvedValueOnce({
-        publication: publication({
-          imageUrl: 'https://example.test/valid.png',
-          revisedPrompt: null,
-        }, 'image:valid'),
-        topicMetadata: { id: 'what-is-dna', title: 'What is DNA?' },
-      });
-
-    render(routedElement('/topicexplorer?topic=what-is-dna', TopicExplorer));
-    await screen.findByText('Current explanation.');
-
-    fireEvent.click(screen.getByRole('button', { name: /^generate image$/i }));
-    await waitFor(() => expect(screen.getByTestId('adaptive-image')).toHaveTextContent('unavailable:image:missing:no-image'));
-    fireEvent.click(screen.getByRole('button', { name: /^regenerate image$/i }));
-    await waitFor(() => expect(screen.getByTestId('adaptive-image')).toHaveTextContent('unavailable:image:number:no-image'));
-    fireEvent.click(screen.getByRole('button', { name: /^regenerate image$/i }));
-    await waitFor(() => expect(screen.getByTestId('adaptive-image')).toHaveTextContent('available:image:valid:https://example.test/valid.png'));
-  });
-
-  it.each([
-    ['missing', undefined],
-    ['null', null],
-    ['scalar', 'https://provider-scalar-leak.example/image.png'],
-    [
-      'noncanonical',
-      {
-        ...publication({
-          imageUrl: 'https://provider-image-leak.example/image.png',
-          revisedPrompt: 'PROVIDER_REVISED_PROMPT_LEAK',
-        }, 'image:noncanonical'),
-        raw: 'PROVIDER_IMAGE_EXTRA_FIELD_LEAK',
-      },
-    ],
-  ])('fails closed when an image response has a %s publication', async (
-    _shape,
-    responsePublication,
-  ) => {
-    apiClient.getExplanation.mockResolvedValue({
-      publication: publication('Current explanation.', 'explanation:image-fail-closed'),
-      topicMetadata: { id: 'what-is-dna', title: 'What is DNA?' },
-      sources: [],
-    });
-    apiClient.generateImage.mockResolvedValue({
-      publication: responsePublication,
-      topicMetadata: { id: 'what-is-dna', title: 'What is DNA?' },
-    });
-
-    render(routedElement('/topicexplorer?topic=what-is-dna', TopicExplorer));
-    await screen.findByText('Current explanation.');
-    fireEvent.click(screen.getByRole('button', { name: /^generate image$/i }));
-
-    const supportId = await screen.findByText('image:client-invalid-publication');
-    const publicationAlert = supportId.closest('[data-publication-status]');
-    expect(publicationAlert).not.toBeNull();
-    expect(publicationAlert).toHaveAttribute('data-publication-status', 'unavailable');
-    expect(publicationAlert).toHaveTextContent('Publication unavailable');
-    expect(screen.getByTestId('adaptive-image')).toHaveAttribute(
-      'data-publication-reason',
-      'invalid_publication_artifact',
-    );
-    expect(screen.getByTestId('adaptive-image')).toHaveTextContent(
-      'unavailable:image:client-invalid-publication:no-image:no-prompt',
-    );
-    expect(screen.queryByText(/provider-(?:scalar|image)-leak/i)).toBeNull();
-    expect(screen.queryByText(/PROVIDER_(?:REVISED_PROMPT|IMAGE_EXTRA_FIELD)_LEAK/i)).toBeNull();
   });
 
   it.each([
@@ -619,12 +483,9 @@ describe('education async publication boundaries', () => {
     expect(screen.queryByText(/could not be completed/i)).toBeNull();
   });
 
-  it('renders terminal 503 publications for explanation, image, and tutor recovery', async () => {
+  it('renders terminal 503 publications for explanation and tutor recovery', async () => {
     apiClient.getExplanation.mockRejectedValue(
       modelPublicationError('explanation:recovery-disabled'),
-    );
-    apiClient.generateImage.mockRejectedValue(
-      modelPublicationError('image:recovery-disabled'),
     );
     apiClient.chat.mockRejectedValue(
       modelPublicationError('chat:recovery-disabled'),
@@ -633,12 +494,10 @@ describe('education async publication boundaries', () => {
     render(routedElement('/topicexplorer?topic=what-is-dna', TopicExplorer));
 
     expect(await screen.findByText('explanation:recovery-disabled')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: /^generate image$/i }));
-    expect(await screen.findByText('image:recovery-disabled')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /explain another way/i }));
     expect(await screen.findByText('chat:recovery-disabled')).toBeInTheDocument();
 
-    expect(screen.getAllByText(/publication unavailable/i)).toHaveLength(3);
+    expect(screen.getAllByText(/publication unavailable/i)).toHaveLength(2);
     expect(screen.queryAllByText(/generated content is temporarily unavailable/i)).toHaveLength(0);
   });
 

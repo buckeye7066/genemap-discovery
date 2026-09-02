@@ -48,7 +48,7 @@ export function publicationErrorDetails(error) {
 
 /**
  * A stable route label for logs / owner email / Sentry that NEVER carries user
- * values. Prefer the route PATTERN (e.g. "/genomics/gene/:symbol"); fall back to
+ * values. Prefer the route PATTERN (e.g. "/entities/projects/:id"); fall back to
  * the path with the query string stripped so query params — which can be PII on
  * a medical app (e.g. ?q=<phenotype>) — never reach the log pipeline or external
  * error tracking.
@@ -77,6 +77,21 @@ export function publicBillingProgress(progress) {
     checkoutSessionsExpired: boundedCount(progress.checkoutSessionsExpired),
     subscriptionsCancelled: boundedCount(progress.subscriptionsCancelled),
     customersDeleted: boundedCount(progress.customersDeleted),
+  };
+}
+
+const PUBLIC_TIERS = new Set(['free', 'premium', 'institutional', 'admin']);
+const PUBLIC_FEATURE = /^[a-z][a-z0-9_.]{1,80}$/u;
+
+function publicEntitlementDetails(error) {
+  const value = error?.entitlement;
+  if (!value || typeof value !== 'object') return null;
+  if (!PUBLIC_FEATURE.test(String(value.feature || ''))) return null;
+  if (!PUBLIC_TIERS.has(value.requiredTier) || !PUBLIC_TIERS.has(value.currentTier)) return null;
+  return {
+    feature: value.feature,
+    requiredTier: value.requiredTier,
+    currentTier: value.currentTier,
   };
 }
 
@@ -114,9 +129,11 @@ export function errorHandler(error, request, reply) {
   if (isAppError(error)) {
     const billingProgress = publicBillingProgress(error.billingProgress);
     const publicationDetails = publicationErrorDetails(error);
+    const entitlement = publicEntitlementDetails(error);
     const details = {
       ...(billingProgress ? { billingProgress } : {}),
       ...(publicationDetails || {}),
+      ...(entitlement ? { entitlement } : {}),
     };
     const hasDetails = Object.keys(details).length > 0;
     return reply.status(error.statusCode).send({

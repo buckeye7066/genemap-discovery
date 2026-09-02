@@ -75,7 +75,7 @@ describe('parseUpdateManifest', () => {
   });
 
   it('rejects the SPA index.html the host serves for unknown paths', () => {
-    expect(() => parseUpdateManifest('<!doctype html>')).toThrow(/not available yet/i);
+    expect(() => parseUpdateManifest('<!doctype html>')).toThrow(/no signed update manifest/i);
   });
 
   it('rejects a non-https bundle URL', () => {

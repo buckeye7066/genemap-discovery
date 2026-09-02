@@ -5,11 +5,21 @@ import type { PublicationArtifact } from './publicationStatus.js';
 export type UserRole = 'user' | 'admin' | 'super_admin';
 
 export interface UserEntitlements {
+  tier: 'free' | 'premium' | 'institutional' | 'admin';
   isPremium: boolean;
+  isInstitutional: boolean;
   isAdmin: boolean;
+  features: string[];
+  limits: Record<string, number> | null;
+  access: {
+    source: 'free' | 'subscription' | 'complimentary' | 'institutional' | 'admin';
+    expiresAt: string | null;
+    canManageBilling: boolean;
+  };
   licenseInfo: {
     organizationName: string;
     licenseType: string;
+    accessType: 'seat' | 'administrator';
   } | null;
 }
 
@@ -20,11 +30,38 @@ export interface User {
   display_name?: string | null;
   full_name?: string | null;
   phone_number?: string | null;
-  education_level?: string | null;
+  education_level?: EducationLevel | null;
   demographics_collected?: boolean;
+  mailing_list_opt_in?: boolean;
+  age?: number | null;
+  field_of_study?: string | null;
+  research_interests?: string | null;
+  current_projects?: string | null;
+  publications?: string | null;
+  linkedin_url?: string | null;
+  orcid_id?: string | null;
+  profile_picture?: string | null;
+  createdAt?: string;
   banned?: boolean;
   ban_reason?: string | null;
   entitlements?: UserEntitlements;
+}
+
+export interface ProfileUpdateRequest {
+  displayName?: string | null;
+  fullName?: string | null;
+  phoneNumber?: string | null;
+  educationLevel?: EducationLevel | null;
+  demographicsCollected?: boolean;
+  mailingListOptIn?: boolean;
+  age?: number | string | null;
+  fieldOfStudy?: string | null;
+  researchInterests?: string | null;
+  currentProjects?: string | null;
+  publications?: string | null;
+  linkedinUrl?: string | null;
+  orcidId?: string | null;
+  profilePicture?: string | null;
 }
 
 // ─── Auth Request/Response Types ────────────────────────────────────────────
@@ -69,10 +106,39 @@ export interface InstitutionalCheckoutRequest {
 export interface CheckoutSessionResponse {
   url: string;
   sessionId: string;
+  /** True when the server safely returned an already-open Stripe session. */
+  reused?: boolean;
+}
+
+export interface CheckoutActivationStatus {
+  state: 'active' | 'processing' | 'incomplete';
+  kind: 'personal' | 'institutional';
+  checkoutComplete: boolean;
+  entitlementActive: boolean;
 }
 
 export interface PortalSessionResponse {
   url: string;
+}
+
+export interface BillingCatalogPrice {
+  currency: string;
+  amountMinor: number;
+  interval: 'month' | 'year';
+}
+
+export interface BillingCatalog {
+  version: 1;
+  personal: {
+    monthly: BillingCatalogPrice;
+    yearly: BillingCatalogPrice;
+  };
+  institutional: Record<'team' | 'department' | 'enterprise', {
+    minSeats: number;
+    maxSeats: number;
+    monthly: BillingCatalogPrice;
+    yearly: BillingCatalogPrice;
+  }>;
 }
 
 // ─── Education Types ────────────────────────────────────────────────────────
@@ -146,11 +212,6 @@ export interface EducationSource {
   label: string;
   url: string;
   publisher: string;
-}
-
-export interface ImageGenerationRequest {
-  topic: EducationTopicId;
-  level: EducationLevel;
 }
 
 export interface QuizRequest {
@@ -331,7 +392,7 @@ export interface LLMOptions {
  * to flow into `invokePublicationTask`, even though it may contain settings
  * that the endpoint rejects.
  */
-type PublicationInvocationOptionKey = 'provider' | 'temperature' | 'maxTokens';
+type PublicationInvocationOptionKey = 'temperature' | 'maxTokens';
 export type PublicationInvocationOptions =
   Pick<LLMOptions, PublicationInvocationOptionKey>
   & Partial<Record<Exclude<keyof LLMOptions, PublicationInvocationOptionKey>, never>>;
@@ -367,13 +428,76 @@ export interface ActivityEntry {
 
 // ─── Medical Data ───────────────────────────────────────────────────────────
 
-export interface MedicalData {
+export interface HealthReferenceRange {
+  text: string;
+  low: number | null;
+  high: number | null;
+  lowerComparator: '>' | '>=' | null;
+  upperComparator: '<' | '<=' | null;
+}
+
+export interface HealthObservation {
+  name: string;
+  value: string;
+  numericValue: number | null;
+  comparator: '<' | '<=' | '>' | '>=' | null;
+  unit: string | null;
+  referenceRange: HealthReferenceRange | null;
+  flag: 'high' | 'low' | 'abnormal' | 'normal' | 'reported';
+  source: { kind: 'line' | 'row' | 'fhir'; number: number };
+}
+
+export interface ParsedHealthDocument {
+  schemaVersion: 1;
+  parserVersion: string;
+  status: 'structured' | 'text_only';
+  source: {
+    fileName: string;
+    mimeType: string;
+    sizeBytes: number;
+    sha256: string;
+    format: 'csv' | 'image' | 'json' | 'pdf' | 'text' | 'tsv';
+    extractionMethod: 'csv' | 'json' | 'ocr' | 'pdf_text' | 'pdf_text_and_ocr' | 'text' | 'tsv';
+    pageCount: number;
+    ocrPages: number[];
+    extractedAt: string;
+  };
+  collectionDate: string | null;
+  observations: HealthObservation[];
+  summary: {
+    total: number;
+    high: number;
+    low: number;
+    abnormal: number;
+    normal: number;
+    reported: number;
+    text: string;
+  };
+  extractedText: string;
+  warnings: string[];
+}
+
+export interface HealthProfileContent {
+  schemaVersion: 1;
+  updatedAt: string;
+  conditions: string[];
+  medications: string[];
+  allergies: string[];
+  familyHistory: string[];
+  symptoms: string[];
+  goals: string[];
+  notes: string;
+}
+
+export interface MedicalData<T = unknown> {
   id?: string;
   dataType: string;
   title?: string | null;
-  content: unknown;
+  content: T;
+  fileUrl?: string | null;
   metadata?: Record<string, unknown> | null;
   createdAt?: string;
+  updatedAt?: string;
 }
 
 // ─── Conversations ──────────────────────────────────────────────────────────
@@ -386,6 +510,56 @@ export interface Conversation {
   metadata?: Record<string, unknown> | null;
   createdAt?: string;
   updatedAt?: string;
+}
+
+export type AssistantId = 'anastasia' | 'robert';
+export type AssistantContextKind =
+  | 'profile'
+  | 'health_profile'
+  | 'lab_record'
+  | 'lab_observation'
+  | 'lab_value'
+  | 'research';
+
+export interface AssistantContextReceipt {
+  contextVersion: string;
+  generatedAt: string;
+  assistant: AssistantId;
+  profileFields: string[];
+  healthProfileIncluded: boolean;
+  records: Array<{
+    id: string;
+    title: string;
+    status: 'structured' | 'text_only';
+    parserVersion: string;
+    extractionMethod: string;
+    observationCount: number;
+    sourceSha256: string;
+  }>;
+  research: {
+    geneSetCount: number;
+    projectCount: number;
+    recentSearchCount: number;
+  };
+  responseReview?: {
+    status: 'passed';
+    generationAttempts: number;
+    matchedContextKinds: AssistantContextKind[];
+    requiredContextKinds: AssistantContextKind[];
+  };
+}
+
+export interface AssistantChatRequest {
+  message: string;
+  conversationId?: string;
+  recordIds?: string[];
+}
+
+export interface AssistantChatResponse {
+  assistant: { id: AssistantId; displayName: string };
+  conversationId: string;
+  message: string;
+  contextReceipt: AssistantContextReceipt;
 }
 
 // ─── Gene Sets ──────────────────────────────────────────────────────────────
@@ -450,9 +624,19 @@ export interface Message {
   id?: string;
   subject: string;
   body: string;
-  category?: string;
+  category?: 'support';
   status?: string;
+  parentId?: string | null;
+  isIssue?: boolean;
+  direction?: 'sent' | 'received';
   createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface SupportMessageRequest {
+  subject: string;
+  body: string;
+  isIssue?: boolean;
 }
 
 // ─── Institutional Licenses ─────────────────────────────────────────────────
@@ -460,10 +644,18 @@ export interface Message {
 export interface License {
   id: string;
   organizationName: string;
+  contactEmail: string;
   licenseType: string;
   maxSeats: number;
   assignedSeats: number;
   status: string;
+  startDate: string;
+  endDate: string;
+  renewalDate: string;
+  autoRenew: boolean;
+  canManageBilling: boolean;
+  assignments: LicenseSeatAssignment[];
+  usageLogs: LicenseUsageLog[];
 }
 
 export interface LicenseSeatAssignment {
@@ -471,6 +663,15 @@ export interface LicenseSeatAssignment {
   userEmail: string;
   department?: string | null;
   status?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface LicenseUsageLog {
+  id: string;
+  userEmail: string;
+  action: string;
+  createdAt: string;
 }
 
 // ─── Genomics Types ─────────────────────────────────────────────────────────

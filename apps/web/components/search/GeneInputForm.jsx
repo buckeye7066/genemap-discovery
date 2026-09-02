@@ -58,11 +58,7 @@ export default function GeneInputForm({ onGenesSubmit, isLoading, initialGenes =
       if (!prevGenes.includes(geneToRemove)) {
         return prevGenes;
       }
-      // No toast() here: there is no toast implementation in this app
-      // (components/ui/toaster.jsx is a no-op stub that exports only <Toaster/>),
-      // so the previous bare `toast(...)` call threw a ReferenceError on every
-      // gene removal. A state updater must stay pure anyway — StrictMode calls
-      // it twice — so any future notification belongs in the click handler.
+      // Keep the state updater pure: StrictMode may call it more than once.
       return prevGenes.filter(g => g !== geneToRemove);
     });
   };

@@ -1,4 +1,4 @@
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
@@ -45,7 +45,8 @@ const VALID_ENV = {
   STRIPE_PRICE_DEPT_YEARLY: 'price_123456deptYearly',
   STRIPE_PRICE_ENT_MONTHLY: 'price_123456entMonthly',
   STRIPE_PRICE_ENT_YEARLY: 'price_123456entYearly',
-  OPENAI_API_KEY: 'sk-live-openai-placeholder-for-validation',
+  OPENAI_API_KEY: 'sk-proj-launch-fixture-012345678901234567890',
+  LLM_TEXT_MODEL: 'gpt-4o-mini',
   ACCOUNT_CLOSURE_LEDGER_WRITE_URL: 'https://ledger.example.com/write',
   ACCOUNT_CLOSURE_LEDGER_READ_URL: 'https://ledger.example.com/read',
   ACCOUNT_CLOSURE_LEDGER_SECRET: 'l'.repeat(48),
@@ -125,6 +126,15 @@ function mockResponse(status, body, contentType = 'application/json') {
 }
 
 describe('production launch verification', () => {
+  it('allows platform-injected environment variables without requiring a local .env file', () => {
+    const apiPackage = JSON.parse(readFileSync(
+      new URL('../../package.json', import.meta.url),
+      'utf8',
+    ));
+    expect(apiPackage.scripts.start).toContain('--env-file-if-exists=.env');
+    expect(apiPackage.scripts.start).not.toContain('--env-file=.env');
+  });
+
   it('ignores the literal pnpm argument separator', () => {
     const opts = parseArgs([
       '--',
@@ -150,7 +160,9 @@ describe('production launch verification', () => {
     delete source.ACCOUNT_CLOSURE_LEDGER_SECRET;
     delete source.ACCOUNT_CLOSURE_LEDGER_IDENTITY_KEYS;
     const { checks } = validateLaunchEnv(source);
-    expect(failures(checks).map((check) => check.id)).toContain('accountClosure.ledger');
+    expect(failures(checks)).toEqual([
+      expect.objectContaining({ id: 'env.loadEnv', message: expect.stringMatching(/ACCOUNT_CLOSURE_LEDGER/) }),
+    ]);
   });
 
   it('rejects a deletion ledger without a rotation-safe identity key ring', () => {
@@ -158,7 +170,12 @@ describe('production launch verification', () => {
       ...VALID_ENV,
       ACCOUNT_CLOSURE_LEDGER_IDENTITY_KEYS: '',
     });
-    expect(failures(checks).map((check) => check.id)).toContain('accountClosure.ledger');
+    expect(failures(checks)).toEqual([
+      expect.objectContaining({
+        id: 'env.loadEnv',
+        message: expect.stringMatching(/ACCOUNT_CLOSURE_LEDGER_IDENTITY_KEYS/),
+      }),
+    ]);
   });
 
   it('rejects test-mode Stripe keys in production', () => {

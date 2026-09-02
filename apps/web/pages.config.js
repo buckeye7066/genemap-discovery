@@ -27,6 +27,8 @@ const LearningPath = lazyWithRetry(() => import('./pages/LearningPath'));
 const Login = lazyWithRetry(() => import('./pages/Login'));
 const PrivacyPolicy = lazyWithRetry(() => import('./pages/PrivacyPolicy'));
 const TermsOfService = lazyWithRetry(() => import('./pages/TermsOfService'));
+const HealthData = lazyWithRetry(() => import('./pages/HealthData'));
+const Assistants = lazyWithRetry(() => import('./pages/Assistants'));
 
 export const PAGES = {
     "DiscoveryStudio": DiscoveryStudio,
@@ -55,7 +57,19 @@ export const PAGES = {
     "Home": Home,
     "PrivacyPolicy": PrivacyPolicy,
     "TermsOfService": TermsOfService,
+    "HealthData": HealthData,
+    "Assistants": Assistants,
 }
+
+export const featurePages = Object.freeze({
+    Search: 'research.search',
+    History: 'research.search',
+    Dashboard: 'research.workspace',
+    ResearchMode: 'research.workspace',
+    HealthData: 'health.records',
+    Assistants: 'assistants.profile_context',
+    InstitutionalAdmin: 'institution.manage',
+});
 
 // Legal/info pages reachable in BOTH auth states (logged-out visitors must be
 // able to read them before signing up; logged-in users via the footer). They
@@ -94,14 +108,11 @@ export const pagesConfig = {
     adminPages,
     superAdminPages,
     openPages,
+    featurePages,
     Pages: PAGES,
     Layout: __Layout,
 };
 
-// The publishable build deliberately omits MedicalData, VCFAnalysis,
-// AIAssistants, Anastasia, RobertClinical, VisualizationHub, and GSEA from both
-// the route map and lazy-import graph. The first group contains personalized
-// clinical execution. VisualizationHub and GSEA currently present LLM-generated
-// coordinates, expression values, interactions, p-values, or FDR values as if
-// they came from named databases or statistical computation. Those routes stay
-// unavailable until they use versioned source adapters or real calculations.
+// Clinical/personal-genomic and unverified statistical surfaces are not part of
+// this product's route map or import graph. The publication-bundle verifier
+// enforces that boundary on every production build.

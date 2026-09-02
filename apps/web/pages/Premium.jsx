@@ -1,8 +1,13 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { apiClient } from "@genemap/shared";
 import { useAuth } from "@/lib/AuthContext";
-import { useEducationLevel } from "@/lib/EducationLevelContext";
 import { isNativeApp } from "@/lib/platform";
+import { pollCheckoutActivation } from "@/lib/checkoutActivation";
+import {
+  annualSavingsPercent,
+  formatBillingPrice,
+  lowestInstitutionalMonthlyPrice,
+} from "@/lib/billingCatalog";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -22,7 +27,6 @@ import {
   Building2,
   BookOpen,
   Brain,
-  Image,
   HelpCircle,
   MessageSquare,
   Infinity as InfinityIcon,
@@ -30,58 +34,134 @@ import {
 } from "lucide-react";
 
 export default function PremiumPage() {
-  const { user, isLoadingAuth } = useAuth();
-  const { levelConfig } = useEducationLevel();
+  const { user, isLoadingAuth, applyUser } = useAuth();
   const [error, setError] = useState(null);
+  const [catalogError, setCatalogError] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [paymentSuccess, setPaymentSuccess] = useState(false);
   const [paymentCanceled, setPaymentCanceled] = useState(false);
+  const [activationState, setActivationState] = useState('idle');
+  const [checkoutSessionId, setCheckoutSessionId] = useState(null);
   const [entitlements, setEntitlements] = useState(null);
+  const [billingCatalog, setBillingCatalog] = useState(null);
+  const blockedFeature = new URLSearchParams(window.location.search).get('feature');
+  const blockedFeatureLabel = {
+    'research.search': 'Gene search and search history',
+    'research.workspace': 'Research workspace',
+    'health.records': 'Encrypted health records and document parsing',
+    'assistants.profile_context': 'Profile-aware Anastasia and Robert assistants',
+    'institution.manage': 'Institutional license administration',
+  }[blockedFeature] || blockedFeature;
 
   const isAdmin = user?.entitlements?.isAdmin || user?.role === 'admin' || user?.role === 'super_admin';
-  const hasActiveSubscription = user?.entitlements?.isPremium || false;
+  const hasPremiumAccess = activationState === 'active' || user?.entitlements?.isPremium || false;
+  const access = user?.entitlements?.access;
+  const isComplimentary = access?.source === 'complimentary';
+  const canPurchasePersonal = !isAdmin && (!hasPremiumAccess || isComplimentary);
+  const accessTitle = isAdmin
+    ? 'Admin — Full Access'
+    : access?.source === 'institutional'
+      ? 'Institutional Premium'
+      : access?.source === 'complimentary'
+        ? 'Complimentary Premium'
+        : 'Premium Active';
+  const accessBadge = isAdmin
+    ? 'Admin Privileges'
+    : access?.source === 'institutional'
+      ? 'Institutional Access'
+      : access?.source === 'complimentary'
+        ? 'Complimentary Access'
+        : 'Paid Subscription';
 
-  useEffect(() => {
-    checkPaymentStatus();
-    loadEntitlements();
-  }, [window.location.search]);
-
-  const loadEntitlements = async () => {
+  const loadEntitlements = useCallback(async () => {
     try {
       const data = await apiClient.getEducationEntitlements();
       setEntitlements(data);
     } catch {
       // Not critical
     }
-  };
+  }, []);
 
-  const checkPaymentStatus = () => {
+  const loadBillingCatalog = useCallback(async () => {
+    setCatalogError(null);
+    try {
+      const catalog = await apiClient.getBillingCatalog();
+      setBillingCatalog(catalog);
+    } catch (catalogLoadError) {
+      setBillingCatalog(null);
+      setCatalogError(catalogLoadError?.message || 'Current Stripe prices could not be verified.');
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadEntitlements();
+    if (!isNativeApp()) void loadBillingCatalog();
+  }, [loadBillingCatalog, loadEntitlements]);
+
+  const confirmCheckoutActivation = useCallback(async (sessionId, signal) => {
+    setActivationState('confirming');
+    setError(null);
+    const result = await pollCheckoutActivation({
+      sessionId,
+      expectedKind: 'personal',
+      getStatus: (id) => apiClient.getCheckoutActivationStatus(id),
+      signal,
+    });
+    if (result.outcome === 'cancelled') return;
+    if (result.outcome === 'wrong_kind') {
+      setActivationState('invalid');
+      return;
+    }
+    if (result.outcome !== 'active') {
+      setActivationState('delayed');
+      return;
+    }
+
+    setActivationState('active');
+    window.history.replaceState({}, '', window.location.pathname);
+    try {
+      const freshUser = await apiClient.getMe();
+      if (!signal?.aborted) applyUser(freshUser);
+    } catch {
+      if (!signal?.aborted) {
+        setError('Your entitlement is active, but this page could not refresh your profile. Reload the page to refresh it.');
+      }
+    }
+  }, [applyUser]);
+
+  useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const success = urlParams.get('success');
     const canceled = urlParams.get('canceled');
+    const sessionId = urlParams.get('session_id');
 
     if (success === 'true') {
-      setPaymentSuccess(true);
-      setTimeout(() => {
-        window.history.replaceState({}, '', window.location.pathname);
-        window.location.reload();
-      }, 3000);
+      if (!sessionId) {
+        setActivationState('invalid');
+        return undefined;
+      }
+      setCheckoutSessionId(sessionId);
+      const controller = new AbortController();
+      void confirmCheckoutActivation(sessionId, controller.signal);
+      return () => controller.abort();
     }
 
     if (canceled === 'true') {
       setPaymentCanceled(true);
-      setTimeout(() => {
-        window.history.replaceState({}, '', window.location.pathname);
-      }, 5000);
+      window.history.replaceState({}, '', window.location.pathname);
     }
-  };
+    return undefined;
+  }, [confirmCheckoutActivation]);
 
   const handleSubscribe = async (plan = 'monthly') => {
+    if (!billingCatalog?.personal?.[plan]) {
+      setError('Current Stripe pricing is not verified. Reload pricing before checkout.');
+      return;
+    }
     setIsProcessing(true);
     setError(null);
 
     try {
-      const successUrl = `${window.location.origin}${window.location.pathname}?success=true`;
+      const successUrl = `${window.location.origin}${window.location.pathname}?success=true&session_id={CHECKOUT_SESSION_ID}`;
       const cancelUrl = `${window.location.origin}${window.location.pathname}?canceled=true`;
 
       const response = await apiClient.createCheckoutSession({
@@ -95,11 +175,20 @@ export default function PremiumPage() {
       } else {
         throw new Error("No checkout URL returned");
       }
-    } catch {
-      setError("Failed to start checkout. Please try again.");
+    } catch (checkoutError) {
+      setError(checkoutError?.message || "Failed to start checkout. Please try again.");
       setIsProcessing(false);
     }
   };
+
+  const monthlyPrice = billingCatalog?.personal?.monthly || null;
+  const yearlyPrice = billingCatalog?.personal?.yearly || null;
+  const monthlyPriceLabel = formatBillingPrice(monthlyPrice);
+  const yearlyPriceLabel = formatBillingPrice(yearlyPrice);
+  const savingsPercent = annualSavingsPercent(monthlyPrice, yearlyPrice);
+  const institutionalStartingPrice = formatBillingPrice(
+    lowestInstitutionalMonthlyPrice(billingCatalog),
+  );
 
   const handleManageSubscription = async () => {
     setIsProcessing(true);
@@ -177,11 +266,48 @@ export default function PremiumPage() {
           </p>
         </div>
 
-        {paymentSuccess && (
+        {activationState === 'active' && (
           <Alert className="mb-6 bg-green-50 border-green-200">
             <CheckCircle className="h-4 w-4 text-green-600" />
             <AlertDescription className="text-green-800">
-              <strong>Payment Successful!</strong> Your premium subscription is now active. Enjoy unlimited learning!
+              <strong>Premium activated.</strong> The checkout and signed-webhook entitlement are both confirmed.
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {activationState === 'confirming' && (
+          <Alert className="mb-6 border-blue-200 bg-blue-50">
+            <Loader2 className="h-4 w-4 animate-spin text-blue-700" />
+            <AlertDescription className="text-blue-900">
+              Checkout returned successfully. Waiting for the verified webhook to activate your server entitlement…
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {activationState === 'delayed' && (
+          <Alert className="mb-6 border-amber-200 bg-amber-50">
+            <AlertCircle className="h-4 w-4 text-amber-700" />
+            <AlertDescription className="text-amber-900 flex items-center justify-between gap-3 flex-wrap">
+              <span>Stripe checkout is not yet matched to an active server entitlement. Locked routes remain locked until webhook processing completes.</span>
+              <Button size="sm" variant="outline" onClick={() => confirmCheckoutActivation(checkoutSessionId)}>
+                Check again
+              </Button>
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {activationState === 'invalid' && (
+          <Alert variant="destructive" className="mb-6">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>The checkout return could not be matched to this personal-subscription flow. No access was granted.</AlertDescription>
+          </Alert>
+        )}
+
+        {blockedFeatureLabel && !hasPremiumAccess && (
+          <Alert className="mb-6 border-blue-300 bg-blue-50">
+            <Crown className="h-4 w-4 text-blue-700" />
+            <AlertDescription className="text-blue-900">
+              <strong>{blockedFeatureLabel}</strong> is not part of the free tier. The page and its API routes use the same server-issued entitlement.
             </AlertDescription>
           </Alert>
         )}
@@ -202,7 +328,17 @@ export default function PremiumPage() {
           </Alert>
         )}
 
-        {hasActiveSubscription && (
+        {catalogError && (
+          <Alert variant="destructive" className="mb-6">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
+              <span>{catalogError} Checkout is disabled until the configured prices are verified.</span>
+              <Button size="sm" variant="outline" onClick={loadBillingCatalog}>Reload pricing</Button>
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {hasPremiumAccess && (
           <Card className="mb-6 bg-gradient-to-r from-green-50 to-emerald-50 border-green-200 shadow-lg">
             <CardContent className="pt-6">
               <div className="flex items-start justify-between flex-wrap gap-4">
@@ -212,11 +348,11 @@ export default function PremiumPage() {
                   </div>
                   <div>
                     <h3 className="font-semibold text-green-900 text-lg">
-                      {isAdmin ? 'Admin — Full Access' : 'Premium Active'}
+                      {accessTitle}
                     </h3>
                     <p className="text-sm text-green-700 flex items-center gap-2">
                       <Badge className={isAdmin ? 'bg-purple-600 text-white' : 'bg-green-600 text-white'}>
-                        {isAdmin ? 'Admin Privileges' : 'Unlimited Access'}
+                        {accessBadge}
                       </Badge>
                     </p>
                     {user?.entitlements?.licenseInfo && (
@@ -224,9 +360,14 @@ export default function PremiumPage() {
                         Via {user.entitlements.licenseInfo.organizationName}
                       </p>
                     )}
+                    {access?.expiresAt && (
+                      <p className="mt-1 text-xs text-green-700">
+                        Current access through {new Date(access.expiresAt).toLocaleDateString()}
+                      </p>
+                    )}
                   </div>
                 </div>
-                {!isAdmin && !user?.entitlements?.licenseInfo && (
+                {!isAdmin && access?.canManageBilling && (
                   <Button
                     onClick={handleManageSubscription}
                     disabled={isProcessing}
@@ -245,22 +386,22 @@ export default function PremiumPage() {
           </Card>
         )}
 
-        {!hasActiveSubscription && entitlements && entitlements.todayUsage && (
+        {!hasPremiumAccess && entitlements && entitlements.todayUsage && (
           <Card className="mb-6 border-blue-200 bg-blue-50">
             <CardContent className="pt-5 pb-5">
               <div className="flex items-center gap-2 mb-3">
                 <Shield className="w-5 h-5 text-blue-600" />
                 <h3 className="font-semibold text-blue-900">Free Tier — Today's Usage</h3>
               </div>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 {[
-                  { label: 'Explanations', key: 'explanation', limit: 5, icon: BookOpen },
-                  { label: 'Images', key: 'image', limit: 2, icon: Image },
-                  { label: 'Quizzes', key: 'quiz', limit: 3, icon: HelpCircle },
-                  { label: 'Chat Messages', key: 'chat', limit: 10, icon: MessageSquare },
-                ].map(({ label, key, limit, icon: Icon }) => {
+                  { label: 'Explanations', key: 'explanation', limitKey: 'explanations_per_day', icon: BookOpen },
+                  { label: 'Quizzes', key: 'quiz', limitKey: 'quizzes_per_day', icon: HelpCircle },
+                  { label: 'Chat Messages', key: 'chat', limitKey: 'chat_messages_per_day', icon: MessageSquare },
+                ].map(({ label, key, limitKey, icon: Icon }) => {
                   const used = entitlements.todayUsage[key] || 0;
-                  const pct = Math.min((used / limit) * 100, 100);
+                  const limit = entitlements.limits?.[limitKey] || 0;
+                  const pct = limit > 0 ? Math.min((used / limit) * 100, 100) : 0;
                   return (
                     <div key={key} className="bg-white rounded-lg p-3 border border-blue-100">
                       <div className="flex items-center gap-1.5 mb-1">
@@ -268,7 +409,9 @@ export default function PremiumPage() {
                         <span className="text-xs font-medium text-slate-700">{label}</span>
                       </div>
                       <Progress value={pct} className="h-1.5 mb-1" />
-                      <p className="text-xs text-slate-500">{used}/{limit} used</p>
+                      <p className="text-xs text-slate-500">
+                        {limit > 0 ? `${used}/${limit} used` : 'Limit unavailable'}
+                      </p>
                     </div>
                   );
                 })}
@@ -304,10 +447,6 @@ export default function PremiumPage() {
                 <span className="text-sm">5 AI explanations/day</span>
               </div>
               <div className="flex items-center gap-2">
-                <Image className="w-4 h-4 text-blue-500 flex-shrink-0" />
-                <span className="text-sm">2 AI illustrations/day</span>
-              </div>
-              <div className="flex items-center gap-2">
                 <HelpCircle className="w-4 h-4 text-blue-500 flex-shrink-0" />
                 <span className="text-sm">3 quizzes/day</span>
               </div>
@@ -317,11 +456,11 @@ export default function PremiumPage() {
               </div>
               <div className="flex items-center gap-2">
                 <X className="w-4 h-4 text-slate-300 flex-shrink-0" />
-                <span className="text-sm text-slate-400">Advanced visualizations</span>
+                <span className="text-sm text-slate-400">Gene search & research tools</span>
               </div>
               <div className="flex items-center gap-2">
                 <X className="w-4 h-4 text-slate-300 flex-shrink-0" />
-                <span className="text-sm text-slate-400">Gene search & research tools</span>
+                <span className="text-sm text-slate-400">Health document parsing & profile-aware assistants</span>
               </div>
             </CardContent>
           </Card>
@@ -335,8 +474,15 @@ export default function PremiumPage() {
                 <Crown className="w-7 h-7 text-white" />
               </div>
               <CardTitle className="text-xl">Premium Learner</CardTitle>
-              <p className="text-2xl font-bold text-slate-900 mt-2">$9.99<span className="text-sm font-normal text-slate-500">/month</span></p>
-              <p className="text-xs text-slate-500">or $99.99/year (save 17%)</p>
+              <p className="text-2xl font-bold text-slate-900 mt-2">
+                {monthlyPriceLabel || 'Verifying…'}
+                {monthlyPriceLabel && <span className="text-sm font-normal text-slate-500">/month</span>}
+              </p>
+              <p className="text-xs text-slate-500">
+                {yearlyPriceLabel
+                  ? `or ${yearlyPriceLabel}/year${savingsPercent ? ` (save ${savingsPercent}%)` : ''}`
+                  : 'Stripe pricing verification in progress'}
+              </p>
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="flex items-center gap-2">
@@ -346,10 +492,6 @@ export default function PremiumPage() {
               <div className="flex items-center gap-2">
                 <InfinityIcon className="w-4 h-4 text-blue-600 flex-shrink-0" />
                 <span className="text-sm"><strong>Unlimited</strong> AI explanations</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <InfinityIcon className="w-4 h-4 text-blue-600 flex-shrink-0" />
-                <span className="text-sm"><strong>Unlimited</strong> AI illustrations</span>
               </div>
               <div className="flex items-center gap-2">
                 <InfinityIcon className="w-4 h-4 text-blue-600 flex-shrink-0" />
@@ -372,14 +514,22 @@ export default function PremiumPage() {
                 <span className="text-sm">Saved gene sets & research projects</span>
               </div>
               <div className="flex items-center gap-2">
+                <Shield className="w-4 h-4 text-blue-600 flex-shrink-0" />
+                <span className="text-sm">Encrypted health profile and parsed lab records</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Brain className="w-4 h-4 text-purple-600 flex-shrink-0" />
+                <span className="text-sm">Profile-aware Anastasia and Robert with context receipts</span>
+              </div>
+              <div className="flex items-center gap-2">
                 <Check className="w-4 h-4 text-green-600 flex-shrink-0" />
-                <span className="text-sm">Priority support</span>
+                <span className="text-sm">Server-enforced premium access on every protected API route</span>
               </div>
             </CardContent>
           </Card>
         </div>
 
-        {!hasActiveSubscription && (
+        {canPurchasePersonal && (
           <div className="text-center mb-8">
             <Card className="max-w-2xl mx-auto shadow-2xl border-2 border-blue-300 bg-gradient-to-br from-blue-50 to-indigo-50">
               <CardContent className="pt-8 pb-8">
@@ -389,37 +539,39 @@ export default function PremiumPage() {
                   </div>
                 </div>
                 <h2 className="text-2xl font-bold text-slate-900 mb-3">
-                  Upgrade to Premium
+                  {isComplimentary ? 'Keep Premium after your complimentary period' : 'Upgrade to Premium'}
                 </h2>
                 <p className="text-slate-600 mb-6">
-                  Unlimited AI-powered genetics learning for every level
+                  {isComplimentary
+                    ? 'Choose a paid plan now; Stripe billing begins through the checkout terms shown before payment.'
+                    : 'Unlimited AI-powered genetics learning for every level'}
                 </p>
                 <div className="flex flex-col sm:flex-row gap-3 justify-center">
                   <Button
                     onClick={() => handleSubscribe('monthly')}
-                    disabled={isProcessing}
+                    disabled={isProcessing || activationState === 'confirming' || !monthlyPriceLabel}
                     size="lg"
                     className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-8"
                   >
                     {isProcessing ? (
                       <><Loader2 className="w-5 h-5 mr-2 animate-spin" /> Processing...</>
                     ) : (
-                      <><Crown className="w-5 h-5 mr-2" /> Monthly — $9.99/mo</>
+                      <><Crown className="w-5 h-5 mr-2" /> Monthly — {monthlyPriceLabel || 'Verifying…'}/mo</>
                     )}
                   </Button>
                   <Button
                     onClick={() => handleSubscribe('yearly')}
-                    disabled={isProcessing}
+                    disabled={isProcessing || activationState === 'confirming' || !yearlyPriceLabel}
                     size="lg"
                     variant="outline"
                     className="border-blue-300 text-blue-700 hover:bg-blue-50 px-8"
                   >
-                    Yearly — $99.99/yr
-                    <Badge className="ml-2 bg-green-600 text-white text-xs">Save 17%</Badge>
+                    Yearly — {yearlyPriceLabel || 'Verifying…'}/yr
+                    {savingsPercent && <Badge className="ml-2 bg-green-600 text-white text-xs">Save {savingsPercent}%</Badge>}
                   </Button>
                 </div>
                 <p className="text-xs text-slate-500 mt-4">
-                  Cancel anytime &bull; Secure payment via Stripe &bull; Instant access
+                  Secure payment via Stripe &bull; Access begins after verified webhook activation
                 </p>
               </CardContent>
             </Card>
@@ -437,11 +589,14 @@ export default function PremiumPage() {
                   Classroom & Institutional Plans
                 </h3>
                 <p className="text-indigo-700 mb-2">
-                  Premium access for your school, university, or organization with volume discounts, admin controls, and student management
+                  Premium access for your school, university, or organization with volume pricing, seat assignment, and server-side tier controls
                 </p>
                 <div className="flex flex-wrap gap-2 justify-center md:justify-start">
-                  <Badge className="bg-indigo-600 text-white">Starting at $5.99/seat/month</Badge>
-                  <Badge className="bg-green-600 text-white">Save up to 40%</Badge>
+                  <Badge className="bg-indigo-600 text-white">
+                    {institutionalStartingPrice
+                      ? `Starting at ${institutionalStartingPrice}/seat/month`
+                      : 'Verified volume pricing'}
+                  </Badge>
                 </div>
               </div>
               <Link to="/institutionalpricing">

@@ -3,6 +3,7 @@ import { createAuditLog } from '../utils/audit.js';
 import { closeUserAccount } from '../services/accountClosure.js';
 import { ValidationError, NotFoundError } from '../utils/errors.js';
 import { FREE_PERIOD_DAYS, computeFreePeriodEnd, grantOrExtendFreePeriod } from '../utils/freePeriod.js';
+import { withSerializableRetry } from '../utils/transactions.js';
 
 const SAFE_ACTIVITY_TYPES = Object.freeze(['page_view', 'gene_view']);
 const SAFE_SEARCH_TYPES = Object.freeze(['free', 'premium', 'general']);
@@ -55,6 +56,15 @@ function normalizeEmail(email) {
   return String(email || '').trim().toLowerCase();
 }
 
+function assertActorCanBan(user, actor) {
+  if (user.id === actor.userId) {
+    throw new ValidationError('Cannot ban your own account');
+  }
+  if (user.role === 'super_admin' && actor.role !== 'super_admin') {
+    throw new ValidationError('Only a super admin can ban another super admin');
+  }
+}
+
 /**
  * Serialize a preBannedUser row (its own table, different column names) into a
  * user-like shape flagged `pre_banned`. The Ban Management page renders pre-bans
@@ -100,7 +110,12 @@ async function grantFreePeriodToAll(prisma, days) {
   const freshEnd = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
 
   const comps = await prisma.subscription.findMany({
-    where: { status: 'active', planType: 'admin_granted' },
+    where: {
+      status: 'active',
+      planType: 'admin_granted',
+      stripeCustomerId: null,
+      stripeSubscriptionId: null,
+    },
     select: { id: true, userId: true, currentPeriodEnd: true },
   });
 
@@ -123,6 +138,8 @@ async function grantFreePeriodToAll(prisma, days) {
         userId: u.id,
         status: 'active',
         planType: 'admin_granted',
+        stripeCustomerId: null,
+        stripeSubscriptionId: null,
         currentPeriodEnd: freshEnd,
       })),
     });
@@ -148,6 +165,55 @@ async function revokeFreePeriod(prisma, userId) {
     data: { status: 'canceled', currentPeriodEnd: new Date() },
   });
   return { revoked: result.count };
+}
+
+/**
+ * Ensure an administrator-issued premium grant runs for at least one year
+ * from today without creating a second active admin_granted row. Repeating the
+ * action is idempotent while the existing grant already extends past that
+ * horizon; it does not accidentally stack another year on every click.
+ */
+async function grantPremiumForOneYear(prisma, userId, now = Date.now()) {
+  const targetEnd = new Date(now + 365 * 24 * 60 * 60 * 1000);
+  const existing = await prisma.subscription.findFirst({
+    where: {
+      userId,
+      status: 'active',
+      planType: 'admin_granted',
+      stripeCustomerId: null,
+      stripeSubscriptionId: null,
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  if (!existing) {
+    await prisma.subscription.create({
+      data: {
+        userId,
+        status: 'active',
+        planType: 'admin_granted',
+        stripeCustomerId: null,
+        stripeSubscriptionId: null,
+        currentPeriodEnd: targetEnd,
+      },
+    });
+    return targetEnd;
+  }
+
+  const existingEnd = existing.currentPeriodEnd instanceof Date
+    ? existing.currentPeriodEnd
+    : new Date(existing.currentPeriodEnd || 0);
+  const currentPeriodEnd = Number.isFinite(existingEnd.getTime()) && existingEnd > targetEnd
+    ? existingEnd
+    : targetEnd;
+
+  if (existing.currentPeriodEnd?.getTime?.() !== currentPeriodEnd.getTime()) {
+    await prisma.subscription.update({
+      where: { id: existing.id },
+      data: { currentPeriodEnd },
+    });
+  }
+  return currentPeriodEnd;
 }
 
 export default async function adminRoutes(fastify) {
@@ -270,37 +336,29 @@ export default async function adminRoutes(fastify) {
     const { userId, reason } = request.body || {};
     if (!userId) throw new ValidationError('userId is required');
 
-    const user = await prisma.user.findUnique({ where: { id: userId } });
-    if (!user) throw new NotFoundError('User not found');
+    await withSerializableRetry(prisma, async (tx) => {
+      const user = await tx.user.findUnique({ where: { id: userId } });
+      if (!user) throw new NotFoundError('User not found');
+      assertActorCanBan(user, request.user);
 
-    if (user.id === request.user.userId) {
-      throw new ValidationError('Cannot ban your own account');
-    }
-    if (user.role === 'super_admin' && request.user.role !== 'super_admin') {
-      throw new ValidationError('Only a super admin can ban another super admin');
-    }
+      await tx.user.update({
+        where: { id: userId },
+        data: {
+          banned: true,
+          banReason: reason || null,
+          bannedDate: new Date(),
+          bannedBy: request.user.userId,
+        },
+      });
 
-    await prisma.user.update({
-      where: { id: userId },
-      data: {
-        banned: true,
-        banReason: reason || null,
-        bannedDate: new Date(),
-        bannedBy: request.user.userId,
-      },
-    });
-
-    await createAuditLog(
-      prisma,
-      {
+      await createAuditLog(tx, {
         userId: request.user.userId,
         action: 'ban_user',
         entityType: 'user',
         entityId: userId,
         metadata: { reason },
-      },
-      { required: true }
-    );
+      }, { required: true });
+    });
 
     return { success: true };
   });
@@ -308,32 +366,39 @@ export default async function adminRoutes(fastify) {
   fastify.post('/unban', async (request) => {
     const { userId, preBanId, isPreBanned } = request.body || {};
 
-    if (isPreBanned && preBanId) {
-      await prisma.preBannedUser.delete({ where: { id: preBanId } });
-    } else if (userId) {
-      await prisma.user.update({
-        where: { id: userId },
-        data: {
-          banned: false,
-          banReason: null,
-          bannedDate: null,
-          bannedBy: null,
-        },
-      });
-    } else {
+    if (!(isPreBanned && preBanId) && !userId) {
       throw new ValidationError('userId or preBanId is required');
     }
 
-    await createAuditLog(
-      prisma,
-      {
+    await withSerializableRetry(prisma, async (tx) => {
+      const removingPreBan = Boolean(isPreBanned && preBanId);
+      const targetId = removingPreBan ? preBanId : userId;
+
+      if (removingPreBan) {
+        const preBan = await tx.preBannedUser.findUnique({ where: { id: preBanId } });
+        if (!preBan) throw new NotFoundError('Pre-ban not found');
+        await tx.preBannedUser.delete({ where: { id: preBanId } });
+      } else {
+        const user = await tx.user.findUnique({ where: { id: userId } });
+        if (!user) throw new NotFoundError('User not found');
+        await tx.user.update({
+          where: { id: userId },
+          data: {
+            banned: false,
+            banReason: null,
+            bannedDate: null,
+            bannedBy: null,
+          },
+        });
+      }
+
+      await createAuditLog(tx, {
         userId: request.user.userId,
         action: 'unban_user',
-        entityType: 'user',
-        entityId: userId || preBanId,
-      },
-      { required: true }
-    );
+        entityType: removingPreBan ? 'pre_banned_user' : 'user',
+        entityId: targetId,
+      }, { required: true });
+    });
 
     return { success: true };
   });
@@ -344,66 +409,64 @@ export default async function adminRoutes(fastify) {
       throw new ValidationError('At least one identifier (email, phoneNumber, fullName) is required');
     }
 
-    if (email) {
-      const existing = await prisma.user.findUnique({ where: { email: normalizeEmail(email) } });
-      if (existing) {
-        await prisma.user.update({
-          where: { id: existing.id },
-          data: {
-            banned: true,
-            banReason: reason || null,
-            bannedDate: new Date(),
-            bannedBy: request.user.userId,
-          },
-        });
-        await createAuditLog(
-          prisma,
-          {
+    const normalizedEmail = email ? normalizeEmail(email) : null;
+    const outcome = await withSerializableRetry(prisma, async (tx) => {
+      if (normalizedEmail) {
+        const existing = await tx.user.findUnique({ where: { email: normalizedEmail } });
+        if (existing) {
+          assertActorCanBan(existing, request.user);
+          await tx.user.update({
+            where: { id: existing.id },
+            data: {
+              banned: true,
+              banReason: reason || null,
+              bannedDate: new Date(),
+              bannedBy: request.user.userId,
+            },
+          });
+          await createAuditLog(tx, {
             userId: request.user.userId,
             action: 'pre_ban_user.immediate',
             entityType: 'user',
             entityId: existing.id,
             metadata: { reason },
-          },
-          { required: true }
-        );
-        return {
-          success: true,
-          type: 'immediate_ban',
-          userId: existing.id,
-          message: `${existing.email} already had an account and was banned immediately.`,
-        };
+          }, { required: true });
+          return {
+            success: true,
+            type: 'immediate_ban',
+            userId: existing.id,
+            message: `${existing.email} already had an account and was banned immediately.`,
+          };
+        }
       }
-    }
 
-    const preBan = await prisma.preBannedUser.create({
-      data: {
-        email: email ? normalizeEmail(email) : null,
-        phoneNumber: phoneNumber || null,
-        fullName: fullName || null,
-        reason: reason || null,
-        bannedBy: request.user.userId,
-      },
-    });
+      const preBan = await tx.preBannedUser.create({
+        data: {
+          email: normalizedEmail,
+          phoneNumber: phoneNumber || null,
+          fullName: fullName || null,
+          reason: reason || null,
+          bannedBy: request.user.userId,
+        },
+      });
 
-    await createAuditLog(
-      prisma,
-      {
+      await createAuditLog(tx, {
         userId: request.user.userId,
         action: 'pre_ban_user',
         entityType: 'pre_banned_user',
         entityId: preBan.id,
         metadata: { email, phoneNumber, fullName, reason },
-      },
-      { required: true }
-    );
+      }, { required: true });
 
-    return {
-      success: true,
-      type: 'pre_ban',
-      preBanId: preBan.id,
-      message: 'User pre-banned. They will be blocked if they try to sign up or log in with any of these identifiers.',
-    };
+      return {
+        success: true,
+        type: 'pre_ban',
+        preBanId: preBan.id,
+        message: 'User pre-banned. They will be blocked if they try to sign up or log in with any of these identifiers.',
+      };
+    });
+
+    return outcome;
   });
 
   // Granting premium = a revenue bypass ("grant yourself premium without
@@ -414,27 +477,21 @@ export default async function adminRoutes(fastify) {
     const { userId } = request.body || {};
     if (!userId) throw new ValidationError('userId is required');
 
-    await prisma.subscription.create({
-      data: {
-        userId,
-        status: 'active',
-        planType: 'admin_granted',
-        currentPeriodEnd: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
-      },
-    });
-
-    await createAuditLog(
-      prisma,
-      {
+    const currentPeriodEnd = await withSerializableRetry(prisma, async (tx) => {
+      const user = await tx.user.findUnique({ where: { id: userId } });
+      if (!user) throw new NotFoundError('User not found');
+      const end = await grantPremiumForOneYear(tx, userId);
+      await createAuditLog(tx, {
         userId: request.user.userId,
         action: 'grant_premium',
         entityType: 'user',
         entityId: userId,
-      },
-      { required: true }
-    );
+        metadata: { currentPeriodEnd: end.toISOString() },
+      }, { required: true });
+      return end;
+    });
 
-    return { success: true };
+    return { success: true, currentPeriodEnd: currentPeriodEnd.toISOString() };
   });
 
   // Comp a user a free week or month of premium. Unlike grant-premium (a
@@ -451,43 +508,39 @@ export default async function adminRoutes(fastify) {
 
     // Bulk grant: comp every non-banned user at once.
     if (scope === 'all') {
-      const result = await grantFreePeriodToAll(prisma, days);
-      await createAuditLog(
-        prisma,
-        {
+      const result = await withSerializableRetry(prisma, async (tx) => {
+        const grantResult = await grantFreePeriodToAll(tx, days);
+        await createAuditLog(tx, {
           userId: request.user.userId,
           action: 'grant_free_period.all',
           entityType: 'system',
           entityId: 'all_users',
-          metadata: { period, days, ...result },
-        },
-        { required: true }
-      );
+          metadata: { period, days, ...grantResult },
+        }, { required: true });
+        return grantResult;
+      }, { timeout: 30_000 });
       return { success: true, scope: 'all', period, ...result };
     }
 
     if (!userId) throw new ValidationError('userId is required');
 
-    const user = await prisma.user.findUnique({ where: { id: userId } });
-    if (!user) throw new NotFoundError('User not found');
-
     // Reuse an active admin-granted comp so grants stack on one row (same
     // helper the automatic new-signup trial uses — see utils/signupTrial.js —
     // so a user can never end up with two competing comp rows). Real Stripe
     // subscriptions (planType month/year/team_*) are deliberately left alone.
-    const newEnd = await grantOrExtendFreePeriod(prisma, userId, days);
-
-    await createAuditLog(
-      prisma,
-      {
+    const newEnd = await withSerializableRetry(prisma, async (tx) => {
+      const user = await tx.user.findUnique({ where: { id: userId } });
+      if (!user) throw new NotFoundError('User not found');
+      const end = await grantOrExtendFreePeriod(tx, userId, days);
+      await createAuditLog(tx, {
         userId: request.user.userId,
         action: 'grant_free_period',
         entityType: 'user',
         entityId: userId,
-        metadata: { period, days, currentPeriodEnd: newEnd.toISOString() },
-      },
-      { required: true }
-    );
+        metadata: { period, days, currentPeriodEnd: end.toISOString() },
+      }, { required: true });
+      return end;
+    });
 
     return { success: true, period, currentPeriodEnd: newEnd.toISOString() };
   });
@@ -499,38 +552,35 @@ export default async function adminRoutes(fastify) {
     const { userId, scope } = request.body || {};
 
     if (scope === 'all') {
-      const result = await revokeFreePeriod(prisma, null);
-      await createAuditLog(
-        prisma,
-        {
+      const result = await withSerializableRetry(prisma, async (tx) => {
+        const revokeResult = await revokeFreePeriod(tx, null);
+        await createAuditLog(tx, {
           userId: request.user.userId,
           action: 'revoke_free_period.all',
           entityType: 'system',
           entityId: 'all_users',
-          metadata: { ...result },
-        },
-        { required: true }
-      );
+          metadata: { ...revokeResult },
+        }, { required: true });
+        return revokeResult;
+      });
       return { success: true, scope: 'all', ...result };
     }
 
     if (!userId) throw new ValidationError('userId is required');
 
-    const user = await prisma.user.findUnique({ where: { id: userId } });
-    if (!user) throw new NotFoundError('User not found');
-
-    const result = await revokeFreePeriod(prisma, userId);
-    await createAuditLog(
-      prisma,
-      {
+    const result = await withSerializableRetry(prisma, async (tx) => {
+      const user = await tx.user.findUnique({ where: { id: userId } });
+      if (!user) throw new NotFoundError('User not found');
+      const revokeResult = await revokeFreePeriod(tx, userId);
+      await createAuditLog(tx, {
         userId: request.user.userId,
         action: 'revoke_free_period',
         entityType: 'user',
         entityId: userId,
-        metadata: { ...result },
-      },
-      { required: true }
-    );
+        metadata: { ...revokeResult },
+      }, { required: true });
+      return revokeResult;
+    });
 
     return { success: true, ...result };
   });
@@ -542,23 +592,31 @@ export default async function adminRoutes(fastify) {
     const { userId } = request.body || {};
     if (!userId) throw new ValidationError('userId is required');
 
-    await prisma.user.update({
-      where: { id: userId },
-      data: { role: 'admin' },
-    });
+    const changed = await withSerializableRetry(prisma, async (tx) => {
+      const user = await tx.user.findUnique({ where: { id: userId } });
+      if (!user) throw new NotFoundError('User not found');
+      if (user.role === 'super_admin') {
+        throw new ValidationError('A super admin cannot be demoted through grant-admin');
+      }
+      const roleChanged = user.role !== 'admin';
+      if (roleChanged) {
+        await tx.user.update({
+          where: { id: userId },
+          data: { role: 'admin' },
+        });
+      }
 
-    await createAuditLog(
-      prisma,
-      {
+      await createAuditLog(tx, {
         userId: request.user.userId,
         action: 'grant_admin',
         entityType: 'user',
         entityId: userId,
-      },
-      { required: true }
-    );
+        metadata: { changed: roleChanged },
+      }, { required: true });
+      return roleChanged;
+    });
 
-    return { success: true };
+    return { success: true, changed };
   });
 
   fastify.get('/analytics', async (_request, reply) => {
@@ -678,25 +736,40 @@ export default async function adminRoutes(fastify) {
   fastify.post('/messages/:id/reply', async (request) => {
     const { id } = request.params;
     const { body } = request.body || {};
-    if (!body) throw new ValidationError('body is required');
+    if (typeof body !== 'string' || !body.trim()) {
+      throw new ValidationError('body is required');
+    }
+    if (body.length > 20_000) {
+      throw new ValidationError('body must be 20000 characters or fewer');
+    }
 
-    const original = await prisma.message.findUnique({ where: { id } });
-    if (!original) throw new NotFoundError('Message not found');
+    const reply = await prisma.$transaction(async (tx) => {
+      const original = await tx.message.findFirst({
+        where: { id, category: 'support', parentId: null },
+      });
+      if (!original) throw new NotFoundError('Support message not found');
 
-    const reply = await prisma.message.create({
-      data: {
-        senderId: request.user.userId,
-        receiverId: original.senderId,
-        subject: `Re: ${original.subject}`,
-        body,
-        category: 'support',
-        parentId: id,
-      },
-    });
-
-    await prisma.message.update({
-      where: { id },
-      data: { status: 'replied' },
+      const created = await tx.message.create({
+        data: {
+          senderId: request.user.userId,
+          receiverId: original.senderId,
+          subject: `Re: ${original.subject}`.slice(0, 300),
+          body: body.trim(),
+          category: 'support',
+          parentId: id,
+        },
+      });
+      await tx.message.update({
+        where: { id: original.id },
+        data: { status: 'replied' },
+      });
+      await createAuditLog(tx, {
+        userId: request.user.userId,
+        action: 'support.reply_sent',
+        entityType: 'message',
+        entityId: original.id,
+      }, { required: true });
+      return created;
     });
 
     return { reply };
@@ -704,9 +777,21 @@ export default async function adminRoutes(fastify) {
 
   fastify.post('/messages/:id/close', async (request) => {
     const { id } = request.params;
-    await prisma.message.update({
-      where: { id },
-      data: { status: 'closed' },
+    await prisma.$transaction(async (tx) => {
+      const original = await tx.message.findFirst({
+        where: { id, category: 'support', parentId: null },
+      });
+      if (!original) throw new NotFoundError('Support message not found');
+      await tx.message.update({
+        where: { id: original.id },
+        data: { status: 'closed' },
+      });
+      await createAuditLog(tx, {
+        userId: request.user.userId,
+        action: 'support.message_closed',
+        entityType: 'message',
+        entityId: original.id,
+      }, { required: true });
     });
     return { success: true };
   });

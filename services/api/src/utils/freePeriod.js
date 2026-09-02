@@ -42,7 +42,13 @@ export function computeFreePeriodEnd(currentEnd, days, now = Date.now()) {
  */
 export async function grantOrExtendFreePeriod(prisma, userId, days, now = Date.now()) {
   const existingComp = await prisma.subscription.findFirst({
-    where: { userId, status: 'active', planType: 'admin_granted' },
+    where: {
+      userId,
+      status: 'active',
+      planType: 'admin_granted',
+      stripeCustomerId: null,
+      stripeSubscriptionId: null,
+    },
     orderBy: { createdAt: 'desc' },
   });
 
@@ -60,6 +66,8 @@ export async function grantOrExtendFreePeriod(prisma, userId, days, now = Date.n
         userId,
         status: 'active',
         planType: 'admin_granted',
+        stripeCustomerId: null,
+        stripeSubscriptionId: null,
         currentPeriodEnd: newEnd,
       },
     });

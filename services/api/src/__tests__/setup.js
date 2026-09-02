@@ -39,6 +39,25 @@ export function createPrismaMock() {
     return store[name];
   }
 
+  function applyOrderBy(records, orderBy) {
+    const clauses = Array.isArray(orderBy) ? orderBy : orderBy ? [orderBy] : [];
+    if (clauses.length === 0) return records;
+    return records.sort((left, right) => {
+      for (const clause of clauses) {
+        for (const [field, direction] of Object.entries(clause)) {
+          const a = left[field];
+          const b = right[field];
+          if (a === b) continue;
+          if (a == null) return direction === 'desc' ? 1 : -1;
+          if (b == null) return direction === 'desc' ? -1 : 1;
+          const comparison = a > b ? 1 : -1;
+          return direction === 'desc' ? -comparison : comparison;
+        }
+      }
+      return 0;
+    });
+  }
+
   function createUniqueError(model, field) {
     const err = new Error(`Unique constraint failed on ${model}.${field}`);
     err.code = 'P2002';
@@ -75,11 +94,12 @@ export function createPrismaMock() {
   const createModel = (name) => ({
     findMany: vi.fn(async (args = {}) => {
       let records = [...getStore(name)];
-      const { where, take, skip } = args;
+      const { where, orderBy, take, skip } = args;
 
       if (where) {
         records = records.filter((r) => matchWhere(r, where));
       }
+      records = applyOrderBy(records, orderBy);
       if (skip) records = records.slice(skip);
       if (take) records = records.slice(0, take);
       return records;
@@ -97,10 +117,11 @@ export function createPrismaMock() {
 
     findFirst: vi.fn(async (args = {}) => {
       let records = [...getStore(name)];
-      const { where } = args;
+      const { where, orderBy } = args;
       if (where) {
         records = records.filter((r) => matchWhere(r, where));
       }
+      records = applyOrderBy(records, orderBy);
       return records[0] || null;
     }),
 
@@ -360,6 +381,10 @@ function matchWhere(record, where) {
         if (condition.notIn.includes(record[key])) return false;
         continue;
       }
+      if ('not' in condition) {
+        if (record[key] === condition.not) return false;
+        continue;
+      }
       if ('contains' in condition) {
         const val = condition.mode === 'insensitive'
           ? String(record[key] || '').toLowerCase()
@@ -445,6 +470,10 @@ export async function buildTestApp(prismaMock, opts = {}) {
   const app = Fastify({ logger: false, ...(opts.fastifyOptions || {}) });
 
   app.decorate('prisma', prismaMock);
+  app.decorate('env', opts.env || {
+    isProduction: false,
+    corsAllowList: () => ['http://localhost:5173'],
+  });
 
   await app.register(cookie, { secret: process.env.COOKIE_SECRET });
 
@@ -488,6 +517,14 @@ export async function buildTestApp(prismaMock, opts = {}) {
     const { default: educationRoutes } = await import('../routes/education.js');
     await app.register(educationRoutes, { prefix: '/education' });
   }
+  if (opts.includePublicationConcepts) {
+    const { default: publicationConceptRoutes } = await import('../routes/publicationConcepts.js');
+    await app.register(publicationConceptRoutes, { prefix: '/genomics/publication-concepts' });
+  }
+  if (opts.includeAssistants) {
+    const { default: assistantRoutes } = await import('../routes/assistants.js');
+    await app.register(assistantRoutes, { prefix: '/assistants' });
+  }
 
   await app.ready();
   return app;
@@ -523,6 +560,36 @@ export function seedAuthUser(prisma, userPayload) {
     createdAt: new Date(),
     updatedAt: new Date(),
   });
+}
+
+/**
+ * Give a seeded test user a current paid subscription. The in-memory Prisma
+ * mock does not hydrate relations from `include`, so the relationship is kept
+ * both in the subscription store and on the user record. Production code still
+ * resolves the entitlement from its server-owned subscription relationship.
+ */
+export function seedPremiumSubscription(prisma, userId, overrides = {}) {
+  if (!prisma) return null;
+  const user = prisma._store.user.find((candidate) => candidate.id === userId);
+  if (!user) throw new Error(`Cannot seed premium subscription for missing user ${userId}`);
+
+  const subscription = {
+    id: overrides.id || `subscription-${userId}`,
+    userId,
+    stripeSubscriptionId: overrides.stripeSubscriptionId || `sub_${userId}`,
+    stripeCustomerId: overrides.stripeCustomerId || `cus_${userId}`,
+    status: 'active',
+    planType: 'month',
+    currentPeriodStart: new Date(Date.now() - 60_000),
+    currentPeriodEnd: new Date(Date.now() + 86_400_000),
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    ...overrides,
+  };
+
+  prisma._store.subscription.push(subscription);
+  user.subscriptions = [subscription];
+  return subscription;
 }
 
 export function authCookie(userPayload, prisma) {

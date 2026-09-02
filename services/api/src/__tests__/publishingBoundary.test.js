@@ -339,8 +339,6 @@ describe('publishable route decision', () => {
   it.each([
     '/clinical-trials/search?gene=BRCA1',
     '/genomics/vcf/parse',
-    '/entities/medical-data/record-1',
-    '/entities/conversations/conversation-1',
     '/admin/self-test',
   ])('hides high-risk path %s', (url) => {
     expect(publicationBoundaryDecision({ url, body: {} })).toMatchObject({
@@ -354,7 +352,27 @@ describe('publishable route decision', () => {
     (url) => expect(publicationBoundaryDecision({ url, body: {} })).toBeNull(),
   );
 
-  for (const url of ['/education/explain', '/education/quiz', '/education/image']) {
+  it.each([
+    '/entities/medical-data/record-1',
+    '/entities/conversations/conversation-1',
+  ])('leaves rebuilt owner-scoped data route %s to its auth and entitlement guards', (url) => {
+    expect(publicationBoundaryDecision({ url, body: {} })).toBeNull();
+  });
+
+  it('allows the server-context assistant contract and rejects caller-injected context', () => {
+    expect(publicationBoundaryDecision({
+      url: '/assistants/robert/chat',
+      routeUrl: '/assistants/:assistantType/chat',
+      body: { message: 'Review my selected results', recordIds: [] },
+    })).toBeNull();
+    expect(publicationBoundaryDecision({
+      url: '/assistants/robert/chat',
+      routeUrl: '/assistants/:assistantType/chat',
+      body: { message: 'Hello', context: { age: 99 } },
+    })).toMatchObject({ statusCode: 403, code: 'EDUCATION_RESEARCH_BOUNDARY' });
+  });
+
+  for (const url of ['/education/explain', '/education/quiz']) {
     it.each(EDUCATION_TOPIC_IDS)(`allows canonical catalog topic ID on ${url}: %s`, (topic) => {
       expect(publicationBoundaryDecision({ url, body: { topic, level: 'undergraduate' } })).toBeNull();
     });

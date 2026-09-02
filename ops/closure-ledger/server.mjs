@@ -1,82 +1,70 @@
-/**
- * GeneMap restore-independent account-deletion ledger.
- *
- * This is the counterparty for `services/api/src/services/accountClosureLedger.js`.
- * It is deliberately a SEPARATE deployable with its OWN persistent storage: a
- * tombstone table inside the application's own Postgres would be resurrected by
- * the same restore that resurrects the deleted accounts, which is exactly the
- * failure this ledger exists to prevent.
- *
- * Protocol (must match the API client exactly):
- *
- *   POST <write path>
- *     headers: content-type: application/json
- *              idempotency-key: <receiptId>
- *              x-genemap-ledger-timestamp: <ISO-8601>
- *              x-genemap-ledger-signature: sha256=HMAC_SHA256(secret, `${timestamp}.${rawBody}`)
- *     body:    the versioned tombstone
- *     200:     HMAC-signed `{"recorded":true,"receiptId":"<same>"}`
- *
- *   GET <read path>
- *     headers: x-genemap-ledger-timestamp + x-genemap-ledger-signature over an
- *              EMPTY body (`${timestamp}.`)
- *     200:     HMAC-signed `{"tombstones":[...]}`
- *
- * Every response this server returns on those two paths carries
- * `x-genemap-ledger-timestamp` and `x-genemap-ledger-signature` computed over
- * `${responseTimestamp}.${responseBody}`; the client rejects any response that
- * is unsigned, mis-signed, or more than 5 minutes skewed.
- *
- * Storage is an append-only JSONL log with a per-record hash chain. Records are
- * never rewritten or deleted by this process — a conflicting re-write of an
- * existing receiptId is refused with 409 rather than mutating history.
- *
- * RETENTION. See `docs/DATA_RETENTION.md`. A deletion ledger exists to PROVE a
- * deletion happened, so "expiry" here can never mean erasing the proof: a
- * tombstone must outlive every backup that could resurrect the account it
- * describes, and outlive the window in which the deletion may have to be
- * evidenced. Expiry therefore RETIRES a tombstone from the reconciliation
- * projection by APPENDING a retention marker to the same hash chain; the
- * original chain-bearing line is never rewritten or removed, so the chain still
- * verifies end to end and the proof survives. `LEDGER_RETENTION_DAYS` can only
- * LENGTHEN retention — a value below `RETENTION_FLOOR_DAYS` refuses to boot.
- *
- * IMMUTABILITY. The chain is tamper-EVIDENT, not tamper-PROOF: whoever controls
- * the volume can rewrite the whole log and re-chain it. `<anchorPath>` exposes
- * the chain head so `anchor.mjs` can publish it OFF this host (the GitHub repo),
- * which makes such a rewrite externally DETECTABLE by comparison. It does not
- * make it impossible.
- */
 import crypto from 'node:crypto';
-import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
+import { createLedgerStore } from './store.mjs';
 
-export const MIN_SECRET_LENGTH = 32;
-export const MAX_CLOCK_SKEW_MS = 5 * 60 * 1000;
-const MAX_BODY_BYTES = 64 * 1024;
-const IDENTITY_KEY_ID = /^[A-Za-z0-9._-]{1,64}$/u;
-const HEX64 = /^[a-f0-9]{64}$/u;
-const GENESIS_HASH = '0'.repeat(64);
-const CHAIN_KEY = 'genemap-closure-ledger-chain';
-const MS_PER_DAY = 24 * 60 * 60 * 1000;
+const DEFAULT_PORT = 3000;
+const MAX_BODY_BYTES = 16 * 1024;
+const MAX_CLOCK_SKEW_MS = 5 * 60 * 1_000;
+const MIN_SECRET_LENGTH = 32;
+const MAX_INTEGRITY_CACHE_MS = 30_000;
 
-/**
- * Retention floor: six years, the evidence period `docs/DATA_RETENTION.md`
- * already contemplates for a post-deletion evidence record ("a claimed six-year
- * evidence record after account deletion"). It is also, deliberately, longer
- * than any backup class this project retains — backup expiry is NOT yet
- * evidenced (docs/DATA_RETENTION.md, "Not yet enforced"), and a tombstone that
- * expired before the last restorable backup would let a restore silently
- * resurrect a deleted account with no tombstone left to reconcile it against.
- * Because that window is unknown, the floor is set high and can only move up.
- */
-export const RETENTION_FLOOR_DAYS = 2192; // 6 years (6 × 365.25, rounded up)
-export const RETENTION_MARKER_EVENT = 'tombstone_retention_expired';
+class HttpError extends Error {
+  constructor(statusCode, code, message) {
+    super(message);
+    this.name = 'HttpError';
+    this.statusCode = statusCode;
+    this.code = code;
+  }
+}
 
-function hmacHex(secret, value) {
-  return crypto.createHmac('sha256', secret).update(value).digest('hex');
+function usableSecret(value) {
+  if (typeof value !== 'string' || value.length < MIN_SECRET_LENGTH) return false;
+  const normalized = value.toLowerCase();
+  return !normalized.includes('replace_with')
+    && !normalized.includes('placeholder')
+    && !normalized.includes('change-in-production');
+}
+
+function safeInteger(value, fallback) {
+  const number = Number(value);
+  return Number.isInteger(number) ? number : fallback;
+}
+
+export function loadLedgerConfig(source = process.env) {
+  const production = source.NODE_ENV === 'production';
+  const port = safeInteger(source.PORT, DEFAULT_PORT);
+  const host = String(source.HOST || '0.0.0.0');
+  const secret = source.ACCOUNT_CLOSURE_LEDGER_SECRET;
+  const defaultDirectory = path.resolve(process.cwd(), '.ledger-data');
+  const directory = source.ACCOUNT_CLOSURE_LEDGER_DIRECTORY || (production ? '' : defaultDirectory);
+
+  const problems = [];
+  if (port < 1 || port > 65535) problems.push('PORT must be an integer from 1 through 65535');
+  if (!host.trim()) problems.push('HOST must not be empty');
+  if (!usableSecret(secret)) {
+    problems.push('ACCOUNT_CLOSURE_LEDGER_SECRET must be a non-placeholder secret with at least 32 characters');
+  }
+  if (!directory) {
+    problems.push('ACCOUNT_CLOSURE_LEDGER_DIRECTORY is required in production');
+  } else if (!path.isAbsolute(directory)) {
+    problems.push('ACCOUNT_CLOSURE_LEDGER_DIRECTORY must be an absolute path');
+  } else if (path.parse(directory).root === path.resolve(directory)) {
+    problems.push('ACCOUNT_CLOSURE_LEDGER_DIRECTORY must not be a filesystem root');
+  }
+  if (problems.length) throw new Error(`[closure-ledger] unsafe configuration: ${problems.join('; ')}`);
+
+  return { directory: path.resolve(directory), host, port, secret };
+}
+
+function hmac(secret, timestamp, body) {
+  return crypto.createHmac('sha256', secret).update(`${timestamp}.${body}`).digest('hex');
+}
+
+function header(req, name) {
+  const value = req.headers[name.toLowerCase()];
+  return Array.isArray(value) ? value[0] : value;
 }
 
 function constantTimeEqual(left, right) {
@@ -85,437 +73,232 @@ function constantTimeEqual(left, right) {
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
-/**
- * Canonical JSON with sorted keys, so idempotency comparison of two writes of
- * the same receipt does not depend on key order.
- */
-export function canonicalize(value) {
-  if (Array.isArray(value)) return `[${value.map(canonicalize).join(',')}]`;
-  if (value && typeof value === 'object') {
-    const keys = Object.keys(value).sort();
-    return `{${keys.map((k) => `${JSON.stringify(k)}:${canonicalize(value[k])}`).join(',')}}`;
+function authenticate(req, secret, body, now) {
+  const timestamp = header(req, 'x-genemap-ledger-timestamp');
+  const supplied = header(req, 'x-genemap-ledger-signature');
+  const parsed = Date.parse(timestamp || '');
+  if (!timestamp || !Number.isFinite(parsed) || Math.abs(now() - parsed) > MAX_CLOCK_SKEW_MS) {
+    throw new HttpError(401, 'LEDGER_AUTH_FAILED', 'Request authentication failed.');
   }
-  return JSON.stringify(value === undefined ? null : value);
-}
-
-/** Reject anything that is not a well-formed v1/v2 deletion tombstone. */
-export function validateTombstone(payload) {
-  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return 'not_an_object';
-  if (payload.event !== 'account_deletion_authorized') return 'unknown_event';
-  if (payload.version !== 1 && payload.version !== 2) return 'unsupported_version';
-  if (typeof payload.receiptId !== 'string' || !payload.receiptId.trim()) return 'missing_receipt_id';
-  if (typeof payload.userIdHash !== 'string' || !HEX64.test(payload.userIdHash)) return 'invalid_user_id_hash';
-  if (payload.version === 2
-    && (typeof payload.identityKeyId !== 'string' || !IDENTITY_KEY_ID.test(payload.identityKeyId))) {
-    return 'invalid_identity_key_id';
-  }
-  return null;
-}
-
-/**
- * `LEDGER_RETENTION_DAYS` may only LENGTHEN retention past the policy floor.
- * Anything shorter, or unparseable, is a configuration error the process must
- * refuse rather than silently expire proofs early.
- */
-export function parseRetentionDays(value) {
-  if (value === undefined || value === null || String(value).trim() === '') {
-    return { valid: true, days: RETENTION_FLOOR_DAYS, reason: null };
-  }
-  const days = Number(String(value).trim());
-  if (!Number.isFinite(days) || !Number.isInteger(days) || days <= 0) {
-    return { valid: false, days: null, reason: 'not_a_positive_integer' };
-  }
-  if (days < RETENTION_FLOOR_DAYS) {
-    return { valid: false, days: null, reason: 'below_retention_floor' };
-  }
-  return { valid: true, days, reason: null };
-}
-
-/** The chain covers the record's single payload, whichever kind it carries. */
-function entryPayload(record) {
-  return record.tombstone !== undefined ? record.tombstone : record.retention;
-}
-
-/**
- * Append-only, hash-chained tombstone log.
- *
- * `append` fsyncs before returning so an acknowledged write has actually
- * reached the volume — the client treats the acknowledgement as the point of no
- * return for the account deletion.
- *
- * Two record kinds share one chain: `{ ..., tombstone }` deletion authorizations
- * and `{ ..., retention }` expiry markers. Nothing is ever rewritten in place.
- */
-export class TombstoneStore {
-  constructor(dataDir, { retentionDays = RETENTION_FLOOR_DAYS } = {}) {
-    this.dataDir = dataDir;
-    this.file = path.join(dataDir, 'tombstones.jsonl');
-    this.retentionDays = retentionDays;
-    this.records = [];
-    this.byReceipt = new Map();
-    this.expired = new Set();
-    this.lastHash = GENESIS_HASH;
-    this.load();
-  }
-
-  load() {
-    fs.mkdirSync(this.dataDir, { recursive: true });
-    if (!fs.existsSync(this.file)) return;
-    const lines = fs.readFileSync(this.file, 'utf8').split('\n');
-    for (const line of lines) {
-      if (!line.trim()) continue;
-      let record;
-      try {
-        record = JSON.parse(line);
-      } catch {
-        // A torn trailing line can only be the last one; anything else means
-        // the log was corrupted and must not be silently ignored.
-        throw new Error(`closure-ledger: unparseable record in ${this.file}`);
-      }
-      this.records.push(record);
-      if (record.tombstone !== undefined) {
-        this.byReceipt.set(record.tombstone.receiptId, record);
-      } else if (record.retention !== undefined) {
-        this.expired.add(record.retention.receiptId);
-      } else {
-        throw new Error(`closure-ledger: record ${record.seq} carries no payload`);
-      }
-      this.lastHash = record.hash;
-    }
-  }
-
-  get(receiptId) {
-    return this.byReceipt.get(receiptId) || null;
-  }
-
-  isExpired(receiptId) {
-    return this.expired.has(receiptId);
-  }
-
-  #appendEntry(kind, payload) {
-    const recordedAt = new Date().toISOString();
-    const prevHash = this.lastHash;
-    const seq = this.records.length + 1;
-    const hash = hmacHex(CHAIN_KEY, `${prevHash}.${seq}.${recordedAt}.${canonicalize(payload)}`);
-    const record = { seq, recordedAt, prevHash, hash, [kind]: payload };
-    const fd = fs.openSync(this.file, 'a');
-    try {
-      fs.writeSync(fd, `${JSON.stringify(record)}\n`);
-      fs.fsyncSync(fd);
-    } finally {
-      fs.closeSync(fd);
-    }
-    this.records.push(record);
-    this.lastHash = hash;
-    return record;
-  }
-
-  append(tombstone) {
-    const record = this.#appendEntry('tombstone', tombstone);
-    this.byReceipt.set(tombstone.receiptId, record);
-    return record;
-  }
-
-  /**
-   * Retire every tombstone whose retention period has elapsed.
-   *
-   * This appends a marker; it never rewrites or removes the original record, so
-   * the chain still verifies and the deletion remains provable afterwards. The
-   * marker only takes the tombstone out of the reconciliation projection.
-   */
-  expireDue(now = Date.now()) {
-    const cutoff = now - this.retentionDays * MS_PER_DAY;
-    const expiredNow = [];
-    for (const record of [...this.records]) {
-      if (record.tombstone === undefined) continue;
-      const receiptId = record.tombstone.receiptId;
-      if (this.expired.has(receiptId)) continue;
-      const recordedAt = Date.parse(record.recordedAt);
-      if (!Number.isFinite(recordedAt) || recordedAt > cutoff) continue;
-      this.#appendEntry('retention', {
-        event: RETENTION_MARKER_EVENT,
-        receiptId,
-        tombstoneSeq: record.seq,
-        tombstoneRecordedAt: record.recordedAt,
-        retentionDays: this.retentionDays,
-        expiredAt: new Date(now).toISOString(),
-      });
-      this.expired.add(receiptId);
-      expiredNow.push(receiptId);
-    }
-    return expiredNow;
-  }
-
-  /** Verify the stored hash chain end to end. */
-  verifyChain() {
-    let prevHash = GENESIS_HASH;
-    for (const record of this.records) {
-      const expected = hmacHex(
-        CHAIN_KEY,
-        `${prevHash}.${record.seq}.${record.recordedAt}.${canonicalize(entryPayload(record))}`,
-      );
-      if (record.prevHash !== prevHash || record.hash !== expected) {
-        return { valid: false, brokenAt: record.seq };
-      }
-      prevHash = record.hash;
-    }
-    return { valid: true, brokenAt: null };
-  }
-
-  /** Chain head, and the hash at any sequence number, for external anchoring. */
-  head() {
-    return {
-      headSeq: this.records.length,
-      headHash: this.lastHash,
-      records: this.records.length,
-      tombstones: this.byReceipt.size,
-      expired: this.expired.size,
-      retentionDays: this.retentionDays,
-    };
-  }
-
-  hashAt(seq) {
-    const record = this.records[seq - 1];
-    return record && record.seq === seq ? record.hash : null;
-  }
-
-  list({ includeExpired = false } = {}) {
-    return this.records
-      .filter((record) => record.tombstone !== undefined)
-      .filter((record) => includeExpired || !this.expired.has(record.tombstone.receiptId))
-      .map((record) => record.tombstone);
+  const expected = `sha256=${hmac(secret, timestamp, body)}`;
+  if (!constantTimeEqual(supplied, expected)) {
+    throw new HttpError(401, 'LEDGER_AUTH_FAILED', 'Request authentication failed.');
   }
 }
 
 function readBody(req) {
   return new Promise((resolve, reject) => {
-    let size = 0;
     const chunks = [];
+    let size = 0;
+    let settled = false;
     req.on('data', (chunk) => {
+      if (settled) return;
       size += chunk.length;
       if (size > MAX_BODY_BYTES) {
-        reject(new Error('body_too_large'));
-        req.destroy();
+        settled = true;
+        reject(new HttpError(413, 'LEDGER_BODY_TOO_LARGE', 'Request body is too large.'));
+        req.resume();
         return;
       }
       chunks.push(chunk);
     });
-    req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
-    req.on('error', reject);
-  });
-}
-
-/**
- * Verify the caller's HMAC over `${timestamp}.${rawBody}` and reject stale or
- * missing timestamps. Returns null on success, a reason string on failure.
- */
-export function verifyRequestSignature(headers, rawBody, secret, now = Date.now()) {
-  const timestamp = headers['x-genemap-ledger-timestamp'];
-  const supplied = headers['x-genemap-ledger-signature'];
-  const parsed = Date.parse(timestamp || '');
-  if (!timestamp || !Number.isFinite(parsed)) return 'missing_or_invalid_timestamp';
-  if (Math.abs(now - parsed) > MAX_CLOCK_SKEW_MS) return 'stale_timestamp';
-  const expected = `sha256=${hmacHex(secret, `${timestamp}.${rawBody}`)}`;
-  if (!constantTimeEqual(supplied, expected)) return 'invalid_signature';
-  return null;
-}
-
-export function createServer({
-  secret,
-  store,
-  writePath = '/tombstones/write',
-  readPath = '/tombstones/read',
-  anchorPath = '/tombstones/anchor',
-  log = console,
-} = {}) {
-  if (typeof secret !== 'string' || secret.length < MIN_SECRET_LENGTH) {
-    throw new Error(`closure-ledger: ACCOUNT_CLOSURE_LEDGER_SECRET must be at least ${MIN_SECRET_LENGTH} characters`);
-  }
-
-  function sendSigned(res, status, payload) {
-    const body = JSON.stringify(payload);
-    const timestamp = new Date().toISOString();
-    res.writeHead(status, {
-      'content-type': 'application/json',
-      'cache-control': 'no-store',
-      'x-genemap-ledger-timestamp': timestamp,
-      'x-genemap-ledger-signature': `sha256=${hmacHex(secret, `${timestamp}.${body}`)}`,
+    req.on('end', () => {
+      if (!settled) resolve(Buffer.concat(chunks).toString('utf8'));
     });
-    res.end(body);
+    req.on('error', (error) => {
+      if (!settled) reject(error);
+    });
+  });
+}
+
+function setResponseHeaders(response) {
+  response.setHeader('cache-control', 'no-store');
+  response.setHeader('content-type', 'application/json; charset=utf-8');
+  response.setHeader('referrer-policy', 'no-referrer');
+  response.setHeader('x-content-type-options', 'nosniff');
+  response.setHeader('x-frame-options', 'DENY');
+}
+
+function sendJson(response, statusCode, value, secret = null) {
+  const body = JSON.stringify(value);
+  setResponseHeaders(response);
+  if (secret) {
+    const timestamp = new Date().toISOString();
+    response.setHeader('x-genemap-ledger-timestamp', timestamp);
+    response.setHeader('x-genemap-ledger-signature', `sha256=${hmac(secret, timestamp, body)}`);
   }
+  response.statusCode = statusCode;
+  response.end(body);
+}
 
-  return http.createServer(async (req, res) => {
-    const url = new URL(req.url, 'http://ledger.local');
-    const route = url.pathname;
+function parseJson(raw) {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    throw new HttpError(400, 'LEDGER_INVALID_JSON', 'Request body must be valid JSON.');
+  }
+}
 
-    // Unauthenticated liveness only — no ledger content, no signature needed,
-    // so a platform healthcheck never has to hold the transport secret.
-    if (req.method === 'GET' && (route === '/healthz' || route === '/')) {
-      const chain = store.verifyChain();
-      const head = store.head();
-      const body = JSON.stringify({
-        status: chain.valid ? 'ok' : 'chain_broken',
-        records: head.records,
-        // Counts only. `tombstones` stays undefined here so the liveness probe
-        // can never be mistaken for, or drift into, a content endpoint.
-        tombstoneCount: head.tombstones,
-        expired: head.expired,
-        retentionDays: head.retentionDays,
-      });
-      res.writeHead(chain.valid ? 200 : 500, { 'content-type': 'application/json', 'cache-control': 'no-store' });
-      res.end(body);
-      return;
-    }
+function publicError(error) {
+  if (error instanceof HttpError || Number.isInteger(error?.statusCode)) {
+    return {
+      statusCode: error.statusCode,
+      body: { error: error.code || 'LEDGER_REQUEST_FAILED', message: error.message },
+    };
+  }
+  return {
+    statusCode: 503,
+    body: { error: 'LEDGER_UNAVAILABLE', message: 'Ledger storage is unavailable.' },
+  };
+}
 
-    if (route !== writePath && route !== readPath && route !== anchorPath) {
-      res.writeHead(404, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ error: 'not_found' }));
-      return;
-    }
+export async function createLedgerService({
+  config = loadLedgerConfig(),
+  now = Date.now,
+  logger = console,
+} = {}) {
+  const store = createLedgerStore({ directory: config.directory });
+  await store.initialize();
+  let lastIntegrityCheck = now();
 
-    let rawBody;
+  const server = http.createServer(async (request, response) => {
     try {
-      rawBody = await readBody(req);
-    } catch {
-      sendSigned(res, 413, { recorded: false, error: 'body_too_large' });
-      return;
-    }
+      const url = new URL(request.url || '/', 'http://ledger.internal');
 
-    const signatureFailure = verifyRequestSignature(req.headers, rawBody, secret);
-    if (signatureFailure) {
-      log.warn?.(`closure-ledger: rejected ${req.method} ${route}: ${signatureFailure}`);
-      sendSigned(res, 401, { recorded: false, error: signatureFailure });
-      return;
-    }
-
-    // Retention is enforced lazily on every authenticated touch: no cron, no
-    // second moving part that can silently stop running. Each sweep only
-    // APPENDS markers, so it cannot damage the chain.
-    const expiredNow = store.expireDue();
-    if (expiredNow.length) {
-      log.info?.(`closure-ledger: retired ${expiredNow.length} tombstone(s) past ${store.retentionDays}-day retention`);
-    }
-
-    if (route === anchorPath) {
-      if (req.method !== 'GET') {
-        sendSigned(res, 405, { error: 'method_not_allowed' });
+      if (request.method === 'GET' && url.pathname === '/healthz') {
+        sendJson(response, 200, { status: 'ok' });
         return;
       }
-      const requestedSeq = url.searchParams.get('seq');
-      if (requestedSeq !== null) {
-        const seq = Number(requestedSeq);
-        if (!Number.isInteger(seq) || seq < 1) {
-          sendSigned(res, 400, { error: 'invalid_seq' });
-          return;
+      if (request.method === 'GET' && url.pathname === '/readyz') {
+        if (now() - lastIntegrityCheck >= MAX_INTEGRITY_CACHE_MS) {
+          await store.verifyAll();
+          lastIntegrityCheck = now();
         }
-        sendSigned(res, 200, { seq, hash: store.hashAt(seq) });
+        sendJson(response, 200, { status: 'ready', durableStorage: true });
         return;
       }
-      // Chain head only — no tombstone content, so the anchor can be published
-      // off-platform (a public GitHub commit) without disclosing anything.
-      sendSigned(res, 200, { ...store.head(), chainValid: store.verifyChain().valid });
-      return;
-    }
 
-    if (route === readPath) {
-      if (req.method !== 'GET') {
-        sendSigned(res, 405, { error: 'method_not_allowed' });
+      if (url.pathname === '/tombstones/write') {
+        if (request.method !== 'POST') {
+          throw new HttpError(405, 'LEDGER_METHOD_NOT_ALLOWED', 'Method not allowed.');
+        }
+        const contentType = header(request, 'content-type') || '';
+        if (!contentType.toLowerCase().startsWith('application/json')) {
+          throw new HttpError(415, 'LEDGER_CONTENT_TYPE_REQUIRED', 'Content-Type must be application/json.');
+        }
+        const raw = await readBody(request);
+        authenticate(request, config.secret, raw, now);
+        const payload = parseJson(raw);
+        if (header(request, 'idempotency-key') !== payload?.receiptId) {
+          throw new HttpError(400, 'LEDGER_IDEMPOTENCY_KEY_MISMATCH', 'Idempotency-Key must equal receiptId.');
+        }
+        const result = await store.write(payload);
+        sendJson(response, result.created ? 201 : 200, {
+          recorded: true,
+          receiptId: result.payload.receiptId,
+        }, config.secret);
         return;
       }
-      const includeExpired = url.searchParams.get('includeExpired') === '1';
-      sendSigned(res, 200, { tombstones: store.list({ includeExpired }) });
-      return;
-    }
 
-    if (req.method !== 'POST') {
-      sendSigned(res, 405, { recorded: false, error: 'method_not_allowed' });
-      return;
-    }
-
-    let payload;
-    try {
-      payload = JSON.parse(rawBody);
-    } catch {
-      sendSigned(res, 400, { recorded: false, error: 'invalid_json' });
-      return;
-    }
-
-    const invalid = validateTombstone(payload);
-    if (invalid) {
-      sendSigned(res, 400, { recorded: false, error: invalid });
-      return;
-    }
-
-    const receiptId = payload.receiptId.trim();
-    const existing = store.get(receiptId);
-    if (existing) {
-      // Idempotent replay of the identical receipt is a success; a DIFFERENT
-      // payload under the same receipt is a conflict, never an overwrite.
-      if (canonicalize(existing.tombstone) === canonicalize(payload)) {
-        sendSigned(res, 200, { recorded: true, receiptId, duplicate: true });
+      if (url.pathname === '/tombstones/read') {
+        if (request.method !== 'GET') {
+          throw new HttpError(405, 'LEDGER_METHOD_NOT_ALLOWED', 'Method not allowed.');
+        }
+        authenticate(request, config.secret, '', now);
+        const limit = url.searchParams.has('limit')
+          ? safeInteger(url.searchParams.get('limit'), 0)
+          : undefined;
+        if (limit !== undefined && (limit < 1 || limit > 1_000)) {
+          throw new HttpError(400, 'LEDGER_INVALID_PAGE', 'limit must be from 1 through 1000.');
+        }
+        const page = await store.list({
+          cursor: url.searchParams.get('cursor') || null,
+          limit,
+        });
+        sendJson(response, 200, page, config.secret);
         return;
       }
-      log.warn?.(`closure-ledger: receipt conflict for ${receiptId}`);
-      sendSigned(res, 409, { recorded: false, error: 'receipt_conflict' });
-      return;
-    }
 
-    try {
-      store.append(payload);
+      throw new HttpError(404, 'LEDGER_NOT_FOUND', 'Route not found.');
     } catch (error) {
-      log.error?.(`closure-ledger: append failed: ${error?.message}`);
-      sendSigned(res, 503, { recorded: false, error: 'append_failed' });
-      return;
+      const published = publicError(error);
+      if (published.statusCode >= 500) {
+        logger.error?.('[closure-ledger] request failed', {
+          code: error?.code || 'LEDGER_UNAVAILABLE',
+          message: error?.message || String(error),
+        });
+      }
+      sendJson(response, published.statusCode, published.body);
     }
-
-    log.info?.(`closure-ledger: recorded receipt ${receiptId}`);
-    sendSigned(res, 200, { recorded: true, receiptId });
   });
-}
 
-export function main(env = process.env) {
-  const secret = env.ACCOUNT_CLOSURE_LEDGER_SECRET || '';
-  if (secret.length < MIN_SECRET_LENGTH) {
-    console.error(
-      `closure-ledger: refusing to start — ACCOUNT_CLOSURE_LEDGER_SECRET must be at least ${MIN_SECRET_LENGTH} characters`,
-    );
-    process.exit(1);
-  }
-  const retention = parseRetentionDays(env.LEDGER_RETENTION_DAYS);
-  if (!retention.valid) {
-    console.error(
-      `closure-ledger: refusing to start — LEDGER_RETENTION_DAYS is ${retention.reason}; `
-      + `retention may only be LENGTHENED past the ${RETENTION_FLOOR_DAYS}-day policy floor, never shortened`,
-    );
-    process.exit(1);
-  }
-  const dataDir = env.LEDGER_DATA_DIR || '/data';
-  const store = new TombstoneStore(dataDir, { retentionDays: retention.days });
-  const chain = store.verifyChain();
-  if (!chain.valid) {
-    console.error(`closure-ledger: refusing to start — hash chain broken at record ${chain.brokenAt}`);
-    process.exit(1);
-  }
-  store.expireDue();
-  const port = Number(env.PORT || 8080);
-  const host = env.HOST || '0.0.0.0';
-  const server = createServer({
-    secret,
+  server.requestTimeout = 10_000;
+  server.headersTimeout = 12_000;
+  server.keepAliveTimeout = 5_000;
+  server.maxRequestsPerSocket = 1_000;
+
+  return {
+    config,
+    server,
     store,
-    writePath: env.LEDGER_WRITE_PATH || '/tombstones/write',
-    readPath: env.LEDGER_READ_PATH || '/tombstones/read',
-    anchorPath: env.LEDGER_ANCHOR_PATH || '/tombstones/anchor',
-  });
-  server.listen(port, host, () => {
-    console.log(
-      `closure-ledger: listening on ${host}:${port}, ${store.records.length} record(s) in ${dataDir}, `
-      + `retention ${retention.days}d, head ${store.lastHash.slice(0, 12)}`,
-    );
-  });
-  return server;
+    async listen() {
+      await new Promise((resolve, reject) => {
+        server.once('error', reject);
+        server.listen(config.port, config.host, () => {
+          server.off('error', reject);
+          resolve();
+        });
+      });
+      return server.address();
+    },
+    async close() {
+      if (!server.listening) return;
+      await new Promise((resolve, reject) => server.close((error) => (
+        error ? reject(error) : resolve()
+      )));
+    },
+  };
 }
 
-// Only start when this file IS the entrypoint (never when a test imports it).
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  main();
+export function isEntrypoint(metaUrl, argvPath) {
+  if (!argvPath) return false;
+  return path.resolve(fileURLToPath(metaUrl)) === path.resolve(argvPath);
 }
+
+async function main() {
+  const service = await createLedgerService();
+  const address = await service.listen();
+  console.log(`[closure-ledger] listening on ${address.address}:${address.port}`);
+
+  let stopping = false;
+  const stop = async (signal) => {
+    if (stopping) return;
+    stopping = true;
+    console.log(`[closure-ledger] received ${signal}; stopping`);
+    await service.close();
+  };
+  process.once('SIGTERM', () => stop('SIGTERM').catch((error) => {
+    console.error('[closure-ledger] shutdown failed', error?.message || error);
+    process.exitCode = 1;
+  }));
+  process.once('SIGINT', () => stop('SIGINT').catch((error) => {
+    console.error('[closure-ledger] shutdown failed', error?.message || error);
+    process.exitCode = 1;
+  }));
+}
+
+if (isEntrypoint(import.meta.url, process.argv[1])) {
+  main().catch((error) => {
+    console.error(error?.message || error);
+    process.exitCode = 1;
+  });
+}
+
+export const __test = {
+  MAX_BODY_BYTES,
+  MAX_CLOCK_SKEW_MS,
+  authenticate,
+  constantTimeEqual,
+  hmac,
+  usableSecret,
+};
