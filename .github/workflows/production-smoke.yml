@@ -141,7 +141,7 @@ jobs:
               ;;
           esac
 
-  # Browser-level smoke: renders the deployed app in Chromium and asserts the
+  # Browser-level smoke: runs for releases and pull requests, renders the deployed app in Chromium,
   # public/auth surface (login form, legal pages, redirects, headers) actually
   # works for a logged-out visitor — things a curl shell check can't see.
   e2e:
