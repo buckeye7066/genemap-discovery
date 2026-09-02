@@ -343,7 +343,7 @@ function GeneCard({ gene, rank, isSelected = false, onSelect = null }) {
             {onSelect && (
               <Checkbox
                 checked={isSelected}
-                onCheckedChange={onSelect}
+                onCheckedChange={() => onSelect(gene)}
                 className="mt-1"
               />
             )}
