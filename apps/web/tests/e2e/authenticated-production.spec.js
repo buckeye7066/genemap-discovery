@@ -82,6 +82,17 @@ test('complete authenticated production journey persists data across logout and 
     expect(me.status(), await me.text()).toBe(200);
     expect((await me.json()).email).toBe(credentials.email);
 
+    await expect(page.getByRole('heading', { name: 'Complete Your Profile', exact: true })).toBeVisible();
+    const profilePromise = page.waitForResponse(
+      (response) => response.url().includes('/auth/me') && response.request().method() === 'PUT',
+      { timeout: 30_000 },
+    );
+    await page.getByRole('button', { name: 'Continue to GeneMap', exact: true }).click();
+    const profileResponse = await profilePromise;
+    expect(profileResponse.status(), await profileResponse.text()).toBe(200);
+    expect((await profileResponse.json()).demographics_collected).toBe(true);
+    await expect(page).toHaveURL(/\/profile(?:\?|$)/, { timeout: 30_000 });
+
     await page.evaluate(() => localStorage.setItem('genemap_education_level', 'undergraduate'));
 
     const topicsResponse = await page.request.get('/education/topics');
