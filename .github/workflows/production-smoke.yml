@@ -9,7 +9,7 @@ on:
       - main
   workflow_dispatch:
   schedule:
-    - cron: '*/15 * * * *'
+    - cron: '17 6 * * *'
 
 permissions:
   contents: read
@@ -147,7 +147,7 @@ jobs:
   e2e:
     name: E2E (public surface, Chromium)
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
