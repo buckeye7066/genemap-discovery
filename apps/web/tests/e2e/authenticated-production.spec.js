@@ -15,8 +15,8 @@ async function csrfHeaders(page) {
   return { 'x-csrf-token': decodeURIComponent(csrfCookie.value) };
 }
 
-async function closeDisposableAccount(page, credentials, wasRegistered) {
-  if (!wasRegistered) return;
+async function closeDisposableAccount(page, credentials, registrationAttempted) {
+  if (!registrationAttempted) return;
 
   let me = await page.request.get('/auth/me');
   if (me.status() === 401) {
@@ -24,6 +24,9 @@ async function closeDisposableAccount(page, credentials, wasRegistered) {
       data: credentials,
     });
     if (!login.ok()) {
+      // A failed registration may not have created an account. A 401 here
+      // proves there is nothing to clean up for this unique address.
+      if (login.status() === 401) return;
       throw new Error(`Cleanup login failed: ${login.status()} ${await login.text()}`);
     }
     me = await page.request.get('/auth/me');
@@ -56,7 +59,7 @@ test('complete authenticated production journey persists data across logout and 
     password: `GeneMap!${unique}Aa9`,
   };
   const pageErrors = [];
-  let wasRegistered = false;
+  let registrationAttempted = false;
 
   page.on('pageerror', (error) => pageErrors.push(error.message));
 
@@ -65,9 +68,15 @@ test('complete authenticated production journey persists data across logout and 
     await page.getByRole('button', { name: 'Register', exact: true }).click();
     await page.getByLabel('Email', { exact: true }).fill(credentials.email);
     await page.getByLabel('Password', { exact: true }).fill(credentials.password);
+    const registrationPromise = page.waitForResponse(
+      (response) => response.url().includes('/auth/register') && response.request().method() === 'POST',
+      { timeout: 30_000 },
+    );
+    registrationAttempted = true;
     await page.getByRole('button', { name: 'Create Account', exact: true }).click();
+    const registrationResponse = await registrationPromise;
+    expect(registrationResponse.status(), await registrationResponse.text()).toBe(200);
     await expect(page).not.toHaveURL(/\/login(?:\?|$)/, { timeout: 30_000 });
-    wasRegistered = true;
 
     const me = await page.request.get('/auth/me');
     expect(me.status(), await me.text()).toBe(200);
@@ -212,6 +221,6 @@ test('complete authenticated production journey persists data across logout and 
 
     expect(pageErrors, `Uncaught browser errors: ${pageErrors.join('\n')}`).toEqual([]);
   } finally {
-    await closeDisposableAccount(page, credentials, wasRegistered);
+    await closeDisposableAccount(page, credentials, registrationAttempted);
   }
 });
