@@ -874,11 +874,11 @@ function sanitizeNarrativeArtifact(result, {
 }
 
 /**
- * Research narratives are long, multi-section provider outputs. A single unsafe
- * paragraph must never leak, but it also should not erase unrelated safe
- * hypotheses and study-design content. Remove complete unsafe blocks, re-scan
- * the combined remainder, and publish it as partial. If no safe block remains,
- * retain the existing fail-closed withheld result.
+ * Education and research narratives are long, multi-section provider outputs.
+ * A single unsafe paragraph must never leak, but it also should not erase
+ * unrelated safe lesson, hypothesis, or study-design content. Remove complete
+ * unsafe blocks, re-scan the combined remainder, and publish it as partial. If
+ * no safe block remains, retain the existing fail-closed withheld result.
  */
 function sanitizeResearchNarrativeArtifact(result, {
   maxLength,
@@ -1416,7 +1416,10 @@ export function sanitizePublicationArtifact(publicationTask, taskInput, result, 
     });
   }
 
-  const artifact = RESEARCH_TASKS.has(publicationTask)
+  const artifact = (
+    publicationTask === TASKS.GENETICS_EDUCATION
+    || RESEARCH_TASKS.has(publicationTask)
+  )
     ? sanitizeResearchNarrativeArtifact(provider.text, {
       ...taskConfig,
       correlationId,
