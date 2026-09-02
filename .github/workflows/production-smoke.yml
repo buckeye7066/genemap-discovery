@@ -141,11 +141,11 @@ jobs:
               ;;
           esac
 
-  # Browser-level smoke: runs for releases and pull requests, renders the deployed app in Chromium,
-  # public/auth surface (login form, legal pages, redirects, headers) actually
-  # works for a logged-out visitor — things a curl shell check can't see.
+  # Browser-level smoke: runs for releases and pull requests against the deployed
+  # app in Chromium. It covers public/auth boundaries plus the complete
+  # disposable-account journey that curl cannot prove.
   e2e:
-    name: E2E (public surface, Chromium)
+    name: E2E (public + authenticated, Chromium)
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -159,8 +159,8 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Install Chromium
         run: pnpm --filter @genemap/web exec playwright install --with-deps chromium
-      - name: Run public and boundary e2e against production
-        run: pnpm --filter @genemap/web e2e
+      - name: Run production e2e in Chromium
+        run: pnpm --filter @genemap/web exec playwright test --project=desktop-chromium
         env:
           CI: 'true'
           PLAYWRIGHT_BASE_URL: ${{ env.WEB_URL }}
