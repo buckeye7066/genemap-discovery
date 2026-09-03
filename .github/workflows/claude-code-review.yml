@@ -3,21 +3,9 @@ name: Claude Code Review
 on:
   pull_request:
     types: [opened, synchronize, ready_for_review, reopened]
-    # Optional: Only run on specific file changes
-    # paths:
-    #   - "src/**/*.ts"
-    #   - "src/**/*.tsx"
-    #   - "src/**/*.js"
-    #   - "src/**/*.jsx"
 
 jobs:
   claude-review:
-    # Optional: Filter by PR author
-    # if: |
-    #   github.event.pull_request.user.login == 'external-contributor' ||
-    #   github.event.pull_request.user.login == 'new-developer' ||
-    #   github.event.pull_request.author_association == 'FIRST_TIME_CONTRIBUTOR'
-
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -31,7 +19,43 @@ jobs:
         with:
           fetch-depth: 1
 
+      # Dependabot-triggered workflows cannot read ordinary Actions secrets.
+      # Keep the required review check meaningful and green without pretending
+      # Claude ran: the authenticated Dependabot App may change dependency
+      # manifests, lockfiles, or action workflow pins only. CI and CodeQL then
+      # exercise the resulting exact dependency graph.
+      - name: Validate Dependabot dependency-only scope
+        if: github.event.pull_request.user.login == 'dependabot[bot]'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          mapfile -t files < <(
+            gh api --paginate \
+              "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/files?per_page=100" \
+              --jq '.[].filename'
+          )
+          if (( ${#files[@]} == 0 )); then
+            echo "Dependabot PR contains no changed files." >&2
+            exit 1
+          fi
+          allowed='(^|/)(package(-lock)?\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|requirements[^/]*\.txt|pyproject\.toml|poetry\.lock|uv\.lock|Pipfile(\.lock)?|Gemfile(\.lock)?|go\.(mod|sum)|Cargo\.(toml|lock)|composer\.(json|lock)|pom\.xml|build\.gradle(\.kts)?|gradle\.properties|gradle-wrapper\.properties|libs\.versions\.toml)$|^\.github/(dependabot\.yml|workflows/[^/]+\.(yml|yaml))$'
+          unexpected=()
+          for file in "${files[@]}"; do
+            if ! [[ "$file" =~ $allowed ]]; then
+              unexpected+=("$file")
+            fi
+          done
+          if (( ${#unexpected[@]} > 0 )); then
+            printf 'Dependabot changed non-dependency path: %s\n' "${unexpected[@]}" >&2
+            exit 1
+          fi
+          printf 'Validated %d dependency-only file(s) from the authenticated Dependabot App.\n' "${#files[@]}"
+
       - name: Run Claude Code Review
+        if: github.event.pull_request.user.login != 'dependabot[bot]'
         id: claude-review
         uses: anthropics/claude-code-action@v1
         with:
@@ -41,4 +65,3 @@ jobs:
           prompt: '/code-review:code-review ${{ github.repository }}/pull/${{ github.event.pull_request.number }}'
           # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
           # or https://code.claude.com/docs/en/cli-reference for available options
-
