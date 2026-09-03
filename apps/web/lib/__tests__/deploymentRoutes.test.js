@@ -10,7 +10,7 @@ describe('production web-to-API routing', () => {
     const expected = [
       '/account/:path*',
       '/admin/:path*',
-      '/assistants/:path*',
+      '/assistants/:assistantType/chat',
       '/auth/:path*',
       '/billing/:path*',
       '/education/:path*',
@@ -27,6 +27,16 @@ describe('production web-to-API routing', () => {
       expect(index).toBeLessThan(config.rewrites.length - 1);
     }
     expect(config.rewrites.at(-1)?.destination).toBe('/index.html');
+  });
+
+  it('reserves the assistants document path for the SPA and proxies only chat calls', () => {
+    const sources = config.rewrites.map((rewrite) => rewrite.source);
+    expect(sources).not.toContain('/assistants/:path*');
+    expect(sources).toContain('/assistants/:assistantType/chat');
+    expect(config.rewrites.at(-1)).toMatchObject({
+      destination: '/index.html',
+    });
+    expect(config.rewrites.at(-1)?.source).not.toContain('assistants');
   });
 
   it('does not route local OCR or mobile artifacts into the SPA document', () => {

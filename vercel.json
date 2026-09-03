@@ -38,8 +38,8 @@
       "destination": "https://genemap-api-production.up.railway.app/account/:path*"
     },
     {
-      "source": "/assistants/:path*",
-      "destination": "https://genemap-api-production.up.railway.app/assistants/:path*"
+      "source": "/assistants/:assistantType/chat",
+      "destination": "https://genemap-api-production.up.railway.app/assistants/:assistantType/chat"
     },
     {
       "source": "/report-client-error",

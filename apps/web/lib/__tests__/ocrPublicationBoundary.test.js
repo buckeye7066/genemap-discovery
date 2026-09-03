@@ -30,8 +30,10 @@ describe('production OCR publication boundary', () => {
     expect(csp).not.toContain('cdn.jsdelivr.net');
     expect(csp).not.toContain('unpkg.com');
 
-    const assistantProxy = vercel.rewrites.find((rewrite) => rewrite.source === '/assistants/:path*');
-    expect(assistantProxy?.destination).toContain('/assistants/:path*');
+    const assistantProxy = vercel.rewrites.find(
+      (rewrite) => rewrite.source === '/assistants/:assistantType/chat',
+    );
+    expect(assistantProxy?.destination).toContain('/assistants/:assistantType/chat');
     const spaFallback = vercel.rewrites.at(-1)?.source || '';
     expect(spaFallback).toContain('ocr/');
     expect(spaFallback).toContain('mobile/');
