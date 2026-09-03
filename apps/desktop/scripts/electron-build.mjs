@@ -6,11 +6,15 @@
 import { createRequire } from 'node:module';
 import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
 const require = createRequire(import.meta.url);
 const electronVersion = require('electron/package.json').version;
 const builderCli = require.resolve('electron-builder/cli.js');
+const compatibilityEntry = fileURLToPath(
+  new URL('./electron-builder-entry.cjs', import.meta.url),
+);
 
 // electron-builder shells out to `pnpm` while collecting the packaged
 // dependency tree. Preserve the repository's Corepack-selected pnpm instead
@@ -26,7 +30,12 @@ if (corepackShims && existsSync(corepackShims)) {
 
 const result = spawnSync(
   process.execPath,
-  [builderCli, `-c.electronVersion=${electronVersion}`, ...process.argv.slice(2)],
+  [
+    compatibilityEntry,
+    builderCli,
+    `-c.electronVersion=${electronVersion}`,
+    ...process.argv.slice(2),
+  ],
   { stdio: 'inherit', env: childEnv },
 );
 process.exit(result.status ?? 1);
