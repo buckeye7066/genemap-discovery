@@ -123,6 +123,7 @@ describe('personalized assistant route', () => {
         responseReview: {
           status: 'passed',
           generationAttempts: 1,
+          generationSource: 'provider',
           matchedContextKinds: ['lab_observation', 'lab_value'],
           requiredContextKinds: ['lab_observation', 'lab_value'],
         },
@@ -249,7 +250,7 @@ describe('personalized assistant route', () => {
     expect(JSON.stringify(prisma.aIConversation.create.mock.calls[0][0].data.messages)).not.toContain('stop taking');
   });
 
-  it('publishes and persists nothing when both drafts remain generic', async () => {
+  it('replaces generic drafts with a reviewed response built from verified context', async () => {
     await buildApp();
     generateChat.mockReset().mockResolvedValue({
       text: 'Lab values can vary, so consider discussing them with a professional.',
@@ -262,13 +263,24 @@ describe('personalized assistant route', () => {
       payload: { message: 'What does this mean?', recordIds: ['11111111-1111-4111-8111-111111111111'] },
     });
 
-    expect(response.statusCode).toBe(502);
-    expect(response.json().code).toBe('ASSISTANT_RESPONSE_REJECTED');
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual(expect.objectContaining({
+      message: expect.stringMatching(/Glucose 102 mg\/dL/iu),
+      contextReceipt: expect.objectContaining({
+        responseReview: expect.objectContaining({
+          status: 'passed',
+          generationAttempts: 2,
+          generationSource: 'verified_context_fallback',
+          matchedContextKinds: expect.arrayContaining(['lab_observation', 'lab_value']),
+        }),
+      }),
+    }));
     expect(generateChat).toHaveBeenCalledTimes(2);
-    expect(prisma.aIConversation.create).not.toHaveBeenCalled();
+    expect(JSON.stringify(prisma.aIConversation.create.mock.calls[0][0].data.messages))
+      .not.toContain('Lab values can vary');
   });
 
-  it('publishes and persists nothing when the provider only returns truncated drafts', async () => {
+  it('replaces truncated drafts with a reviewed response built from verified context', async () => {
     await buildApp();
     generateChat.mockReset().mockResolvedValue({
       text: 'Your glucose was 102 mg/dL',
@@ -284,12 +296,80 @@ describe('personalized assistant route', () => {
       },
     });
 
-    expect(response.statusCode).toBe(502);
-    expect(response.json().code).toBe('ASSISTANT_RESPONSE_REJECTED');
+    expect(response.statusCode).toBe(200);
+    expect(response.json().message).toMatch(/Glucose 102 mg\/dL/iu);
+    expect(response.json().contextReceipt.responseReview).toEqual(expect.objectContaining({
+      generationAttempts: 2,
+      generationSource: 'verified_context_fallback',
+    }));
     expect(generateChat).toHaveBeenCalledTimes(2);
-    expect(prisma.aIConversation.create).not.toHaveBeenCalled();
-    expect(prisma.auditLog.create).not.toHaveBeenCalledWith(expect.objectContaining({
+    expect(JSON.stringify(prisma.aIConversation.create.mock.calls[0][0].data.messages))
+      .not.toContain('Your glucose was 102 mg/dL');
+    expect(prisma.auditLog.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ action: 'assistant.response.generated' }),
     }));
+  });
+
+  it('uses verified context when the provider is unavailable', async () => {
+    await buildApp();
+    const providerError = new Error('sanitized provider failure');
+    providerError.code = 'LLM_PROVIDER_TIMEOUT';
+    generateChat.mockRejectedValue(providerError);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/assistants/robert/chat',
+      payload: {
+        message: 'Explain my result',
+        recordIds: ['11111111-1111-4111-8111-111111111111'],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().message).toMatch(/Glucose 102 mg\/dL/iu);
+    expect(response.json().contextReceipt.responseReview).toEqual(expect.objectContaining({
+      generationAttempts: 1,
+      generationSource: 'verified_context_fallback',
+    }));
+  });
+
+  it('discards unsafe drafts before returning and persisting the verified-context fallback', async () => {
+    await buildApp();
+    generateChat.mockResolvedValue({
+      text: 'You should stop taking metformin because of this result.',
+      completion: 'complete',
+    });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/assistants/anastasia/chat',
+      payload: {
+        message: 'Explain my result',
+        recordIds: ['11111111-1111-4111-8111-111111111111'],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().message).toMatch(/Glucose 102 mg\/dL/iu);
+    expect(response.json().message).not.toContain('stop taking');
+    expect(JSON.stringify(prisma.aIConversation.create.mock.calls[0][0].data.messages))
+      .not.toContain('stop taking');
+  });
+
+  it('does not convert an unexpected implementation error into a fallback response', async () => {
+    await buildApp();
+    generateChat.mockRejectedValue(new Error('unexpected implementation defect'));
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/assistants/robert/chat',
+      payload: {
+        message: 'Explain my result',
+        recordIds: ['11111111-1111-4111-8111-111111111111'],
+      },
+    });
+
+    expect(response.statusCode).toBe(500);
+    expect(prisma.aIConversation.create).not.toHaveBeenCalled();
   });
 });

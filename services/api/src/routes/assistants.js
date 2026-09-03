@@ -8,6 +8,7 @@ import {
   ASSISTANT_DEFINITIONS,
   buildAssistantContext,
   buildAssistantMessages,
+  buildVerifiedContextFallback,
   reviewAssistantResponse,
 } from '../services/assistantContext.js';
 import { assertNoRawGenomicLLM } from '../services/genomicGuard.js';
@@ -91,6 +92,10 @@ function generatedText(generated) {
     return '';
   }
   return typeof generated === 'string' ? generated : generated?.text;
+}
+
+function isProviderGenerationFailure(error) {
+  return /^LLM_PROVIDER_(?:ERROR|TIMEOUT|CONNECTION)$/u.test(String(error?.code || ''));
 }
 
 function correctiveMessages(messages) {
@@ -230,24 +235,42 @@ export default async function assistantRoutes(fastify, options = {}) {
       includeMetadata: true,
       honestyPersona: `${definition.displayName} is an educational assistant, not a clinician.`,
     };
-    let generated = await generateChat(providerMessages, generationOptions);
-    let assistantMessage = generatedText(generated);
-    let responseReview = reviewAssistantResponse(assistantMessage, context);
-    let generationAttempts = 1;
+    let generated = null;
+    let assistantMessage = '';
+    let responseReview = reviewAssistantResponse('', context);
+    let generationAttempts = 0;
+    let generationSource = 'provider';
+    let providerFailureCode = null;
 
-    if (!responseReview.publishable) {
-      generationAttempts = 2;
-      generated = await generateChat(correctiveMessages(providerMessages), generationOptions);
+    try {
+      generationAttempts = 1;
+      generated = await generateChat(providerMessages, generationOptions);
       assistantMessage = generatedText(generated);
       responseReview = reviewAssistantResponse(assistantMessage, context);
+
+      if (!responseReview.publishable) {
+        generationAttempts = 2;
+        generated = await generateChat(correctiveMessages(providerMessages), generationOptions);
+        assistantMessage = generatedText(generated);
+        responseReview = reviewAssistantResponse(assistantMessage, context);
+      }
+    } catch (error) {
+      if (!isProviderGenerationFailure(error)) throw error;
+      providerFailureCode = error.code;
     }
+
     if (!responseReview.publishable) {
-      const error = new AppError(
-        'The assistant could not produce a safe, context-grounded response. Please rephrase the question.',
-        502,
-      );
-      error.code = 'ASSISTANT_RESPONSE_REJECTED';
-      throw error;
+      assistantMessage = buildVerifiedContextFallback(assistantType, context);
+      responseReview = reviewAssistantResponse(assistantMessage, context);
+      generationSource = 'verified_context_fallback';
+      if (!responseReview.publishable) {
+        const error = new AppError(
+          'The assistant could not produce a safe, context-grounded response. Please rephrase the question.',
+          502,
+        );
+        error.code = 'ASSISTANT_RESPONSE_REJECTED';
+        throw error;
+      }
     }
 
     const reviewedContextReceipt = {
@@ -255,6 +278,7 @@ export default async function assistantRoutes(fastify, options = {}) {
       responseReview: {
         status: 'passed',
         generationAttempts,
+        generationSource,
         matchedContextKinds: responseReview.matchedContextKinds,
         requiredContextKinds: responseReview.requiredContextKinds,
       },
@@ -281,9 +305,13 @@ export default async function assistantRoutes(fastify, options = {}) {
         metadata: {
           assistantType,
           contextVersion: reviewedContextReceipt.contextVersion,
-          completion: typeof generated === 'object' ? generated.completion || 'unknown' : 'unknown',
+          completion: generated && typeof generated === 'object'
+            ? generated.completion || 'unknown'
+            : 'unknown',
           generationAttempts,
+          generationSource,
           matchedContextKinds: responseReview.matchedContextKinds,
+          ...(providerFailureCode ? { providerFailureCode } : {}),
         },
       }, { required: true });
       return storedConversation;
@@ -304,6 +332,7 @@ export const __test = {
   conversationHistory,
   conversationTitle,
   correctiveMessages,
+  isProviderGenerationFailure,
   parseChatBody,
   saveConversation,
 };

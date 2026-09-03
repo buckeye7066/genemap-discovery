@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import {
   buildAssistantContext,
   buildAssistantMessages,
+  buildVerifiedContextFallback,
   reviewAssistantResponse,
 } from '../services/assistantContext.js';
 import { createPrismaMock } from './setup.js';
@@ -189,6 +190,32 @@ describe('assistant server context', () => {
       safe: true,
       grounded: false,
       matchedContextKinds: [],
+    }));
+  });
+
+  it('builds a safe, grounded fallback from parser-verified observations', () => {
+    const context = {
+      profile: { displayName: 'Alex' },
+      labRecords: [{
+        title: 'August panel',
+        observations: [{
+          name: 'Glucose',
+          value: '102',
+          unit: 'mg/dL',
+          referenceRange: { text: '70-99' },
+          flag: 'high',
+        }],
+      }],
+    };
+    const response = buildVerifiedContextFallback('anastasia', context);
+
+    expect(response).toMatch(/Glucose 102 mg\/dL/iu);
+    expect(response).toMatch(/70-99/u);
+    expect(reviewAssistantResponse(response, context)).toEqual(expect.objectContaining({
+      publishable: true,
+      safe: true,
+      grounded: true,
+      matchedContextKinds: ['lab_observation', 'lab_value'],
     }));
   });
 });

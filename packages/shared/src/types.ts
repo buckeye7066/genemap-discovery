@@ -544,6 +544,7 @@ export interface AssistantContextReceipt {
   responseReview?: {
     status: 'passed';
     generationAttempts: number;
+    generationSource: 'provider' | 'verified_context_fallback';
     matchedContextKinds: AssistantContextKind[];
     requiredContextKinds: AssistantContextKind[];
   };

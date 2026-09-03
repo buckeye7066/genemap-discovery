@@ -98,6 +98,9 @@ function ContextReceipt({ receipt }) {
           {requiredContextKinds.length
             ? ` Required: ${requiredContextKinds.join(', ').replaceAll('_', ' ')}.`
             : ''}
+          {receipt.responseReview.generationSource === 'verified_context_fallback'
+            ? ' A verified-context fallback replaced provider drafts that did not pass review.'
+            : ''}
         </p>
       )}
       <div>

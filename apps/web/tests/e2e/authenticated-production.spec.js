@@ -233,6 +233,7 @@ test('complete authenticated production journey persists data across logout and 
         })],
         responseReview: {
           status: 'passed',
+          generationSource: expect.stringMatching(/^(?:provider|verified_context_fallback)$/u),
           matchedContextKinds: expect.arrayContaining(['lab_observation', 'lab_value']),
           requiredContextKinds: ['lab_observation', 'lab_value'],
         },

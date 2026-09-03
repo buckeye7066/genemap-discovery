@@ -54,11 +54,21 @@ function compactObject(value) {
   return Object.fromEntries(Object.entries(value).filter(([, item]) => item != null && item !== ''));
 }
 
+function contextText(value, maximum = 160) {
+  if (value == null) return null;
+  const normalized = String(value)
+    .normalize('NFKC')
+    .replace(/\p{Cc}/gu, ' ')
+    .replace(/\s+/gu, ' ')
+    .trim();
+  return normalized ? normalized.slice(0, maximum) : null;
+}
+
 function normalizedAnchor(value) {
   if (typeof value !== 'string') return null;
   const normalized = value.normalize('NFKC').replace(/\s+/gu, ' ').trim().toLocaleLowerCase('en-US');
-  if (normalized.length < 4 || normalized.length > 160) return null;
-  return normalized;
+  if (normalized.length < 4) return null;
+  return normalized.slice(0, 160);
 }
 
 function addAnchor(output, kind, value) {
@@ -151,6 +161,140 @@ export function reviewAssistantResponse(response, context) {
     matchedContextKinds,
     requiredContextKinds,
   };
+}
+
+function referenceRangeText(referenceRange) {
+  if (typeof referenceRange === 'string') return contextText(referenceRange, 120);
+  if (!referenceRange || typeof referenceRange !== 'object') return null;
+  const explicit = contextText(referenceRange.text, 120);
+  if (explicit) return explicit;
+  const low = contextText(referenceRange.low, 40);
+  const high = contextText(referenceRange.high, 40);
+  if (low && high) return `${low}-${high}`;
+  return low ? `at least ${low}` : high ? `up to ${high}` : null;
+}
+
+function reportedObservationLines(context) {
+  const lines = [];
+  for (const record of context?.labRecords || []) {
+    for (const observation of record.observations || []) {
+      const name = contextText(observation.name, 120);
+      const value = contextText(observation.value, 80);
+      if (!name || !value) continue;
+      const unit = contextText(observation.unit, 40);
+      const range = referenceRangeText(observation.referenceRange);
+      const flag = contextText(observation.flag, 40);
+      let line = `- ${name} ${value}${unit ? ` ${unit}` : ''}.`;
+      if (range) line += ` Uploaded reference range: ${range}.`;
+      if (flag) line += ` The parser recorded the report flag as ${flag}.`;
+      lines.push(line);
+      if (lines.length >= 5) return lines;
+    }
+  }
+  return lines;
+}
+
+/**
+ * Produce a useful response from verified server-owned context when provider
+ * drafts are incomplete, generic, or cross the safety boundary. This is not a
+ * filename summary and it never invents clinical interpretation: structured
+ * facts come only from parser-versioned owner records, and the caller subjects
+ * the result to the same deterministic safety/grounding review as model text.
+ */
+export function buildVerifiedContextFallback(assistantType, context) {
+  const definition = ASSISTANT_DEFINITIONS[assistantType];
+  if (!definition) throw new ValidationError('assistantType must be anastasia or robert');
+
+  const observationLines = reportedObservationLines(context);
+  if (observationLines.length) {
+    const interpretationBoundary = assistantType === 'robert'
+      ? 'Reference intervals can vary by assay, specimen conditions, and the population used by the laboratory.'
+      : 'A reference range is the laboratory’s comparison range; it is not, by itself, a diagnosis.';
+    return [
+      `I can give a bounded ${definition.displayName} review using the structured values in your selected record.`,
+      '',
+      ...observationLines,
+      '',
+      'These are reported values transcribed from the upload. Repeating them does not establish a diagnosis or explain their cause.',
+      interpretationBoundary,
+      'Useful questions to discuss with a qualified clinician include whether collection conditions such as fasting affect interpretation, how the result compares with prior measurements, and whether the laboratory reference interval fits the method used.',
+    ].join('\n');
+  }
+
+  const textOnlyRecord = (context?.labRecords || []).find((record) => contextText(record.title));
+  if (textOnlyRecord) {
+    return [
+      `I can confirm that your selected parsed record is ${contextText(textOnlyRecord.title)}.`,
+      'It does not contain a structured result that I can restate reliably, so I will not infer a value or diagnosis from its filename or free text.',
+      'A useful next step is to ask the laboratory or a qualified clinician which reported value and reference interval should be reviewed.',
+    ].join(' ');
+  }
+
+  const healthProfileFields = [
+    ['goals', 'goal'],
+    ['conditions', 'condition'],
+    ['medications', 'medication'],
+    ['allergies', 'allergy'],
+    ['familyHistory', 'family-history item'],
+    ['symptoms', 'symptom'],
+  ];
+  for (const [field, label] of healthProfileFields) {
+    const first = Array.isArray(context?.healthProfile?.[field])
+      ? context.healthProfile[field].map((value) => contextText(value)).find(Boolean)
+      : null;
+    if (first) {
+      return [
+        `Your saved health profile includes this ${label}: ${first}.`,
+        'I can use that detail to frame educational questions, but it does not establish a diagnosis or treatment plan.',
+        'Consider discussing what evidence would clarify that question with a qualified clinician or genetic counselor.',
+      ].join(' ');
+    }
+  }
+
+  const age = Number(context?.profile?.age);
+  if (Number.isFinite(age)) {
+    return [
+      `Your saved profile lists age ${age}.`,
+      'Age can affect how educational reference information is framed, but it cannot determine a diagnosis by itself.',
+      'A qualified clinician can explain which age-specific context is relevant to the question you asked.',
+    ].join(' ');
+  }
+  for (const [field, label] of [
+    ['educationLevel', 'education level'],
+    ['fieldOfStudy', 'field of study'],
+    ['researchInterests', 'research interest'],
+    ['currentProjects', 'current project'],
+  ]) {
+    const value = contextText(context?.profile?.[field]);
+    if (value) {
+      return [
+        `Your saved ${label} is ${value}.`,
+        'I can use that profile detail to set the level and focus of educational explanations.',
+        'Please narrow the question to the concept or evidence you want reviewed.',
+      ].join(' ');
+    }
+  }
+
+  const researchAnchor = [
+    ...(context?.research?.geneSets || []).flatMap((geneSet) => [
+      ...(geneSet.genes || []),
+      geneSet.name,
+    ]),
+    ...(context?.research?.projects || []).map((project) => project.title),
+    ...(context?.research?.recentSearches || []).map((search) => search.query),
+  ].map((value) => contextText(value)).find(Boolean);
+  if (researchAnchor) {
+    return [
+      `Your saved research context includes ${researchAnchor}.`,
+      'I can discuss its educational genetics context and separate established evidence from hypotheses.',
+      'Please specify the comparison, mechanism, or evidence question you want examined.',
+    ].join(' ');
+  }
+
+  return [
+    `${definition.displayName} does not have a selected record or substantive saved profile detail that directly grounds this question.`,
+    'I can still explain general genetics concepts, or you can select a parsed health record for a context-specific educational review.',
+  ].join(' ');
 }
 
 function usableLabContent(content) {
@@ -393,6 +537,7 @@ export function buildAssistantMessages(assistantType, context, history, message)
 }
 
 export const __test = {
+  buildVerifiedContextFallback,
   groundingAnchors,
   profileContext,
   reviewAssistantResponse,
