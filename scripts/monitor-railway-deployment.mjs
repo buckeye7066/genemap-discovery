@@ -5,7 +5,7 @@ import { resolve } from 'node:path';
 
 const execFileAsync = promisify(execFile);
 const FAILED_STATUSES = new Set(['FAILED', 'CRASHED', 'REMOVED']);
-const DEFAULT_MAX_ATTEMPTS = 40;
+const DEFAULT_MAX_ATTEMPTS = 60;
 const DEFAULT_POLL_MS = 15_000;
 const DEFAULT_COMMAND_TIMEOUT_MS = 30_000;
 const DEFAULT_FETCH_TIMEOUT_MS = 10_000;
@@ -28,6 +28,13 @@ function bounded(value, maximum = LOG_OUTPUT_LIMIT) {
   return text.length > maximum
     ? `${text.slice(0, maximum)}\n[output truncated at ${maximum} characters]`
     : text;
+}
+
+export function redactDiagnostic(value) {
+  return String(value || '')
+    .replace(/\b(Bearer)\s+[A-Za-z0-9._~-]+/giu, '$1 ***')
+    .replace(/\b(password|secret|token|authorization|api[_-]?key)\s*[=:]\s*[^\s,;]+/giu, '$1=***')
+    .replace(/([a-z][a-z0-9+.-]*:\/\/[^\s/:@]+:)[^\s/@]+@/giu, '$1***@');
 }
 
 async function defaultRunRailway(args, options = {}) {
@@ -213,8 +220,8 @@ const isMain = process.argv[1]
 
 if (isMain) {
   monitorRailwayDeployment().catch((error) => {
-    const sanitizedMessage = `An error occurred during deployment verification.`;
-    console.error(`::error title=Railway deployment verification failed::${sanitizedMessage}`);
+    console.error('::error title=Railway deployment verification failed::The exact deployment did not become healthy.');
+    console.error(redactDiagnostic(bounded(error?.message || error)));
     process.exitCode = 1;
   });
 }

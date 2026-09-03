@@ -3,6 +3,7 @@ import { defineConfig } from 'vite'
 import { createReadStream, readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import path from 'path'
+import { releaseIdentityJson } from './lib/releaseIdentity.js'
 
 const require = createRequire(import.meta.url)
 const tessdataPackage = path.dirname(require.resolve('@tesseract.js-data/eng/package.json'))
@@ -32,8 +33,33 @@ function localOcrData() {
   }
 }
 
+function releaseIdentity() {
+  const publicPath = '/release.json'
+  const source = () => releaseIdentityJson(process.env)
+  return {
+    name: 'release-identity',
+    generateBundle() {
+      this.emitFile({
+        type: 'asset',
+        fileName: publicPath.slice(1),
+        source: source(),
+      })
+    },
+    configureServer(server) {
+      server.middlewares.use((request, response, next) => {
+        const pathname = new URL(request.url || '/', 'http://localhost').pathname
+        if (pathname !== publicPath) return next()
+        response.statusCode = 200
+        response.setHeader('Content-Type', 'application/json; charset=utf-8')
+        response.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
+        response.end(source())
+      })
+    },
+  }
+}
+
 export default defineConfig({
-  plugins: [react(), localOcrData()],
+  plugins: [react(), localOcrData(), releaseIdentity()],
   server: {
     host: true,
     port: 5173,

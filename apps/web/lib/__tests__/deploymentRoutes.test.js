@@ -34,5 +34,14 @@ describe('production web-to-API routing', () => {
     expect(fallback).toContain('assets/');
     expect(fallback).toContain('mobile/');
     expect(fallback).toContain('ocr/');
+    expect(fallback).toContain('release\\.json');
+  });
+
+  it('serves the release identity without caching it', () => {
+    const releaseHeaders = config.headers.find((entry) => entry.source === '/release.json');
+    expect(releaseHeaders?.headers).toContainEqual({
+      key: 'Cache-Control',
+      value: 'no-cache, no-store, must-revalidate',
+    });
   });
 });

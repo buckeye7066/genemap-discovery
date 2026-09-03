@@ -4,6 +4,7 @@ import {
   deploymentForCommit,
   monitorRailwayDeployment,
   parseDeploymentList,
+  redactDiagnostic,
 } from '../monitor-railway-deployment.mjs';
 
 const SHA = 'a'.repeat(40);
@@ -91,4 +92,13 @@ test('does not accept Railway success until live health reports the same SHA', a
     }),
     /live releaseSha b{40} did not match a{40}/u,
   );
+});
+
+test('deployment diagnostics remain useful while credentials are redacted', () => {
+  const diagnostic = redactDiagnostic(
+    'build failed token=railway-secret password:hunter2 postgres://user:database-pass@host/db',
+  );
+  assert.match(diagnostic, /build failed/iu);
+  assert.doesNotMatch(diagnostic, /railway-secret|hunter2|database-pass/iu);
+  assert.match(diagnostic, /token=\*\*\*|password=\*\*\*|user:\*\*\*@/u);
 });

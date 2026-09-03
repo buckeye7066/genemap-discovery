@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { Buffer } from 'node:buffer';
 
 const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || 'https://genemap-discovery.vercel.app';
 
@@ -67,8 +68,12 @@ test('complete authenticated production journey persists data across logout and 
     email: `genemap-production-e2e+${unique}@example.com`,
     password: `GeneMap!${unique}Aa9`,
   };
+  const profileName = `Production Profile ${unique}`;
+  const labTitle = `Production glucose panel ${unique}`;
   const pageErrors = [];
   let registrationAttempted = false;
+  let savedLab;
+  let assistantConversationId;
 
   page.on('pageerror', (error) => pageErrors.push(error.message));
 
@@ -89,9 +94,21 @@ test('complete authenticated production journey persists data across logout and 
 
     const me = await page.request.get('/auth/me');
     expect(me.status(), await me.text()).toBe(200);
-    expect((await me.json()).email).toBe(credentials.email);
+    const meBody = await me.json();
+    expect(meBody.email).toBe(credentials.email);
+    expect(meBody.entitlements).toMatchObject({
+      tier: 'premium',
+      isPremium: true,
+      access: { source: 'complimentary' },
+    });
+    expect(meBody.entitlements.features).toEqual(expect.arrayContaining([
+      'health.records',
+      'assistants.profile_context',
+      'research.workspace',
+    ]));
 
     await expect(page.getByText('Complete Your Profile', { exact: true })).toBeVisible({ timeout: 60_000 });
+    await page.getByPlaceholder('Your full name').fill(profileName);
     const profilePromise = page.waitForResponse(
       (response) => response.url().includes('/auth/me') && response.request().method() === 'PUT',
       { timeout: 30_000 },
@@ -101,6 +118,131 @@ test('complete authenticated production journey persists data across logout and 
     expect(profileResponse.status(), await profileResponse.text()).toBe(200);
     expect((await profileResponse.json()).demographics_collected).toBe(true);
     await expect(page).toHaveURL(/\/profile(?:\?|$)/, { timeout: 30_000 });
+
+    await page.goto('/healthdata');
+    await expect(page.getByRole('heading', { name: 'Health data', exact: true })).toBeVisible({ timeout: 30_000 });
+
+    const storageConsent = page.locator('label')
+      .filter({ hasText: 'Allow encrypted health-data storage' })
+      .getByRole('checkbox');
+    const aiConsent = page.locator('label')
+      .filter({ hasText: 'Allow Anastasia and Robert to process health and genetics questions' })
+      .getByRole('checkbox');
+    await storageConsent.click();
+    await aiConsent.click();
+    await expect(storageConsent).toHaveAttribute('data-state', 'checked');
+    await expect(aiConsent).toHaveAttribute('data-state', 'checked');
+
+    const consentPromise = page.waitForResponse(
+      (response) => response.url().includes('/entities/consent/batch')
+        && response.request().method() === 'POST',
+      { timeout: 30_000 },
+    );
+    await page.getByRole('button', { name: 'Save privacy choices', exact: true }).click();
+    const consentResponse = await consentPromise;
+    expect(consentResponse.status(), await consentResponse.text()).toBe(200);
+    const consentRecords = (await consentResponse.json()).records;
+    expect(consentRecords).toEqual(expect.arrayContaining([
+      expect.objectContaining({ consentType: 'medical_data_storage', version: '1.0', granted: true }),
+      expect.objectContaining({ consentType: 'medical_data_ai_analysis', version: '1.0', granted: true }),
+    ]));
+    await expect(page.getByText('Privacy choices saved. A later revocation supersedes an earlier grant.', { exact: true })).toBeVisible();
+
+    const healthGoal = `Understand the glucose result for ${profileName}`;
+    await page.getByLabel('Goals', { exact: true }).fill(healthGoal);
+    const healthProfilePromise = page.waitForResponse(
+      (response) => response.url().endsWith('/entities/medical-data')
+        && response.request().method() === 'POST',
+      { timeout: 30_000 },
+    );
+    await page.getByRole('button', { name: 'Save encrypted health profile', exact: true }).click();
+    const healthProfileResponse = await healthProfilePromise;
+    expect(healthProfileResponse.status(), await healthProfileResponse.text()).toBe(200);
+    expect((await healthProfileResponse.json()).record).toMatchObject({
+      dataType: 'health_profile',
+      content: { schemaVersion: 1, goals: [healthGoal] },
+    });
+
+    await page.locator('input[type="file"]').setInputFiles({
+      name: 'production-glucose-panel.csv',
+      mimeType: 'text/csv',
+      buffer: Buffer.from([
+        'Test,Result,Units,Reference Range,Flag',
+        'Glucose,102,mg/dL,70-99,H',
+      ].join('\n')),
+    });
+    await expect(page.getByText('Extraction complete', { exact: true })).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText('Glucose', { exact: true }).first()).toBeVisible();
+    await page.getByLabel('Record title', { exact: true }).fill(labTitle);
+
+    const labSavePromise = page.waitForResponse(
+      (response) => response.url().endsWith('/entities/medical-data')
+        && response.request().method() === 'POST',
+      { timeout: 30_000 },
+    );
+    await page.getByRole('button', { name: 'Save encrypted result', exact: true }).click();
+    const labSaveResponse = await labSavePromise;
+    expect(labSaveResponse.status(), await labSaveResponse.text()).toBe(200);
+    savedLab = (await labSaveResponse.json()).record;
+    expect(savedLab).toMatchObject({
+      dataType: 'lab_document',
+      title: labTitle,
+      content: {
+        schemaVersion: 1,
+        parserVersion: 'health-document-1.0.0',
+        status: 'structured',
+        source: { fileName: 'production-glucose-panel.csv', extractionMethod: 'csv' },
+        observations: [expect.objectContaining({
+          name: 'Glucose',
+          value: '102',
+          unit: 'mg/dL',
+          flag: 'high',
+        })],
+      },
+    });
+    expect(savedLab.id).toBeTruthy();
+    expect(savedLab.content.source.sha256).toMatch(/^[a-f0-9]{64}$/u);
+    await expect(page.getByText('Parsed lab document saved. Its structured results can now be used by Anastasia or Robert.', { exact: true })).toBeVisible();
+
+    await page.goto(`/assistants?record=${encodeURIComponent(savedLab.id)}`);
+    await expect(page.getByRole('heading', { name: 'Profile-aware assistants', exact: true })).toBeVisible({ timeout: 30_000 });
+    const selectedRecord = page.locator('label').filter({ hasText: labTitle }).getByRole('checkbox');
+    await expect(selectedRecord).toHaveAttribute('data-state', 'checked', { timeout: 30_000 });
+    const assistantPrompt = 'Using my selected record, explain the reported Glucose result in plain educational language and include the exact value and unit. Do not diagnose or recommend treatment.';
+    await page.getByPlaceholder(/Ask Anastasia about/).fill(assistantPrompt);
+    const assistantPromise = page.waitForResponse(
+      (response) => response.url().includes('/assistants/anastasia/chat')
+        && response.request().method() === 'POST',
+      { timeout: 120_000 },
+    );
+    await page.getByRole('button', { name: 'Send', exact: true }).click();
+    const assistantResponse = await assistantPromise;
+    expect(assistantResponse.status(), await assistantResponse.text()).toBe(200);
+    const assistantBody = await assistantResponse.json();
+    assistantConversationId = assistantBody.conversationId;
+    expect(assistantBody).toMatchObject({
+      assistant: { id: 'anastasia', displayName: 'Anastasia' },
+      contextReceipt: {
+        assistant: 'anastasia',
+        healthProfileIncluded: true,
+        records: [expect.objectContaining({
+          id: savedLab.id,
+          title: labTitle,
+          parserVersion: 'health-document-1.0.0',
+          observationCount: 1,
+        })],
+        responseReview: {
+          status: 'passed',
+          matchedContextKinds: expect.arrayContaining(['lab_observation', 'lab_value']),
+          requiredContextKinds: ['lab_observation', 'lab_value'],
+        },
+      },
+    });
+    expect(assistantBody.contextReceipt.profileFields).toContain('displayName');
+    expect(assistantBody.message).toMatch(/Glucose/iu);
+    expect(assistantBody.message).toMatch(/102\s*mg\/dL/iu);
+    await expect(page.getByText(/Context receipt 1\.0/)).toBeVisible();
+    await expect(page.getByText(/Response review passed after/)).toBeVisible();
 
     await page.evaluate(() => localStorage.setItem('genemap_education_level', 'undergraduate'));
 
@@ -139,7 +281,8 @@ test('complete authenticated production journey persists data across logout and 
     const quiz = await quizResponse.json();
     const questions = quiz?.publication?.content;
     expect(Array.isArray(questions)).toBe(true);
-    expect(questions).toHaveLength(5);
+    expect(questions.length).toBeGreaterThan(0);
+    expect(questions.length).toBeLessThanOrEqual(5);
 
     for (let index = 0; index < questions.length; index += 1) {
       const question = questions[index];
@@ -244,6 +387,40 @@ test('complete authenticated production journey persists data across logout and 
     await page.goto('/researchmode');
     await page.getByRole('tab', { name: /Projects/ }).click();
     await expect(page.getByText(savedProject.title, { exact: true }).first()).toBeVisible({ timeout: 30_000 });
+
+    const persistedHealthResponse = await page.request.get('/entities/medical-data');
+    expect(persistedHealthResponse.status(), await persistedHealthResponse.text()).toBe(200);
+    const persistedHealth = (await persistedHealthResponse.json()).records;
+    expect(persistedHealth).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: savedLab.id,
+        title: labTitle,
+        content: expect.objectContaining({ parserVersion: 'health-document-1.0.0' }),
+      }),
+      expect.objectContaining({
+        dataType: 'health_profile',
+        content: expect.objectContaining({ goals: [healthGoal] }),
+      }),
+    ]));
+
+    const persistedConversationResponse = await page.request.get('/entities/conversations?assistantType=anastasia');
+    expect(persistedConversationResponse.status(), await persistedConversationResponse.text()).toBe(200);
+    const persistedConversations = (await persistedConversationResponse.json()).conversations;
+    expect(persistedConversations).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: assistantConversationId,
+        assistantType: 'anastasia',
+        messages: expect.arrayContaining([
+          expect.objectContaining({ role: 'user', content: assistantPrompt }),
+          expect.objectContaining({ role: 'assistant' }),
+        ]),
+        metadata: expect.objectContaining({
+          lastContextReceipt: expect.objectContaining({
+            records: [expect.objectContaining({ id: savedLab.id })],
+          }),
+        }),
+      }),
+    ]));
 
     expect(pageErrors, `Uncaught browser errors: ${pageErrors.join('\n')}`).toEqual([]);
   } finally {

@@ -37,7 +37,7 @@
     "db:migrate": "corepack pnpm --filter @genemap/api db:migrate",
     "db:migrate:deploy": "corepack pnpm --filter @genemap/api db:migrate:deploy",
     "db:studio": "corepack pnpm --filter @genemap/api db:studio",
-    "test:backup": "node --test scripts/__tests__/backup-snapshot.test.mjs scripts/__tests__/monitor-railway-deployment.test.mjs scripts/__tests__/publish-android-release.test.mjs scripts/__tests__/build-mobile-bundle.test.mjs",
+    "test:backup": "node --test scripts/__tests__/backup-snapshot.test.mjs scripts/__tests__/monitor-railway-deployment.test.mjs scripts/__tests__/publish-android-release.test.mjs scripts/__tests__/build-mobile-bundle.test.mjs scripts/__tests__/wait-for-live-release.test.mjs",
     "test:ledger": "node --test ops/closure-ledger/__tests__/closure-ledger.test.mjs"
   },
   "pnpm": {
@@ -76,7 +76,7 @@
       "vitest@<3.2.6": ">=3.2.6 <4",
       "vite@>=6.0.0 <=6.4.1": ">=6.4.2 <7",
       "flatted@<=3.4.1": ">=3.4.2",
-      "@xmldom/xmldom@<0.8.12": ">=0.8.12",
+      "@xmldom/xmldom@<0.8.15": "0.8.15",
       "@xmldom/xmldom@>=0.9.0 <0.9.12": ">=0.9.12",
       "esbuild@<=0.24.2": ">=0.25.0",
       "react-router@>=7.0.0 <7.18.0": ">=7.18.0",

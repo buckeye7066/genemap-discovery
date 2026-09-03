@@ -26,11 +26,20 @@ jobs:
   smoke:
     name: Live health, readiness, CORS, and web shell
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 20
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '24'
+
+      - name: Wait for exact API and web release
+        if: github.event_name == 'push'
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+        run: node scripts/wait-for-live-release.mjs
 
       - name: Check API liveness
         run: |
@@ -67,8 +76,6 @@ jobs:
             { method: 'POST', path: '/genomics/vcf/parse', body: {} },
             { method: 'GET', path: '/genomics/variant/search?q=rs123' },
             { method: 'GET', path: '/genomics/clinvar/search?q=BRCA1' },
-            { method: 'GET', path: '/entities/medical-data' },
-            { method: 'GET', path: '/entities/conversations' },
             { method: 'GET', path: '/admin/self-test' },
           ];
 
@@ -94,6 +101,43 @@ jobs:
               throw new Error(
                 `${probe.method} ${probe.path} escaped the publication boundary: ` +
                 `${response.status} ${JSON.stringify(body)}`
+              );
+            }
+          }
+          NODE
+
+      - name: Check enabled private health and assistant paths
+        run: |
+          node --input-type=module <<'NODE'
+          const baseUrl = process.env.API_URL.replace(/\/+$/, '');
+          const probes = [
+            { method: 'GET', path: '/entities/medical-data' },
+            { method: 'GET', path: '/entities/conversations' },
+            {
+              method: 'POST',
+              path: '/assistants/anastasia/chat',
+              body: { message: 'Verify the authentication boundary.', recordIds: [] },
+            },
+          ];
+
+          for (const probe of probes) {
+            const response = await fetch(`${baseUrl}${probe.path}`, {
+              method: probe.method,
+              headers: probe.body ? { 'content-type': 'application/json' } : undefined,
+              body: probe.body ? JSON.stringify(probe.body) : undefined,
+              signal: AbortSignal.timeout(15_000),
+            });
+            const raw = await response.text();
+            let body;
+            try {
+              body = JSON.parse(raw);
+            } catch {
+              throw new Error(`${probe.method} ${probe.path} returned non-JSON: ${raw.slice(0, 200)}`);
+            }
+            if (response.status !== 401 || body.error !== 'Authentication required') {
+              throw new Error(
+                `${probe.method} ${probe.path} did not enforce its live private route: `
+                + `${response.status} ${JSON.stringify(body)}`
               );
             }
           }
@@ -146,6 +190,7 @@ jobs:
   # disposable-account journey that curl cannot prove.
   e2e:
     name: E2E (public + authenticated, Chromium)
+    needs: smoke
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
