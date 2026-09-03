@@ -38,7 +38,13 @@
     "db:migrate:deploy": "corepack pnpm --filter @genemap/api db:migrate:deploy",
     "db:studio": "corepack pnpm --filter @genemap/api db:studio",
     "test:backup": "node --test scripts/__tests__/backup-snapshot.test.mjs scripts/__tests__/monitor-railway-deployment.test.mjs scripts/__tests__/publish-android-release.test.mjs scripts/__tests__/build-mobile-bundle.test.mjs scripts/__tests__/wait-for-live-release.test.mjs",
-    "test:ledger": "node --test ops/closure-ledger/__tests__/closure-ledger.test.mjs"
+    "test:ledger": "node --test ops/closure-ledger/__tests__/closure-ledger.test.mjs",
+    "memory:startup": "node scripts/obsidian-memory.mjs startup",
+    "memory:health": "node scripts/obsidian-memory.mjs health",
+    "memory:recall": "node scripts/obsidian-memory.mjs recall",
+    "memory:note": "node scripts/obsidian-memory.mjs note",
+    "predev": "npm run memory:startup",
+    "prestart": "npm run memory:startup"
   },
   "pnpm": {
     "auditConfig": {
