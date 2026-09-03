@@ -5,15 +5,6 @@ import { resolve } from 'node:path';
 const ROOT = process.cwd();
 const EXCEPTIONS = [
   {
-    id: 'GHSA-jmr9-qjv8-65gv',
-    packageName: 'extract-zip',
-    reviewBy: '2026-09-15',
-    reason:
-      'The affected package is reachable only through Electron desktop build tooling and is not shipped as application runtime code; production does not accept or extract untrusted archives through this dependency.',
-    realFix:
-      'Remove this exception when Electron replaces extract-zip or the advisory publishes a patched compatible version, then refresh the pinned lockfile and rebuild every desktop target.',
-  },
-  {
     id: 'GHSA-qwww-vcr4-c8h2',
     packageName: 'react-router',
     reviewBy: '2026-10-01',

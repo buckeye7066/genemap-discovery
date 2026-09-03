@@ -1,11 +1,76 @@
-node_modules/
-dist/
-coverage/
-.ledger-data/
-*.log
-*.tsbuildinfo
-.DS_Store
-
+# Environment variables
 .env
 .env.*
 !.env.example
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Dependencies
+node_modules
+
+# Build output
+dist
+dist-ssr
+dist-electron
+build
+.next
+*.local
+*.tsbuildinfo
+
+# Stray npm lockfiles — this is a pnpm workspace; pnpm-lock.yaml is canonical.
+# A package-lock.json triggers accidental `npm install` runs that pollute
+# node_modules with an npm-style tree (orphaned transitive deps), breaking
+# pnpm's resolution locally.
+package-lock.json
+apps/*/package-lock.json
+
+# Backups
+backups/
+*.zip
+*.sql
+*.sql.gz
+
+# Production launch evidence can name internal owners, vendors, dashboards, and
+# operational decisions. Commit the example template, not the filled evidence.
+ops/production-launch-evidence*.json
+!ops/production-launch-evidence.example.json
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Prisma
+# Committed migrations are required in production (Dockerfile/Railway run
+# `prisma migrate deploy` which expects them on disk). Do NOT ignore them.
+# The blanket `*.sql` rule above would swallow them, so re-include explicitly.
+!services/api/prisma/migrations/
+!services/api/prisma/migrations/**/*.sql
+services/api/prisma/*.db
+services/api/prisma/*.db-journal
+
+# Closure-ledger local state
+.ledger-data/
+
+# Nightly agent sweep output (regenerated every run; not source)
+reports/agents/
+
+# Testing
+coverage
+.nyc_output
+playwright-report
+test-results
+.vercel

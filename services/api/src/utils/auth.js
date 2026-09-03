@@ -48,9 +48,30 @@ export function verifyRefreshToken(token) {
 }
 
 export async function hashRefreshToken(token) {
-  return bcrypt.hash(token, 10);
+  // bcrypt ignores bytes after the 72nd byte. JWT refresh tokens for the same
+  // user share that prefix, so bcrypt can treat two distinct rotations as the
+  // same credential. HMAC the complete token instead; the prefix makes the
+  // storage format explicit.
+  const digest = crypto
+    .createHmac('sha256', JWT_REFRESH_SECRET)
+    .update(token, 'utf8')
+    .digest('hex');
+  return `hmac-sha256:${digest}`;
 }
 
 export async function verifyRefreshTokenHash(token, hash) {
-  return bcrypt.compare(token, hash);
+  if (typeof token !== 'string' || typeof hash !== 'string') return false;
+
+  if (hash.startsWith('hmac-sha256:')) {
+    const expected = await hashRefreshToken(token);
+    const actualBuffer = Buffer.from(hash, 'utf8');
+    const expectedBuffer = Buffer.from(expected, 'utf8');
+    return actualBuffer.length === expectedBuffer.length
+      && crypto.timingSafeEqual(actualBuffer, expectedBuffer);
+  }
+
+  // Legacy bcrypt refresh hashes are deliberately rejected. They cannot
+  // safely distinguish tokens with a shared 72-byte prefix, so accepting them
+  // would retain a replay window. Existing users reauthenticate once instead.
+  return false;
 }

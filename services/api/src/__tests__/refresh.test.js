@@ -1,6 +1,11 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { buildTestApp, createPrismaMock } from './setup.js';
-import { hashPassword, generateRefreshToken, hashRefreshToken } from '../utils/auth.js';
+import {
+  hashPassword,
+  generateRefreshToken,
+  hashRefreshToken,
+  verifyRefreshTokenHash,
+} from '../utils/auth.js';
 
 let app;
 let prisma;
@@ -42,6 +47,27 @@ async function seedSession() {
 }
 
 describe('POST /auth/refresh', () => {
+  it('hashes the complete refresh token instead of bcrypt-truncating its shared prefix', async () => {
+    // This is the exact condition that makes bcrypt unsafe for long JWT
+    // storage: distinct credentials can share all 72 bytes bcrypt retains.
+    const sharedJwtPrefix = 'x'.repeat(72);
+    const first = `${sharedJwtPrefix}.first-rotation`;
+    const second = `${sharedJwtPrefix}.second-rotation`;
+    expect(first).not.toBe(second);
+    expect(first.slice(0, 72)).toBe(second.slice(0, 72));
+
+    const firstHash = await hashRefreshToken(first);
+    const secondHash = await hashRefreshToken(second);
+    expect(firstHash).toMatch(/^hmac-sha256:[a-f0-9]{64}$/);
+    expect(secondHash).not.toBe(firstHash);
+    expect(await verifyRefreshTokenHash(first, firstHash)).toBe(true);
+    expect(await verifyRefreshTokenHash(second, firstHash)).toBe(false);
+
+    const unsafeLegacyBcryptHash = await hashPassword(first);
+    expect(await verifyRefreshTokenHash(first, unsafeLegacyBcryptHash)).toBe(false);
+    expect(await verifyRefreshTokenHash(first, 'unsupported-format')).toBe(false);
+  });
+
   it('rejects with 401 when no refresh cookie is present', async () => {
     const res = await app.inject({ method: 'POST', url: '/auth/refresh' });
     expect(res.statusCode).toBe(401);
@@ -96,6 +122,13 @@ describe('POST /auth/refresh', () => {
       headers: { cookie: `refreshToken=${refreshToken}` },
     });
     expect(first.statusCode).toBe(200);
+    const rotatedRefresh = first.cookies.find((cookie) => cookie.name === 'refreshToken');
+    expect(rotatedRefresh?.value).toBeTruthy();
+    expect(rotatedRefresh.value).not.toBe(refreshToken);
+    expect(prisma._store.session).toHaveLength(1);
+    expect(
+      await verifyRefreshTokenHash(refreshToken, prisma._store.session[0].refreshTokenHash)
+    ).toBe(false);
 
     const reused = await app.inject({
       method: 'POST',
