@@ -12,7 +12,23 @@
  * legacy caller omits it. Remove this bridge once app-builder-lib no longer
  * resolves plist 3.1.0.
  */
-const { DOMParser } = require('@xmldom/xmldom');
+const { createRequire } = require('node:module');
+
+const builderCli = process.argv[2];
+if (!builderCli) {
+  throw new Error('electron-builder CLI path was not provided');
+}
+
+// Follow the same dependency-resolution chain used by electron-builder.
+// The repository also has a root @xmldom/xmldom installation, but plist is
+// loaded by app-builder-lib and can resolve a distinct nested copy. Patching
+// the root prototype would therefore leave the packaging parser untouched.
+const builderRequire = createRequire(builderCli);
+const appBuilderEntry = builderRequire.resolve('app-builder-lib');
+const appBuilderRequire = createRequire(appBuilderEntry);
+const plistEntry = appBuilderRequire.resolve('plist');
+const plistRequire = createRequire(plistEntry);
+const { DOMParser } = plistRequire('@xmldom/xmldom');
 
 const patchMarker = Symbol.for('genemap.xmldom.defaultMimeCompatibility');
 const originalParseFromString = DOMParser.prototype.parseFromString;
@@ -30,11 +46,6 @@ if (!originalParseFromString[patchMarker]) {
     value: true,
   });
   DOMParser.prototype.parseFromString = parseFromStringWithExplicitDefault;
-}
-
-const builderCli = process.argv[2];
-if (!builderCli) {
-  throw new Error('electron-builder CLI path was not provided');
 }
 
 process.argv = [process.execPath, builderCli, ...process.argv.slice(3)];
