@@ -16,6 +16,7 @@
  */
 
 import { z } from 'zod';
+import { configuredTextModel, configuredTextProvider } from './llmRuntime.js';
 
 // Minimum length for any cryptographic secret used by the app.
 // 32 chars ≈ 192 bits of entropy if base64/hex; below this is unsafe.
@@ -109,7 +110,6 @@ const PRODUCTION_REQUIRED = [
   'STRIPE_PRICE_DEPT_YEARLY',
   'STRIPE_PRICE_ENT_MONTHLY',
   'STRIPE_PRICE_ENT_YEARLY',
-  'LLM_TEXT_MODEL',
   'ACCOUNT_CLOSURE_LEDGER_WRITE_URL',
   'ACCOUNT_CLOSURE_LEDGER_READ_URL',
   'ACCOUNT_CLOSURE_LEDGER_SECRET',
@@ -120,7 +120,7 @@ const PRODUCTION_REQUIRED = [
 // without at least one provider. This has no bypass: a deployment that cannot
 // serve an advertised assistant must fail its release before accepting traffic.
 function selectedLLMProvider(env) {
-  return env.LLM_TEXT_PROVIDER || 'openai';
+  return configuredTextProvider(env);
 }
 
 function isUsableProviderKey(provider, value) {
@@ -296,6 +296,10 @@ export function loadEnv(opts = {}) {
       if (env[key] && !isCompatibleTextModel(provider, env[key])) {
         invalid.push(`${key} is not compatible with LLM_TEXT_PROVIDER=${provider}`);
       }
+    }
+    const resolvedModel = configuredTextModel('assistant', env);
+    if (!isCompatibleTextModel(provider, resolvedModel)) {
+      invalid.push(`resolved text model is not compatible with LLM_TEXT_PROVIDER=${provider}`);
     }
     if (env.OPENAI_MODEL && !isCompatibleTextModel('openai', env.OPENAI_MODEL)) {
       invalid.push('OPENAI_MODEL is not an OpenAI model name');

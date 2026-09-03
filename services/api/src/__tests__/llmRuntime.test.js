@@ -28,4 +28,11 @@ describe('server-owned LLM runtime selection', () => {
     expect(configuredTextProvider(source)).toBe('anthropic');
     expect(configuredTextModel('assistant', source)).toBe('claude-sonnet-5');
   });
+
+  it('uses audited provider defaults when no model override is configured', () => {
+    expect(configuredTextModel('assistant', { LLM_TEXT_PROVIDER: 'openai' }))
+      .toBe('gpt-4o-mini');
+    expect(configuredTextModel('assistant', { LLM_TEXT_PROVIDER: 'anthropic' }))
+      .toBe('claude-sonnet-5');
+  });
 });

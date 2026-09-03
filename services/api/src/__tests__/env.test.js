@@ -158,10 +158,10 @@ describe('loadEnv (production)', () => {
     expect(env.LLM_TEXT_PROVIDER).toBe('anthropic');
   });
 
-  it('requires an explicit model compatible with the selected provider', () => {
+  it('uses an audited provider default and rejects incompatible model overrides', () => {
     const missingModel = prodEnv();
     delete missingModel.LLM_TEXT_MODEL;
-    expect(() => loadEnv({ source: missingModel })).toThrowError(/LLM_TEXT_MODEL/);
+    expect(() => loadEnv({ source: missingModel })).not.toThrow();
 
     expect(() => loadEnv({ source: prodEnv({
       LLM_TEXT_PROVIDER: 'anthropic',
@@ -207,7 +207,7 @@ describe('ENV_CONSTANTS', () => {
   it('exports the production-required list and ledger key validator', () => {
     expect(ENV_CONSTANTS.PRODUCTION_REQUIRED).toContain('MEDICAL_DATA_ENCRYPTION_KEY');
     expect(ENV_CONSTANTS.PRODUCTION_REQUIRED).toContain('JWT_SECRET');
-    expect(ENV_CONSTANTS.PRODUCTION_REQUIRED).toContain('LLM_TEXT_MODEL');
+    expect(ENV_CONSTANTS.PRODUCTION_REQUIRED).not.toContain('LLM_TEXT_MODEL');
     expect(ENV_CONSTANTS.isValidLedgerIdentityKeyConfig(LEDGER_IDENTITY_KEYS)).toBe(true);
   });
 });
