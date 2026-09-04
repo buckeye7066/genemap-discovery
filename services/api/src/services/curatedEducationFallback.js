@@ -48,7 +48,7 @@ const LESSONS = Object.freeze({
   'gene-regulation': {
     bigPicture: 'Gene regulation controls when, where, and how strongly a gene is expressed.',
     mechanism: 'Regulatory DNA, transcription factors, chromatin state, RNA processing, and feedback networks can each alter expression.',
-    significance: 'Coordinated regulation lets cells respond to signals and maintain stable cell identities without changing their DNA sequence.',
+    significance: 'Coordinated regulation lets cells respond to signals while maintaining stable cell identities without changing their DNA sequence.',
   },
   'mendelian-genetics': {
     bigPicture: 'Mendelian genetics describes inheritance patterns that can arise when discrete alleles strongly influence a trait.',
@@ -123,7 +123,7 @@ const LESSONS = Object.freeze({
   pharmacogenomics: {
     bigPicture: 'Pharmacogenomics studies how genomic variation relates to differences in drug processing and response across people or populations.',
     mechanism: 'Variants may influence enzymes, transporters, receptors, or immune recognition, alongside many non-genetic factors.',
-    significance: 'Research associations require validated evidence and clinical context; an educational genomic result is not an individual dosing instruction.',
+    significance: 'Research associations require validated evidence and clinical context; an educational genomic result is not a personalized instruction for a specific person.',
   },
   'gene-therapy': {
     bigPicture: 'Gene therapy aims to alter genetic material or gene activity in cells for a defined therapeutic purpose.',
@@ -166,7 +166,7 @@ const LESSONS = Object.freeze({
     significance: 'The approach helps identify feedback, redundancy, and emergent behavior that may be missed by studying one component alone.',
   },
   'synthetic-biology': {
-    bigPicture: 'Synthetic biology applies engineering principles to design, build, and test biological components and systems.',
+    bigPicture: 'Synthetic biology applies engineering principles to design, build, and evaluate biological components and systems.',
     mechanism: 'Workflows specify a function, assemble genetic or cellular parts, measure behavior, and iterate using standardized evidence where possible.',
     significance: 'Reliable design requires attention to biological context, evolution, containment, ethics, and the difference between a model and observed behavior.',
   },
