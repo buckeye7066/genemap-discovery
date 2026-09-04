@@ -5,7 +5,7 @@ import {
 // This revision identifies the reviewed lesson and quiz text independently of
 // the topic-catalog schema. Bump it whenever any curriculum wording or level
 // adaptation changes.
-export const CURATED_EDUCATION_VERSION = 2;
+export const CURATED_EDUCATION_VERSION = 3;
 
 // Reviewed, non-clinical continuity lessons. These are intentionally bounded
 // facts, not generated prose. The route publishes them only when its configured
@@ -247,7 +247,7 @@ const LEVEL_FRAMES = Object.freeze({
     bigPicture: (value) => `Research framing: ${value}`,
     mechanism: (value) => `Interacting mechanisms: ${value}`,
     significance: (value) => `Measurement and uncertainty: ${value}`,
-    focus: 'Compare plausible mechanisms, measurement choices, and sources of uncertainty before treating an observed association as a causal explanation.',
+    focus: 'Compare plausible mechanisms, measurement choices, uncertainty sources, and alternative explanations; a causal account requires evidence that distinguishes those alternatives.',
     prompts: Object.freeze({
       bigPicture: 'Which research framing best scopes',
       mechanism: 'Which account preserves the interacting mechanisms in',
@@ -264,6 +264,45 @@ const LEVEL_FRAMES = Object.freeze({
       mechanism: 'Which statement makes the mechanistic assumptions explicit for',
       significance: 'Which evidentiary boundary remains defensible for',
     }),
+  }),
+});
+
+// Each level contributes section-specific reasoning, not just a heading or a
+// vocabulary label around the same sentence. The base lesson remains the
+// reviewed scientific anchor; these deterministic expansions change what the
+// learner is asked to represent, compare, and infer at every level. Keeping
+// the transformations centralized also makes all 32 topics auditable as one
+// versioned curriculum instead of maintaining 192 drifting copies.
+const LEVEL_SECTION_DEPTH = Object.freeze({
+  elementary: Object.freeze({
+    bigPicture: (value) => `${plainLanguage(value)} Name the main part and tell, in your own words, what it does.`,
+    mechanism: (value) => `${plainLanguage(value)} Follow the change from its first step to the result.`,
+    significance: (value) => `${plainLanguage(value)} Connect the idea to one thing scientists can observe.`,
+  }),
+  middle_school: Object.freeze({
+    bigPicture: (value) => `${value} Sort the terms in this account into structures, processes, and observed patterns.`,
+    mechanism: (value) => `${value} Trace which part acts first, what it changes, and which outcome follows.`,
+    significance: (value) => `${value} Link the mechanism to a biological pattern while keeping cause separate from correlation.`,
+  }),
+  high_school: Object.freeze({
+    bigPicture: (value) => `${value} Define each molecular component in this account and state the biological scale at which it operates.`,
+    mechanism: (value) => `${value} Distinguish the molecular event, its predicted downstream effect, and the evidence that could support the link.`,
+    significance: (value) => `${value} Explain which observations this account supports and which broader conclusions remain outside its scope.`,
+  }),
+  undergraduate: Object.freeze({
+    bigPicture: (value) => `${value} Frame this account in terms of molecular entities, cellular context, and boundary conditions.`,
+    mechanism: (value) => `${value} Represent the causal sequence as perturbation, comparison, and downstream readout, with each step mapped to a predicted change.`,
+    significance: (value) => `${value} Connect the mechanism to experimental design by defining controls, measurements, and the conclusion each observation can support.`,
+  }),
+  graduate: Object.freeze({
+    bigPicture: (value) => `${value} Compare this account with plausible alternatives and state which assumptions make the competing accounts distinguishable.`,
+    mechanism: (value) => `${value} Derive contrasting predictions for the mechanisms, specify orthogonal measurements, and identify confounders and uncertainty sources.`,
+    significance: (value) => `${value} Interpret the evidence within its sampling and measurement limits, and identify the result that would favor one causal account over another.`,
+  }),
+  postgraduate: Object.freeze({
+    bigPicture: (value) => `${value} Formalize the account as competing models with explicit scope, identifiability conditions, and assumptions that could fail.`,
+    mechanism: (value) => `${value} Map latent variables, feedback, measurement error, and alternative causal structures to discriminating observations.`,
+    significance: (value) => `${value} State the unresolved question, the decisive evidence needed to separate models, and the boundary beyond which no inference is justified.`,
   }),
 });
 
@@ -288,11 +327,12 @@ function lessonForOffset(topicId, offset) {
 
 function adaptLesson(lesson, level) {
   const frame = LEVEL_FRAMES[level];
-  if (!frame) throw new Error('A supported education level is required.');
+  const depth = LEVEL_SECTION_DEPTH[level];
+  if (!frame || !depth) throw new Error('A supported education level is required.');
   return {
-    bigPicture: frame.bigPicture(lesson.bigPicture),
-    mechanism: frame.mechanism(lesson.mechanism),
-    significance: frame.significance(lesson.significance),
+    bigPicture: frame.bigPicture(depth.bigPicture(lesson.bigPicture)),
+    mechanism: frame.mechanism(depth.mechanism(lesson.mechanism)),
+    significance: frame.significance(depth.significance(lesson.significance)),
   };
 }
 
@@ -355,4 +395,9 @@ export function curatedEducationQuiz(topic, level, requestedItems = 5) {
   return questions.slice(0, Math.max(1, Math.min(requestedItems, questions.length)));
 }
 
-export const __test = { LESSONS, LEVEL_FRAMES, TOPIC_IDS };
+export const __test = {
+  LESSONS,
+  LEVEL_FRAMES,
+  LEVEL_SECTION_DEPTH,
+  TOPIC_IDS,
+};

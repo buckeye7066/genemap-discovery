@@ -22,13 +22,13 @@ const LEVELS = [
 ];
 const TOPICS = TOPICS_CATALOG.flatMap((category) => category.topics);
 const REVIEWED_CURRICULUM_RELEASE = Object.freeze({
-  version: 2,
-  sha256: '3db77e212aa9152f6d4ff60554fc5f7311ff076c8cfd6e152418ab7493c27428',
+  version: 3,
+  sha256: 'd4b52acac0cd79513d5c984a417f0052052310227aafe792f4df96306eef59ef',
 });
 
 describe('curated education continuity curriculum', () => {
   it('covers every canonical topic with reusable, boundary-safe content at every level', () => {
-    expect(CURATED_EDUCATION_VERSION).toBe(2);
+    expect(CURATED_EDUCATION_VERSION).toBe(3);
     expect(__test.TOPIC_IDS).toEqual(TOPICS.map((topic) => topic.id));
 
     for (const listedTopic of TOPICS) {
@@ -48,9 +48,12 @@ describe('curated education continuity curriculum', () => {
           content,
           { correlationId: `test:${topic.id}:${level}` },
         );
-        expect(['available', 'partial']).toContain(publication.status);
-        expect(typeof publication.content).toBe('string');
-        expect(publication.content.length).toBeGreaterThan(500);
+        expect(publication).toMatchObject({
+          status: 'available',
+          reasonCode: null,
+          limitations: [],
+        });
+        expect(publication.content).toBe(content);
       }
     }
   });
@@ -93,8 +96,13 @@ describe('curated education continuity curriculum', () => {
     expect(lessons[0]).toContain('copying proteins called DNA polymerases');
     expect(lessons[0]).not.toContain('complementary strands');
     expect(lessons[3]).toContain('Causal sequence:');
+    expect(lessons[3]).toContain('perturbation, comparison, and downstream readout');
+    expect(lessons[4]).toContain('orthogonal measurements');
     expect(lessons[5]).toContain('causal identifiability');
+    expect(lessons[5]).toContain('identifiability conditions');
+    expect(lessons[5]).toContain('latent variables');
     expect(quizzes[0][0].question).toContain('simple idea');
+    expect(quizzes[4][1].explanation).toContain('confounders and uncertainty sources');
     expect(quizzes[5][0].question).toContain('model-scoped');
   });
 

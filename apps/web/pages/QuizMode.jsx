@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { ArrowLeft, CheckCircle2, XCircle, Trophy, RefreshCw, ArrowRight, HelpCircle, Sparkles } from 'lucide-react';
 import MedicalDisclaimer from '@/components/shared/MedicalDisclaimer';
+import SourceList from '@/components/shared/SourceList';
 import PublicationState, {
   enforcePublicationContentType,
   isCanonicalPublicationArtifact,
@@ -149,6 +150,7 @@ export default function QuizMode() {
   const [catalogTopic, setCatalogTopic] = useState(null);
   const [topicMetadata, setTopicMetadata] = useState(null);
   const [quizPublication, setQuizPublication] = useState(null);
+  const [quizSources, setQuizSources] = useState([]);
   const [questions, setQuestions] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState(null);
@@ -167,6 +169,7 @@ export default function QuizMode() {
     setCatalogTopic(null);
     setTopicMetadata(null);
     setQuizPublication(null);
+    setQuizSources([]);
     setQuestions([]);
     setCatalogError({ topicId, message: '' });
     setQuizError(null);
@@ -234,6 +237,7 @@ export default function QuizMode() {
     setLoading(true);
     setQuizError(null);
     setQuizPublication(null);
+    setQuizSources([]);
     setTopicMetadata(null);
     setQuestions([]);
     setCurrentIndex(0);
@@ -253,6 +257,7 @@ export default function QuizMode() {
       setQuizPublication(publication);
       setTopicMetadata(res?.topicMetadata || null);
       setQuestions(Array.isArray(content) ? content : []);
+      setQuizSources(Array.isArray(res?.sources) ? res.sources : []);
     } catch (err) {
       if (isCurrentRequest()) {
         const recoveryPublication = terminalPublicationArtifactFromError(err);
@@ -343,6 +348,7 @@ export default function QuizMode() {
           </CardHeader>
           <CardContent className="space-y-4">
             <PublicationState artifact={quizPublication} />
+            <SourceList sources={quizSources} title="References for this quiz" />
             {!quizPublication && (
               <p className="text-sm text-slate-600">No reusable quiz publication was returned.</p>
             )}
@@ -382,6 +388,7 @@ export default function QuizMode() {
           </div>
           <CardContent className="p-6">
             <PublicationState artifact={quizPublication} className="mb-4" />
+            <SourceList sources={quizSources} title="References for this quiz" />
             <h3 className="font-semibold text-center mb-5 text-slate-700">{topicTitle} Quiz Results</h3>
             <div className="flex gap-3 justify-center">
               <Button variant="outline" onClick={() => navigate('/learngenetics')} className="h-10">
@@ -417,6 +424,8 @@ export default function QuizMode() {
       <MedicalDisclaimer variant="education" compact />
 
       <PublicationState artifact={quizPublication} />
+
+      <SourceList sources={quizSources} title="References for this quiz" />
 
       {current && (
         <Card className="animate-slide-up delay-200 shadow-sm overflow-hidden">
