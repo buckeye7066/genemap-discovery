@@ -226,6 +226,8 @@ const NO_REFRESH_PATHS = new Set([
 // JSON error; the client only aborts when the connection is genuinely dead,
 // turning the old "perpetual spinner" into a clean, retryable error.
 const DEFAULT_REQUEST_TIMEOUT_MS = 40_000;
+/** Keep the browser alive long enough for the server's 30–120s provider window. */
+const CANDIDATE_PUBLICATION_CLIENT_TIMEOUT_MS = 125_000;
 
 export class ApiClient {
   baseURL: string;
@@ -587,6 +589,8 @@ export class ApiClient {
     const llmOptions: PublicationInvocationOptions = {};
     if (options?.temperature !== undefined) llmOptions.temperature = options.temperature;
     if (options?.maxTokens !== undefined) llmOptions.maxTokens = options.maxTokens;
+    const timeoutMs =
+      publicationTask === 'candidate_gene_research' ? CANDIDATE_PUBLICATION_CLIENT_TIMEOUT_MS : undefined;
     return this.request('/llm/invoke', {
       method: 'POST',
       body: JSON.stringify({
@@ -594,6 +598,10 @@ export class ApiClient {
         taskInput,
         options: llmOptions,
       }),
+      // The server grants candidate-gene research a longer provider deadline (default 90s,
+      // clamped 30–120s). Ensure the browser never aborts first so the UI receives the
+      // structured publication status instead of a client-timeout.
+      ...(timeoutMs ? { timeoutMs } : {}),
     });
   }
 
