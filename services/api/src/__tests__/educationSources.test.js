@@ -138,10 +138,14 @@ describe('/education/explain attaches sources', () => {
     expect(timeoutBody.publication.content).toContain('DNA, or deoxyribonucleic acid');
     expect(timeoutBody.publication.limitations).toEqual(expect.arrayContaining([
       expect.stringContaining('provider_timeout'),
-      expect.stringContaining('curriculum version 1'),
+      expect.stringContaining('curriculum version 2'),
     ]));
     expect(JSON.stringify(timeoutBody)).not.toContain(timeout.message);
     expect(timeoutBody.sources.length).toBeGreaterThan(0);
+    expect(timeoutBody.usage).toMatchObject({ used: 0 });
+    expect(prisma._store.learningSession.some(
+      (session) => session.type === 'explanation_status',
+    )).toBe(true);
 
     generateExplanation.mockResolvedValueOnce({ text: '', completion: 'failed' });
     const incomplete = await app.inject({
@@ -194,6 +198,12 @@ describe('/education/explain attaches sources', () => {
       expect.stringContaining('3 of 5'),
     ]));
     expect(JSON.stringify(body)).not.toContain(error.message);
+    expect(body.sources.length).toBeGreaterThan(0);
+    expect(body.sources[0].url).toContain('genome.gov/genetics-glossary/DNA');
+    expect(body.usage).toMatchObject({ used: 0 });
+    expect(prisma._store.learningSession.some(
+      (session) => session.type === 'quiz_status',
+    )).toBe(true);
   });
 });
 

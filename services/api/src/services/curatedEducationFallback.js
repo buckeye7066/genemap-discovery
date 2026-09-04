@@ -1,9 +1,11 @@
 import {
-  EDUCATION_CATALOG_VERSION,
   TOPICS_CATALOG,
 } from '../config/educationCatalog.js';
 
-export const CURATED_EDUCATION_VERSION = EDUCATION_CATALOG_VERSION;
+// This revision identifies the reviewed lesson and quiz text independently of
+// the topic-catalog schema. Bump it whenever any curriculum wording or level
+// adaptation changes.
+export const CURATED_EDUCATION_VERSION = 2;
 
 // Reviewed, non-clinical continuity lessons. These are intentionally bounded
 // facts, not generated prose. The route publishes them only when its configured
@@ -172,13 +174,97 @@ const LESSONS = Object.freeze({
   },
 });
 
+const PLAIN_LANGUAGE_TERMS = Object.freeze([
+  [/\bdeoxyribonucleic acid\b/giu, 'DNA'],
+  [/\bnucleotide bases\b/giu, 'chemical letters'],
+  [/\bnucleotides\b/giu, 'chemical letters'],
+  [/\bnucleotide\b/giu, 'chemical letter'],
+  [/\bgenomes\b/giu, 'complete sets of DNA'],
+  [/\bgenome\b/giu, 'complete set of DNA'],
+  [/\bDNA polymerases\b/gu, 'copying proteins called DNA polymerases'],
+  [/\bcomplementary strands\b/giu, 'matching DNA strands'],
+  [/\bpolypeptide\b/giu, 'protein chain'],
+  [/\bchromatin\b/giu, 'DNA packaging'],
+  [/\bgenotypes\b/giu, 'sets of gene versions'],
+  [/\bgenotype\b/giu, 'set of gene versions'],
+  [/\balleles\b/giu, 'versions of a gene'],
+  [/\ballele\b/giu, 'version of a gene'],
+]);
+
+function plainLanguage(value) {
+  return PLAIN_LANGUAGE_TERMS.reduce(
+    (adapted, [pattern, replacement]) => adapted.replace(pattern, replacement),
+    value,
+  );
+}
+
 const LEVEL_FRAMES = Object.freeze({
-  elementary: 'This version uses short sentences and focuses on one idea at a time.',
-  middle_school: 'This version introduces the main scientific words and explains how the pieces connect.',
-  high_school: 'This version uses standard biology terms and distinguishes mechanisms from outcomes.',
-  undergraduate: 'This version emphasizes molecular mechanisms, evidence, and limits on inference.',
-  graduate: 'This version emphasizes interacting mechanisms, measurement choices, and uncertainty.',
-  postgraduate: 'This version emphasizes model assumptions, evidentiary limits, and unresolved research questions.',
+  elementary: Object.freeze({
+    bigPicture: (value) => `One clear idea: ${plainLanguage(value)}`,
+    mechanism: (value) => `What happens: ${plainLanguage(value)}`,
+    significance: (value) => `Why scientists care: ${plainLanguage(value)}`,
+    focus: 'Look for one thing that changes and one result that follows. New science words are introduced beside plain-language meanings.',
+    prompts: Object.freeze({
+      bigPicture: 'Which simple idea best matches',
+      mechanism: 'Which description best shows what happens in',
+      significance: 'Which sentence best explains why scientists study',
+    }),
+  }),
+  middle_school: Object.freeze({
+    bigPicture: (value) => `Core concept: ${value}`,
+    mechanism: (value) => `Connected steps: ${value}`,
+    significance: (value) => `Connection to biology: ${value}`,
+    focus: 'Connect each scientific term to the part, process, or pattern it names, then separate the mechanism from its result.',
+    prompts: Object.freeze({
+      bigPicture: 'Which core concept belongs with',
+      mechanism: 'Which sequence of connected steps describes',
+      significance: 'Which biological connection matters for',
+    }),
+  }),
+  high_school: Object.freeze({
+    bigPicture: (value) => `Biology account: ${value}`,
+    mechanism: (value) => `Mechanism-to-outcome link: ${value}`,
+    significance: (value) => `Interpretation boundary: ${value}`,
+    focus: 'Relate molecular events to observable outcomes while distinguishing a supported mechanism from a broader inference.',
+    prompts: Object.freeze({
+      bigPicture: 'Which biological account accurately describes',
+      mechanism: 'Which mechanism-to-outcome link fits',
+      significance: 'Which interpretation remains appropriately bounded for',
+    }),
+  }),
+  undergraduate: Object.freeze({
+    bigPicture: (value) => `Molecular scope: ${value}`,
+    mechanism: (value) => `Causal sequence: ${value}`,
+    significance: (value) => `Experimental relevance: ${value}`,
+    focus: 'Trace the molecular entities and causal sequence, then identify which observations would support the account and which conclusions remain outside it.',
+    prompts: Object.freeze({
+      bigPicture: 'Which molecular framing is accurate for',
+      mechanism: 'Which causal sequence is associated with',
+      significance: 'Which statement captures the experimental relevance of',
+    }),
+  }),
+  graduate: Object.freeze({
+    bigPicture: (value) => `Research framing: ${value}`,
+    mechanism: (value) => `Interacting mechanisms: ${value}`,
+    significance: (value) => `Measurement and uncertainty: ${value}`,
+    focus: 'Compare plausible mechanisms, measurement choices, and sources of uncertainty before treating an observed association as a causal explanation.',
+    prompts: Object.freeze({
+      bigPicture: 'Which research framing best scopes',
+      mechanism: 'Which account preserves the interacting mechanisms in',
+      significance: 'Which measurement-aware interpretation fits',
+    }),
+  }),
+  postgraduate: Object.freeze({
+    bigPicture: (value) => `Model scope: ${value}`,
+    mechanism: (value) => `Mechanistic assumptions: ${value}`,
+    significance: (value) => `Open evidentiary boundary: ${value}`,
+    focus: 'Interrogate causal identifiability, model assumptions, competing explanations, and the evidence needed to resolve an open research question.',
+    prompts: Object.freeze({
+      bigPicture: 'Which model-scoped statement best characterizes',
+      mechanism: 'Which statement makes the mechanistic assumptions explicit for',
+      significance: 'Which evidentiary boundary remains defensible for',
+    }),
+  }),
 });
 
 const TOPIC_IDS = TOPICS_CATALOG.flatMap((category) => category.topics.map((topic) => topic.id));
@@ -200,21 +286,32 @@ function lessonForOffset(topicId, offset) {
   return LESSONS[candidate];
 }
 
+function adaptLesson(lesson, level) {
+  const frame = LEVEL_FRAMES[level];
+  if (!frame) throw new Error('A supported education level is required.');
+  return {
+    bigPicture: frame.bigPicture(lesson.bigPicture),
+    mechanism: frame.mechanism(lesson.mechanism),
+    significance: frame.significance(lesson.significance),
+  };
+}
+
 function rotateOptions(options, seed) {
   const shift = seed % options.length;
   return [...options.slice(shift), ...options.slice(0, shift)];
 }
 
-function question(topic, prompt, field, seed) {
-  const correct = LESSONS[topic.id][field];
+function question(topic, level, field, seed) {
+  const frame = LEVEL_FRAMES[level];
+  const correct = adaptLesson(LESSONS[topic.id], level)[field];
   const options = rotateOptions([
     correct,
-    lessonForOffset(topic.id, 5)[field],
-    lessonForOffset(topic.id, 11)[field],
-    lessonForOffset(topic.id, 19)[field],
+    adaptLesson(lessonForOffset(topic.id, 5), level)[field],
+    adaptLesson(lessonForOffset(topic.id, 11), level)[field],
+    adaptLesson(lessonForOffset(topic.id, 19), level)[field],
   ], seed);
   return {
-    question: `${prompt} ${topic.title}`,
+    question: `${frame.prompts[field]} ${topic.title}`,
     options,
     correctIndex: options.indexOf(correct),
     explanation: correct,
@@ -222,20 +319,22 @@ function question(topic, prompt, field, seed) {
 }
 
 export function curatedEducationExplanation(topic, level) {
-  const lesson = assertTopic(topic);
+  const lesson = adaptLesson(assertTopic(topic), level);
   const frame = LEVEL_FRAMES[level];
-  if (!frame) throw new Error('A supported education level is required.');
   return [
     `# ${topic.title}`,
     '',
     '## The Big Picture',
-    `${lesson.bigPicture} ${frame}`,
+    lesson.bigPicture,
     '',
     '## How It Works',
     lesson.mechanism,
     '',
     '## Why It Matters',
     lesson.significance,
+    '',
+    '## Level Focus',
+    frame.focus,
     '',
     '## Key Takeaways',
     `- ${lesson.bigPicture}`,
@@ -249,9 +348,9 @@ export function curatedEducationQuiz(topic, level, requestedItems = 5) {
   if (!LEVEL_FRAMES[level]) throw new Error('A supported education level is required.');
   const seed = topic.id.length + level.length;
   const questions = [
-    question(topic, 'Which description best matches', 'bigPicture', seed),
-    question(topic, 'Which mechanism is most closely associated with', 'mechanism', seed + 1),
-    question(topic, 'Why does this topic matter when studying', 'significance', seed + 2),
+    question(topic, level, 'bigPicture', seed),
+    question(topic, level, 'mechanism', seed + 1),
+    question(topic, level, 'significance', seed + 2),
   ];
   return questions.slice(0, Math.max(1, Math.min(requestedItems, questions.length)));
 }

@@ -207,6 +207,11 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Install Chromium
         run: pnpm --filter @genemap/web exec playwright install --with-deps chromium
+      - name: Recheck exact API and web release before browser journey
+        if: github.event_name != 'pull_request'
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+        run: node scripts/wait-for-live-release.mjs
       - name: Run production e2e in Chromium
         run: pnpm --filter @genemap/web exec playwright test --project=desktop-chromium
         env:

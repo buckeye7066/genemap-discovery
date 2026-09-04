@@ -197,7 +197,7 @@ describe('education route publication boundaries', () => {
     expect(provider.generateExplanation).not.toHaveBeenCalled();
   });
 
-  it('maps provider failure to an unavailable artifact without sentinel content', async () => {
+  it('publishes a safe, uncounted continuity artifact without provider details', async () => {
     provider.generateExplanation.mockRejectedValueOnce(new Error('upstream timeout'));
 
     const response = await app.inject({
@@ -212,16 +212,19 @@ describe('education route publication boundaries', () => {
     expect(body).toMatchObject({
       publication: {
         contractVersion: 1,
-        status: 'unavailable',
-        content: null,
-        reasonCode: 'provider_unavailable',
+        status: 'partial',
+        content: expect.stringContaining('## The Big Picture'),
+        reasonCode: 'curated_curriculum_fallback',
       },
     });
     expect(body).not.toHaveProperty('explanation');
     const storedStatus = prisma._store.learningSession.find(
       (session) => session.type === 'explanation_status',
     );
-    expect(storedStatus.content.publication.content).toBeNull();
+    expect(storedStatus.content.publication).toEqual(body.publication);
+    expect(body.usage.used).toBe(0);
+    expect(body.usage.remaining).toBe(body.usage.limit);
+    expect(response.payload).not.toContain('upstream timeout');
   });
 
   it.each([

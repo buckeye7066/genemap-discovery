@@ -183,7 +183,7 @@ describe('publication route contracts without the full application harness', () 
     expect(prisma.sessions[0].content.publication).toEqual(body.publication);
   });
 
-  it('maps provider timeout to unavailable and persists no provider text', async () => {
+  it('maps provider timeout to an uncounted curated artifact without provider text', async () => {
     const error = new Error('secret provider timeout detail');
     error.code = 'LLM_PROVIDER_TIMEOUT';
     boundary.generateExplanation.mockRejectedValueOnce(error);
@@ -199,17 +199,22 @@ describe('publication route contracts without the full application harness', () 
     expect(body).toMatchObject({
       publication: {
         contractVersion: 1,
-        status: 'unavailable',
-        content: null,
-        reasonCode: 'provider_timeout',
+        status: 'partial',
+        content: expect.stringContaining('## The Big Picture'),
+        reasonCode: 'curated_curriculum_fallback',
       },
     });
     expect(body).not.toHaveProperty('explanation');
     expect(prisma.sessions[0].type).toBe('explanation_status');
     expect(JSON.stringify(prisma.sessions[0])).not.toContain('secret provider timeout detail');
+    expect(boundary.finalizeUsageSession).toHaveBeenCalledWith(
+      prisma,
+      expect.anything(),
+      expect.objectContaining({ counted: false }),
+    );
   });
 
-  it('fails closed on an unexpected provider completion value', async () => {
+  it('uses a bounded curated quiz for an unexpected provider completion value', async () => {
     boundary.generateQuiz.mockResolvedValueOnce({
       text: [{
         question: 'Which molecule stores hereditary information?',
@@ -231,12 +236,17 @@ describe('publication route contracts without the full application harness', () 
     expect(body).toMatchObject({
       publication: {
         contractVersion: 1,
-        status: 'unavailable',
-        content: null,
-        reasonCode: 'provider_incomplete',
+        status: 'partial',
+        content: expect.arrayContaining([expect.objectContaining({
+          question: expect.any(String),
+          options: expect.any(Array),
+        })]),
+        reasonCode: 'curated_curriculum_fallback',
       },
     });
     expect(body).not.toHaveProperty('questions');
+    expect(body.sources.length).toBeGreaterThan(0);
+    expect(prisma.sessions[0].type).toBe('quiz_status');
   });
 
   it('returns a canonical kill-switch artifact before quota and provider access', async () => {

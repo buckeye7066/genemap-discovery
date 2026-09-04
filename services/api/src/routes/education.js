@@ -194,7 +194,8 @@ async function persistPublicationSession(prisma, request, {
     level,
     type,
     content: { publication, ...metadata },
-    counted: canUsePublicationContent(publication),
+    counted: canUsePublicationContent(publication)
+      && publication.reasonCode !== 'curated_curriculum_fallback',
   });
 }
 
@@ -439,6 +440,7 @@ export default async function educationRoutes(fastify) {
       topic: topic.id,
       topicMetadata: topicMetadata(topic),
       level,
+      sources: getSources(topic),
       usage: request.usageInfo || null,
       tier: request.entitlements?.tier || 'free',
     };
