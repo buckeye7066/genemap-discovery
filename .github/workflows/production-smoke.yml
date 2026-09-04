@@ -36,7 +36,10 @@ jobs:
           node-version: '24'
 
       - name: Wait for exact API and web release
-        if: github.event_name == 'push'
+        # Pull requests do not have an API preview. Every production event must
+        # prove the deployed API and web identities before exercising journeys;
+        # otherwise a scheduled green run can accidentally certify stale code.
+        if: github.event_name != 'pull_request'
         env:
           EXPECTED_SHA: ${{ github.sha }}
         run: node scripts/wait-for-live-release.mjs
@@ -185,11 +188,15 @@ jobs:
               ;;
           esac
 
-  # Browser-level smoke: runs for releases and pull requests against the deployed
-  # app in Chromium. It covers public/auth boundaries plus the complete
-  # disposable-account journey that curl cannot prove.
+  # Browser-level production smoke runs only for a deployed release. A pull
+  # request has no API preview, so running the PR's forward-looking assertions
+  # against the older production API creates an impossible red gate: neither
+  # result says anything truthful about the candidate. Exact-head PR browser
+  # coverage lives in Web Tests and CI; the post-merge push waits for this SHA
+  # to be deployed before this disposable-account journey can certify it.
   e2e:
     name: E2E (public + authenticated, Chromium)
+    if: github.event_name != 'pull_request'
     needs: smoke
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -204,6 +211,11 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Install Chromium
         run: pnpm --filter @genemap/web exec playwright install --with-deps chromium
+      - name: Recheck exact API and web release before browser journey
+        if: github.event_name != 'pull_request'
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+        run: node scripts/wait-for-live-release.mjs
       - name: Run production e2e in Chromium
         run: pnpm --filter @genemap/web exec playwright test --project=desktop-chromium
         env:

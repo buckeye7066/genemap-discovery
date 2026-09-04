@@ -26,7 +26,15 @@ vi.mock('@/components/education/AdaptiveExplanation', () => ({ default: () => nu
 vi.mock('@/components/education/LevelPicker', () => ({ default: () => null }));
 vi.mock('@/components/education/UsageBanner', () => ({ default: () => null }));
 vi.mock('@/components/shared/MedicalDisclaimer', () => ({ default: () => null }));
-vi.mock('@/components/shared/SourceList', () => ({ default: () => null }));
+vi.mock('@/components/shared/SourceList', () => ({
+  default: ({ sources, title }) => (
+    <section aria-label={title}>
+      {(sources || []).map((source) => (
+        <a key={source.url} href={source.url}>{source.label}</a>
+      ))}
+    </section>
+  ),
+}));
 vi.mock('@/components/shared/safeModelMarkdown', () => ({ safeModelMarkdownComponents: {} }));
 vi.mock('@/components/ui/progress', () => ({ Progress: () => null }));
 vi.mock('@/components/ui/tabs', () => ({
@@ -129,6 +137,11 @@ describe('education deep-link catalog boundary', () => {
         limitations: [],
       },
       topicMetadata: { id: 'what-is-dna', title: 'What is DNA?', category: 'Foundations' },
+      sources: [{
+        label: 'DNA glossary',
+        publisher: 'National Human Genome Research Institute',
+        url: 'https://www.genome.gov/genetics-glossary/Deoxyribonucleic-Acid-DNA',
+      }],
     });
     apiClient.updateLearningProgress.mockResolvedValue({});
 
@@ -140,6 +153,8 @@ describe('education deep-link catalog boundary', () => {
 
     expect(await screen.findByText('Question one?')).toBeInTheDocument();
     expect(screen.getByText('What is DNA? Quiz')).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'References for this quiz' }))
+      .toHaveTextContent('DNA glossary');
     expect(screen.queryByText(/take tylenol/i)).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /correct one/i }));
     fireEvent.click(screen.getByRole('button', { name: /next question/i }));
