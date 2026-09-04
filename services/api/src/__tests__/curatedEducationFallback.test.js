@@ -22,13 +22,13 @@ const LEVELS = [
 ];
 const TOPICS = TOPICS_CATALOG.flatMap((category) => category.topics);
 const REVIEWED_CURRICULUM_RELEASE = Object.freeze({
-  version: 3,
-  sha256: 'd4b52acac0cd79513d5c984a417f0052052310227aafe792f4df96306eef59ef',
+  version: 4,
+  sha256: '70c35bc34a9ef674926f8790eac5c536b7dc4926b4941276f126d133745e818b',
 });
 
 describe('curated education continuity curriculum', () => {
   it('covers every canonical topic with reusable, boundary-safe content at every level', () => {
-    expect(CURATED_EDUCATION_VERSION).toBe(3);
+    expect(CURATED_EDUCATION_VERSION).toBe(4);
     expect(__test.TOPIC_IDS).toEqual(TOPICS.map((topic) => topic.id));
 
     for (const listedTopic of TOPICS) {
@@ -94,7 +94,9 @@ describe('curated education continuity curriculum', () => {
     expect(new Set(quizzes.map((quiz) => JSON.stringify(quiz))).size).toBe(LEVELS.length);
     expect(lessons[0]).toContain('One clear idea:');
     expect(lessons[0]).toContain('copying proteins called DNA polymerases');
+    expect(lessons[0]).not.toContain('copying proteins called copying proteins');
     expect(lessons[0]).not.toContain('complementary strands');
+    expect(JSON.stringify(quizzes[0])).not.toContain('copying proteins called copying proteins');
     expect(lessons[3]).toContain('Causal sequence:');
     expect(lessons[3]).toContain('perturbation, comparison, and downstream readout');
     expect(lessons[4]).toContain('orthogonal measurements');

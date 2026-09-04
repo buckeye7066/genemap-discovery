@@ -549,6 +549,7 @@ export class ApiClient {
     topic: string;
     topicMetadata: Topic & { category: string; catalogVersion: number };
     level: string;
+    sources: EducationSource[];
     usage: unknown;
     tier: string;
   }> {

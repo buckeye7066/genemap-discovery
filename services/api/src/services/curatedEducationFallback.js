@@ -5,7 +5,7 @@ import {
 // This revision identifies the reviewed lesson and quiz text independently of
 // the topic-catalog schema. Bump it whenever any curriculum wording or level
 // adaptation changes.
-export const CURATED_EDUCATION_VERSION = 3;
+export const CURATED_EDUCATION_VERSION = 4;
 
 // Reviewed, non-clinical continuity lessons. These are intentionally bounded
 // facts, not generated prose. The route publishes them only when its configured
@@ -275,9 +275,12 @@ const LEVEL_FRAMES = Object.freeze({
 // versioned curriculum instead of maintaining 192 drifting copies.
 const LEVEL_SECTION_DEPTH = Object.freeze({
   elementary: Object.freeze({
-    bigPicture: (value) => `${plainLanguage(value)} Name the main part and tell, in your own words, what it does.`,
-    mechanism: (value) => `${plainLanguage(value)} Follow the change from its first step to the result.`,
-    significance: (value) => `${plainLanguage(value)} Connect the idea to one thing scientists can observe.`,
+    // LEVEL_FRAMES applies the vocabulary pass after these reasoning prompts
+    // are appended. Keeping it in one layer makes replacements such as
+    // "DNA polymerases" idempotent instead of expanding them twice.
+    bigPicture: (value) => `${value} Name the main part and tell, in your own words, what it does.`,
+    mechanism: (value) => `${value} Follow the change from its first step to the result.`,
+    significance: (value) => `${value} Connect the idea to one thing scientists can observe.`,
   }),
   middle_school: Object.freeze({
     bigPicture: (value) => `${value} Sort the terms in this account into structures, processes, and observed patterns.`,
