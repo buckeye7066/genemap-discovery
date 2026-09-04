@@ -39,8 +39,40 @@ const GENERATION_OPTION_KEYS = new Set([
   'maxTokens',
 ]);
 
-const LLM_TIMEOUT_MS = Number(process.env.LLM_TIMEOUT_MS || 30_000);
+const DEFAULT_LLM_TIMEOUT_MS = 30_000;
+const DEFAULT_CANDIDATE_TIMEOUT_MS = 90_000;
+const MIN_CANDIDATE_TIMEOUT_MS = 30_000;
+const MAX_CANDIDATE_TIMEOUT_MS = 120_000;
 const INVOKE_TEXT_RUNTIME = textRuntimeConfig('invoke');
+
+function configuredTimeoutMs(raw, fallback) {
+  if (raw === undefined || raw === '') return fallback;
+  const timeoutMs = Number(raw);
+  return Number.isFinite(timeoutMs) && timeoutMs > 0
+    ? Math.floor(timeoutMs)
+    : fallback;
+}
+
+/**
+ * Candidate-gene generation can use the full 4,096-token premium allowance,
+ * so it receives a longer provider deadline than the other structured tasks.
+ * Keep the override server-owned and bounded: callers cannot select a timeout,
+ * and a bad deployment value cannot create an unbounded request.
+ */
+function publicationTaskTimeoutMs(publicationTask, source = process.env) {
+  if (publicationTask !== 'candidate_gene_research') {
+    return configuredTimeoutMs(source.LLM_TIMEOUT_MS, DEFAULT_LLM_TIMEOUT_MS);
+  }
+
+  const configured = configuredTimeoutMs(
+    source.LLM_CANDIDATE_TIMEOUT_MS,
+    DEFAULT_CANDIDATE_TIMEOUT_MS,
+  );
+  return Math.max(
+    MIN_CANDIDATE_TIMEOUT_MS,
+    Math.min(MAX_CANDIDATE_TIMEOUT_MS, configured),
+  );
+}
 
 /** Return the exact state used by both /readyz and provider-facing routes. */
 export function isModelPublicationEnabled(source = process.env) {
@@ -256,7 +288,7 @@ export default async function llmRoutes(fastify, options = {}) {
         model: INVOKE_TEXT_RUNTIME.model,
         maxTokens,
         temperature,
-        timeoutMs: LLM_TIMEOUT_MS,
+        timeoutMs: publicationTaskTimeoutMs(publicationTask),
         allowGenomic,
         includeMetadata: true,
       });
@@ -326,11 +358,16 @@ export const __test = {
   clampTemperature,
   validatePrompt,
   validateGenerationOptions,
+  publicationTaskTimeoutMs,
   structuredInvocation,
   structuredTaskRequest,
   prepareStructuredRequest,
   ABSOLUTE_MAX_TOKENS,
   DEFAULT_MAX_TOKENS,
   PREMIUM_MAX_TOKENS,
+  DEFAULT_LLM_TIMEOUT_MS,
+  DEFAULT_CANDIDATE_TIMEOUT_MS,
+  MIN_CANDIDATE_TIMEOUT_MS,
+  MAX_CANDIDATE_TIMEOUT_MS,
   MAX_PROMPT_CHARS,
 };

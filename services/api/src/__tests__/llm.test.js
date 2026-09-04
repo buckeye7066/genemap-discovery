@@ -20,6 +20,19 @@ const STRUCTURED_RESEARCH_INPUT = Object.freeze({
   modalities: ['wes'],
   objective: 'identify_variants',
 });
+const CANDIDATE_INPUT = Object.freeze({
+  version: 1,
+  operation: 'classify_and_suggest',
+  query: Object.freeze({
+    kind: 'curated_concept',
+    conceptId: 'phenotype:short-stature',
+    canonicalLabel: 'short stature',
+    conceptKind: 'phenotype',
+    source: 'genemap_curated',
+    version: 1,
+  }),
+  audience: 'researcher',
+});
 const invokePayload = (options = {}) => ({
   publicationTask: 'aggregate_genomics_research',
   taskInput: STRUCTURED_RESEARCH_INPUT,
@@ -113,6 +126,90 @@ describe('LLM route protection', () => {
     expect(llmInternals.clampTemperature(-5)).toBe(0);
     expect(llmInternals.clampTemperature(99)).toBe(2);
     expect(llmInternals.clampTemperature(0.4)).toBe(0.4);
+  });
+
+  it('keeps the longer candidate deadline task-scoped and explicitly bounded', () => {
+    expect(llmInternals.publicationTaskTimeoutMs('candidate_gene_research', {}))
+      .toBe(llmInternals.DEFAULT_CANDIDATE_TIMEOUT_MS);
+    expect(llmInternals.publicationTaskTimeoutMs('candidate_gene_research', {
+      LLM_CANDIDATE_TIMEOUT_MS: '10000',
+    })).toBe(llmInternals.MIN_CANDIDATE_TIMEOUT_MS);
+    expect(llmInternals.publicationTaskTimeoutMs('candidate_gene_research', {
+      LLM_CANDIDATE_TIMEOUT_MS: '999999',
+    })).toBe(llmInternals.MAX_CANDIDATE_TIMEOUT_MS);
+    expect(llmInternals.publicationTaskTimeoutMs('candidate_gene_research', {
+      LLM_CANDIDATE_TIMEOUT_MS: 'not-a-number',
+    })).toBe(llmInternals.DEFAULT_CANDIDATE_TIMEOUT_MS);
+
+    for (const publicationTask of [
+      'aggregate_genomics_research',
+      'research_hypothesis',
+      'learning_activity_summary',
+    ]) {
+      expect(llmInternals.publicationTaskTimeoutMs(publicationTask, {
+        LLM_TIMEOUT_MS: '47000',
+        LLM_CANDIDATE_TIMEOUT_MS: '110000',
+      })).toBe(47_000);
+    }
+  });
+
+  it('uses the candidate-only deadline while preserving token and output bounds', async () => {
+    const llmService = await import('../services/llm.js');
+    llmService.generateExplanation.mockClear();
+    llmService.generateExplanation.mockResolvedValueOnce({
+      text: JSON.stringify({
+        queryType: 'phenotype',
+        isDisease: false,
+        isHPOTerm: false,
+        mainFeatures: ['A bounded phenotype feature'],
+        candidateGenes: Array.from({ length: 20 }, (_, index) => ({
+          symbol: `G${index + 10}`,
+          name: `Gene ${index + 10}`,
+          explanation: 'Exploratory lead for authoritative source verification.',
+        })),
+      }),
+      completion: 'complete',
+    });
+    const headers = {
+      cookie: authCookie({ userId: 'premium-user', email: 'premium@example.com', role: 'user' }),
+    };
+
+    const candidateResponse = await app.inject({
+      method: 'POST',
+      url: '/llm/invoke',
+      headers,
+      payload: {
+        publicationTask: 'candidate_gene_research',
+        taskInput: CANDIDATE_INPUT,
+        options: { maxTokens: 4096 },
+      },
+    });
+
+    expect(candidateResponse.statusCode).toBe(200);
+    expect(llmService.generateExplanation).toHaveBeenLastCalledWith(
+      expect.stringMatching(/generate 3-15 candidate-gene leads/u),
+      expect.objectContaining({
+        maxTokens: llmInternals.ABSOLUTE_MAX_TOKENS,
+        timeoutMs: llmInternals.DEFAULT_CANDIDATE_TIMEOUT_MS,
+      }),
+    );
+    const candidateGenes = JSON.parse(candidateResponse.body).publication.content.candidateGenes;
+    expect(candidateGenes).toHaveLength(15);
+
+    const aggregateResponse = await app.inject({
+      method: 'POST',
+      url: '/llm/invoke',
+      headers,
+      payload: invokePayload({ maxTokens: 4096 }),
+    });
+    expect(aggregateResponse.statusCode).toBe(200);
+    expect(llmService.generateExplanation).toHaveBeenLastCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        maxTokens: llmInternals.ABSOLUTE_MAX_TOKENS,
+        timeoutMs: llmInternals.DEFAULT_LLM_TIMEOUT_MS,
+      }),
+    );
   });
 
   it('rejects a free-tier research invocation with a machine-readable entitlement response', async () => {

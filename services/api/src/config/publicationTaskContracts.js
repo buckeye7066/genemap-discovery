@@ -502,7 +502,7 @@ function composeCandidatePrompt(input) {
   switch (input.operation) {
     case 'classify_and_suggest':
       return [...base,
-        `Classify the bounded research term (${query}) as disease, phenotype, or ontology identifier and generate candidate-gene leads.`,
+        `Classify the bounded research term (${query}) as disease, phenotype, or ontology identifier and generate 3-15 candidate-gene leads.`,
         'Order candidateGenes by research-lead usefulness only. Do not invent scores, confidence percentages, evidence grades, species mixing, or citations.',
         `Return ONLY JSON with queryType, isDisease, diseaseName, isHPOTerm, mainFeatures, synonyms, inheritancePattern, and candidateGenes (${jsonGeneShape}).`,
       ].join('\n');
