@@ -199,7 +199,7 @@ describe('/education/explain attaches sources', () => {
     ]));
     expect(JSON.stringify(body)).not.toContain(error.message);
     expect(body.sources.length).toBeGreaterThan(0);
-    expect(body.sources[0].url).toContain('genome.gov/genetics-glossary/DNA');
+    expect(body.sources[0]).toEqual(TOPIC_GLOSSARY['what-is-dna']);
     expect(body.usage).toMatchObject({ used: 0 });
     expect(prisma._store.learningSession.some(
       (session) => session.type === 'quiz_status',
