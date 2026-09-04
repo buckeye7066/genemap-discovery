@@ -138,7 +138,7 @@ describe('/education/explain attaches sources', () => {
     expect(timeoutBody.publication.content).toContain('DNA, or deoxyribonucleic acid');
     expect(timeoutBody.publication.limitations).toEqual(expect.arrayContaining([
       expect.stringContaining('provider_timeout'),
-      expect.stringContaining('curriculum version 2'),
+      expect.stringContaining('curriculum version 3'),
     ]));
     expect(JSON.stringify(timeoutBody)).not.toContain(timeout.message);
     expect(timeoutBody.sources.length).toBeGreaterThan(0);
