@@ -266,7 +266,15 @@ test('complete authenticated production journey persists data across logout and 
     const explanationResponse = await explanationPromise;
     expect(explanationResponse.status(), await explanationResponse.text()).toBe(200);
     const explanation = await explanationResponse.json();
-    expect(['available', 'partial']).toContain(explanation?.publication?.status);
+    const explanationProof = {
+      status: explanation?.publication?.status,
+      reasonCode: explanation?.publication?.reasonCode,
+      correlationId: explanation?.publication?.correlationId,
+    };
+    expect(
+      ['available', 'partial'],
+      `Explanation publication was not reusable: ${JSON.stringify(explanationProof)}`,
+    ).toContain(explanation?.publication?.status);
     expect(typeof explanation?.publication?.content).toBe('string');
     expect(explanation.publication.content.trim().length).toBeGreaterThan(50);
 
@@ -280,8 +288,16 @@ test('complete authenticated production journey persists data across logout and 
     const quizResponse = await quizPromise;
     expect(quizResponse.status(), await quizResponse.text()).toBe(200);
     const quiz = await quizResponse.json();
+    const quizProof = {
+      status: quiz?.publication?.status,
+      reasonCode: quiz?.publication?.reasonCode,
+      correlationId: quiz?.publication?.correlationId,
+    };
     const questions = quiz?.publication?.content;
-    expect(Array.isArray(questions)).toBe(true);
+    expect(
+      Array.isArray(questions),
+      `Quiz publication did not contain questions: ${JSON.stringify(quizProof)}`,
+    ).toBe(true);
     expect(questions.length).toBeGreaterThan(0);
     expect(questions.length).toBeLessThanOrEqual(5);
 

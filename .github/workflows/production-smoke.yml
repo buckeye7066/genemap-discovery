@@ -36,7 +36,10 @@ jobs:
           node-version: '24'
 
       - name: Wait for exact API and web release
-        if: github.event_name == 'push'
+        # Pull requests do not have an API preview. Every production event must
+        # prove the deployed API and web identities before exercising journeys;
+        # otherwise a scheduled green run can accidentally certify stale code.
+        if: github.event_name != 'pull_request'
         env:
           EXPECTED_SHA: ${{ github.sha }}
         run: node scripts/wait-for-live-release.mjs

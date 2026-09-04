@@ -17,6 +17,11 @@ import {
   QUIZ_HONESTY_NOTE,
 } from '../services/scientificHonesty.js';
 import { getSources } from '../services/educationSources.js';
+import {
+  CURATED_EDUCATION_VERSION,
+  curatedEducationExplanation,
+  curatedEducationQuiz,
+} from '../services/curatedEducationFallback.js';
 import { assertNoRawGenomicLLM } from '../services/genomicGuard.js';
 import {
   sanitizeEducationQuizArtifact,
@@ -135,6 +140,45 @@ function providerFailureReason(error) {
   if (error?.code === 'LLM_PROVIDER_CONNECTION') return 'provider_connection';
   if (error?.code === 'LLM_PROVIDER_ERROR') return 'provider_error';
   return 'provider_unavailable';
+}
+
+function curatedFallbackArtifact(publication, request, surface, upstreamReason, details = []) {
+  if (!canUsePublicationContent(publication)) return publication;
+  return createPublicationArtifact({
+    status: PUBLICATION_STATUSES.PARTIAL,
+    content: publication.content,
+    reasonCode: 'curated_curriculum_fallback',
+    correlationId: publicationCorrelationId(request, surface),
+    limitations: [
+      `The configured model provider did not return reusable content (${upstreamReason || 'provider_unavailable'}).`,
+      `Reviewed continuity curriculum version ${CURATED_EDUCATION_VERSION} was published instead.`,
+      ...publication.limitations,
+      ...details,
+    ],
+  });
+}
+
+function curatedExplanationPublication(request, topic, level, upstreamReason) {
+  const surface = 'education-explanation';
+  const publication = sanitizePublicationArtifact(
+    'genetics_education',
+    { surface: 'curated_explanation', topic: topic.id, level },
+    curatedEducationExplanation(topic, level),
+    { correlationId: publicationCorrelationId(request, surface) },
+  );
+  return curatedFallbackArtifact(publication, request, surface, upstreamReason);
+}
+
+function curatedQuizPublication(request, topic, level, questionCount, upstreamReason) {
+  const surface = 'education-quiz';
+  const questions = curatedEducationQuiz(topic, level, questionCount);
+  const publication = sanitizeEducationQuizArtifact(questions, questions.length, {
+    correlationId: publicationCorrelationId(request, surface),
+  });
+  const details = questions.length < questionCount
+    ? [`The continuity quiz provides ${questions.length} of ${questionCount} requested questions.`]
+    : [];
+  return curatedFallbackArtifact(publication, request, surface, upstreamReason, details);
 }
 
 async function persistPublicationSession(prisma, request, {
@@ -284,11 +328,20 @@ export default async function educationRoutes(fastify) {
         providerResult,
         { correlationId: publicationCorrelationId(request, 'education-explanation') },
       );
+      if (publication.status === PUBLICATION_STATUSES.UNAVAILABLE) {
+        publication = curatedExplanationPublication(
+          request,
+          topic,
+          level,
+          publication.reasonCode,
+        );
+      }
     } catch (error) {
       request.log.warn({ code: error?.code }, 'education explanation provider failed');
-      publication = unavailablePublication(
+      publication = curatedExplanationPublication(
         request,
-        'education-explanation',
+        topic,
+        level,
         providerFailureReason(error),
       );
     }
@@ -354,9 +407,24 @@ export default async function educationRoutes(fastify) {
       publication = sanitizeEducationQuizArtifact(providerResult, questionCount, {
         correlationId: publicationCorrelationId(request, 'education-quiz'),
       });
+      if (publication.status === PUBLICATION_STATUSES.UNAVAILABLE) {
+        publication = curatedQuizPublication(
+          request,
+          topic,
+          level,
+          questionCount,
+          publication.reasonCode,
+        );
+      }
     } catch (error) {
       request.log.warn({ code: error?.code }, 'education quiz provider failed');
-      publication = unavailablePublication(request, 'education-quiz', providerFailureReason(error));
+      publication = curatedQuizPublication(
+        request,
+        topic,
+        level,
+        questionCount,
+        providerFailureReason(error),
+      );
     }
     await persistPublicationSession(prisma, request, {
       topic,
