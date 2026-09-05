@@ -116,3 +116,21 @@ export const pagesConfig = {
 // Clinical/personal-genomic and unverified statistical surfaces are not part of
 // this product's route map or import graph. The publication-bundle verifier
 // enforces that boundary on every production build.
+//
+// Named, because a boundary nobody can enumerate is a boundary nobody can check:
+// the publishable build deliberately omits MedicalData, VCFAnalysis,
+// AIAssistants, Anastasia, RobertClinical, VisualizationHub and GSEA. The first
+// group is personalized clinical execution. VisualizationHub and GSEA presented
+// LLM-generated coordinates, expression values, interactions, p-values and FDR
+// values as if they came from named databases or real statistical computation.
+// As of 01c1b19 (2026-09-02) those modules are gone from `apps/web/pages/`
+// entirely — stronger than being unrouted — and `scripts/verify-publication-
+// bundle.mjs` still denylists their chunk names so a reintroduction fails the
+// release gate rather than shipping. Do not re-add one without versioned source
+// adapters or real calculations behind it.
+//
+// This paragraph is load-bearing text, not decoration: Ellie's cross-repo
+// invariant guard (`orchestrator/src/autonomous/invariants.js`, surface
+// `genemap`) keys on the phrase "deliberately omits" in this file and escalates
+// hold -> refuse when it is missing. 01c1b19 replaced the original wording with
+// a shorter note and that guard has been failing since; restored 2026-09-05.
