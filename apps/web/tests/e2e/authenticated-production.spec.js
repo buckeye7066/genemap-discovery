@@ -319,7 +319,7 @@ test('complete authenticated production journey persists data across logout and 
     const [candidateResponse] = await Promise.all([
       page.waitForResponse(
         (response) => response.url().includes('/llm/invoke') && response.request().method() === 'POST',
-        { timeout: 120_000 },
+        { timeout: 150_000 },
       ),
       page
         .getByRole('heading', { name: 'Start Your Discovery', exact: true })
@@ -330,10 +330,22 @@ test('complete authenticated production journey persists data across logout and 
     ]);
     expect(candidateResponse.status(), await candidateResponse.text()).toBe(200);
     const candidate = await candidateResponse.json();
-    expect(['available', 'partial']).toContain(candidate?.publication?.status);
+    const candidateProof = {
+      status: candidate?.publication?.status,
+      reasonCode: candidate?.publication?.reasonCode,
+      correlationId: candidate?.publication?.correlationId,
+    };
+    expect(
+      ['available', 'partial'],
+      `Candidate publication was not reusable: ${JSON.stringify(candidateProof)}`,
+    ).toContain(candidate?.publication?.status);
     const candidateGenes = candidate?.publication?.content?.candidateGenes;
-    expect(Array.isArray(candidateGenes)).toBe(true);
+    expect(
+      Array.isArray(candidateGenes),
+      `Candidate publication did not contain gene leads: ${JSON.stringify(candidateProof)}`,
+    ).toBe(true);
     expect(candidateGenes.length).toBeGreaterThan(0);
+    expect(candidateGenes.length).toBeLessThanOrEqual(15);
     const candidateSymbol = candidateGenes[0].symbol;
 
     await expect(page.getByText(candidateSymbol, { exact: true }).first()).toBeVisible({ timeout: 120_000 });
