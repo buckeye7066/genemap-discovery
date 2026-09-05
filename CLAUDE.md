@@ -14,10 +14,10 @@ enable a route.
 
 | Piece | File | What it guarantees |
 |---|---|---|
-| Fail-closed boundary | `services/api/src/config/publishingBoundary.js` | `HIGH_RISK_CLINICAL_FEATURES_ENABLED = false`. Model execution is authorized ONLY by `ROUTE_OWNED_TASKS` (server-owned) or `CLIENT_TASK_ROUTES` (versioned structured task). Arbitrary prompt text is never authorization. `HIDDEN_PATH_PREFIXES` 404s `/clinical-trials`, `/genomics/vcf`, `/genomics/variant`, `/genomics/clinvar`, `/entities/medical-data`, `/entities/conversations`, `/admin/self-test`. Both hooks are global, installed at `src/index.js` **before** any route registers. |
+| Fail-closed boundary | `services/api/src/config/publishingBoundary.js` | `HIGH_RISK_CLINICAL_FEATURES_ENABLED = false`. Model execution is authorized ONLY by `ROUTE_OWNED_TASKS` (server-owned) or `CLIENT_TASK_ROUTES` (versioned structured task). Arbitrary prompt text is never authorization. `HIDDEN_PATH_PREFIXES` 404s `/clinical-trials`, `/genomics/vcf`, `/genomics/variant`, `/genomics/clinvar`, `/admin/self-test`. **`/entities/medical-data` and `/entities/conversations` were REMOVED from that list by `01c1b19` (2026-09-02) and now ship behind Premium features; this line claimed otherwise until 2026-09-05. Read the file, not this line.** Both hooks are global, installed at `src/index.js` **before** any route registers. |
 | Genomic guard | `services/api/src/services/genomicGuard.js` | Raw genomic content cannot reach a cloud model without a current `genomic_llm_upload` v1.0 consent (latest record wins, so revocation supersedes). |
 | Scientific honesty | `services/api/src/services/scientificHonesty.js` | Every model call is wrapped with the honesty directive. |
-| Route map | `apps/web/pages.config.js` | The ONLY authorization for a page to ship. Deliberately omits MedicalData, VCFAnalysis, AIAssistants, Anastasia, RobertClinical, VisualizationHub, GSEA from both the route map AND the lazy-import graph. Read the comment at the bottom of that file before touching it. |
+| Route map | `apps/web/pages.config.js` | The ONLY authorization for a page to ship. Deliberately omits MedicalData, VCFAnalysis, AIAssistants, RobertClinical, VisualizationHub, GSEA from both the route map AND the lazy-import graph. **It DOES register `HealthData` and `Assistants` (added `01c1b19`, 2026-09-02), gated by the `health.records` and `assistants.profile_context` Premium features.** Read the comment at the bottom of that file before touching it. |
 
 ### Two gates enforce the above; both must stay green
 

@@ -45,9 +45,16 @@ Prompt prose is composed server-side by `composePublicationPrompt`.
 
 **Excluded surfaces are 404, not hidden links.** A set of hidden path prefixes
 (`/clinical-trials`, `/genomics/vcf`, `/genomics/variant`, `/genomics/clinvar`,
-`/entities/medical-data`, `/entities/conversations`, `/admin/self-test`) returns
-`404 FEATURE_NOT_AVAILABLE` from an `onRequest` hook, before authentication and
-before any handler runs.
+`/admin/self-test`) returns `404 FEATURE_NOT_AVAILABLE` from an `onRequest`
+hook, before authentication and before any handler runs.
+
+> **`/entities/medical-data` and `/entities/conversations` are NO LONGER on that
+> list.** They were removed from `HIDDEN_PATH_PREFIXES` by `01c1b19`
+> ("feat: enforce production-grade profile and health flows", 2026-09-02), which
+> also shipped the `HealthData` and `Assistants` pages. This file was last
+> updated 2026-08-25 and asserted the opposite for the week in between. The list
+> above now matches `services/api/src/config/publishingBoundary.js`; verify
+> against that file, not against this sentence.
 
 Both hooks are installed globally on the root Fastify instance, ahead of every
 route registration:
@@ -188,14 +195,14 @@ publishable build.** Do not re-enable a route because backend code exists.
 | VCF parse / enrich / cohort enrich | `services/api/src/services/vcf.js`, `routes/genomics.js` | `/genomics/vcf/*` is a hidden prefix → `404 FEATURE_NOT_AVAILABLE` before auth | Sequence/VCF analysis is deferred (**Gate A**). It stays out of the publishable product. |
 | Single-variant and variant search lookup | `routes/genomics.js`, `services/genomicDatabases.js` | `/genomics/variant/*` hidden → 404 | Personal-variant interpretation is clinical-adjacent; deferred with Gate A. |
 | ClinVar search | `routes/genomics.js` | `/genomics/clinvar/*` hidden → 404 | Same. Clinical significance lookup is not an education/research feature here. |
-| Medical-data entities | `routes/entities.js`, `middleware/accessLog.js` | `/entities/medical-data` hidden → 404 | Medical-record interpretation is outside the product boundary. Access logging exists but never fires in this build. |
-| Stored AI conversations | `routes/entities.js` | `/entities/conversations` hidden → 404 | Same boundary. |
+| Medical-data entities | `routes/entities.js`, `middleware/accessLog.js` | **SHIPPING** as the `HealthData` page behind the `health.records` Premium feature. NO LONGER a hidden prefix (`01c1b19`, 2026-09-02) | **This widens the stated product boundary and the change is not yet reflected in the safety rationale below.** A Premium user now stores encrypted personal health records in the product. What still constrains interpretation is prompt-level only — the `scientificHonesty` directive and the `genomicGuard` content filter — not a route block. |
+| Stored AI conversations | `routes/entities.js`, `routes/assistants.js`, `services/assistantContext.js` | **SHIPPING** as the `Assistants` page behind the `assistants.profile_context` Premium feature. NO LONGER a hidden prefix (`01c1b19`) | The "Anastasia" (health educator) and "Robert" (technical genomics) personas receive the user's STORED HEALTH CONTEXT as chat input. Same prompt-level-only constraint. |
 | Clinical-trial search | `routes/clinicalTrials.js`, `services/clinicalTrials.js` | `/clinical-trials` hidden → 404 | Trial matching is explicitly outside the product boundary. |
 | Gene metadata lookup | `routes/genomics.js` `GET /genomics/gene/:symbol` | Handler returns `NotFoundError` unless `GENOMICS_GENE_LOOKUP_ENABLED === 'true'` | Deployment-level switch; **off** in the published deployment. |
 | Education image generation | `routes/education.js` `POST /education/image` | Handler always returns an `unavailable` publication artifact with `reasonCode: 'image_output_verification_unavailable'` | There is no way to verify that a generated image is scientifically accurate. Until there is, it returns unavailable rather than a plausible-looking picture. |
 | Free-form LLM chat / image | `routes/llm.js` `POST /llm/chat`, `POST /llm/image` | 403 at the boundary (`isUnknownGenerationRoute`), then `ValidationError` in the handler | Arbitrary prompt text is never an authorization signal. |
 | GSEA / pathway enrichment | `apps/web/components/gsea/GeneSetInput.jsx`, `EnrichmentResults.jsx` (orphaned; no importer, no route, no API caller) | Route absent from `pages.config.js`; chunk name on the bundle-verifier denylist | Deferred (**Gate B**). `EnrichmentResults.jsx` renders p-value and FDR columns; **there is no pathway-enrichment computation anywhere in the API** — no KEGG, Reactome, or GO retrieval exists server-side. Shipping it would present fabricated statistics as if computed. |
-| Clinical/persona pages | *removed from disk* — `MedicalData`, `VCFAnalysis`, `AIAssistants`, `Anastasia`, `RobertClinical`, `VisualizationHub` | No source file exists; names remain on the bundle-verifier denylist and in regression tests | Personalized clinical execution and LLM-generated coordinates / expression values / interactions presented as database-derived. |
+| Clinical/persona pages | *removed from disk* — `MedicalData`, `VCFAnalysis`, `AIAssistants`, `RobertClinical`, `VisualizationHub`. **`HealthData.jsx` and `Assistants.jsx` DO exist and DO ship** (see the two rows above) | The removed names remain on the bundle-verifier denylist and in regression tests. The two shipping pages are registered in `apps/web/pages.config.js` and are Premium-feature gated | Personalized clinical execution and LLM-generated coordinates / expression values / interactions presented as database-derived. **The persona surface this row was written to exclude is now partly present under different file names — reconcile the boundary or this table is describing a product that no longer exists.** |
 
 ---
 
