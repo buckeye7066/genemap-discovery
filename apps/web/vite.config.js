@@ -1,37 +1,13 @@
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
-import { createReadStream, readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import path from 'path'
 import { releaseIdentityJson } from './lib/releaseIdentity.js'
+import { localOcrData, resolveWebPort } from './vite.runtime.mjs'
 
 const require = createRequire(import.meta.url)
 const tessdataPackage = path.dirname(require.resolve('@tesseract.js-data/eng/package.json'))
 const englishTessdata = path.join(tessdataPackage, '4.0.0_best_int', 'eng.traineddata.gz')
-
-function localOcrData() {
-  const publicPath = '/ocr/eng.traineddata.gz'
-  return {
-    name: 'local-ocr-data',
-    buildStart() {
-      this.emitFile({
-        type: 'asset',
-        fileName: publicPath.slice(1),
-        source: readFileSync(englishTessdata),
-      })
-    },
-    configureServer(server) {
-      server.middlewares.use((request, response, next) => {
-        const pathname = new URL(request.url || '/', 'http://localhost').pathname
-        if (pathname !== publicPath) return next()
-        response.statusCode = 200
-        response.setHeader('Content-Type', 'application/gzip')
-        response.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
-        createReadStream(englishTessdata).pipe(response)
-      })
-    },
-  }
-}
 
 function releaseIdentity() {
   const publicPath = '/release.json'
@@ -59,10 +35,10 @@ function releaseIdentity() {
 }
 
 export default defineConfig({
-  plugins: [react(), localOcrData(), releaseIdentity()],
+  plugins: [react(), localOcrData(englishTessdata), releaseIdentity()],
   server: {
     host: '127.0.0.1',
-    port: 5173,
+    port: resolveWebPort(process.env),
     strictPort: true,
   },
   resolve: {
