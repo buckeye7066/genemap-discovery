@@ -1,0 +1,30 @@
+name: EVA web runtime
+on:
+  pull_request:
+    paths:
+      - 'apps/web/vite.config.js'
+      - 'apps/web/vite.runtime.mjs'
+      - 'apps/web/scripts/check-vite-runtime.mjs'
+      - '.github/workflows/eva-web-runtime.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'apps/web/vite.config.js'
+      - 'apps/web/vite.runtime.mjs'
+      - 'apps/web/scripts/check-vite-runtime.mjs'
+      - '.github/workflows/eva-web-runtime.yml'
+permissions:
+  contents: read
+jobs:
+  eva-web-runtime:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: node --test apps/web/scripts/check-vite-runtime.mjs
