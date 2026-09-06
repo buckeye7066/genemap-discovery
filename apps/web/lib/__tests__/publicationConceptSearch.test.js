@@ -78,7 +78,7 @@ test('a partial resolver outage retains choices but cannot establish exact-match
     return { suggestions: [mondo()] };
   });
   assert.equal(result.status, 'choose');
-  assert.equal(result.unavailable, true);
+  assert.equal('unavailable' in result && result.unavailable, true);
   assert.equal(result.reference, undefined);
 });
 

@@ -2,8 +2,11 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
 
-const source = readFileSync(new URL('../../public/service-worker.js', import.meta.url), 'utf8');
+// node:path avoids Vite rewriting a public asset URL into an HTTP URL.
+const source = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), '../../public/service-worker.js'), 'utf8');
 function worker({ network = async () => new Response('online'), stored = new Map(), storageFails = false } = {}) {
   const handlers = {};
   const deleted = [];
