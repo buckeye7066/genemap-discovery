@@ -7,6 +7,7 @@ describe('production OCR publication boundary', () => {
   it('uses only application-hosted worker, core, and language assets', () => {
     const parser = read('../healthDocumentParser.js');
     const vite = read('../../vite.config.js');
+    const runtime = read('../../vite.runtime.mjs');
 
     expect(parser).toContain("import('tesseract.js/dist/worker.min.js?url')");
     expect(parser).toContain("import('tesseract.js-core/tesseract-core-lstm.wasm.js?url')");
@@ -15,8 +16,12 @@ describe('production OCR publication boundary', () => {
     expect(parser).not.toMatch(/https?:\/\/(?:cdn\.jsdelivr\.net|unpkg\.com)/u);
 
     expect(vite).toContain("'4.0.0_best_int', 'eng.traineddata.gz'");
-    expect(vite).toContain("const publicPath = '/ocr/eng.traineddata.gz'");
-    expect(vite).toContain('this.emitFile({');
+    expect(vite).toContain("import { localOcrData, resolveWebPort } from './vite.runtime.mjs'");
+    expect(vite).toContain('localOcrData(englishTessdata)');
+    expect(runtime).toContain("const publicPath = '/ocr/eng.traineddata.gz'");
+    expect(runtime).toContain('generateBundle()');
+    expect(runtime).toContain('this.emitFile({');
+    expect(runtime).not.toMatch(/buildStart\s*\(/u);
   });
 
   it('keeps the production CSP same-origin while permitting local OCR execution', () => {
