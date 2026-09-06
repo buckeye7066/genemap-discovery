@@ -1,54 +1,83 @@
-const CACHE_NAME = 'genemap-v1';
-const PRECACHE_URLS = [
-  '/',
-  '/index.html',
-];
+const CACHE_NAME = 'genemap-shell-v2';
+const PRECACHE_URLS = ['/', '/index.html'];
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(PRECACHE_URLS))
-  );
-  self.skipWaiting();
+  event.waitUntil((async () => {
+    const cache = await caches.open(CACHE_NAME);
+    await cache.addAll(PRECACHE_URLS);
+    await self.skipWaiting();
+  })());
 });
 
 self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key)))
-    )
-  );
-  self.clients.claim();
+  event.waitUntil((async () => {
+    const keys = await caches.keys();
+    await Promise.all(keys.filter((key) => key.startsWith('genemap-') && key !== CACHE_NAME)
+      .map((key) => caches.delete(key)));
+    await self.clients.claim();
+  })());
 });
 
-self.addEventListener('fetch', (event) => {
-  if (event.request.method !== 'GET') return;
-
-  const url = new URL(event.request.url);
-
-  if (url.pathname.startsWith('/education/') || url.pathname.startsWith('/auth/') || url.pathname.startsWith('/billing/')) {
-    return;
+async function cacheResponse(key, response) {
+  try {
+    const cache = await caches.open(CACHE_NAME);
+    await cache.put(key, response);
+  } catch {
+    // Storage exhaustion/private browsing must not turn a good network response
+    // into a failed navigation or an unhandled promise rejection.
   }
+}
 
-  event.respondWith(
-    fetch(event.request)
-      .then((response) => {
-        if (response.ok && url.origin === self.location.origin) {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
-        }
-        return response;
-      })
-      .catch(async () => {
-        // respondWith() rejects anything that isn't a Response — a bare
-        // caches.match() miss resolves to undefined and throws
-        // "Failed to convert value to 'Response'". Always end with a Response.
-        const cached = await caches.match(event.request);
-        if (cached) return cached;
-        if (event.request.mode === 'navigate') {
-          const shell = await caches.match('/index.html');
-          if (shell) return shell;
-        }
-        return new Response('Offline', { status: 503, statusText: 'Service Unavailable' });
-      })
-  );
+async function cachedResponse(key) {
+  try {
+    const cache = await caches.open(CACHE_NAME);
+    return await cache.match(key);
+  } catch {
+    return undefined;
+  }
+}
+
+self.addEventListener('fetch', (event) => {
+  const request = event.request;
+  if (request.method !== 'GET') return;
+  const url = new URL(request.url);
+  if (url.origin !== self.location.origin) return;
+  // Never cache/intercept auth, health records, generated output, or API calls.
+  // In particular, a Railway/CORS failure must not become a fake local 503.
+  if (/^\/(?:api|auth|billing|education|genomics|entities|llm|assistants)(?:\/|$)/u.test(url.pathname)) return;
+  const navigation = request.mode === 'navigate';
+  const asset = /^\/(?:assets|icons)\//u.test(url.pathname);
+  if (!navigation && !asset) return;
+
+  event.respondWith((async () => {
+    let response;
+    try {
+      response = await fetch(request);
+    } catch {
+      // Offline/network interruption: try only this app's public shell/assets.
+    }
+    if (response?.ok) {
+      const contentType = response.headers.get('content-type') || '';
+      if (navigation && contentType.includes('text/html')) {
+        await cacheResponse('/index.html', response.clone());
+      } else if (asset) {
+        await cacheResponse(request, response.clone());
+      }
+      return response;
+    }
+    if (!response || response.status >= 500) {
+      const cached = await cachedResponse(navigation ? '/index.html' : request);
+      if (cached) return cached;
+    }
+    // Preserve real HTTP errors instead of concealing them as success.
+    if (response) return response;
+    if (navigation) {
+      return new Response('<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>GeneMap connection unavailable</title><body><h1>GeneMap could not connect</h1><p>Check your connection, then try again. No research search was run.</p><p><a href="/search">Try again</a></p></body></html>', {
+        status: 503,
+        statusText: 'Service Unavailable',
+        headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' },
+      });
+    }
+    return Response.error();
+  })());
 });
