@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "node --watch --env-file-if-exists=.env src/index.js",
+    "dev": "corepack pnpm --filter @genemap/shared build && corepack pnpm db:generate && node --watch --env-file-if-exists=.env src/index.js",
     "start": "node --env-file-if-exists=.env src/index.js",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
