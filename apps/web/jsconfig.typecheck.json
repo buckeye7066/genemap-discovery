@@ -18,7 +18,7 @@
     "noResolve": false,
     "noImplicitAny": false,
     "strictNullChecks": false,
-    "types": []
+    "types": ["node"]
   },
   "include": [
     "lib/**/*.js",
