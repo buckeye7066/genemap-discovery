@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "corepack pnpm --filter @genemap/shared build && corepack pnpm db:generate && node --watch --env-file-if-exists=.env src/index.js",
+    "dev": "corepack pnpm prepare:runtime && node --watch --env-file-if-exists=.env src/index.js",
     "start": "node --env-file-if-exists=.env src/index.js",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
@@ -15,7 +15,9 @@
     "typecheck": "node --check src/index.js && node --check src/config/env.js",
     "test": "vitest run",
     "test:integration": "vitest run src/__tests__/postgres-integration.test.js",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "prepare:runtime": "corepack pnpm --filter @genemap/shared build && corepack pnpm db:generate",
+    "start:eva": "corepack pnpm prepare:runtime && node --env-file-if-exists=.env src/index.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.122.0",
