@@ -216,8 +216,8 @@ importers:
         specifier: ^16.3.3
         version: 16.3.3(@testing-library/dom@10.4.1)(@types/react-dom@18.3.7(@types/react@18.3.28))(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@types/node':
-        specifier: ^22.20.0
-        version: 22.20.1
+        specifier: ^24.13.3
+        version: 24.13.3
       '@types/react':
         specifier: ^18.2.66
         version: 18.3.28
@@ -226,7 +226,7 @@ importers:
         version: 18.3.7(@types/react@18.3.28)
       '@vitejs/plugin-react':
         specifier: ^4.3.4
-        version: 4.7.0(vite@6.4.3(@types/node@22.20.1)(jiti@1.21.7)(lightningcss@1.32.0))
+        version: 4.7.0(vite@6.4.3(@types/node@24.13.3)(jiti@1.21.7)(lightningcss@1.32.0))
       autoprefixer:
         specifier: ^10.5.4
         version: 10.5.4(postcss@8.5.26)
@@ -244,10 +244,10 @@ importers:
         version: 5.9.3
       vite:
         specifier: '>=6.4.2 <7'
-        version: 6.4.3(@types/node@22.20.1)(jiti@1.21.7)(lightningcss@1.32.0)
+        version: 6.4.3(@types/node@24.13.3)(jiti@1.21.7)(lightningcss@1.32.0)
       vitest:
         specifier: ^4.1.11
-        version: 4.1.11(@types/node@22.20.1)(jsdom@25.0.1)(vite@6.4.3(@types/node@22.20.1)(jiti@1.21.7)(lightningcss@1.32.0))
+        version: 4.1.11(@types/node@24.13.3)(jsdom@25.0.1)(vite@6.4.3(@types/node@24.13.3)(jiti@1.21.7)(lightningcss@1.32.0))
 
   packages/shared:
     dependencies:
@@ -6698,7 +6698,7 @@ snapshots:
 
   '@ungap/structured-clone@1.3.0': {}
 
-  '@vitejs/plugin-react@4.7.0(vite@6.4.3(@types/node@22.20.1)(jiti@1.21.7)(lightningcss@1.32.0))':
+  '@vitejs/plugin-react@4.7.0(vite@6.4.3(@types/node@24.13.3)(jiti@1.21.7)(lightningcss@1.32.0))':
     dependencies:
       '@babel/core': 7.29.7
       '@babel/plugin-transform-react-jsx-self': 7.27.1(@babel/core@7.29.7)
@@ -6706,7 +6706,7 @@ snapshots:
       '@rolldown/pluginutils': 1.0.0-beta.27
       '@types/babel__core': 7.20.5
       react-refresh: 0.17.0
-      vite: 6.4.3(@types/node@22.20.1)(jiti@1.21.7)(lightningcss@1.32.0)
+      vite: 6.4.3(@types/node@24.13.3)(jiti@1.21.7)(lightningcss@1.32.0)
     transitivePeerDependencies:
       - supports-color
 
@@ -6719,14 +6719,6 @@ snapshots:
       chai: 6.2.2
       tinyrainbow: 3.1.1
 
-  '@vitest/mocker@4.1.11(vite@6.4.3(@types/node@22.20.1)(jiti@1.21.7)(lightningcss@1.32.0))':
-    dependencies:
-      '@vitest/spy': 4.1.11
-      estree-walker: 3.0.3
-      magic-string: 0.30.21
-    optionalDependencies:
-      vite: 6.4.3(@types/node@22.20.1)(jiti@1.21.7)(lightningcss@1.32.0)
-
   '@vitest/mocker@4.1.11(vite@6.4.3(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.32.0))':
     dependencies:
       '@vitest/spy': 4.1.11
@@ -6734,6 +6726,14 @@ snapshots:
       magic-string: 0.30.21
     optionalDependencies:
       vite: 6.4.3(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.32.0)
+
+  '@vitest/mocker@4.1.11(vite@6.4.3(@types/node@24.13.3)(jiti@1.21.7)(lightningcss@1.32.0))':
+    dependencies:
+      '@vitest/spy': 4.1.11
+      estree-walker: 3.0.3
+      magic-string: 0.30.21
+    optionalDependencies:
+      vite: 6.4.3(@types/node@24.13.3)(jiti@1.21.7)(lightningcss@1.32.0)
 
   '@vitest/mocker@4.1.11(vite@6.4.3(@types/node@26.1.1)(jiti@2.7.0)(lightningcss@1.32.0))':
     dependencies:
@@ -10360,20 +10360,6 @@ snapshots:
       d3-time: 3.1.0
       d3-timer: 3.0.1
 
-  vite@6.4.3(@types/node@22.20.1)(jiti@1.21.7)(lightningcss@1.32.0):
-    dependencies:
-      esbuild: 0.25.12
-      fdir: 6.5.0(picomatch@4.0.4)
-      picomatch: 4.0.4
-      postcss: 8.5.26
-      rollup: 4.62.2
-      tinyglobby: 0.2.17
-    optionalDependencies:
-      '@types/node': 22.20.1
-      fsevents: 2.3.3
-      jiti: 1.21.7
-      lightningcss: 1.32.0
-
   vite@6.4.3(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.32.0):
     dependencies:
       esbuild: 0.25.12
@@ -10386,6 +10372,20 @@ snapshots:
       '@types/node': 22.20.1
       fsevents: 2.3.3
       jiti: 2.7.0
+      lightningcss: 1.32.0
+
+  vite@6.4.3(@types/node@24.13.3)(jiti@1.21.7)(lightningcss@1.32.0):
+    dependencies:
+      esbuild: 0.25.12
+      fdir: 6.5.0(picomatch@4.0.4)
+      picomatch: 4.0.4
+      postcss: 8.5.26
+      rollup: 4.62.2
+      tinyglobby: 0.2.17
+    optionalDependencies:
+      '@types/node': 24.13.3
+      fsevents: 2.3.3
+      jiti: 1.21.7
       lightningcss: 1.32.0
 
   vite@6.4.3(@types/node@26.1.1)(jiti@2.7.0)(lightningcss@1.32.0):
@@ -10401,34 +10401,6 @@ snapshots:
       fsevents: 2.3.3
       jiti: 2.7.0
       lightningcss: 1.32.0
-
-  vitest@4.1.11(@types/node@22.20.1)(jsdom@25.0.1)(vite@6.4.3(@types/node@22.20.1)(jiti@1.21.7)(lightningcss@1.32.0)):
-    dependencies:
-      '@vitest/expect': 4.1.11
-      '@vitest/mocker': 4.1.11(vite@6.4.3(@types/node@22.20.1)(jiti@1.21.7)(lightningcss@1.32.0))
-      '@vitest/pretty-format': 4.1.11
-      '@vitest/runner': 4.1.11
-      '@vitest/snapshot': 4.1.11
-      '@vitest/spy': 4.1.11
-      '@vitest/utils': 4.1.11
-      es-module-lexer: 2.3.2
-      expect-type: 1.4.0
-      magic-string: 0.30.21
-      obug: 2.1.4
-      pathe: 2.0.3
-      picomatch: 4.0.5
-      std-env: 4.2.0
-      tinybench: 2.9.0
-      tinyexec: 1.2.4
-      tinyglobby: 0.2.17
-      tinyrainbow: 3.1.1
-      vite: 6.4.3(@types/node@22.20.1)(jiti@1.21.7)(lightningcss@1.32.0)
-      why-is-node-running: 2.3.0
-    optionalDependencies:
-      '@types/node': 22.20.1
-      jsdom: 25.0.1
-    transitivePeerDependencies:
-      - msw
 
   vitest@4.1.11(@types/node@22.20.1)(jsdom@25.0.1)(vite@6.4.3(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.32.0)):
     dependencies:
@@ -10454,6 +10426,34 @@ snapshots:
       why-is-node-running: 2.3.0
     optionalDependencies:
       '@types/node': 22.20.1
+      jsdom: 25.0.1
+    transitivePeerDependencies:
+      - msw
+
+  vitest@4.1.11(@types/node@24.13.3)(jsdom@25.0.1)(vite@6.4.3(@types/node@24.13.3)(jiti@1.21.7)(lightningcss@1.32.0)):
+    dependencies:
+      '@vitest/expect': 4.1.11
+      '@vitest/mocker': 4.1.11(vite@6.4.3(@types/node@24.13.3)(jiti@1.21.7)(lightningcss@1.32.0))
+      '@vitest/pretty-format': 4.1.11
+      '@vitest/runner': 4.1.11
+      '@vitest/snapshot': 4.1.11
+      '@vitest/spy': 4.1.11
+      '@vitest/utils': 4.1.11
+      es-module-lexer: 2.3.2
+      expect-type: 1.4.0
+      magic-string: 0.30.21
+      obug: 2.1.4
+      pathe: 2.0.3
+      picomatch: 4.0.5
+      std-env: 4.2.0
+      tinybench: 2.9.0
+      tinyexec: 1.2.4
+      tinyglobby: 0.2.17
+      tinyrainbow: 3.1.1
+      vite: 6.4.3(@types/node@24.13.3)(jiti@1.21.7)(lightningcss@1.32.0)
+      why-is-node-running: 2.3.0
+    optionalDependencies:
+      '@types/node': 24.13.3
       jsdom: 25.0.1
     transitivePeerDependencies:
       - msw
