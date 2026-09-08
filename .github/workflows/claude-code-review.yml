@@ -54,6 +54,11 @@ jobs:
           fi
           printf 'Validated %d dependency-only file(s) from the authenticated Dependabot App.\n' "${#files[@]}"
 
+      - name: Prepare Claude Code install directory
+        if: github.event.pull_request.user.login != 'dependabot[bot]'
+        shell: bash
+        run: mkdir -p "$HOME/.local/bin"
+
       - name: Run Claude Code Review
         if: github.event.pull_request.user.login != 'dependabot[bot]'
         id: claude-review
