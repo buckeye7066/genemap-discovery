@@ -30,14 +30,12 @@
 //
 // Run standalone (after a web build) with:  pnpm build:mobile-bundle
 
-import { createRequire } from 'node:module';
+import { zipSync } from 'fflate';
 import { fileURLToPath } from 'node:url';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
-const require = createRequire(import.meta.url);
-const AdmZip = require('adm-zip');
 
 export const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const DEFAULT_BASE_URL = 'https://genemap-discovery.vercel.app';
@@ -81,17 +79,22 @@ export function publishMobileBundle({
   fs.rmSync(mobileDir, { recursive: true, force: true });
   fs.mkdirSync(mobileDir, { recursive: true });
 
-  const zip = new AdmZip();
-  for (const entry of fs.readdirSync(distDir, { withFileTypes: true })) {
-    if (entry.name === 'mobile') continue; // never nest the feed inside its own bundle
-    const full = path.join(distDir, entry.name);
-    if (entry.isDirectory()) zip.addLocalFolder(full, entry.name);
-    else zip.addLocalFile(full);
+  const files = Object.create(null);
+  function collect(directory, prefix = '') {
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+      if (!prefix && entry.name === 'mobile') continue;
+      const full = path.join(directory, entry.name);
+      const name = prefix + entry.name;
+      if (entry.isSymbolicLink()) throw new Error('[mobile-bundle] symlinks are not publishable: ' + name);
+      if (entry.isDirectory()) collect(full, name + '/');
+      else if (entry.isFile()) files[name] = new Uint8Array(fs.readFileSync(full));
+    }
   }
+  collect(distDir);
 
   const zipName = `bundle-${resolvedVersion}.zip`;
   const zipPath = path.join(mobileDir, zipName);
-  zip.writeZip(zipPath);
+  fs.writeFileSync(zipPath, zipSync(files, { level: 6 }));
 
   // Hash the file as it now exists on disk — not the in-memory buffer — so the
   // published digest describes exactly the bytes a device will download.
