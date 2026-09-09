@@ -2,6 +2,7 @@ export {};
 
 declare global {
   interface ImportMetaEnv {
+  readonly VITE_APP_UPDATE_VERSION?: string;
     readonly VITE_API_URL?: string;
     readonly VITE_STRIPE_PUBLIC_KEY?: string;
     readonly VITE_NATIVE_VERSION?: string;
@@ -17,3 +18,4 @@ declare global {
     readonly env: ImportMetaEnv;
   }
 }
+

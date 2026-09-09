@@ -1,10 +1,9 @@
+import NativeBootReady from '@/components/NativeBootReady'
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from '@/App.jsx'
 import '@/index.css'
 import { reportClientError } from '@/lib/reportClientError.js'
-import { isNativeApp } from '@/lib/platform.js'
-import { startMobileUpdateNotifier } from '@/lib/mobileUpdateNotifier.js'
 
 // Capture uncaught errors and unhandled promise rejections once, at bootstrap,
 // and report them to the backend. POST /report-client-error accepts two enum
@@ -34,18 +33,6 @@ if (typeof window !== 'undefined') {
 }
 
 // Keep the native rollback watchdog armed until the React application commits.
-function NativeBootReady() {
-  React.useEffect(() => {
-    if (!isNativeApp()) return undefined
-    let stopped = false
-    import('@capgo/capacitor-updater')
-      .then(({ CapacitorUpdater }) => { if (!stopped) return CapacitorUpdater.notifyAppReady() })
-      .catch(() => {})
-    const stop = startMobileUpdateNotifier({ isNative: true })
-    return () => { stopped = true; stop() }
-  }, [])
-  return null
-}
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
