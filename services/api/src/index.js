@@ -1,3 +1,4 @@
+import { ADVERTISING_RATE_LIMIT_MAX, isAdvertisingTraffic } from './config/advertisingRateLimit.js';
 import advertisingRoutes, { advertisingLinkRoutes } from './routes/advertising.js';
 import Fastify from 'fastify';
 import compress from '@fastify/compress';
@@ -127,11 +128,18 @@ fastify.addHook(
     scope: 'global',
     max: GLOBAL_RATE_LIMIT_MAX,
     timeWindowMs: RATE_LIMIT_WINDOW_MS,
-    skip: shouldBypassRateLimit,
+    skip: (request) => shouldBypassRateLimit(request) || isAdvertisingTraffic(request),
   })
 );
 
 fastify.addHook('onRequest', enforceHiddenPathBoundary);
+fastify.addHook('preHandler', createEmergencyRateLimitHook({
+  redisClient: rateLimitRedis,
+  scope: 'advertising',
+  max: ADVERTISING_RATE_LIMIT_MAX,
+  timeWindowMs: RATE_LIMIT_WINDOW_MS,
+  skip: (request) => !isAdvertisingTraffic(request),
+}));
 fastify.addHook('preHandler', enforcePublishingBoundary);
 fastify.addHook('preHandler', requireCsrf);
 

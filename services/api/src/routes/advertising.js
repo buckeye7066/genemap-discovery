@@ -1,3 +1,4 @@
+import { advertisingRateConfig } from '../config/advertisingRateLimit.js';
 import crypto from 'node:crypto';
 import { z } from 'zod';
 import { authenticate } from '../middleware/auth.js';
@@ -16,11 +17,11 @@ export default async function advertisingRoutes(fastify) {
     return payload;
   });
   const secret = process.env.COOKIE_SECRET;
-  fastify.get('/capability', async (request) => ({ canManage: isAdvertisingOwner(request.user) }));
-  fastify.get('/feed', async () => ({ creatives: await prisma.adCreative.findMany({
+  fastify.get('/capability', { config: advertisingRateConfig }, async (request) => ({ canManage: isAdvertisingOwner(request.user) }));
+  fastify.get('/feed', { config: advertisingRateConfig }, async () => ({ creatives: await prisma.adCreative.findMany({
     where: activeWhere(), select: publicFields, orderBy: { createdAt: 'asc' }, take: 100,
   }) }));
-  fastify.get('/:id/image', async (request) => {
+  fastify.get('/:id/image', { config: advertisingRateConfig }, async (request) => {
     const id = idInput.parse(request.params.id);
     const ad = await prisma.adCreative.findFirst({
       where: { id, ...(isAdvertisingOwner(request.user) ? { deletedAt: null } : activeWhere()) },
@@ -29,7 +30,7 @@ export default async function advertisingRoutes(fastify) {
     if (!ad) throw new NotFoundError('Advertisement unavailable');
     return { image: `data:image/webp;base64,${Buffer.from(ad.image).toString('base64')}` };
   });
-  fastify.post('/:id/display', async (request) => {
+  fastify.post('/:id/display', { config: advertisingRateConfig }, async (request) => {
     const id = idInput.parse(request.params.id);
     const { viewer } = viewerInput.parse(request.body);
     if (isAdvertisingOwner(request.user)) return { ticket: null }; // previews never count
@@ -38,7 +39,7 @@ export default async function advertisingRoutes(fastify) {
     const at = Date.now();
     return { ticket: signDisplay({ id, revision: ad.revision, viewer: viewerHash(viewer, secret), at }, secret) };
   });
-  fastify.post('/event', async (request) => {
+  fastify.post('/event', { config: advertisingRateConfig }, async (request) => {
     const { ticket, kind } = eventInput.parse(request.body);
     if (isAdvertisingOwner(request.user)) return { counted: false };
     const display = verifyDisplay(ticket, secret);
@@ -52,10 +53,10 @@ export default async function advertisingRoutes(fastify) {
     const result = await prisma.adEvent.createMany({ data: [{ creativeId: ad.id, viewer: display.viewer, displayKey, kind, day: new Date().toISOString().slice(0, 10) }], skipDuplicates: true });
     return { counted: result.count === 1 };
   });
-  fastify.get('/manage', { preHandler: requireAdvertisingOwner }, async () => ({ creatives: await prisma.adCreative.findMany({
+  fastify.get('/manage', { config: advertisingRateConfig, preHandler: requireAdvertisingOwner }, async () => ({ creatives: await prisma.adCreative.findMany({
     where: { deletedAt: null }, select: publicFields, orderBy: { createdAt: 'desc' }, take: 100,
   }) }));
-  fastify.post('/manage', { preHandler: requireAdvertisingOwner, bodyLimit: 3_000_000 }, async (request, reply) => {
+  fastify.post('/manage', { config: advertisingRateConfig, preHandler: requireAdvertisingOwner, bodyLimit: 3_000_000 }, async (request, reply) => {
     const { image, ...input } = request.body || {};
     const data = creativeData(input);
     const bytes = await rasterImage(image);
@@ -63,7 +64,7 @@ export default async function advertisingRoutes(fastify) {
     const creative = await prisma.adCreative.create({ data: { ...data, image: bytes }, select: publicFields });
     return reply.code(201).send({ creative });
   });
-  fastify.put('/manage/:id', { preHandler: requireAdvertisingOwner, bodyLimit: 3_000_000 }, async (request) => {
+  fastify.put('/manage/:id', { config: advertisingRateConfig, preHandler: requireAdvertisingOwner, bodyLimit: 3_000_000 }, async (request) => {
     const id = idInput.parse(request.params.id);
     const { image, ...input } = request.body || {};
     const data = creativeData(input);
@@ -72,13 +73,13 @@ export default async function advertisingRoutes(fastify) {
     if (!result.count) throw new NotFoundError('Advertisement unavailable');
     return { success: true };
   });
-  fastify.delete('/manage/:id', { preHandler: requireAdvertisingOwner }, async (request) => {
+  fastify.delete('/manage/:id', { config: advertisingRateConfig, preHandler: requireAdvertisingOwner }, async (request) => {
     const id = idInput.parse(request.params.id);
     const result = await prisma.adCreative.updateMany({ where: { id, deletedAt: null }, data: { paused: true, deletedAt: new Date(), image: Buffer.alloc(0), revision: { increment: 1 } } });
     if (!result.count) throw new NotFoundError('Advertisement unavailable');
     return { success: true };
   });
-  fastify.get('/manage/stats', { preHandler: requireAdvertisingOwner }, async () => {
+  fastify.get('/manage/stats', { config: advertisingRateConfig, preHandler: requireAdvertisingOwner }, async () => {
     // Aggregates only: no raw viewer identifiers, account data, referrers,
     // searches, profiles, or genomic information are stored or returned.
     const [totals, creatives, daily] = await Promise.all([

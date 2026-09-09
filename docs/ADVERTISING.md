@@ -28,7 +28,9 @@ in a hidden tab, while the link has focus, or when the reader pauses it. The
 server issues expiring signed display tickets, checks the current published
 revision and run window, and deduplicates each creative/browser/15-second
 window in PostgreSQL. Clicks require a recorded impression and are deduplicated
-per display. Owner previews do not count. These are application measurements,
+per display. Owner previews do not count. Periodic advertising requests have
+a separate bounded rate-limit budget, including the Redis-outage fallback, so
+rotation cannot exhaust education/account access limits. These are application measurements,
 not independently verified advertising billing or bot-proof audience estimates.
 
 Unique viewers mean randomly identified browser installations, not people.
