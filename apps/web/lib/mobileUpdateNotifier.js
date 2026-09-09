@@ -31,7 +31,10 @@ export const UPDATE_AVAILABLE_EVENT = 'genemap:mobile-update-available';
 export const UPDATE_NOTIFICATION_ID = 9001;
 
 /** Don't hammer the feed when a user flicks between apps. */
-export const MIN_CHECK_INTERVAL_MS = 15 * 60 * 1000;
+export const MIN_CHECK_INTERVAL_MS = 60 * 1000;
+
+let pendingUpdate = null;
+export const getPendingMobileUpdate = () => pendingUpdate;
 
 /**
  * @param {Pick<Storage, 'getItem'> | null | undefined} storage
@@ -214,6 +217,7 @@ export function startMobileUpdateNotifier({
         notifications,
         storage,
         emit: (detail) => {
+          pendingUpdate = detail;
           try {
             window.dispatchEvent(new CustomEvent(UPDATE_AVAILABLE_EVENT, { detail }));
           } catch {
@@ -233,10 +237,16 @@ export function startMobileUpdateNotifier({
   };
 
   doc.addEventListener('visibilitychange', onVisibility);
+  const poll = setInterval(onVisibility, minIntervalMs);
+  const host = doc.defaultView;
+  host?.addEventListener('online', onVisibility);
   void tick(); // launch check
 
   return () => {
     stopped = true;
+    clearInterval(poll);
+    host?.removeEventListener('online', onVisibility);
     doc.removeEventListener('visibilitychange', onVisibility);
   };
 }
+

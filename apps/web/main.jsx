@@ -1,10 +1,9 @@
+import NativeBootReady from '@/components/NativeBootReady'
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from '@/App.jsx'
 import '@/index.css'
 import { reportClientError } from '@/lib/reportClientError.js'
-import { isNativeApp } from '@/lib/platform.js'
-import { startMobileUpdateNotifier } from '@/lib/mobileUpdateNotifier.js'
 
 // Capture uncaught errors and unhandled promise rejections once, at bootstrap,
 // and report them to the backend. POST /report-client-error accepts two enum
@@ -33,26 +32,12 @@ if (typeof window !== 'undefined') {
   })
 }
 
-// Native app only. Two jobs:
-//  1. notifyAppReady() confirms the active OTA bundle booted, so
-//     @capgo/capacitor-updater does not roll it back to the previous one.
-//  2. start the launch/resume update check that raises a local notification
-//     and the in-app prompt (see lib/mobileUpdateNotifier.js).
-// Both are best-effort: an older package without the plugin just skips them.
-if (isNativeApp()) {
-  import('@capgo/capacitor-updater')
-    .then(({ CapacitorUpdater }) => CapacitorUpdater.notifyAppReady())
-    .catch(() => {})
-  try {
-    startMobileUpdateNotifier({ isNative: true })
-  } catch {
-    // an update check must never block the app from rendering
-  }
-}
+// Keep the native rollback watchdog armed until the React application commits.
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <App />
+    <NativeBootReady />
   </React.StrictMode>,
 )
 
@@ -64,6 +49,7 @@ if (import.meta.env.DEV && import.meta.hot) {
     window.parent?.postMessage({ type: 'sandbox:afterUpdate' }, '*');
   });
 }
+
 
 
 

@@ -246,3 +246,15 @@ describe('downloadAndApplyUpdate', () => {
     expect(updater.download).not.toHaveBeenCalled();
   });
 });
+
+it('rechecks native compatibility at the shared apply boundary', async () => {
+  const download = vi.fn();
+  const updater = { current: async () => ({ native: '1.0.1' }), download };
+  await expect(downloadAndApplyUpdate({ version: '1.0.9', url: 'https://updates.example/bundle.zip', sha256: 'a'.repeat(64), minNativeVersion: '1.0.5' }, { updater })).rejects.toThrow('signed app release');
+  expect(download).not.toHaveBeenCalled();
+});
+
+it("uses embedded web identity for builtin packages with a native versionName", async () => {
+  const updater = { current: async () => ({ bundle: { id: "builtin", version: "1.0.200" }, native: "1.0.200" }) };
+  await expect(readInstalledVersions({ updater })).resolves.toEqual({ bundleVersion: BAKED_BUNDLE_VERSION, nativeVersion: "1.0.200" });
+});

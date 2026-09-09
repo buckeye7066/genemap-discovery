@@ -1,4 +1,5 @@
-const { app, BrowserWindow, shell } = require('electron');
+const { app, BrowserWindow, shell, Menu, dialog } = require('electron');
+const { createDesktopUpdater } = require('./updates.cjs');
 const path = require('path');
 
 const isDev = !app.isPackaged;
@@ -87,7 +88,23 @@ function createWindow() {
   });
 }
 
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+  createWindow();
+  let updater = null;
+  if (process.platform === 'win32') {
+    const { autoUpdater } = require('electron-updater');
+    autoUpdater.setFeedURL({ provider: 'generic', url: 'https://github.com/buckeye7066/genemap-discovery/releases/download/desktop-updates/' });
+    updater = createDesktopUpdater({ app, autoUpdater, dialog, getWindow: () => mainWindow });
+    updater.start();
+  }
+  Menu.setApplicationMenu(Menu.buildFromTemplate([
+    { label: 'GeneMap Discovery', submenu: [
+      { label: 'Check for updates...', click: () => updater ? void updater.check(true) : void dialog.showMessageBox({ message: 'Installer updates are not configured for this platform yet.' }) },
+      { role: 'quit' },
+    ] },
+    { role: 'editMenu' }, { role: 'viewMenu' }, { role: 'windowMenu' },
+  ]));
+});
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {

@@ -73,7 +73,10 @@ export function publishMobileBundle({
   }
   const resolvedVersion =
     version ??
-    JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'apps', 'web', 'package.json'), 'utf8')).version;
+    JSON.parse(fs.readFileSync(path.join(distDir, 'app-update.json'), 'utf8')).bundleVersion;
+  if (!/^\d+\.\d+\.\d+$/.test(resolvedVersion || '')) {
+    throw new Error('Build identity is missing a numeric bundleVersion. Run the web build first.');
+  }
 
   const mobileDir = path.join(distDir, 'mobile');
   fs.rmSync(mobileDir, { recursive: true, force: true });
@@ -128,3 +131,4 @@ if (invokedDirectly) {
     process.exit(1);
   }
 }
+

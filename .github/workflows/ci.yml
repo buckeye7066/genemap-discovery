@@ -263,6 +263,7 @@ jobs:
       - name: Build web bundle for desktop resources
         run: pnpm build:web
         env:
+          ELECTRON_BUILD: 'true'
           VITE_API_URL: http://localhost:3000
       - name: Generate desktop icons
         run: pnpm --filter @genemap/desktop run build:icons
@@ -301,12 +302,18 @@ jobs:
       - name: Build web bundle for desktop resources
         run: pnpm build:web
         env:
+          ELECTRON_BUILD: 'true'
           VITE_API_URL: http://localhost:3000
       - name: Generate desktop icons
         run: pnpm --filter @genemap/desktop run build:icons
       - name: Build unsigned Windows NSIS installer
         working-directory: apps/desktop
         run: node scripts/electron-build.mjs --win --publish never
+      - name: Verify packaged desktop web assets and updater decisions
+        run: |
+          node --test apps/desktop/updates.test.cjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node scripts/verify-desktop-resources.mjs apps/desktop/dist-electron/win-unpacked/resources
       - name: Verify Windows installer exists
         shell: pwsh
         run: |
@@ -345,6 +352,7 @@ jobs:
       - name: Build web bundle for desktop resources
         run: pnpm build:web
         env:
+          ELECTRON_BUILD: 'true'
           VITE_API_URL: http://localhost:3000
       - name: Generate desktop icons
         run: pnpm --filter @genemap/desktop run build:icons

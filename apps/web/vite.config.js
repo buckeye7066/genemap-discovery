@@ -1,4 +1,5 @@
 import react from '@vitejs/plugin-react'
+import appUpdates from '../../scripts/app-updates.mjs'
 import { defineConfig } from 'vite'
 import { createRequire } from 'node:module'
 import path from 'path'
@@ -35,7 +36,8 @@ function releaseIdentity() {
 }
 
 export default defineConfig({
-  plugins: [react(), localOcrData(englishTessdata), releaseIdentity()],
+  base: process.env.ELECTRON_BUILD === 'true' ? './' : '/',
+  plugins: [react(), localOcrData(englishTessdata), releaseIdentity(), appUpdates({ app: 'genemap-discovery' })],
   server: {
     host: '127.0.0.1',
     port: resolveWebPort(process.env),
@@ -94,3 +96,4 @@ export default defineConfig({
     },
   },
 })
+

@@ -58,11 +58,20 @@
       "destination": "https://genemap-api-production.up.railway.app/readyz"
     },
     {
-      "source": "/((?!assets/|icons/|mobile/|ocr/|release\\.json$|\\.well-known/).*)",
+      "source": "/((?!app-update\\.json$|app-update-[a-zA-Z0-9-]+\\.(?:js|css)$|assets/|icons/|mobile/|ocr/|release\\.json$|\\.well-known/).*)",
       "destination": "/index.html"
     }
   ],
   "headers": [
+    {
+      "source": "/app-update.json",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-cache, no-store, must-revalidate"
+        }
+      ]
+    },
     {
       "source": "/release.json",
       "headers": [
