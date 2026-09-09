@@ -1,0 +1,165 @@
+{
+  "name": "GeneMap Discovery",
+  "defaults": {
+    "win32": "windows",
+    "darwin": "macos",
+    "linux": "web"
+  },
+  "guidance": "Install repository dependencies and platform toolchains first. Auto uses the build host; explicit target names the recipient. iOS/Safari use web; native Apple distribution requires separate signing and existing release procedures.",
+  "targets": {
+    "web": {
+      "format": "web",
+      "output": "apps/web/dist/",
+      "notice": "Browser build for web; no native installer or Apple signing. Recipients sign in with their own account.",
+      "commands": [
+        {
+          "command": "npm",
+          "args": [
+            "run",
+            "build:shared"
+          ]
+        },
+        {
+          "command": "npm",
+          "args": [
+            "run",
+            "build:web"
+          ]
+        }
+      ]
+    },
+    "safari": {
+      "format": "web",
+      "output": "apps/web/dist/",
+      "notice": "Browser build for safari; no native installer or Apple signing. Recipients sign in with their own account.",
+      "commands": [
+        {
+          "command": "npm",
+          "args": [
+            "run",
+            "build:shared"
+          ]
+        },
+        {
+          "command": "npm",
+          "args": [
+            "run",
+            "build:web"
+          ]
+        }
+      ]
+    },
+    "ios": {
+      "format": "web",
+      "output": "apps/web/dist/",
+      "notice": "Browser build for ios; no native installer or Apple signing. Recipients sign in with their own account.",
+      "commands": [
+        {
+          "command": "npm",
+          "args": [
+            "run",
+            "build:shared"
+          ]
+        },
+        {
+          "command": "npm",
+          "args": [
+            "run",
+            "build:web"
+          ]
+        }
+      ]
+    },
+    "windows": {
+      "format": "Windows installer",
+      "hosts": [
+        "win32"
+      ],
+      "output": "apps/desktop/dist-electron/*.exe",
+      "notice": "Local build only. Signing/notarization requires configured publisher credentials; no release is uploaded.",
+      "commands": [
+        {
+          "command": "npm",
+          "args": [
+            "run",
+            "build:shared"
+          ]
+        },
+        {
+          "command": "npm",
+          "args": [
+            "run",
+            "build:desktop:win",
+            "--",
+            "--publish",
+            "never"
+          ]
+        }
+      ]
+    },
+    "macos": {
+      "format": "macOS package",
+      "hosts": [
+        "darwin"
+      ],
+      "output": "apps/desktop/dist-electron/*.dmg",
+      "notice": "Local build only. Signing/notarization requires configured publisher credentials; no release is uploaded.",
+      "commands": [
+        {
+          "command": "npm",
+          "args": [
+            "run",
+            "build:shared"
+          ]
+        },
+        {
+          "command": "npm",
+          "args": [
+            "run",
+            "build:desktop:mac",
+            "--",
+            "--publish",
+            "never"
+          ]
+        }
+      ]
+    },
+    "android": {
+      "format": "Android debug APK",
+      "output": "apps/web/android/app/build/outputs/apk/debug/app-debug.apk",
+      "notice": "Debug-signed test APK, not a production release. Requires installed Capacitor dependencies, Java21 and Android SDK. Use the existing gated release workflow for production signing.",
+      "commands": [
+        {
+          "command": "npm",
+          "args": [
+            "run",
+            "build:shared"
+          ]
+        },
+        {
+          "command": "npm",
+          "args": [
+            "run",
+            "build:web"
+          ]
+        },
+        {
+          "command": "capacitor",
+          "args": [
+            "sync",
+            "android"
+          ],
+          "cwd": "apps/web"
+        },
+        {
+          "command": "gradle",
+          "args": [
+            "assembleDebug",
+            "--no-daemon"
+          ],
+          "cwd": "apps/web/android"
+        }
+      ]
+    }
+  }
+}
