@@ -79,6 +79,8 @@ const baseSchema = z.object({
 
   // Admin allowlist (comma-separated emails)
   ADMIN_EMAILS: z.string().optional(),
+  // Verified immutable owner account ID. Missing configuration denies ad management.
+  ADVERTISING_OWNER_USER_ID: z.string().optional(),
 
   // CSRF
   CSRF_SECRET: z.string().optional(),

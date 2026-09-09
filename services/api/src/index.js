@@ -1,3 +1,5 @@
+import { ADVERTISING_RATE_LIMIT_MAX, isAdvertisingTraffic } from './config/advertisingRateLimit.js';
+import advertisingRoutes, { advertisingLinkRoutes } from './routes/advertising.js';
 import Fastify from 'fastify';
 import compress from '@fastify/compress';
 import cors from '@fastify/cors';
@@ -126,11 +128,18 @@ fastify.addHook(
     scope: 'global',
     max: GLOBAL_RATE_LIMIT_MAX,
     timeWindowMs: RATE_LIMIT_WINDOW_MS,
-    skip: shouldBypassRateLimit,
+    skip: (request) => shouldBypassRateLimit(request) || isAdvertisingTraffic(request),
   })
 );
 
 fastify.addHook('onRequest', enforceHiddenPathBoundary);
+fastify.addHook('preHandler', createEmergencyRateLimitHook({
+  redisClient: rateLimitRedis,
+  scope: 'advertising',
+  max: ADVERTISING_RATE_LIMIT_MAX,
+  timeWindowMs: RATE_LIMIT_WINDOW_MS,
+  skip: (request) => !isAdvertisingTraffic(request),
+}));
 fastify.addHook('preHandler', enforcePublishingBoundary);
 fastify.addHook('preHandler', requireCsrf);
 
@@ -174,6 +183,8 @@ await fastify.register(billingRoutes, { prefix: '/billing' });
 await fastify.register(educationRoutes, { prefix: '/education' });
 await fastify.register(llmRoutes, { prefix: '/llm' });
 await fastify.register(adminRoutes, { prefix: '/admin' });
+await fastify.register(advertisingRoutes, { prefix: '/advertising' });
+await fastify.register(advertisingLinkRoutes, { prefix: '/advertising-link' });
 await fastify.register(entityRoutes, { prefix: '/entities' });
 await fastify.register(genomicsRoutes, { prefix: '/genomics' });
 await fastify.register(publicationConceptRoutes, { prefix: '/genomics/publication-concepts' });

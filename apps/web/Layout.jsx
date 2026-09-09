@@ -1,3 +1,4 @@
+import Advertisement from './components/ads/Advertisement';
 import React, { useEffect, memo } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { createPageUrl } from "@/utils";
@@ -315,6 +316,7 @@ export default function Layout({ children, currentPageName }) {
 
           <div className="flex-1 overflow-auto min-h-0">
             <MobileUpdatePrompt />
+            <Advertisement key={user?.id || 'guest'} />
 
             {children}
 

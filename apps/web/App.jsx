@@ -91,7 +91,7 @@ const AuthenticatedApp = () => {
   if (!isAuthenticated) {
     return (
       <Suspense fallback={<LoadingSpinner />}>
-        <Routes>
+        <Routes key={user?.id || 'guest'}>
           {Object.entries(Pages)
             .filter(([path]) => publicPageKeys.has(path) || openPageKeys.has(path))
             .map(([path, Page]) => (
@@ -123,7 +123,7 @@ const AuthenticatedApp = () => {
 
   return (
     <Suspense fallback={<LoadingSpinner />}>
-      <Routes>
+      <Routes key={user?.id || 'guest'}>
         {Object.entries(Pages)
           .filter(([path]) => publicPageKeys.has(path))
           .map(([path]) => (

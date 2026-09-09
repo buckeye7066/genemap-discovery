@@ -44,7 +44,7 @@ self.addEventListener('fetch', (event) => {
   if (url.origin !== self.location.origin) return;
   // Never cache/intercept auth, health records, generated output, or API calls.
   // In particular, a Railway/CORS failure must not become a fake local 503.
-  if (/^\/(?:api|auth|billing|education|genomics|entities|llm|assistants)(?:\/|$)/u.test(url.pathname)) return;
+  if (/^\/(?:api|auth|billing|education|genomics|entities|llm|assistants|advertising|advertising-link|admin|account)(?:\/|$)/u.test(url.pathname)) return;
   const navigation = request.mode === 'navigate';
   const asset = /^\/(?:assets|icons)\//u.test(url.pathname);
   if (!navigation && !asset) return;

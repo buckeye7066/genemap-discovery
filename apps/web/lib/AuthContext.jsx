@@ -1,10 +1,22 @@
-import React, { createContext, useState, useContext, useEffect, useCallback, useMemo } from 'react';
+import React, { createContext, useState, useContext, useEffect, useCallback, useMemo, useRef } from 'react';
 import { apiClient, hasStoredSession, setCsrfToken } from '@genemap/shared';
+import { queryClientInstance } from './query-client';
 
 const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
+  const [user, setUserState] = useState(null);
+  const userIdentity = useRef(null);
+  // Clear cached results and cancel their requests before rendering a different
+  // account. A shared browser must never reuse the previous owner's query data.
+  const setUser = useCallback((nextUser) => {
+    const nextIdentity = nextUser?.id || null;
+    if (userIdentity.current !== nextIdentity) {
+      queryClientInstance.clear();
+      userIdentity.current = nextIdentity;
+    }
+    setUserState(nextUser);
+  }, []);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
   const [isLoadingPublicSettings, setIsLoadingPublicSettings] = useState(false);
