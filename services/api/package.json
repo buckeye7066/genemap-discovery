@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "node --watch --env-file-if-exists=.env src/index.js",
+    "dev": "corepack pnpm prepare:runtime && node --watch --env-file-if-exists=.env src/index.js",
     "start": "node --env-file-if-exists=.env src/index.js",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
@@ -12,10 +12,13 @@
     "db:migrate:deploy": "prisma migrate deploy",
     "db:studio": "prisma studio",
     "lint": "eslint \"src/**/*.js\"",
-    "typecheck": "node --check src/index.js && node --check src/config/env.js",
-    "test": "vitest run",
+    "typecheck": "node --check src/index.js && node --check src/config/env.js && node --check ../../scripts/start-eva-api.mjs",
+    "test": "vitest run && node --test ../../scripts/__tests__/start-eva-api.test.mjs",
     "test:integration": "vitest run src/__tests__/postgres-integration.test.js",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "prepare:runtime": "corepack pnpm --filter @genemap/shared build && corepack pnpm db:generate",
+    "start:eva": "corepack pnpm prepare:runtime && node ../../scripts/start-eva-api.mjs",
+    "stop:eva": "node ../../scripts/stop-eva-api.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.122.0",
