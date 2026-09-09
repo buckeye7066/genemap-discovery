@@ -311,7 +311,7 @@ jobs:
         run: node scripts/electron-build.mjs --win --publish never
       - name: Verify packaged desktop web assets and updater decisions
         run: |
-          node --test apps/desktop/updates.test.cjs
+          node --test apps/desktop/updates.test.cjs scripts/__tests__/desktop-release-head.test.mjs
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           node scripts/verify-desktop-resources.mjs apps/desktop/dist-electron/win-unpacked/resources
       - name: Verify Windows installer exists
