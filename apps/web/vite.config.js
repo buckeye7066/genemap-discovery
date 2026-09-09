@@ -36,6 +36,7 @@ function releaseIdentity() {
 }
 
 export default defineConfig({
+  base: process.env.ELECTRON_BUILD === 'true' ? './' : '/',
   plugins: [react(), localOcrData(englishTessdata), releaseIdentity(), appUpdates({ app: 'genemap-discovery' })],
   server: {
     host: '127.0.0.1',

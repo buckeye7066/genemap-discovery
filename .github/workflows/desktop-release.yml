@@ -1,0 +1,67 @@
+name: Desktop release
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: desktop-release
+  cancel-in-progress: false
+jobs:
+  windows:
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Stamp a unique installer version
+        env:
+          RELEASE_VERSION: 1.${{ github.run_number }}.${{ github.run_attempt }}
+        run: node scripts/stamp-desktop-version.mjs
+      - name: Test updater decisions
+        run: node --test apps/desktop/updates.test.cjs
+      - name: Build Windows installer
+        env:
+          ELECTRON_BUILD: 'true'
+          VITE_API_URL: https://genemap-api-production.up.railway.app
+          CSC_LINK: ${{ secrets.WINDOWS_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CSC_KEY_PASSWORD }}
+        run: |
+          pnpm --filter @genemap/shared build
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          pnpm build:web
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          pnpm --filter @genemap/desktop run build:win --publish never
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node scripts/verify-desktop-resources.mjs apps/desktop/dist-electron/win-unpacked/resources
+      - name: Publish payloads before replacing the update manifest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          $currentMain = gh api repos/${{ github.repository }}/git/ref/heads/main --jq .object.sha
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if ($currentMain -ne '${{ github.event.workflow_run.head_sha }}') { Write-Output 'Superseded by a newer main commit; no release published.'; exit 0 }
+          gh release view desktop-updates *> $null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create desktop-updates --target ${{ github.event.workflow_run.head_sha }} --title 'GeneMap Discovery desktop updates' --notes 'Windows desktop installers, currently unsigned. Install the bootstrap once to enable future update prompts. Save your work before installing. Apple desktop releases require signing and notarization credentials.' --latest=false
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+          $payloads = @(Get-ChildItem apps/desktop/dist-electron -File | Where-Object { $_.Extension -in '.exe', '.blockmap' } | ForEach-Object { $_.FullName })
+          if ($payloads.Count -eq 0) { throw 'No Windows release payloads were produced.' }
+          gh release upload desktop-updates @payloads --clobber
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          gh release upload desktop-updates apps/desktop/dist-electron/latest.yml --clobber
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

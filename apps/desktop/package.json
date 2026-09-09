@@ -16,7 +16,10 @@
   "build": {
     "appId": "com.genemap.discovery",
     "productName": "GeneMap Discovery",
-    "publish": null,
+    "publish": {
+      "provider": "generic",
+      "url": "https://github.com/buckeye7066/genemap-discovery/releases/download/desktop-updates/"
+    },
     "npmRebuild": false,
     "directories": {
       "output": "dist-electron"
@@ -25,32 +28,43 @@
       "main.js",
       "preload.js",
       "package.json",
-      "icons/**"
+      "icons/**",
+      "updates.cjs"
     ],
     "extraResources": [
       {
         "from": "../web/dist",
         "to": "app",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
       }
     ],
     "win": {
-      "target": ["nsis"],
+      "target": [
+        "nsis"
+      ],
       "icon": "icons/icon.ico"
     },
     "mac": {
-      "target": ["dmg"],
+      "target": [
+        "dmg"
+      ],
       "icon": "icons/icon.icns",
       "category": "public.app-category.education"
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true
-    }
+    },
+    "artifactName": "GeneMap-Discovery-${version}-${arch}.${ext}"
   },
   "devDependencies": {
     "electron": "^43.2.0",
     "electron-builder": "^26.15.3",
     "electron-builder-squirrel-windows": "^26.15.3"
+  },
+  "dependencies": {
+    "electron-updater": "6.8.9"
   }
 }
