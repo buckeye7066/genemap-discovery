@@ -68,6 +68,9 @@ services/api/prisma/*.db-journal
 # Nightly agent sweep output (regenerated every run; not source)
 reports/agents/
 
+# Disposable EVA database/runtime state (never durable application data)
+.eva-tmp/
+
 # Testing
 coverage
 .nyc_output
