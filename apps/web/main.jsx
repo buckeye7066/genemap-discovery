@@ -33,26 +33,24 @@ if (typeof window !== 'undefined') {
   })
 }
 
-// Native app only. Two jobs:
-//  1. notifyAppReady() confirms the active OTA bundle booted, so
-//     @capgo/capacitor-updater does not roll it back to the previous one.
-//  2. start the launch/resume update check that raises a local notification
-//     and the in-app prompt (see lib/mobileUpdateNotifier.js).
-// Both are best-effort: an older package without the plugin just skips them.
-if (isNativeApp()) {
-  import('@capgo/capacitor-updater')
-    .then(({ CapacitorUpdater }) => CapacitorUpdater.notifyAppReady())
-    .catch(() => {})
-  try {
-    startMobileUpdateNotifier({ isNative: true })
-  } catch {
-    // an update check must never block the app from rendering
-  }
+// Keep the native rollback watchdog armed until the React application commits.
+function NativeBootReady() {
+  React.useEffect(() => {
+    if (!isNativeApp()) return undefined
+    let stopped = false
+    import('@capgo/capacitor-updater')
+      .then(({ CapacitorUpdater }) => { if (!stopped) return CapacitorUpdater.notifyAppReady() })
+      .catch(() => {})
+    const stop = startMobileUpdateNotifier({ isNative: true })
+    return () => { stopped = true; stop() }
+  }, [])
+  return null
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <App />
+    <NativeBootReady />
   </React.StrictMode>,
 )
 
@@ -64,6 +62,7 @@ if (import.meta.env.DEV && import.meta.hot) {
     window.parent?.postMessage({ type: 'sandbox:afterUpdate' }, '*');
   });
 }
+
 
 
 

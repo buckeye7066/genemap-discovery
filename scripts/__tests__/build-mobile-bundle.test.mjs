@@ -82,3 +82,18 @@ test('refuses to publish a feed for a dist that was never built', () => {
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('publishes the built identity instead of the unchanged package version', () => {
+  const distDir = fakeDist();
+  try {
+    const marker = path.join(distDir, 'app-update.json');
+    fs.writeFileSync(marker, JSON.stringify({ bundleVersion: '1.0.1788900000000' }));
+    const first = publishMobileBundle({ distDir });
+    fs.writeFileSync(marker, JSON.stringify({ bundleVersion: '1.0.1788900000001' }));
+    const second = publishMobileBundle({ distDir });
+    assert.equal(first.manifest.version, '1.0.1788900000000');
+    assert.equal(second.manifest.version, '1.0.1788900000001');
+    assert.notEqual(first.manifest.sha256, second.manifest.sha256);
+  } finally { fs.rmSync(distDir, { recursive: true, force: true }); }
+});
+

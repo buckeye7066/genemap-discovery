@@ -1,8 +1,8 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Download, ExternalLink, Loader2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { downloadAndApplyUpdate } from '@/lib/mobileUpdater.js';
-import { UPDATE_AVAILABLE_EVENT } from '@/lib/mobileUpdateNotifier.js';
+import { UPDATE_AVAILABLE_EVENT, getPendingMobileUpdate } from '@/lib/mobileUpdateNotifier.js';
 import { RELEASES_URL } from '@/components/settings/MobileUpdateCard';
 
 /**
@@ -16,7 +16,8 @@ import { RELEASES_URL } from '@/components/settings/MobileUpdateCard';
  * so it is inert on the web and on an up-to-date device.
  */
 export default function MobileUpdatePrompt() {
-  const [detail, setDetail] = useState(/** @type {any} */ (null));
+  const [detail, setDetail] = useState(getPendingMobileUpdate);
+  const dismissedVersion = useRef('');
   const [state, setState] = useState('idle'); // idle | installing | error
   const [error, setError] = useState('');
 
@@ -24,7 +25,7 @@ export default function MobileUpdatePrompt() {
     if (typeof window === 'undefined') return undefined;
     const onAvailable = (event) => {
       const next = /** @type {any} */ (event)?.detail;
-      if (next?.manifest?.version) setDetail(next);
+      if (next?.manifest?.version && dismissedVersion.current !== next.manifest.version) setDetail(next);
     };
     window.addEventListener(UPDATE_AVAILABLE_EVENT, onAvailable);
     return () => window.removeEventListener(UPDATE_AVAILABLE_EVENT, onAvailable);
@@ -71,7 +72,8 @@ export default function MobileUpdatePrompt() {
         <button
           type="button"
           aria-label="Dismiss update notice"
-          onClick={() => setDetail(null)}
+          onClick={() => { dismissedVersion.current = manifest.version; setDetail(null); }}
+          disabled={state === 'installing'}
           className="shrink-0 rounded p-1 opacity-60 hover:opacity-100"
         >
           <X className="h-4 w-4" />
@@ -99,3 +101,4 @@ export default function MobileUpdatePrompt() {
     </div>
   );
 }
+

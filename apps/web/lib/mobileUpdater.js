@@ -34,7 +34,7 @@ import { loadCapacitorUpdater } from '@/lib/capacitorUpdaterPlugin.js';
  * the built-in bundle as the placeholder "builtin", which carries no version,
  * so this is what we compare the feed against until an OTA bundle is active.
  */
-export const BAKED_BUNDLE_VERSION = pkg.version;
+export const BAKED_BUNDLE_VERSION = import.meta.env.VITE_APP_UPDATE_VERSION || pkg.version;
 
 /** Production origin that hosts /mobile/latest.json + the bundle zips. */
 export const UPDATE_BASE_URL = 'https://genemap-discovery.vercel.app';
@@ -157,6 +157,9 @@ export function parseUpdateManifest(raw) {
   if (!isSha256(sha256)) {
     throw new Error('Update feed is missing a valid sha256 checksum — refusing to offer an unverifiable update.');
   }
+  if (record.minNativeVersion && !parseVersion(record.minNativeVersion)) {
+    throw new Error('Update feed has an invalid minimum app version.');
+  }
   return {
     version: String(version),
     url,
@@ -261,7 +264,7 @@ export function requiresNativeUpdate(manifest, nativeVersion) {
  * it. Any verification failure deletes the downloaded bundle and throws — the
  * caller never gets a code path that applies unverified bytes.
  *
- * @param {{ version: string, url: string, sha256: string }} manifest
+ * @param {{ version: string, url: string, sha256: string, minNativeVersion?: string }} manifest
  * @param {{ updater?: any, onProgress?: (percent: number) => void, apply?: boolean }} [opts]
  * @returns {Promise<{ id?: string, version?: string, checksum?: string }>}
  */
@@ -270,6 +273,12 @@ export async function downloadAndApplyUpdate(manifest, { updater, onProgress, ap
     throw new Error('Update refused: the feed did not publish a bundle checksum.');
   }
   const plugin = updater ?? (await loadCapacitorUpdater()).plugin;
+  if (manifest.minNativeVersion) {
+    const current = await plugin.current?.();
+    if (requiresNativeUpdate(manifest, current?.native)) {
+      throw new Error('Install the latest signed app release before applying this update.');
+    }
+  }
 
   let listener = null;
   if (typeof onProgress === 'function' && typeof plugin.addListener === 'function') {
@@ -349,3 +358,4 @@ export async function readInstalledVersions({ updater } = {}) {
     return { bundleVersion: BAKED_BUNDLE_VERSION, nativeVersion: null };
   }
 }
+

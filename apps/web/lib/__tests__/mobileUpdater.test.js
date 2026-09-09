@@ -246,3 +246,11 @@ describe('downloadAndApplyUpdate', () => {
     expect(updater.download).not.toHaveBeenCalled();
   });
 });
+
+it('rechecks native compatibility at the shared apply boundary', async () => {
+  const download = vi.fn();
+  const updater = { current: async () => ({ native: '1.0.1' }), download };
+  await expect(downloadAndApplyUpdate({ version: '1.0.9', sha256: 'a'.repeat(64), minNativeVersion: '1.0.5' }, { updater })).rejects.toThrow('signed app release');
+  expect(download).not.toHaveBeenCalled();
+});
+
