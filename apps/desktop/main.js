@@ -7,6 +7,8 @@ const isDev = !app.isPackaged;
 // Hosts the user can open in their default browser. Anything outside this
 // list is denied, even when it uses an https: scheme.
 const ALLOWED_EXTERNAL_HOSTS = new Set([
+  // Published advertiser destinations resolve server-side without session tokens.
+  'genemap-api-production.up.railway.app',
   'clinicaltrials.gov',
   'www.clinicaltrials.gov',
   'www.ncbi.nlm.nih.gov',

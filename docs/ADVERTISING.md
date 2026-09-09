@@ -52,6 +52,10 @@ account-cache cancellation, ticket replay/expiry, and a real PostgreSQL test
 for reconnect persistence and concurrent event deduplication. The PostgreSQL
 test is included in `test:api:integration`; it runs only with `TEST_DB=postgres`.
 
+Desktop advertiser clicks use a first-party published-creative redirect; no
+session token or identity is placed in that URL or passed to the system browser.
+The desktop external-host allowlist gains only the existing GeneMap API host.
+
 The existing deployment/update pipelines remain authoritative: Vercel web and
 mobile feed, Railway API/migrations, and CI-triggered Windows installer release.
 The pre-existing desktop file-origin sign-in limitation remains a separate

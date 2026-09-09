@@ -89,3 +89,19 @@ export default async function advertisingRoutes(fastify) {
     return { totals: totals[0], creatives, daily };
   });
 }
+
+// Desktop opens this first-party URL in the system browser. It carries only a
+// published creative ID, never account tokens or identity. The server resolves
+// the owner-approved destination; arbitrary redirect URLs are not accepted.
+export async function advertisingLinkRoutes(fastify) {
+  fastify.get('/:id', async (request, reply) => {
+    const id = idInput.parse(request.params.id);
+    const ad = await fastify.prisma.adCreative.findFirst({ where: { id, ...activeWhere() }, select: { targetUrl: true } });
+    if (!ad) throw new NotFoundError('Advertisement unavailable');
+    const target = new URL(ad.targetUrl);
+    if (target.protocol !== 'https:' || target.username || target.password) throw new NotFoundError('Advertisement unavailable');
+    reply.header('Cache-Control', 'no-store');
+    reply.header('Referrer-Policy', 'no-referrer');
+    return reply.redirect(target.href);
+  });
+}

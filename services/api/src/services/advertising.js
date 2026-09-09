@@ -8,7 +8,7 @@ export function isAdvertisingOwner(user, env = process.env) {
   const id = env.ADVERTISING_OWNER_USER_ID?.trim();
   return Boolean(id && user?.userId === id && user?.role === 'super_admin');
 }
-export function requireAdvertisingOwner(request) {
+export async function requireAdvertisingOwner(request) {
   if (!isAdvertisingOwner(request.user)) throw new ForbiddenError('Owner access required');
 }
 export const creativeInput = z.object({

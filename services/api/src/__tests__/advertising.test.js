@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 import Fastify from 'fastify';
 import cookie from '@fastify/cookie';
 import sharp from 'sharp';
-import advertisingRoutes from '../routes/advertising.js';
+import advertisingRoutes, { advertisingLinkRoutes } from '../routes/advertising.js';
 import { activeWhere, creativeData, isAdvertisingOwner, rasterImage, signDisplay, verifyDisplay, viewerHash } from '../services/advertising.js';
 import { authCookie } from './setup.js';
 import { requireCsrf, __test__ as csrf } from '../middleware/csrf.js';
@@ -50,6 +50,7 @@ beforeEach(async () => {
   app.addHook('preHandler', requireCsrf);
   app.setErrorHandler((error, _request, reply) => reply.code(error.statusCode || (error.name === 'ZodError' ? 400 : 500)).send({ error: 'Rejected' }));
   await app.register(advertisingRoutes, { prefix: '/advertising' });
+  await app.register(advertisingLinkRoutes, { prefix: '/advertising-link' });
   await app.ready();
 });
 afterEach(async () => { delete process.env.ADVERTISING_OWNER_USER_ID; await app.close(); });
@@ -137,4 +138,16 @@ describe('honest deduplicated measurements', () => {
     expect(Object.keys(decoded).sort()).toEqual(['at', 'id', 'revision', 'viewer']);
     expect(JSON.stringify(decoded)).not.toContain(ordinaryId);
   });
+});
+
+it('opens only currently published owner-approved destinations without transferring a session', async () => {
+  await request('POST', '/manage', { ...input(), image });
+  const ad = ads[0];
+  const response = await app.inject({ method: 'GET', url: `/advertising-link/${ad.id}?url=https://evil.invalid` });
+  expect(response.statusCode).toBe(302);
+  expect(response.headers.location).toBe(input().targetUrl);
+  expect(response.headers['referrer-policy']).toBe('no-referrer');
+  expect(response.headers['set-cookie']).toBeUndefined();
+  ad.paused = true;
+  expect((await app.inject({ method: 'GET', url: `/advertising-link/${ad.id}` })).statusCode).toBe(404);
 });

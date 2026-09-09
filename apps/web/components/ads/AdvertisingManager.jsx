@@ -7,6 +7,7 @@ const localDate = (date) => {
 };
 export function runEnd(start, period) {
   const date = new Date(start);
+  if (!Number.isFinite(date.getTime())) return '';
   if (period === 'month') {
     const day = date.getDate();
     date.setDate(1); date.setMonth(date.getMonth() + 1);

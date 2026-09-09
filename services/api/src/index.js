@@ -1,4 +1,4 @@
-import advertisingRoutes from './routes/advertising.js';
+import advertisingRoutes, { advertisingLinkRoutes } from './routes/advertising.js';
 import Fastify from 'fastify';
 import compress from '@fastify/compress';
 import cors from '@fastify/cors';
@@ -176,6 +176,7 @@ await fastify.register(educationRoutes, { prefix: '/education' });
 await fastify.register(llmRoutes, { prefix: '/llm' });
 await fastify.register(adminRoutes, { prefix: '/admin' });
 await fastify.register(advertisingRoutes, { prefix: '/advertising' });
+await fastify.register(advertisingLinkRoutes, { prefix: '/advertising-link' });
 await fastify.register(entityRoutes, { prefix: '/entities' });
 await fastify.register(genomicsRoutes, { prefix: '/genomics' });
 await fastify.register(publicationConceptRoutes, { prefix: '/genomics/publication-concepts' });

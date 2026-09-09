@@ -1,8 +1,10 @@
 import React from 'react';
-import { act, cleanup, render } from '@testing-library/react';
+import { act, cleanup, render, screen } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { afterEach, expect, it, vi } from 'vitest';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import { queryClientInstance } from '@/lib/query-client';
+import PageNotFound from '@/lib/PageNotFound';
 
 vi.mock('@genemap/shared', () => ({ hasStoredSession: () => false, setCsrfToken: vi.fn(), apiClient: { logout: vi.fn(async () => {}) } }));
 let auth;
@@ -24,4 +26,13 @@ it('removes cached data before changing accounts and on logout, including cancel
   await act(async () => auth.logout());
   expect(auth.user).toBeNull();
   expect(queryClientInstance.getQueryData(['account-result'])).toBeUndefined();
+});
+
+it('removes privileged 404 guidance immediately when the current account changes', () => {
+  render(<AuthProvider><Probe /><MemoryRouter initialEntries={['/unknown']}><PageNotFound /></MemoryRouter></AuthProvider>);
+  act(() => auth.applyUser({ id: 'owner', role: 'super_admin' }));
+  expect(screen.getByText('Admin Note')).toBeTruthy();
+  queryClientInstance.setQueryData(['user'], { user: { id: 'owner', role: 'super_admin' }, isAuthenticated: true });
+  act(() => auth.applyUser({ id: 'viewer', role: 'user' }));
+  expect(screen.queryByText('Admin Note')).toBeNull();
 });

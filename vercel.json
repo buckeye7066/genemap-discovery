@@ -6,6 +6,10 @@
   "outputDirectory": "apps/web/dist",
   "rewrites": [
     {
+      "source": "/advertising-link/:path*",
+      "destination": "https://genemap-api-production.up.railway.app/advertising-link/:path*"
+    },
+    {
       "source": "/advertising/:path*",
       "destination": "https://genemap-api-production.up.railway.app/advertising/:path*"
     },

@@ -9,7 +9,7 @@ CREATE TABLE "ad_creatives" (
 );
 CREATE INDEX "ad_creatives_paused_starts_at_ends_at_idx" ON "ad_creatives"("paused", "starts_at", "ends_at");
 CREATE TABLE "ad_events" (
- "id" TEXT NOT NULL PRIMARY KEY, "creative_id" TEXT NOT NULL REFERENCES "ad_creatives"("id"),
+ "id" TEXT NOT NULL PRIMARY KEY, "creative_id" TEXT NOT NULL REFERENCES "ad_creatives"("id") ON DELETE RESTRICT ON UPDATE CASCADE,
  "viewer" TEXT NOT NULL, "display_key" TEXT NOT NULL, "kind" TEXT NOT NULL CHECK (kind IN ('impression', 'click')),
  "day" TEXT NOT NULL, "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
 );

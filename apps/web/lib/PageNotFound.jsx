@@ -1,6 +1,5 @@
 import { useLocation } from 'react-router-dom';
-import { apiClient } from '@genemap/shared';
-import { useQuery } from '@tanstack/react-query';
+import { useAuth } from './AuthContext';
 import { isAdminUser } from './roles';
 
 
@@ -8,18 +7,8 @@ export default function PageNotFound() {
     const location = useLocation();
     const pageName = location.pathname.substring(1);
 
-    const { data: authData, isFetched } = useQuery({
-        queryKey: ['user'],
-        queryFn: async () => {
-            try {
-                const user = await apiClient.getMe();
-                return { user, isAuthenticated: true };
-            } catch (error) {
-                return { user: null, isAuthenticated: false };
-            }
-        }
-    });
-    
+    const { user, isAuthenticated } = useAuth();
+
     return (
         <div className="min-h-screen flex items-center justify-center p-6 bg-slate-50">
             <div className="max-w-md w-full">
@@ -41,7 +30,7 @@ export default function PageNotFound() {
                     </div>
                     
                     {/* Admin Note */}
-                    {isFetched && authData.isAuthenticated && isAdminUser(authData.user) && (
+                    {isAuthenticated && isAdminUser(user) && (
                         <div className="mt-8 p-4 bg-slate-100 rounded-lg border border-slate-200">
                             <div className="flex items-start space-x-3">
                                 <div className="flex-shrink-0 w-5 h-5 rounded-full bg-orange-100 flex items-center justify-center mt-0.5">

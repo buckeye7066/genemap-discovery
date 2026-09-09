@@ -16,6 +16,9 @@ function viewerId() {
     return id;
   } catch { return crypto.randomUUID(); }
 }
+export const advertisementHref = (ad) => window.electronAPI?.isElectron
+  ? `${apiClient.baseURL}/advertising-link/${encodeURIComponent(ad.id)}`
+  : ad.targetUrl;
 export const liveCreatives = (ads, now = Date.now()) => ads.filter((ad) => !ad.paused && Date.parse(ad.startsAt) <= now && Date.parse(ad.endsAt) > now);
 
 export default function Advertisement() {
@@ -100,7 +103,7 @@ export default function Advertisement() {
     {canManage && manage && <AdvertisingManager onChange={reload} />}
     {ad && <div ref={box} className="rounded-xl border border-slate-200 bg-white p-3 max-w-4xl mx-auto">
       <div className="flex items-center justify-between gap-3 text-xs text-slate-500 mb-2"><span>Advertisement · {ad.advertiser}</span>{live.length > 1 && <button type="button" className="underline p-1" onClick={() => setRotationPaused(!rotationPaused)}>{rotationPaused ? 'Resume rotation' : 'Pause rotation'}</button>}</div>
-      <a href={ad.targetUrl} target="_blank" rel="noopener noreferrer sponsored" referrerPolicy="no-referrer" onClick={click} onFocus={() => setLinkFocused(true)} onBlur={() => setLinkFocused(false)} className="flex flex-col sm:flex-row gap-3 rounded-lg focus-visible:ring-2 focus-visible:ring-blue-500">
+      <a href={advertisementHref(ad)} target="_blank" rel="noopener noreferrer sponsored" referrerPolicy="no-referrer" onClick={click} onFocus={() => setLinkFocused(true)} onBlur={() => setLinkFocused(false)} className="flex flex-col sm:flex-row gap-3 rounded-lg focus-visible:ring-2 focus-visible:ring-blue-500">
         {image && <img src={image} alt={ad.headline} onLoad={() => setReady(true)} onError={() => setReady(false)} className="w-full sm:w-48 h-32 object-contain rounded bg-slate-50" />}
         <div className="min-w-0 break-words"><p className="font-semibold text-slate-900">{ad.headline}</p><p className="text-sm text-slate-600 whitespace-pre-wrap">{ad.body}</p><span className="text-sm text-blue-700">Visit advertiser ↗</span></div>
       </a>

@@ -35,9 +35,9 @@
     "jsonwebtoken": "^9.0.2",
     "openai": "^4.104.0",
     "resend": "^6.25.0",
+    "sharp": "^0.35.4",
     "stripe": "^17.5.0",
-    "zod": "^3.24.2",
-    "sharp": "^0.35.4"
+    "zod": "^3.24.2"
   },
   "devDependencies": {
     "@types/bcrypt": "^5.0.2",
