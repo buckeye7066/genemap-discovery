@@ -56,7 +56,7 @@ jobs:
           if ($currentMain -ne '${{ github.event.workflow_run.head_sha }}') { Write-Output 'Superseded by a newer main commit; no release published.'; exit 0 }
           gh release view desktop-updates *> $null
           if ($LASTEXITCODE -ne 0) {
-            gh release create desktop-updates --target ${{ github.event.workflow_run.head_sha }} --title 'GeneMap Discovery desktop updates' --notes 'Windows desktop installers, currently unsigned. Install the bootstrap once to enable future update prompts. Save your work before installing. Apple desktop releases require signing and notarization credentials.' --latest=false
+            gh release create desktop-updates --target ${{ github.event.workflow_run.head_sha }} --title 'GeneMap Discovery desktop updates' --notes 'Windows desktop installers, currently unsigned. Install the bootstrap once to enable future update prompts. Desktop backend sign-in is currently blocked by file-origin CORS; use the web app for authenticated work until the separate desktop transport fix. Save your work before installing. Apple desktop releases require signing and notarization credentials.' --latest=false
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
           $payloads = @(Get-ChildItem apps/desktop/dist-electron -File | Where-Object { $_.Extension -in '.exe', '.blockmap' } | ForEach-Object { $_.FullName })
