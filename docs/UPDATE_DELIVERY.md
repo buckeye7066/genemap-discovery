@@ -10,3 +10,6 @@ Incognito keeps remote web-bundle installation disabled. Android checks the exis
 
 Tests are build and client regression evidence. Physical-device installation, Safari/iOS behavior, and notifications with the app fully closed require separate device evidence and are not implied by a passing CI run.
 
+GeneMap's Electron desktop package currently loads a bundled file URL, with publish set to null and no updater IPC. Its inspected release channel contains Android artifacts only; no Windows/macOS signing identity is configured in repository secrets. This change does not bootstrap already-installed desktop packages. A trusted desktop installer channel and one initial installer upgrade are required before those packages can receive future updates.
+
+For a native OTA rollback, rebuild the known-good commit to publish a fresh numeric bundle version. Promoting an older immutable web deployment alone does not downgrade native bundles. Native comparisons remain newer-only to avoid replacing a newer signed app with a lagging web deployment; the updater watchdog retains its own failed-boot rollback.

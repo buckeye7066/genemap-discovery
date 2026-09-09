@@ -349,7 +349,7 @@ export async function readInstalledVersions({ updater } = {}) {
   try {
     const plugin = updater ?? (await loadCapacitorUpdater()).plugin;
     const current = await plugin.current();
-    const bundleVersion = parseVersion(current?.bundle?.version)
+    const bundleVersion = current?.bundle?.id !== 'builtin' && parseVersion(current?.bundle?.version)
       ? String(current.bundle.version)
       : BAKED_BUNDLE_VERSION;
     const nativeVersion = current?.native ? String(current.native) : null;

@@ -19,6 +19,8 @@ const config: CapacitorConfig = {
     // talks to anything but our own pinned feed.
     CapacitorUpdater: {
       autoUpdate: false,
+      // Allow slower first React commits while retaining failed-boot rollback.
+      appReadyTimeout: 30000,
       statsUrl: '',
       updateUrl: '',
     },

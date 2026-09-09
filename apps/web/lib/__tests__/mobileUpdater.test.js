@@ -254,3 +254,7 @@ it('rechecks native compatibility at the shared apply boundary', async () => {
   expect(download).not.toHaveBeenCalled();
 });
 
+it("uses embedded web identity for builtin packages with a native versionName", async () => {
+  const updater = { current: async () => ({ bundle: { id: "builtin", version: "1.0.200" }, native: "1.0.200" }) };
+  await expect(readInstalledVersions({ updater })).resolves.toEqual({ bundleVersion: BAKED_BUNDLE_VERSION, nativeVersion: "1.0.200" });
+});
