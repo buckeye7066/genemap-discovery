@@ -17,6 +17,33 @@ describe('LLM provider retry', () => {
     expect(operation).toHaveBeenCalledTimes(2);
   });
 
+  it('does not retry a 429 that means the provider account has no quota left', async () => {
+    const exhausted = new Error('429 You exceeded your current quota, please check your plan and billing details.');
+    exhausted.status = 429;
+    exhausted.code = 'insufficient_quota';
+    const operation = vi.fn().mockRejectedValue(exhausted);
+
+    await expect(withProviderRetry(operation, {
+      provider: 'openai',
+      attempts: 3,
+      baseDelayMs: 0,
+    })).rejects.toThrow('LLM provider api.openai.com failed HTTP 429 after 1 attempt(s)');
+    expect(operation).toHaveBeenCalledTimes(1);
+  });
+
+  it('recognises exhausted credits from the message when no code is attached', async () => {
+    const exhausted = new Error('429 You have no credits remaining. Add credits to continue using the API.');
+    exhausted.status = 429;
+    const operation = vi.fn().mockRejectedValue(exhausted);
+
+    await expect(withProviderRetry(operation, {
+      provider: 'openai',
+      attempts: 3,
+      baseDelayMs: 0,
+    })).rejects.toThrow('after 1 attempt(s)');
+    expect(operation).toHaveBeenCalledTimes(1);
+  });
+
   it('does not retry permanent provider failures and hides full upstream details', async () => {
     const permanent = new Error('bad request https://api.openai.com/v1/chat/completions?api_key=secret');
     permanent.status = 400;

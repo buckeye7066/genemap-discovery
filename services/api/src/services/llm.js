@@ -181,6 +181,19 @@ export function isConnectionResetError(error) {
   );
 }
 
+// An exhausted provider account also answers HTTP 429 (OpenAI code
+// `insufficient_quota`, "You exceeded your current quota" / "no credits
+// remaining"). Unlike a rate limit it cannot clear within a retry window, so
+// retrying only delays a failure the caller is about to see.
+const QUOTA_EXHAUSTED_MESSAGE = /insufficient_quota|exceeded your current quota|no credits remaining/i;
+
+export function isQuotaExhaustedError(error) {
+  const status = error?.status ?? error?.statusCode;
+  if (status !== 429) return false;
+  const code = error?.code ?? error?.error?.code;
+  return code === 'insufficient_quota' || QUOTA_EXHAUSTED_MESSAGE.test(String(error?.message || ''));
+}
+
 function isRetryableProviderError(error) {
   if (String(error?.message || '').includes('_API_KEY')) return false;
   if (isTimeoutError(error)) return false;
@@ -188,6 +201,7 @@ function isRetryableProviderError(error) {
   // can arrive with a stale/misleading status attached, but it is still a
   // transport failure that a fresh connection recovers from.
   if (isConnectionResetError(error)) return true;
+  if (isQuotaExhaustedError(error)) return false;
   if (typeof error?.status === 'number') {
     return RETRYABLE_STATUS.has(error.status);
   }
