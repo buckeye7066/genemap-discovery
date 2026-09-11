@@ -63,6 +63,20 @@ describe('LLM provider retry', () => {
     }
   });
 
+  it('stops retrying when a provider hint would exceed the retry wait budget', async () => {
+    const limited = new Error('429 rate limited');
+    limited.status = 429;
+    limited.headers = { 'retry-after': '30' };
+    const operation = vi.fn().mockRejectedValue(limited);
+
+    await expect(withProviderRetry(operation, {
+      provider: 'openai',
+      attempts: 3,
+      baseDelayMs: 0,
+    })).rejects.toThrow('LLM provider api.openai.com failed HTTP 429 after 1 attempt(s)');
+    expect(operation).toHaveBeenCalledTimes(1);
+  });
+
   it('reads a Headers instance and ignores hints of 60 seconds or more', () => {
     expect(providerRetryDelayMs({ headers: new Headers({ 'retry-after-ms': '1200' }) })).toBe(1200);
     expect(providerRetryDelayMs({ headers: { 'retry-after': '60' } })).toBeNull();

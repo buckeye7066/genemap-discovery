@@ -19,6 +19,11 @@ const PROVIDER_HOSTS = {
 };
 const DEFAULT_ATTEMPTS = 3;
 const DEFAULT_RETRY_BASE_MS = Number(process.env.LLM_RETRY_BASE_MS || 150);
+// Total time withProviderRetry may spend waiting between attempts. A provider
+// Retry-After can ask for up to a minute; honouring several of those would
+// outlast the gateway (see the timeout note below) and keep billing requests
+// after the browser has already been handed an empty response.
+const DEFAULT_RETRY_WAIT_BUDGET_MS = Number(process.env.LLM_RETRY_WAIT_BUDGET_MS || 10_000);
 
 /**
  * Robustly extract a JSON value from a raw LLM completion.
@@ -256,14 +261,22 @@ export async function withProviderRetry(operation, {
   provider,
   attempts = DEFAULT_ATTEMPTS,
   baseDelayMs = DEFAULT_RETRY_BASE_MS,
+  retryWaitBudgetMs = DEFAULT_RETRY_WAIT_BUDGET_MS,
 } = {}) {
   const host = providerHost(provider);
   let lastError;
+  let waited = 0;
 
   for (let attempt = 0; attempt < attempts; attempt++) {
     if (attempt > 0) {
       const backoff = providerRetryDelayMs(lastError)
         ?? baseDelayMs * 2 ** (attempt - 1) + Math.floor(Math.random() * baseDelayMs);
+      // A wait that would blow the budget ends the retries: surface the
+      // failure now instead of after the gateway has given up on the request.
+      if (waited + backoff > retryWaitBudgetMs) {
+        throw sanitizeProviderError(lastError, host, attempt);
+      }
+      waited += backoff;
       await sleep(backoff);
     }
 
