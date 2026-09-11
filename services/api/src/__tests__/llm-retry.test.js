@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { withProviderRetry } from '../services/llm.js';
+import { providerRetryDelayMs, withProviderRetry } from '../services/llm.js';
 
 describe('LLM provider retry', () => {
   it('retries transient provider failures and returns the eventual result', async () => {
@@ -42,6 +42,31 @@ describe('LLM provider retry', () => {
       baseDelayMs: 0,
     })).rejects.toThrow('after 1 attempt(s)');
     expect(operation).toHaveBeenCalledTimes(1);
+  });
+
+  it('waits for a provider Retry-After before the next attempt', async () => {
+    vi.useFakeTimers();
+    try {
+      const limited = new Error('429 rate limited');
+      limited.status = 429;
+      limited.headers = { 'retry-after': '2' };
+      const operation = vi.fn().mockRejectedValueOnce(limited).mockResolvedValueOnce('ok');
+
+      const result = withProviderRetry(operation, { provider: 'openai', attempts: 3, baseDelayMs: 0 });
+      await vi.advanceTimersByTimeAsync(1_900);
+      expect(operation).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(200);
+      await expect(result).resolves.toBe('ok');
+      expect(operation).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('reads a Headers instance and ignores hints of 60 seconds or more', () => {
+    expect(providerRetryDelayMs({ headers: new Headers({ 'retry-after-ms': '1200' }) })).toBe(1200);
+    expect(providerRetryDelayMs({ headers: { 'retry-after': '60' } })).toBeNull();
+    expect(providerRetryDelayMs(new Error('no headers'))).toBeNull();
   });
 
   it('does not retry permanent provider failures and hides full upstream details', async () => {

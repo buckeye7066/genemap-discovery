@@ -194,6 +194,27 @@ export function isQuotaExhaustedError(error) {
   return code === 'insufficient_quota' || QUOTA_EXHAUSTED_MESSAGE.test(String(error?.message || ''));
 }
 
+// The wait a provider asked for before a retry, read the way the SDKs' own
+// retry loops read it: `retry-after-ms`, otherwise `retry-after` as seconds or
+// an HTTP date, honoured only when positive and under 60 seconds. The SDK
+// clients run with maxRetries: 0, so withProviderRetry must honour it itself or
+// a rate limit asking for a second or more fails instead of recovering.
+export function providerRetryDelayMs(error, now = Date.now()) {
+  const headers = error?.headers;
+  if (!headers || typeof headers !== 'object') return null;
+  const read = (name) => (typeof headers.get === 'function' ? headers.get(name) : headers[name]);
+
+  let delay = parseFloat(read('retry-after-ms'));
+  if (!delay) {
+    const retryAfter = read('retry-after');
+    if (retryAfter != null) {
+      const seconds = parseFloat(retryAfter);
+      delay = Number.isNaN(seconds) ? Date.parse(retryAfter) - now : seconds * 1000;
+    }
+  }
+  return Number.isFinite(delay) && delay > 0 && delay < 60_000 ? delay : null;
+}
+
 function isRetryableProviderError(error) {
   if (String(error?.message || '').includes('_API_KEY')) return false;
   if (isTimeoutError(error)) return false;
@@ -241,7 +262,8 @@ export async function withProviderRetry(operation, {
 
   for (let attempt = 0; attempt < attempts; attempt++) {
     if (attempt > 0) {
-      const backoff = baseDelayMs * 2 ** (attempt - 1) + Math.floor(Math.random() * baseDelayMs);
+      const backoff = providerRetryDelayMs(lastError)
+        ?? baseDelayMs * 2 ** (attempt - 1) + Math.floor(Math.random() * baseDelayMs);
       await sleep(backoff);
     }
 
