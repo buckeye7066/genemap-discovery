@@ -12,7 +12,10 @@ async function getClient() {
       throw new Error('OPENAI_API_KEY is not set in environment variables');
     }
     const { default: OpenAI } = await import('openai');
-    client = new OpenAI({ apiKey });
+    // llm.js withProviderRetry is the only caller and owns retry policy. The
+    // SDK's own default retries (2, including 429s and timeouts) multiplied
+    // each wrapper attempt and retried failures the wrapper deliberately stops on.
+    client = new OpenAI({ apiKey, maxRetries: 0 });
   }
   return client;
 }

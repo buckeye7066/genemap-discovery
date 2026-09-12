@@ -19,6 +19,11 @@ const PROVIDER_HOSTS = {
 };
 const DEFAULT_ATTEMPTS = 3;
 const DEFAULT_RETRY_BASE_MS = Number(process.env.LLM_RETRY_BASE_MS || 150);
+// Total time withProviderRetry may spend waiting between attempts. A provider
+// Retry-After can ask for up to a minute; honouring several of those would
+// outlast the gateway (see the timeout note below) and keep billing requests
+// after the browser has already been handed an empty response.
+const DEFAULT_RETRY_WAIT_BUDGET_MS = Number(process.env.LLM_RETRY_WAIT_BUDGET_MS || 10_000);
 
 /**
  * Robustly extract a JSON value from a raw LLM completion.
@@ -181,6 +186,40 @@ export function isConnectionResetError(error) {
   );
 }
 
+// An exhausted provider account also answers HTTP 429 (OpenAI code
+// `insufficient_quota`, "You exceeded your current quota" / "no credits
+// remaining"). Unlike a rate limit it cannot clear within a retry window, so
+// retrying only delays a failure the caller is about to see.
+const QUOTA_EXHAUSTED_MESSAGE = /insufficient_quota|exceeded your current quota|no credits remaining/i;
+
+export function isQuotaExhaustedError(error) {
+  const status = error?.status ?? error?.statusCode;
+  if (status !== 429) return false;
+  const code = error?.code ?? error?.error?.code;
+  return code === 'insufficient_quota' || QUOTA_EXHAUSTED_MESSAGE.test(String(error?.message || ''));
+}
+
+// The wait a provider asked for before a retry, read the way the SDKs' own
+// retry loops read it: `retry-after-ms`, otherwise `retry-after` as seconds or
+// an HTTP date, honoured only when positive and under 60 seconds. The SDK
+// clients run with maxRetries: 0, so withProviderRetry must honour it itself or
+// a rate limit asking for a second or more fails instead of recovering.
+export function providerRetryDelayMs(error, now = Date.now()) {
+  const headers = error?.headers;
+  if (!headers || typeof headers !== 'object') return null;
+  const read = (name) => (typeof headers.get === 'function' ? headers.get(name) : headers[name]);
+
+  let delay = parseFloat(read('retry-after-ms'));
+  if (!delay) {
+    const retryAfter = read('retry-after');
+    if (retryAfter != null) {
+      const seconds = parseFloat(retryAfter);
+      delay = Number.isNaN(seconds) ? Date.parse(retryAfter) - now : seconds * 1000;
+    }
+  }
+  return Number.isFinite(delay) && delay > 0 && delay < 60_000 ? delay : null;
+}
+
 function isRetryableProviderError(error) {
   if (String(error?.message || '').includes('_API_KEY')) return false;
   if (isTimeoutError(error)) return false;
@@ -188,6 +227,7 @@ function isRetryableProviderError(error) {
   // can arrive with a stale/misleading status attached, but it is still a
   // transport failure that a fresh connection recovers from.
   if (isConnectionResetError(error)) return true;
+  if (isQuotaExhaustedError(error)) return false;
   if (typeof error?.status === 'number') {
     return RETRYABLE_STATUS.has(error.status);
   }
@@ -221,13 +261,22 @@ export async function withProviderRetry(operation, {
   provider,
   attempts = DEFAULT_ATTEMPTS,
   baseDelayMs = DEFAULT_RETRY_BASE_MS,
+  retryWaitBudgetMs = DEFAULT_RETRY_WAIT_BUDGET_MS,
 } = {}) {
   const host = providerHost(provider);
   let lastError;
+  let waited = 0;
 
   for (let attempt = 0; attempt < attempts; attempt++) {
     if (attempt > 0) {
-      const backoff = baseDelayMs * 2 ** (attempt - 1) + Math.floor(Math.random() * baseDelayMs);
+      const backoff = providerRetryDelayMs(lastError)
+        ?? baseDelayMs * 2 ** (attempt - 1) + Math.floor(Math.random() * baseDelayMs);
+      // A wait that would blow the budget ends the retries: surface the
+      // failure now instead of after the gateway has given up on the request.
+      if (waited + backoff > retryWaitBudgetMs) {
+        throw sanitizeProviderError(lastError, host, attempt);
+      }
+      waited += backoff;
       await sleep(backoff);
     }
 
