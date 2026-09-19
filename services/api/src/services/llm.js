@@ -1,3 +1,4 @@
+import {ownerSubscription} from '../lib/ownerSubscription.js';
 import * as openaiService from './openai.js';
 import * as anthropicService from './anthropic.js';
 import { looksLikeRawGenomicContent } from './genomicGuard.js';
@@ -127,7 +128,20 @@ export function assertProviderPayloadAllowed(payload, allowGenomic) {
   }
 }
 
+const ownerTextProvider = {
+  async generateTextResult(prompt,{maxTokens=2000,timeoutMs=DEFAULT_TIMEOUT_MS,signal}={}) {
+    const answer=await ownerSubscription.complete({prompt,maxTokens,timeoutMs,signal});
+    return {...answer,text:answer.raw,completion:'complete'};
+  },
+  async generateChatResponseResult(messages,{maxTokens=2000,timeoutMs=DEFAULT_TIMEOUT_MS,signal}={}) {
+    const system=messages.filter(m=>['system','developer'].includes(m.role)).map(m=>extractProviderText(m.content)).join('\n\n');
+    const answer=await ownerSubscription.complete({system,prompt:JSON.stringify(messages.filter(m=>!['system','developer'].includes(m.role))),maxTokens,timeoutMs,signal});
+    return {...answer,text:answer.raw,completion:'complete'};
+  },
+};
+
 function getTextProvider(providerOverride) {
+  if (ownerSubscription.isOwner()) return ownerTextProvider;
   const provider = providerOverride || TEXT_PROVIDER;
   switch (provider) {
     case 'anthropic':
@@ -221,6 +235,7 @@ export function providerRetryDelayMs(error, now = Date.now()) {
 }
 
 function isRetryableProviderError(error) {
+  if (error?.code === "OWNER_SUBSCRIPTION_UNAVAILABLE") return false;
   if (String(error?.message || '').includes('_API_KEY')) return false;
   if (isTimeoutError(error)) return false;
   // Check connection resets BEFORE the status checks: an HTTP/2 body-read reset

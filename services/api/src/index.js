@@ -1,6 +1,8 @@
 import { ADVERTISING_RATE_LIMIT_MAX, isAdvertisingTraffic } from './config/advertisingRateLimit.js';
 import advertisingRoutes, { advertisingLinkRoutes } from './routes/advertising.js';
 import Fastify from 'fastify';
+import {ownerSubscription} from './lib/ownerSubscription.js';
+import ownerSubscriptionRoutes,{isOwnerWorkerRequest} from './routes/ownerSubscription.js';
 import compress from '@fastify/compress';
 import cors from '@fastify/cors';
 import cookie from '@fastify/cookie';
@@ -66,6 +68,7 @@ const fastify = Fastify({
   bodyLimit: 1048576,
 });
 
+fastify.addHook('onRequest',(request,reply,done)=>ownerSubscription.scope(reply.raw,done));
 fastify.decorate('prisma', prisma);
 fastify.decorate('env', env);
 
@@ -118,7 +121,7 @@ let accountClosureCleanupTimer = null;
 await fastify.register(rateLimit, {
   max: GLOBAL_RATE_LIMIT_MAX,
   timeWindow: '15 minutes',
-  allowList: shouldBypassRateLimit,
+  allowList: (request)=>shouldBypassRateLimit(request)||isOwnerWorkerRequest(request),
   ...rateLimitStoreOptions(rateLimitRedis),
 });
 fastify.addHook(
@@ -128,7 +131,7 @@ fastify.addHook(
     scope: 'global',
     max: GLOBAL_RATE_LIMIT_MAX,
     timeWindowMs: RATE_LIMIT_WINDOW_MS,
-    skip: (request) => shouldBypassRateLimit(request) || isAdvertisingTraffic(request),
+    skip: (request) => shouldBypassRateLimit(request) || isAdvertisingTraffic(request) || isOwnerWorkerRequest(request),
   })
 );
 
@@ -178,6 +181,7 @@ await fastify.register(async (authScope) => {
 // authentication/role preHandlers have succeeded.
 await adminDeletionLockPlugin(fastify);
 
+await fastify.register(ownerSubscriptionRoutes,{prefix:'/api/owner-ai'});
 await fastify.register(accountRoutes, { prefix: '/account' });
 await fastify.register(billingRoutes, { prefix: '/billing' });
 await fastify.register(educationRoutes, { prefix: '/education' });
