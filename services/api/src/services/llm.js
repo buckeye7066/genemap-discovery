@@ -1,3 +1,4 @@
+import {ownerSubscription} from '../lib/ownerSubscription.js';
 import * as openaiService from './openai.js';
 import * as anthropicService from './anthropic.js';
 import { looksLikeRawGenomicContent } from './genomicGuard.js';
@@ -127,7 +128,21 @@ export function assertProviderPayloadAllowed(payload, allowGenomic) {
   }
 }
 
+const ownerTextProvider = {
+  async generateTextResult(prompt,{maxTokens=2000,timeoutMs=DEFAULT_TIMEOUT_MS,signal,honestyPersona=''}={}) {
+    const system=withHonestySystem([],honestyPersona).map(message=>extractProviderText(message.content)).join('\n\n');
+    const answer=await ownerSubscription.complete({system,prompt,maxTokens,timeoutMs,signal});
+    return {...answer,text:answer.raw,completion:'complete'};
+  },
+  async generateChatResponseResult(messages,{maxTokens=2000,timeoutMs=DEFAULT_TIMEOUT_MS,signal}={}) {
+    const system=messages.filter(m=>['system','developer'].includes(m.role)).map(m=>extractProviderText(m.content)).join('\n\n');
+    const answer=await ownerSubscription.complete({system,prompt:JSON.stringify(messages.filter(m=>!['system','developer'].includes(m.role))),maxTokens,timeoutMs,signal});
+    return {...answer,text:answer.raw,completion:'complete'};
+  },
+};
+
 function getTextProvider(providerOverride) {
+  if (ownerSubscription.isOwner()) return ownerTextProvider;
   const provider = providerOverride || TEXT_PROVIDER;
   switch (provider) {
     case 'anthropic':
@@ -221,6 +236,7 @@ export function providerRetryDelayMs(error, now = Date.now()) {
 }
 
 function isRetryableProviderError(error) {
+  if (error?.code === "OWNER_SUBSCRIPTION_UNAVAILABLE") return false;
   if (String(error?.message || '').includes('_API_KEY')) return false;
   if (isTimeoutError(error)) return false;
   // Check connection resets BEFORE the status checks: an HTTP/2 body-read reset
@@ -240,8 +256,11 @@ function isRetryableProviderError(error) {
 function sanitizeProviderError(error, host, attempts) {
   const status = error?.status ?? error?.statusCode;
   const statusText = typeof status === 'number' ? ` HTTP ${status}` : '';
-  const sanitized = new Error(`LLM provider ${host} failed${statusText} after ${attempts} attempt(s)`);
-  sanitized.code = isTimeoutError(error)
+  const ownerFailure = error?.code === 'OWNER_SUBSCRIPTION_UNAVAILABLE';
+  const sanitized = new Error(ownerFailure
+    ? `Owner subscription failed${statusText} after ${attempts} attempt(s)`
+    : `LLM provider ${host} failed${statusText} after ${attempts} attempt(s)`);
+  sanitized.code = ownerFailure ? 'OWNER_SUBSCRIPTION_UNAVAILABLE' : isTimeoutError(error)
     ? 'LLM_PROVIDER_TIMEOUT'
     : isConnectionResetError(error)
       ? 'LLM_PROVIDER_CONNECTION'
@@ -298,7 +317,7 @@ export async function generateExplanation(
   { provider, model, maxTokens = 2000, temperature = 0.7, timeoutMs = DEFAULT_TIMEOUT_MS, allowGenomic = false, includeMetadata = false } = {}
 ) {
   assertProviderPayloadAllowed(prompt, allowGenomic);
-  const protectedPrompt = withHonestyPrefix(prompt);
+  const protectedPrompt = ownerSubscription.isOwner() ? prompt : withHonestyPrefix(prompt);
   const service = getTextProvider(provider);
   const result = await withProviderRetry(
     () => service.generateTextResult
@@ -345,7 +364,8 @@ export async function generateChatResponse(
 
 export async function generateQuiz(prompt, { provider, model, maxTokens = 3000, timeoutMs = DEFAULT_TIMEOUT_MS, allowGenomic = false, includeMetadata = false } = {}) {
   assertProviderPayloadAllowed(prompt, allowGenomic);
-  const protectedPrompt = withHonestyPrefix(prompt, QUIZ_HONESTY_NOTE);
+  const ownerText = ownerSubscription.isOwner();
+  const protectedPrompt = ownerText ? prompt : withHonestyPrefix(prompt, QUIZ_HONESTY_NOTE);
   const service = getTextProvider(provider);
   const result = await withProviderRetry(
     () => service.generateTextResult
@@ -354,6 +374,7 @@ export async function generateQuiz(prompt, { provider, model, maxTokens = 3000, 
         maxTokens,
         temperature: 0.5,
         timeoutMs,
+        ...(ownerText ? { honestyPersona: QUIZ_HONESTY_NOTE } : {}),
       })
       : service.generateText(protectedPrompt, {
         model,

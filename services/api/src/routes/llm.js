@@ -1,3 +1,4 @@
+import { ownerSubscription } from '../lib/ownerSubscription.js';
 import {
   canUsePublicationContent,
   createPublicationArtifact,
@@ -282,6 +283,7 @@ export default async function llmRoutes(fastify, options = {}) {
     const temperature = clampTemperature(generationOptions.temperature);
 
     let publication;
+    let providerEvidence = {provider:INVOKE_TEXT_RUNTIME.provider,provider_receipt:false};
     try {
       const providerResult = await generateExplanation(withHonestyPrefix(prompt), {
         provider: INVOKE_TEXT_RUNTIME.provider,
@@ -292,6 +294,15 @@ export default async function llmRoutes(fastify, options = {}) {
         allowGenomic,
         includeMetadata: true,
       });
+      if (providerResult && typeof providerResult === 'object') {
+        if (providerResult.provider === 'subscription:codex' && providerResult.billing_mode === 'subscription') {
+          providerEvidence = {provider:'subscription:codex',billing_mode:'subscription',model:providerResult.model,provider_receipt:true};
+        } else if (['openai','anthropic'].includes(providerResult.provider)) {
+          providerEvidence = {provider:providerResult.provider,model:providerResult.model,provider_receipt:true};
+        } else if (!providerResult.provider && !ownerSubscription.isOwner()) {
+          providerEvidence = {provider:INVOKE_TEXT_RUNTIME.provider,model:INVOKE_TEXT_RUNTIME.model,provider_receipt:true};
+        }
+      }
       publication = sanitizePublicationArtifact(
         publicationTask,
         taskInput,
@@ -299,6 +310,7 @@ export default async function llmRoutes(fastify, options = {}) {
         { correlationId: publicationCorrelationId(request) },
       );
     } catch (error) {
+      if (error?.code === 'OWNER_SUBSCRIPTION_UNAVAILABLE') providerEvidence = {provider:'subscription:codex',billing_mode:'subscription',provider_receipt:false};
       request.log.warn({ code: error?.code, publicationTask }, 'publication provider failed');
       publication = unavailablePublication(request, error);
     }
@@ -309,7 +321,7 @@ export default async function llmRoutes(fastify, options = {}) {
       await prisma.$transaction(async (tx) => {
         await recordUsage(tx, request.user.userId, sessionType, {
           maxTokens,
-          provider: INVOKE_TEXT_RUNTIME.provider,
+          ...providerEvidence,
           publicationTask,
           publication,
           publicationStatus: publication.status,
@@ -324,7 +336,7 @@ export default async function llmRoutes(fastify, options = {}) {
             publicationTask,
             taskInputVersion: taskInput.version,
             maxTokens,
-            provider: INVOKE_TEXT_RUNTIME.provider,
+            ...providerEvidence,
             publicationStatus: publication.status,
             publicationReasonCode: publication.reasonCode,
           },

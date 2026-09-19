@@ -1,3 +1,4 @@
+import {ownerSubscription} from '../lib/ownerSubscription.js';
 import { verifyAccessToken } from '../utils/auth.js';
 import { UnauthorizedError, ForbiddenError } from '../utils/errors.js';
 
@@ -44,6 +45,7 @@ export async function authenticate(request) {
     email: user.email,
     role: user.role,
   };
+  ownerSubscription.identify({id:user.id,email:user.email,role:user.role});
 }
 
 export function requireRole(...roles) {
