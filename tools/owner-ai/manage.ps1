@@ -1,28 +1,33 @@
 param(
   [ValidateSet('Install','Start','Run','Stop','Uninstall')][string]$Action='Start',
   [string]$Url,
-  [string]$CodexHome
+  [string]$CodexHome,
+  [Security.SecureString]$BridgeToken
 )
 $ErrorActionPreference='Stop'
 $taskName='GeneMap Owner Subscription'
-$home=Join-Path $env:LOCALAPPDATA 'GeneMap\owner-ai-bridge'
-$secretPath=Join-Path $home 'bridge-secret.dpapi'
-$configPath=Join-Path $home 'config.json'
+$bridgeHome=Join-Path $env:LOCALAPPDATA 'GeneMap\owner-ai-bridge'
+$secretPath=Join-Path $bridgeHome 'bridge-secret.dpapi'
+$configPath=Join-Path $bridgeHome 'config.json'
 switch($Action){
   'Install' {
     $target=[Uri]$Url
     if($target.Scheme -ne 'https' -or $target.UserInfo -or $target.Query -or $target.Fragment -or $target.AbsolutePath -ne '/') {throw 'An HTTPS origin is required'}
     if(-not [IO.Path]::IsPathRooted($CodexHome)) {throw 'An absolute private Codex home is required'}
     if(-not (Get-Command node.exe -ErrorAction SilentlyContinue)) {throw 'Node is required'}
-    New-Item -ItemType Directory -Force $home | Out-Null
+    New-Item -ItemType Directory -Force $bridgeHome | Out-Null
     $identity=[Security.Principal.WindowsIdentity]::GetCurrent().Name
-    & icacls.exe $home /inheritance:r /grant:r "${identity}:(OI)(CI)F" | Out-Null
+    & icacls.exe $bridgeHome /inheritance:r /grant:r "${identity}:(OI)(CI)F" | Out-Null
     if($LASTEXITCODE -ne 0){throw 'Cannot protect owner configuration'}
-    $secret=Read-Host 'Dedicated app bridge token' -AsSecureString
+    $secret=if($null -ne $BridgeToken){$BridgeToken}else{Read-Host 'Dedicated app bridge token' -AsSecureString}
     if($secret.Length -lt 32){throw 'Bridge token is too short'}
     $secret | ConvertFrom-SecureString | Set-Content -LiteralPath $secretPath
     @{url=$target.AbsoluteUri;codexHome=$CodexHome} | ConvertTo-Json | Set-Content -LiteralPath $configPath
-    $arguments='-NoProfile -NonInteractive -WindowStyle Hidden -File "'+$PSCommandPath+'" -Action Run'
+    foreach($name in @('manage.ps1','bridge.mjs','officialCli.mjs','codexAppServer.mjs')){
+      $source=Join-Path $PSScriptRoot $name;$destination=Join-Path $bridgeHome $name
+      if((Test-Path $source) -and [IO.Path]::GetFullPath($source)-ne[IO.Path]::GetFullPath($destination)){Copy-Item -LiteralPath $source -Destination $destination -Force}
+    }
+    $arguments='-NoProfile -NonInteractive -WindowStyle Hidden -File "'+(Join-Path $bridgeHome 'manage.ps1')+'" -Action Run'
     $action=New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $arguments
     $trigger=New-ScheduledTaskTrigger -AtLogOn -User $identity
     $principal=New-ScheduledTaskPrincipal -UserId $identity -LogonType Interactive -RunLevel Limited
