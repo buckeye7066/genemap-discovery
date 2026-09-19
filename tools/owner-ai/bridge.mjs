@@ -26,6 +26,16 @@ export function bridgeConfig(env = process.env) {
   if (!env.OWNER_AI_BRIDGE_TOKEN || env.OWNER_AI_BRIDGE_TOKEN.length < 32) throw new Error('invalid_configuration')
   return { url, token: env.OWNER_AI_BRIDGE_TOKEN }
 }
+export async function deliverResult(post,body,{deadline,signal,now=Date.now,wait=delay}={}) {
+  while(!signal?.aborted&&now()<deadline){
+    try{const reply=await post('result',body,signal);return reply?.received===true}
+    catch(error){if([400,401,403,409,410,413].includes(error?.status))return false}
+    const remaining=deadline-now();if(remaining<=0)return false
+    try{await wait(Math.min(250,remaining),undefined,{signal})}catch{return false}
+  }
+  return false
+}
+
 export async function runBridge({ env = process.env, signal } = {}) {
   const { url, token } = bridgeConfig(env)
   const providerStatus = createProviderStatusCache()
@@ -34,7 +44,7 @@ export async function runBridge({ env = process.env, signal } = {}) {
       method: 'POST', redirect: 'error', signal: AbortSignal.any([AbortSignal.timeout(5000), ...(requestSignal ? [requestSignal] : [])]),
       headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' }, body: JSON.stringify(body),
     })
-    if (!response.ok) { await response.body?.cancel(); throw new Error('unavailable') }
+    if (!response.ok) { await response.body?.cancel(); throw Object.assign(new Error('unavailable'),{status:response.status}) }
     let size = 0
     const chunks = []
     for await (const chunk of response.body) {
@@ -53,6 +63,7 @@ export async function runBridge({ env = process.env, signal } = {}) {
         if (!Number.isFinite(job.timeoutMs) || job.timeoutMs <= 0 || job.timeoutMs > 120000 ||
             typeof job.prompt !== 'string' || typeof job.system !== 'string' ||
             !Number.isInteger(job.maxTokens) || job.maxTokens < 2) throw new Error('invalid_job')
+        const deadline=Date.now()+job.timeoutMs
         const controller = new AbortController()
         const jobSignal = AbortSignal.any([controller.signal, AbortSignal.timeout(job.timeoutMs), ...(signal ? [signal] : [])])
         const monitor = (async () => {
@@ -64,11 +75,10 @@ export async function runBridge({ env = process.env, signal } = {}) {
             }
           } catch { controller.abort() }
         })()
-        const result = await executeJob(job, { env, signal: jobSignal })
-        const cancelled = jobSignal.aborted
-        controller.abort()
-        await monitor
-        if (!cancelled) await post('result', { id: job.id, lease: job.lease, result })
+        try {
+          const result = await executeJob(job, { env, signal: jobSignal })
+          if (!jobSignal.aborted) await deliverResult(post,{id:job.id,lease:job.lease,result},{deadline,signal:jobSignal})
+        } finally {controller.abort();await monitor}
       }
     } catch {
       // Never log prompts, results, native status output, or credentials.

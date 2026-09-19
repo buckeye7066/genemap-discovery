@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {EventEmitter} from 'node:events';
 import {createOwnerSubscription} from '../lib/ownerSubscription.js';
 const env={OWNER_AI_USER_ID:'owner-id',OWNER_AI_EMAIL:'owner@example.test',OWNER_AI_BRIDGE_ENABLED:'true',OWNER_AI_BRIDGE_TOKEN:'x'.repeat(48)};
-const result={ok:true,complete:true,provider:'subscription:codex',billing_mode:'subscription',model:'gpt-6-astra',model_source:'explicit_cli_argument',raw:'Fixture answer',usage:{input_tokens:8,cached_input_tokens:0,output_tokens:3}};
+const result={ok:true,complete:true,provider:'subscription:codex',billing_mode:'subscription',model:'gpt-6-astra',model_source:'app_server_configuration',raw:'Fixture answer',usage:{input_tokens:8,cached_input_tokens:0,output_tokens:3}};
 test('only a verified owner identity can queue subscription inference',async()=>{
  const runtime=createOwnerSubscription({env});runtime.poll({providers:{codex:'ready'}});
  await assert.rejects(runtime.complete({prompt:'public',maxTokens:100,timeoutMs:1000}),/owner/i);
@@ -17,7 +17,7 @@ test('only a verified owner identity can queue subscription inference',async()=>
   assert.equal(runtime.result({id:job.id,lease:'wrong',result}),false);
   assert.equal(runtime.result({id:job.id,lease:job.lease,result}),true);
   assert.equal((await answer).billing_mode,'subscription');
-  assert.equal(runtime.result({id:job.id,lease:job.lease,result}),false);
+  assert.equal(runtime.result({id:job.id,lease:job.lease,result}),true);
  });
 });
 test('cancellation revokes pending work without changing owner billing identity',async()=>{

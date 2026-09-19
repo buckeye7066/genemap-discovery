@@ -21,7 +21,7 @@
     "build:desktop": "corepack pnpm build:web && corepack pnpm --filter @genemap/desktop build",
     "build:desktop:win": "corepack pnpm build:web && corepack pnpm --filter @genemap/desktop build:win",
     "build:desktop:mac": "corepack pnpm build:web && corepack pnpm --filter @genemap/desktop build:mac",
-    "test": "corepack pnpm -r test && npm run test:build-target",
+    "test": "npm run test:owner-runtime && corepack pnpm -r test && npm run test:build-target",
     "test:api": "corepack pnpm --filter @genemap/api test",
     "test:api:integration": "corepack pnpm --filter @genemap/api test:integration",
     "test:shared": "corepack pnpm --filter @genemap/shared test",
@@ -48,7 +48,8 @@
     "prebuild": "npm run memory:startup",
     "build:target": "node scripts/build-target.cjs",
     "test:build-target": "node --test scripts/build-target.test.cjs",
-    "build:shared": "corepack pnpm --filter @genemap/shared build"
+    "build:shared": "corepack pnpm --filter @genemap/shared build",
+    "test:owner-runtime": "node --test tools/owner-ai/codexAppServer.test.mjs tools/owner-ai/bridge.test.mjs"
   },
   "pnpm": {
     "auditConfig": {

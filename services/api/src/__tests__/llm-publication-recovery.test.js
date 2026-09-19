@@ -104,3 +104,12 @@ describe('model publication recovery switch', () => {
     expect(prisma._store.learningSession).toHaveLength(0);
   });
 });
+
+
+it('records the acknowledged subscription provider rather than the configured customer API',async()=>{
+ generateExplanation.mockResolvedValueOnce({text:'An aggregate cohort study can compare variant frequencies; this is a research proposal, not a diagnostic conclusion.',completion:'complete',provider:'subscription:codex',billing_mode:'subscription',model:'gpt-6-astra'});
+ const response=await app.inject({method:'POST',url:'/llm/invoke',headers:{cookie:authCookie({userId:'recovery-user',email:'recovery@example.com',role:'user'})},payload});
+ expect(response.statusCode).toBe(200);
+ expect(prisma._store.learningSession.at(-1).content).toMatchObject({provider:'subscription:codex',billing_mode:'subscription',model:'gpt-6-astra'});
+ expect(prisma._store.auditLog.find(row=>row.action==='llm_invoke').metadata).toMatchObject({provider:'subscription:codex',billing_mode:'subscription',model:'gpt-6-astra'});
+});

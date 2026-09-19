@@ -4,8 +4,9 @@ const failure=message=>Object.assign(new Error(message),{status:503,statusCode:5
 
 /** Per-service owner bridge. Account credentials never leave the owner's worker. */
 export function createOwnerSubscription({env=process.env,now=Date.now}={}) {
-  const contexts=new AsyncLocalStorage();const pending=new Map();let worker=null;
-  const enabled=()=>env.OWNER_AI_BRIDGE_ENABLED==='true';
+  const contexts=new AsyncLocalStorage();const pending=new Map();const acknowledgements=new Map();let worker=null;
+  const leaseMs=10000;
+  const enabled=()=>env.OWNER_AI_BRIDGE_ENABLED==='true'&&(env.NODE_ENV!=='production'||env.OWNER_AI_API_REPLICAS==='1');
   const owner=identity=>Boolean(env.OWNER_AI_USER_ID&&env.OWNER_AI_EMAIL&&identity?.id===env.OWNER_AI_USER_ID&&
     String(identity?.email||'').toLowerCase()===env.OWNER_AI_EMAIL.toLowerCase()&&['admin','super_admin','owner'].includes(identity?.role));
   const online=()=>enabled()&&worker?.ready&&now()-worker.at<15000;
@@ -22,26 +23,31 @@ export function createOwnerSubscription({env=process.env,now=Date.now}={}) {
     const expected=Buffer.from('Bearer '+token);const received=Buffer.from(header);
     return expected.length===received.length&&timingSafeEqual(expected,received);
   }
-  function status() {return {enabled:enabled(),online:Boolean(online()),pending:pending.size,billing_mode:'subscription',metered_fallback:false};}
+  function status() {return {enabled:enabled(),online:Boolean(online()),pending:pending.size,single_replica_required:true,billing_mode:'subscription',metered_fallback:false};}
   function poll(body={}) {
     worker={at:now(),ready:body.providers?.codex==='ready'};
-    for(const item of pending.values())if(now()>=item.deadline)item.finish(null);
-    if(body.active){const item=pending.get(body.active.id);return {job:null,active:Boolean(item&&item.lease===body.active.lease)};}
+    for(const [id,ack] of acknowledgements)if(now()>=ack.expires)acknowledgements.delete(id);
+    for(const item of pending.values()){
+      if(now()>=item.deadline)item.finish(null);
+      else if(item.lease&&now()>=item.leaseUntil){if(item.attempts>=2)item.finish(null);else item.lease=null;}
+    }
+    if(body.active){const item=pending.get(body.active.id);const active=Boolean(item&&item.lease===body.active.lease);if(active)item.leaseUntil=Math.min(item.deadline,now()+leaseMs);return {job:null,active};}
     if(!online())return {job:null};
     const item=[...pending.values()].find(candidate=>!candidate.lease);
     if(!item)return {job:null};
-    item.lease=randomBytes(24).toString('hex');
+    item.lease=randomBytes(24).toString('hex');item.leaseUntil=Math.min(item.deadline,now()+leaseMs);item.attempts++;
     return {job:{...item.input,id:item.id,lease:item.lease,providers:['codex'],timeoutMs:Math.max(0,item.deadline-now())}};
   }
   function result(body={}) {
-    const item=pending.get(body.id);if(!item||!item.lease||item.lease!==body.lease)return false;
+    const item=pending.get(body.id);if(!item){const ack=acknowledgements.get(body.id);return Boolean(ack&&ack.lease===body.lease&&now()<ack.expires);}
+    if(!item.lease||item.lease!==body.lease||now()>=item.leaseUntil)return false;
     const answer=body.result;let valid=null;
     if(now()<item.deadline&&answer?.ok===true&&answer.complete===true&&answer.provider==='subscription:codex'&&
-      answer.billing_mode==='subscription'&&answer.model_source==='explicit_cli_argument'&&
+      answer.billing_mode==='subscription'&&answer.model_source==='app_server_configuration'&&
       typeof answer.model==='string'&&/^[a-zA-Z0-9._:-]{1,120}$/.test(answer.model)&&
       typeof answer.raw==='string'&&answer.raw.trim()&&Buffer.byteLength(answer.raw)<=262144&&
       ['input_tokens','cached_input_tokens','output_tokens'].every(k=>Number.isSafeInteger(answer.usage?.[k])&&answer.usage[k]>=0)&&
-      answer.usage.output_tokens>0&&answer.usage.output_tokens<item.input.maxTokens) {
+      answer.usage.output_tokens>0) {
       valid={ok:true,raw:answer.raw,provider:answer.provider,model:answer.model,billing_mode:'subscription',usage:answer.usage};
       if(item.input.format==='json'){try{const parsed=JSON.parse(answer.raw);if(!parsed||typeof parsed!=='object')valid=null;}catch{valid=null;}}
     }
@@ -58,9 +64,10 @@ export function createOwnerSubscription({env=process.env,now=Date.now}={}) {
     return new Promise((resolve,reject)=>{
       const signals=[context.signal,signal].filter(Boolean);let timer;
       const cancel=()=>finish(null);
-      const finish=value=>{if(!pending.delete(id))return;clearTimeout(timer);signals.forEach(s=>s.removeEventListener('abort',cancel));
+      const finish=value=>{const old=pending.get(id);if(!pending.delete(id))return;if(old?.lease){acknowledgements.set(id,{lease:old.lease,expires:now()+60000});while(acknowledgements.size>100)acknowledgements.delete(acknowledgements.keys().next().value);}
+        clearTimeout(timer);signals.forEach(s=>s.removeEventListener('abort',cancel));
         if(value)resolve(value);else reject(failure('Owner subscription did not complete; no metered fallback was used'));};
-      pending.set(id,{id,input:{prompt,system,format,maxTokens},deadline:now()+budget,lease:null,finish});
+      pending.set(id,{id,input:{prompt,system,format,maxTokens},deadline:now()+budget,lease:null,leaseUntil:0,attempts:0,finish});
       timer=setTimeout(cancel,budget);signals.forEach(s=>s.addEventListener('abort',cancel,{once:true}));
       if(signals.some(s=>s.aborted))cancel();
     });
