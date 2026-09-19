@@ -65,20 +65,23 @@ export async function runBridge({ env = process.env, signal } = {}) {
             !Number.isInteger(job.maxTokens) || job.maxTokens < 2) throw new Error('invalid_job')
         const deadline=Date.now()+job.timeoutMs
         const controller = new AbortController()
+        const monitorStop = new AbortController()
         const jobSignal = AbortSignal.any([controller.signal, AbortSignal.timeout(job.timeoutMs), ...(signal ? [signal] : [])])
+        const monitorSignal = AbortSignal.any([jobSignal, monitorStop.signal])
         const monitor = (async () => {
           try {
-            while (!jobSignal.aborted) {
-              await delay(1000, undefined, { signal: jobSignal })
-              const reply = await post('poll', { providers, active: { id: job.id, lease: job.lease } }, jobSignal)
-              if (!reply.active) controller.abort()
+            while (!monitorSignal.aborted) {
+              await delay(1000, undefined, { signal: monitorSignal })
+              const reply = await post('poll', { providers, active: { id: job.id, lease: job.lease } }, monitorSignal)
+              if (!reply.active && !monitorStop.signal.aborted) controller.abort()
             }
-          } catch { controller.abort() }
+          } catch { if (!monitorStop.signal.aborted) controller.abort() }
         })()
         try {
           const result = await executeJob(job, { env, signal: jobSignal })
+          monitorStop.abort(); await monitor
           if (!jobSignal.aborted) await deliverResult(post,{id:job.id,lease:job.lease,result},{deadline,signal:jobSignal})
-        } finally {controller.abort();await monitor}
+        } finally {monitorStop.abort();controller.abort();await monitor}
       }
     } catch {
       // Never log prompts, results, native status output, or credentials.

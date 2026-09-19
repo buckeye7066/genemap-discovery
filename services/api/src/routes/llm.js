@@ -1,3 +1,4 @@
+import { ownerSubscription } from '../lib/ownerSubscription.js';
 import {
   canUsePublicationContent,
   createPublicationArtifact,
@@ -298,6 +299,8 @@ export default async function llmRoutes(fastify, options = {}) {
           providerEvidence = {provider:'subscription:codex',billing_mode:'subscription',model:providerResult.model,provider_receipt:true};
         } else if (['openai','anthropic'].includes(providerResult.provider)) {
           providerEvidence = {provider:providerResult.provider,model:providerResult.model,provider_receipt:true};
+        } else if (!providerResult.provider && !ownerSubscription.isOwner()) {
+          providerEvidence = {provider:INVOKE_TEXT_RUNTIME.provider,model:INVOKE_TEXT_RUNTIME.model,provider_receipt:true};
         }
       }
       publication = sanitizePublicationArtifact(

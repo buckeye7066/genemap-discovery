@@ -4,7 +4,7 @@ import {EventEmitter} from 'node:events'
 import {PassThrough,Writable} from 'node:stream'
 import {runCodexSession} from './codexAppServer.mjs'
 const base={system:'Trusted scientific-honesty rules.',prompt:'Untrusted task text.',format:'text',maxTokens:10,timeoutMs:1000}
-function protocol({account='chatgpt',model='gpt-6-astra',tool=false,stall=false,reroute=false}={}) {
+function protocol({account='chatgpt',planType='pro',model='gpt-6-astra',tool=false,stall=false,reroute=false}={}) {
   const requests=[];let child
   const spawnImpl=(_exe,args,options)=>{
     child=new EventEmitter();child.pid=undefined;child.stdout=new PassThrough();child.stderr=new PassThrough();child.killed=false
@@ -12,7 +12,7 @@ function protocol({account='chatgpt',model='gpt-6-astra',tool=false,stall=false,
     const emit=value=>child.stdout.write(JSON.stringify(value)+'\n')
     child.stdin=new Writable({write(chunk,_encoding,done){for(const line of chunk.toString().trim().split('\n')){const r=JSON.parse(line);requests.push(r);queueMicrotask(()=>{
       if(r.method==='initialize')emit({id:r.id,result:{userAgent:'fixture'}})
-      if(r.method==='account/read')emit({id:r.id,result:{account:{type:account},requiresOpenaiAuth:true}})
+      if(r.method==='account/read')emit({id:r.id,result:{account:{type:account,...(planType===null?{}:{planType})},requiresOpenaiAuth:true}})
       if(r.method==='thread/start')emit({id:r.id,result:{thread:{id:'thread-fixture',ephemeral:true},model,modelProvider:'openai',approvalPolicy:'never',sandbox:{type:'readOnly',networkAccess:false},instructionSources:[]}})
       if(r.method==='turn/start'){
         emit({id:r.id,result:{turn:{id:'turn-fixture',status:'inProgress',items:[]}}})
@@ -55,3 +55,11 @@ test('deadline ends an unresponsive worker and yields no success',async()=>{
  const fixture=protocol({stall:true});assert.equal(await runCodexSession({...base,timeoutMs:20},opts(fixture)),null)
  assert.equal(fixture.child.killed,true)
 })
+
+for(const planType of ['free','unknown',null,'self_serve_business_usage_based']) {
+ test('does not label '+String(planType)+' as a fixed subscription',async()=>{
+  const fixture=protocol({planType})
+  assert.equal(await runCodexSession(base,opts(fixture)),null)
+  assert.equal(fixture.requests.some(request=>request.method==='turn/start'),false)
+ })
+}

@@ -49,7 +49,7 @@
     "build:target": "node scripts/build-target.cjs",
     "test:build-target": "node --test scripts/build-target.test.cjs",
     "build:shared": "corepack pnpm --filter @genemap/shared build",
-    "test:owner-runtime": "node --test tools/owner-ai/codexAppServer.test.mjs tools/owner-ai/bridge.test.mjs"
+    "test:owner-runtime": "node --test tools/owner-ai/codexAppServer.test.mjs tools/owner-ai/bridge.test.mjs tools/owner-ai/authMetadata.test.mjs"
   },
   "pnpm": {
     "auditConfig": {

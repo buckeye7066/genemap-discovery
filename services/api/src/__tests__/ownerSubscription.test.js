@@ -55,7 +55,7 @@ test('verified owner explanations use subscription inference after the scientifi
   ownerSubscription.identify({id:'owner-id',email:'owner@example.test',role:'super_admin'});
   const answer=await generateExplanation('Explain Mendelian inheritance for a lesson.',{includeMetadata:true});
   assert.equal(answer.billing_mode,'subscription');assert.equal(answer.text,'Fixture answer');assert.equal(paid.mock.calls.length,0);
-  assert.match(requestSeen.prompt,/research|educat|diagnos|clinical/i);
+  assert.match(requestSeen.system,/research|educat|diagnos|clinical/i);
  });}finally{clearInterval(pump);paid.mockRestore();for(const key of Object.keys(env)){if(old[key]===undefined)delete process.env[key];else process.env[key]=old[key];}}
 });
 

@@ -3,6 +3,7 @@ import path from 'node:path'
 import {existsSync} from 'node:fs'
 const safeModel=value=>typeof value==='string'&&/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,119}$/.test(value)
 const inertItems=new Set(['userMessage','reasoning','agentMessage'])
+const subscriptionPlans=new Set(['go','plus','pro','prolite','team','business','edu','edu_plus','edu_pro'])
 const MAX_WIRE_BYTES=8*1024*1024
 const MAX_LINE_BYTES=1024*1024
 const MAX_OUTPUT_BYTES=512*1024
@@ -117,7 +118,7 @@ export function runCodexSession(job,{env,cwd,model,features=[],signal,spawnImpl=
         await request('initialize',{clientInfo:{name:'owner_subscription_bridge',version:'1.0.0'},capabilities:{experimentalApi:true}})
         send({method:'initialized',params:{}})
         const account=await request('account/read',{refreshToken:false})
-        if(account?.account?.type!=='chatgpt')return stop(null)
+        if(account?.account?.type!=='chatgpt'||!subscriptionPlans.has(account.account.planType))return stop(null)
         const started=await request('thread/start',{model,modelProvider:'openai',cwd,approvalPolicy:'never',sandbox:'read-only',ephemeral:true,
           developerInstructions:job.system,config:{web_search:'disabled',model_reasoning_effort:'low'}})
         if(started?.model!==model||started.modelProvider!=='openai'||started.approvalPolicy!=='never'||
