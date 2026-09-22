@@ -1,6 +1,7 @@
 import {ownerSubscription} from '../lib/ownerSubscription.js';
 import { verifyAccessToken } from '../utils/auth.js';
 import { UnauthorizedError, ForbiddenError } from '../utils/errors.js';
+import { isOwnerEmail } from '../utils/ownerOnly.js';
 
 /**
  * Verify the access token AND hydrate the latest user row.
@@ -36,6 +37,9 @@ export async function authenticate(request) {
 
   if (user.banned) {
     throw new UnauthorizedError('Account has been suspended');
+  }
+  if (!isOwnerEmail(user.email)) {
+    throw new ForbiddenError('Access is restricted to the owner account');
   }
 
   // Authoritative source of truth for downstream handlers — never trust the

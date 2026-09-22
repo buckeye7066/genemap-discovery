@@ -20,6 +20,7 @@ import { signupTrialGrant } from '../utils/signupTrial.js';
 import { grantOrExtendFreePeriod, FREE_PERIOD_DAYS } from '../utils/freePeriod.js';
 import { resolveEntitlements } from '../middleware/entitlements.js';
 import { withSerializableRetry } from '../utils/transactions.js';
+import { isOwnerEmail } from '../utils/ownerOnly.js';
 
 /**
  * Lower-case + trim the email before any DB lookup or write so the same
@@ -247,6 +248,9 @@ export default async function authRoutes(fastify) {
     if (user.banned) {
       throw new UnauthorizedError('Account has been suspended');
     }
+    if (!isOwnerEmail(user.email)) {
+      throw new ForbiddenError('Access is restricted to the owner account');
+    }
 
     // Came in on the refresh path — issue a new short-lived access token so the
     // rest of this session's requests authenticate normally.
@@ -278,6 +282,9 @@ export default async function authRoutes(fastify) {
     }
     const parsed = registerSchema.parse(request.body);
     const email = normalizeEmail(parsed.email);
+    if (!isOwnerEmail(email)) {
+      throw new ForbiddenError('Access is restricted to the owner account');
+    }
     const passwordHash = await hashPassword(parsed.password);
     const trial = signupTrialGrant(process.env);
     const userId = crypto.randomUUID();
@@ -367,6 +374,9 @@ export default async function authRoutes(fastify) {
     }
     const parsed = loginSchema.parse(request.body);
     const email = normalizeEmail(parsed.email);
+    if (!isOwnerEmail(email)) {
+      throw new ForbiddenError('Access is restricted to the owner account');
+    }
 
     const user = await prisma.user.findUnique({ where: { email } });
     if (!user) {
@@ -521,6 +531,9 @@ export default async function authRoutes(fastify) {
     const user = await prisma.user.findUnique({ where: { id: payload.userId } });
     if (!user || user.banned) {
       throw new UnauthorizedError('Account not available');
+    }
+    if (!isOwnerEmail(user.email)) {
+      throw new ForbiddenError('Access is restricted to the owner account');
     }
 
     const newAccess = generateAccessToken({ userId: user.id, email: user.email, role: user.role });
