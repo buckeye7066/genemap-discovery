@@ -142,8 +142,9 @@ const ownerTextProvider = {
 };
 
 function getTextProvider(providerOverride) {
-  if (ownerSubscription.isOwner()) return ownerTextProvider;
-  const provider = providerOverride || TEXT_PROVIDER;
+  const localOnly = String(process.env.AI_LOCAL_ONLY ?? 'true').trim().toLowerCase() !== 'false';
+  if (!localOnly && ownerSubscription.isOwner()) return ownerTextProvider;
+  const provider = localOnly ? 'openai' : (providerOverride || TEXT_PROVIDER);
   switch (provider) {
     case 'anthropic':
     case 'claude':

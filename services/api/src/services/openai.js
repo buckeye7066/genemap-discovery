@@ -7,15 +7,18 @@ let client = null;
 
 async function getClient() {
   if (!client) {
-    const apiKey = process.env.OPENAI_API_KEY;
+    const localOnly = String(process.env.AI_LOCAL_ONLY ?? 'true').trim().toLowerCase() !== 'false';
+    const apiKey = localOnly ? (process.env.OLLAMA_API_KEY || 'ollama-local') : process.env.OPENAI_API_KEY;
     if (!apiKey) {
-      throw new Error('OPENAI_API_KEY is not set in environment variables');
+      throw new Error('AI provider is not configured');
     }
     const { default: OpenAI } = await import('openai');
-    // llm.js withProviderRetry is the only caller and owns retry policy. The
-    // SDK's own default retries (2, including 429s and timeouts) multiplied
-    // each wrapper attempt and retried failures the wrapper deliberately stops on.
-    client = new OpenAI({ apiKey, maxRetries: 0 });
+    const baseURL = localOnly
+      ? (process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434/v1')
+      : process.env.OPENAI_BASE_URL;
+    // llm.js owns retry policy; local Ollama is exposed through its
+    // OpenAI-compatible loopback endpoint and never needs a paid provider key.
+    client = new OpenAI({ apiKey, maxRetries: 0, ...(baseURL ? { baseURL } : {}) });
   }
   return client;
 }
@@ -54,7 +57,7 @@ function protectedChatMessages(messages, honestyPersona = '') {
 
 export async function generateTextResult(
   prompt,
-  { model = 'gpt-4o', maxTokens = 2000, temperature = 0.7, timeoutMs = 30_000 } = {}
+  { model = process.env.OPENAI_MODEL || process.env.OLLAMA_MODEL || 'qwen3.6:35b-a3b', maxTokens = 2000, temperature = 0.7, timeoutMs = 30_000 } = {}
 ) {
   const openai = await getClient();
   // The OpenAI SDK accepts a per-request timeout that aborts the underlying
@@ -79,7 +82,7 @@ export async function generateText(prompt, options = {}) {
 export async function generateChatResponseResult(
   messages,
   {
-    model = 'gpt-4o',
+    model = process.env.OPENAI_MODEL || process.env.OLLAMA_MODEL || 'qwen3.6:35b-a3b',
     maxTokens = 2000,
     temperature = 0.7,
     timeoutMs = 30_000,
